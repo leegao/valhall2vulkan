@@ -1,2 +1,8 @@
-# valhall2vulkan
-Compile a state of (CSF-registers, GPU-memory, Valhall-ISA) into a pair of (Spirv, VkGfx/ComputePipeline) as part of the libmali_kbase_emu.so userspace emulation of Kbase
+
+## Build & Test Instructions
+
+```bash
+make codegen   # Regenerate C++17 ISA/CSF headers, sources, and formal semantics docs from XML specs
+make all       # Build build/libvalhall2spirv.a, build/libmoc_hook.so, and all 4 test binaries
+make test      # Run test_isa_decoder, test_csf_descriptors, test_moc_roundtrip_compute, and test_moc_roundtrip_graphics
+```
