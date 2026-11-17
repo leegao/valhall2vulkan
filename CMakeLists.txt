@@ -131,3 +131,32 @@ add_test(NAME test_vkcube_frame1_replay
     COMMAND test_vkcube_frame1_replay
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_library(VkLayer_mali_csf_dump SHARED
+    tools/mali_csf_dump_layer/mali_csf_dump_layer.cpp
+)
+target_include_directories(VkLayer_mali_csf_dump PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
+    "${VULKAN_INCLUDE_DIR}"
+)
+target_compile_options(VkLayer_mali_csf_dump PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(VkLayer_mali_csf_dump PRIVATE ${CMAKE_DL_LIBS})
+add_custom_command(TARGET VkLayer_mali_csf_dump POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/mali_csf_dump_layer/VkLayer_mali_csf_dump.json"
+        "$<TARGET_FILE_DIR:VkLayer_mali_csf_dump>/VkLayer_mali_csf_dump.json"
+)
+
+add_executable(test_csf_dump_layer tests/test_csf_dump_layer.cpp)
+target_include_directories(test_csf_dump_layer PRIVATE "${VULKAN_INCLUDE_DIR}")
+target_compile_options(test_csf_dump_layer PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_definitions(test_csf_dump_layer PRIVATE
+    CSF_DUMP_LAYER_PATH="$<TARGET_FILE:VkLayer_mali_csf_dump>"
+    CSF_DUMP_LAYER_DIR="$<TARGET_FILE_DIR:VkLayer_mali_csf_dump>"
+)
+target_link_libraries(test_csf_dump_layer PRIVATE "${VULKAN_LIBRARY}" ${CMAKE_DL_LIBS})
+add_dependencies(test_csf_dump_layer VkLayer_mali_csf_dump)
+add_test(NAME test_csf_dump_layer
+    COMMAND test_csf_dump_layer
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)

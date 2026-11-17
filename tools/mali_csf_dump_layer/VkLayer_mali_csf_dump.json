@@ -1,0 +1,19 @@
+{
+  "file_format_version": "1.2.0",
+  "layer": {
+    "name": "VK_LAYER_MALI_csf_dump",
+    "type": "GLOBAL",
+    "library_path": "./libVkLayer_mali_csf_dump.so",
+    "api_version": "1.3.0",
+    "implementation_version": "1",
+    "description": "Hooks libGLES_mali.so (r54p3 / r44p1) kbase CSF ioctls on load and dumps a single frame in vkcube_frame1 format",
+    "functions": {
+      "vkNegotiateLoaderLayerInterfaceVersion": "vkNegotiateLoaderLayerInterfaceVersion",
+      "vkGetInstanceProcAddr": "vkGetInstanceProcAddr",
+      "vkGetDeviceProcAddr": "vkGetDeviceProcAddr"
+    },
+    "disable_environment": {
+      "MALI_CSF_DUMP_DISABLE": "1"
+    }
+  }
+}
