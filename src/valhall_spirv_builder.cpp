@@ -11,19 +11,6 @@ SpirvBuilder::SpirvBuilder(ExecutionModel model, bool enable_bda)
     entry_label_id_ = alloc_id();
 
     add_capability(Capability::Shader);
-    add_capability(Capability::Int64);
-    add_capability(Capability::Int16);
-    add_capability(Capability::Int8);
-    add_capability(Capability::Float16);
-    add_capability(Capability::ImageQuery);
-    add_capability(Capability::Sampled1D);
-    add_capability(Capability::Image1D);
-    add_capability(Capability::DerivativeControl);
-    add_capability(Capability::GroupNonUniform);
-    add_capability(Capability::GroupNonUniformVote);
-    add_capability(Capability::GroupNonUniformArithmetic);
-    add_capability(Capability::GroupNonUniformBallot);
-    add_capability(Capability::GroupNonUniformShuffle);
 
     if (enable_bda_) {
         add_capability(Capability::PhysicalStorageBufferAddresses);
@@ -112,6 +99,9 @@ uint32_t SpirvBuilder::type_int(uint32_t width, bool is_signed) {
     auto key = std::make_pair(width, is_signed);
     auto it = int_types_.find(key);
     if (it != int_types_.end()) return it->second;
+    if (width == 64) add_capability(Capability::Int64);
+    else if (width == 16) add_capability(Capability::Int16);
+    else if (width == 8) add_capability(Capability::Int8);
     uint32_t id = alloc_id();
     append_op(types_consts_globals_words_, Op::OpTypeInt, { id, width, is_signed ? 1u : 0u });
     int_types_[key] = id;
@@ -121,7 +111,8 @@ uint32_t SpirvBuilder::type_int(uint32_t width, bool is_signed) {
 uint32_t SpirvBuilder::type_float(uint32_t width) {
     auto it = float_types_.find(width);
     if (it != float_types_.end()) return it->second;
-    if (width == 64) add_capability(Capability::Float64);
+    if (width == 16) add_capability(Capability::Float16);
+    else if (width == 64) add_capability(Capability::Float64);
     uint32_t id = alloc_id();
     append_op(types_consts_globals_words_, Op::OpTypeFloat, { id, width });
     float_types_[width] = id;
@@ -136,6 +127,16 @@ uint32_t SpirvBuilder::type_vector(uint32_t elem_type_id, uint32_t count) {
     uint32_t id = alloc_id();
     append_op(types_consts_globals_words_, Op::OpTypeVector, { id, elem_type_id, count });
     vector_types_[key] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::type_matrix(uint32_t col_type_id, uint32_t col_count) {
+    auto key = std::make_pair(col_type_id, col_count);
+    auto it = matrix_types_.find(key);
+    if (it != matrix_types_.end()) return it->second;
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpTypeMatrix, { id, col_type_id, col_count });
+    matrix_types_[key] = id;
     return id;
 }
 
@@ -201,6 +202,9 @@ uint32_t SpirvBuilder::type_image(uint32_t sampled_type_id, Dim dim, uint32_t de
     std::vector<uint32_t> key = { sampled_type_id, static_cast<uint32_t>(dim), depth, arrayed, ms, sampled, format };
     auto it = image_types_.find(key);
     if (it != image_types_.end()) return it->second;
+    if (dim == Dim::Dim1D) {
+        add_capability(sampled == 2 ? Capability::Image1D : Capability::Sampled1D);
+    }
     uint32_t id = alloc_id();
     std::vector<uint32_t> args = { id, sampled_type_id, static_cast<uint32_t>(dim), depth, arrayed, ms, sampled, format };
     append_op(types_consts_globals_words_, Op::OpTypeImage, args);
@@ -299,6 +303,71 @@ uint32_t SpirvBuilder::const_u16(uint16_t val) {
     return id;
 }
 
+uint32_t SpirvBuilder::const_s64(int64_t val) {
+    auto it = const_s64_map_.find(val);
+    if (it != const_s64_map_.end()) return it->second;
+    uint32_t t = type_s64();
+    uint32_t id = alloc_id();
+    uint64_t uval = static_cast<uint64_t>(val);
+    append_op(types_consts_globals_words_, Op::OpConstant,
+              { t, id, static_cast<uint32_t>(uval & 0xFFFFFFFFULL), static_cast<uint32_t>(uval >> 32) });
+    const_s64_map_[val] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::const_s16(int16_t val) {
+    auto it = const_s16_map_.find(val);
+    if (it != const_s16_map_.end()) return it->second;
+    uint32_t t = type_s16();
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpConstant, { t, id, static_cast<uint32_t>(static_cast<uint16_t>(val)) });
+    const_s16_map_[val] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::const_u8(uint8_t val) {
+    auto it = const_u8_map_.find(val);
+    if (it != const_u8_map_.end()) return it->second;
+    uint32_t t = type_u8();
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpConstant, { t, id, static_cast<uint32_t>(val) });
+    const_u8_map_[val] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::const_s8(int8_t val) {
+    auto it = const_s8_map_.find(val);
+    if (it != const_s8_map_.end()) return it->second;
+    uint32_t t = type_s8();
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpConstant, { t, id, static_cast<uint32_t>(static_cast<uint8_t>(val)) });
+    const_s8_map_[val] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::const_f16(uint16_t bits) {
+    auto it = const_f16_map_.find(bits);
+    if (it != const_f16_map_.end()) return it->second;
+    uint32_t t = type_f16();
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpConstant, { t, id, static_cast<uint32_t>(bits) });
+    const_f16_map_[bits] = id;
+    return id;
+}
+
+uint32_t SpirvBuilder::const_f64(double val) {
+    uint64_t bits = 0;
+    std::memcpy(&bits, &val, sizeof(double));
+    auto it = const_f64_map_.find(bits);
+    if (it != const_f64_map_.end()) return it->second;
+    uint32_t t = type_f64();
+    uint32_t id = alloc_id();
+    append_op(types_consts_globals_words_, Op::OpConstant,
+              { t, id, static_cast<uint32_t>(bits & 0xFFFFFFFFULL), static_cast<uint32_t>(bits >> 32) });
+    const_f64_map_[bits] = id;
+    return id;
+}
+
 uint32_t SpirvBuilder::const_composite(uint32_t type_id, const std::vector<uint32_t>& constituents) {
     std::vector<uint32_t> key = { type_id };
     key.insert(key.end(), constituents.begin(), constituents.end());
@@ -384,11 +453,38 @@ uint32_t SpirvBuilder::emit_label(uint32_t label_id) {
     return label_id;
 }
 
+static void track_op_capabilities(SpirvBuilder& self, Op opcode) {
+    uint32_t op = static_cast<uint32_t>(opcode);
+    if (opcode == Op::OpDPdx || opcode == Op::OpDPdy || opcode == Op::OpFwidth) {
+        self.add_capability(Capability::DerivativeControl);
+    } else if (opcode == Op::OpImageQuerySizeLod || opcode == Op::OpImageQuerySize) {
+        self.add_capability(Capability::ImageQuery);
+    } else if (op >= static_cast<uint32_t>(Op::OpGroupNonUniformElect) &&
+               op <= static_cast<uint32_t>(Op::OpGroupNonUniformBitwiseXor)) {
+        self.add_capability(Capability::GroupNonUniform);
+        if (op >= static_cast<uint32_t>(Op::OpGroupNonUniformAll) && op <= static_cast<uint32_t>(Op::OpGroupNonUniformAllEqual)) {
+            self.add_capability(Capability::GroupNonUniformVote);
+        } else if (op >= static_cast<uint32_t>(Op::OpGroupNonUniformBroadcast) && op <= static_cast<uint32_t>(Op::OpGroupNonUniformBallotFindMSB)) {
+            self.add_capability(Capability::GroupNonUniformBallot);
+        } else if (op >= static_cast<uint32_t>(Op::OpGroupNonUniformShuffle) && op <= static_cast<uint32_t>(Op::OpGroupNonUniformShuffleDown)) {
+            self.add_capability(Capability::GroupNonUniformShuffle);
+        } else if (op >= static_cast<uint32_t>(Op::OpGroupNonUniformIAdd)) {
+            self.add_capability(Capability::GroupNonUniformArithmetic);
+        }
+    }
+}
+
 void SpirvBuilder::emit_inst(Op opcode, const std::vector<uint32_t>& words) {
+    track_op_capabilities(*this, opcode);
     append_op(body_words_, opcode, words);
 }
 
 uint32_t SpirvBuilder::emit_typed_inst(Op opcode, uint32_t result_type_id, const std::vector<uint32_t>& operands) {
+    track_op_capabilities(*this, opcode);
+    if (result_type_id == 0 || result_type_id >= next_id_) {
+        errors_.push_back("Invalid result_type_id=" + std::to_string(result_type_id) +
+                          " in emit_typed_inst(op=" + std::to_string(static_cast<uint32_t>(opcode)) + ")");
+    }
     uint32_t id = alloc_id();
     std::vector<uint32_t> args = { result_type_id, id };
     args.insert(args.end(), operands.begin(), operands.end());
@@ -412,6 +508,10 @@ uint32_t SpirvBuilder::emit_load(uint32_t result_type_id, uint32_t ptr_id, uint3
 }
 
 void SpirvBuilder::emit_store(uint32_t ptr_id, uint32_t val_id, uint32_t align_bytes) {
+    if (ptr_id == 0 || ptr_id >= next_id_ || val_id == 0 || val_id >= next_id_) {
+        errors_.push_back("Invalid SSA ID in OpStore: ptr=%" + std::to_string(ptr_id) +
+                          " val=%" + std::to_string(val_id) + " (bound=" + std::to_string(next_id_) + ")");
+    }
     if (align_bytes > 0) {
         emit_inst(Op::OpStore, { ptr_id, val_id, MemoryAccessMask::Aligned, align_bytes });
     } else {

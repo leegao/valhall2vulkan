@@ -430,6 +430,7 @@ public:
     uint32_t type_f32() { return type_float(32); }
     uint32_t type_f64() { return type_float(64); }
     uint32_t type_vector(uint32_t elem_type_id, uint32_t count);
+    uint32_t type_matrix(uint32_t col_type_id, uint32_t col_count);
     uint32_t type_array(uint32_t elem_type_id, uint32_t length_const_id, uint32_t stride_bytes = 0);
     uint32_t type_runtime_array(uint32_t elem_type_id, uint32_t stride_bytes = 0);
     uint32_t type_struct(const std::vector<uint32_t>& member_types, const std::string& debug_name = "");
@@ -446,7 +447,13 @@ public:
     uint32_t const_f32(float val);
     uint32_t const_f32_bits(uint32_t bits);
     uint32_t const_u64(uint64_t val);
+    uint32_t const_s64(int64_t val);
     uint32_t const_u16(uint16_t val);
+    uint32_t const_s16(int16_t val);
+    uint32_t const_u8(uint8_t val);
+    uint32_t const_s8(int8_t val);
+    uint32_t const_f16(uint16_t bits);
+    uint32_t const_f64(double val);
     uint32_t const_composite(uint32_t type_id, const std::vector<uint32_t>& constituents);
     uint32_t const_null(uint32_t type_id);
 
@@ -486,6 +493,10 @@ public:
     void emit_return();
     void emit_kill();
 
+    // Validation diagnostics accumulated during emission
+    bool has_errors() const { return !errors_.empty(); }
+    const std::vector<std::string>& errors() const { return errors_; }
+
     // Finalize binary SPIR-V words
     std::vector<uint32_t> assemble() const;
 
@@ -516,6 +527,7 @@ private:
     std::map<std::pair<uint32_t, bool>, uint32_t> int_types_;
     std::map<uint32_t, uint32_t> float_types_;
     std::map<std::pair<uint32_t, uint32_t>, uint32_t> vector_types_;
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> matrix_types_;
     std::map<std::tuple<uint32_t, uint32_t, uint32_t>, uint32_t> array_types_;
     std::map<std::pair<uint32_t, uint32_t>, uint32_t> runtime_array_types_;
     std::map<std::pair<uint32_t, uint32_t>, uint32_t> pointer_types_;
@@ -529,7 +541,14 @@ private:
     std::map<int32_t, uint32_t> const_s32_map_;
     std::map<uint32_t, uint32_t> const_f32_map_;
     std::map<uint64_t, uint32_t> const_u64_map_;
+    std::map<int64_t, uint32_t> const_s64_map_;
     std::map<uint16_t, uint32_t> const_u16_map_;
+    std::map<int16_t, uint32_t> const_s16_map_;
+    std::map<uint8_t, uint32_t> const_u8_map_;
+    std::map<int8_t, uint32_t> const_s8_map_;
+    std::map<uint16_t, uint32_t> const_f16_map_;
+    std::map<uint64_t, uint32_t> const_f64_map_;
+    std::vector<std::string> errors_;
     std::map<std::vector<uint32_t>, uint32_t> const_composite_map_;
     std::map<uint32_t, uint32_t> const_null_map_;
     std::map<uint32_t, uint32_t> builtin_inputs_;
