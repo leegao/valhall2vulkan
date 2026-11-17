@@ -346,6 +346,9 @@ class KraidIsaSpec:
                 pos = int(c.attrib["pos"])
                 width = int(c.attrib["width"])
                 rtype = c.attrib["type"]
+                if rtype == "zero":
+                    rmask = ((1 << width) - 1) << pos
+                    fixed_mask |= rmask
                 reserved_fields.append({"pos": pos, "width": width, "zero": rtype == "zero"})
             elif c.tag == "syntax":
                 for sc in c:
@@ -1707,7 +1710,12 @@ def generate_csf_files(v11_spec: CsfXmlSpec, other_specs: dict, out_dir: str):
                 if fstart % 32 == 0 and fsize >= sub_words * 32:
                     h_lines.append(f"        out.{fn} = {sub_st}::unpack(words + {fstart // 32});")
                 else:
-                    h_lines.append(f"        {{ uint32_t tmp[{sub_words}] = {{0}}; tmp[0] = uint32_t(extract_bits(words, {fstart}, {min(fsize, 32)})); out.{fn} = {sub_st}::unpack(tmp); }}")
+                    num_copy_bits = min(fsize, sub_words * 32)
+                    chunks = []
+                    for off in range(0, num_copy_bits, 32):
+                        c_bits = min(32, num_copy_bits - off)
+                        chunks.append(f"tmp[{off // 32}] = uint32_t(extract_bits(words, {fstart + off}, {c_bits}));")
+                    h_lines.append(f"        {{ uint32_t tmp[{sub_words}] = {{0}}; " + " ".join(chunks) + f" out.{fn} = {sub_st}::unpack(tmp); }}")
                 continue
 
             raw_e = f"extract_bits(words, {fstart}, {fsize})"
@@ -1774,7 +1782,12 @@ def generate_csf_files(v11_spec: CsfXmlSpec, other_specs: dict, out_dir: str):
                     else:
                         h_lines.append(f"        {fn}.pack(words + {fstart // 32});")
                 else:
-                    h_lines.append(f"        {{ uint32_t tmp[{sub_words}] = {{0}}; {fn}.pack(tmp); insert_bits(words, {fstart}, {min(fsize, 32)}, tmp[0]); }}")
+                    num_copy_bits = min(fsize, sub_words * 32)
+                    chunks = []
+                    for off in range(0, num_copy_bits, 32):
+                        c_bits = min(32, num_copy_bits - off)
+                        chunks.append(f"insert_bits(words, {fstart + off}, {c_bits}, tmp[{off // 32}]);")
+                    h_lines.append(f"        {{ uint32_t tmp[{sub_words}] = {{0}}; {fn}.pack(tmp); " + " ".join(chunks) + " }")
                 continue
 
             val_e = f"uint64_t({fn})"

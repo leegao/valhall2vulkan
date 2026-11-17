@@ -6669,633 +6669,633 @@ bool decode_source_operand(
 }
 
 static const InstructionSemanticsSpec kInstructionSpecs[] = {
-    { 0, Mnemonic::ACMPXCHG, Variant::I32, Mnemonic::ACMPXCHG, Variant::I32, "ACMPXCHG.i32", "msg", 9, 14, 0x01FFC07E3FC00000ULL, 0x0120C0041FC00000ULL, 25, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_cas(mem[addr64 + offset], sr_src[0], sr_src[1])", "OpAtomicCompareExchange", "" },
-    { 1, Mnemonic::ACMPXCHG, Variant::I64, Mnemonic::ACMPXCHG, Variant::I64, "ACMPXCHG.i64", "msg", 9, 14, 0x01FFC07E3FC00000ULL, 0x0120C0182FC00000ULL, 25, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_cas(mem[addr64 + offset], sr_src[0], sr_src[1])", "OpAtomicCompareExchange", "" },
-    { 2, Mnemonic::ADR, Variant::NONE, Mnemonic::IADD_IMM, Variant::I32, "ADR", "cvt", 9, 14, 0x07FFC000000000FFULL, 0x0710C000000000FEULL, 21, SemanticCategory::INT_ARITH, "dst = (pc + 8) + sext(imm32)", "PC-relative address calculation", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 3, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "sfu", 9, 10, 0x01FF00073F00FF00ULL, 0x00B400011000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 4, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "cvt", 11, 13, 0x01FF00073F00FF00ULL, 0x00B400011000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 5, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "cvt", 14, 14, 0x01FF00073F00FF00ULL, 0x00B400011000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 6, Mnemonic::AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "AND.i64", "sfu", 9, 13, 0x01FFC0073F00FF00ULL, 0x01B7C0011000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 7, Mnemonic::AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "AND.i64", "sfu", 14, 14, 0x01FFC0073F00FF00ULL, 0x01B7C0011000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 8, Mnemonic::AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "AND.v2i16", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B500010000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 9, Mnemonic::AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "AND.v2i16", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B500010000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 10, Mnemonic::AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "AND.v4i8", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B600010000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 11, Mnemonic::AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "AND.v4i8", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B600010000C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 12, Mnemonic::AND_IMM, Variant::I32, Mnemonic::AND_IMM, Variant::I32, "AND_IMM.i32", "cvt", 11, 14, 0x01FF000000000000ULL, 0x0118000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = src0 & imm32", "OpBitwiseAnd(src0, imm32)", "" },
-    { 13, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "sfu", 9, 10, 0x01FF000F03FF0000ULL, 0x00B4000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 14, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "cvt", 11, 13, 0x01FF000F03FF0000ULL, 0x00B4000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 15, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "cvt", 14, 14, 0x01FF000F03FF0000ULL, 0x00B4000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 16, Mnemonic::ARSHIFT, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT.i64", "sfu", 9, 13, 0x01FFC00F03FF0000ULL, 0x01B7C00401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 17, Mnemonic::ARSHIFT, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT.i64", "sfu", 14, 14, 0x01FFC00F03FF0000ULL, 0x01B7C00401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 18, Mnemonic::ARSHIFT, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT.v2i16", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B5000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 19, Mnemonic::ARSHIFT, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT.v2i16", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B5000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 20, Mnemonic::ARSHIFT, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT.v4i8", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B6000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 21, Mnemonic::ARSHIFT, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT.v4i8", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B6000401C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 22, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 23, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 24, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 25, Mnemonic::ARSHIFT_AND, Variant::I64, Mnemonic::ARSHIFT_AND, Variant::I64, "ARSHIFT_AND.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 26, Mnemonic::ARSHIFT_AND, Variant::I64, Mnemonic::ARSHIFT_AND, Variant::I64, "ARSHIFT_AND.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 27, Mnemonic::ARSHIFT_AND, Variant::V2I16, Mnemonic::ARSHIFT_AND, Variant::V2I16, "ARSHIFT_AND.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 28, Mnemonic::ARSHIFT_AND, Variant::V2I16, Mnemonic::ARSHIFT_AND, Variant::V2I16, "ARSHIFT_AND.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 29, Mnemonic::ARSHIFT_AND, Variant::V4I8, Mnemonic::ARSHIFT_AND, Variant::V4I8, "ARSHIFT_AND.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 30, Mnemonic::ARSHIFT_AND, Variant::V4I8, Mnemonic::ARSHIFT_AND, Variant::V4I8, "ARSHIFT_AND.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000400000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 31, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 32, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 33, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 34, Mnemonic::ARSHIFT_OR, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT_OR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 35, Mnemonic::ARSHIFT_OR, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT_OR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 36, Mnemonic::ARSHIFT_OR, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT_OR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 37, Mnemonic::ARSHIFT_OR, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT_OR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 38, Mnemonic::ARSHIFT_OR, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT_OR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 39, Mnemonic::ARSHIFT_OR, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT_OR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000401000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 40, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 41, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 42, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 43, Mnemonic::ARSHIFT_XOR, Variant::I64, Mnemonic::ARSHIFT_XOR, Variant::I64, "ARSHIFT_XOR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 44, Mnemonic::ARSHIFT_XOR, Variant::I64, Mnemonic::ARSHIFT_XOR, Variant::I64, "ARSHIFT_XOR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 45, Mnemonic::ARSHIFT_XOR, Variant::V2I16, Mnemonic::ARSHIFT_XOR, Variant::V2I16, "ARSHIFT_XOR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 46, Mnemonic::ARSHIFT_XOR, Variant::V2I16, Mnemonic::ARSHIFT_XOR, Variant::V2I16, "ARSHIFT_XOR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 47, Mnemonic::ARSHIFT_XOR, Variant::V4I8, Mnemonic::ARSHIFT_XOR, Variant::V4I8, "ARSHIFT_XOR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 48, Mnemonic::ARSHIFT_XOR, Variant::V4I8, Mnemonic::ARSHIFT_XOR, Variant::V4I8, "ARSHIFT_XOR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000402000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 49, Mnemonic::ATEST, Variant::NONE, Mnemonic::ATEST, Variant::NONE, "ATEST", "msg", 9, 14, 0x01FFC00FC0000000ULL, 0x007D800200000000ULL, 17, SemanticCategory::FRAGMENT_OUT, "coverage_out = update_coverage(coverage_in, alpha, atest_datum)", "Alpha-to-coverage / discard test", "Does alpha-to-coverage testing, updating the sample coverage mask. ATEST does not do an implicit discard. It should be executed before the first ZS_EMIT or BLEND instruction." },
-    { 50, Mnemonic::ATOM, Variant::I32, Mnemonic::ATOM, Variant::I32, "ATOM.i32", "msg", 9, 14, 0x01FFC00E3C000000ULL, 0x0068400218000000ULL, 18, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom_op(mem[addr64 + offset], sr_src)", "OpAtomicIAdd / SMin / SMax / UMin / UMax / And / Or / Xor / Exchange", "" },
-    { 51, Mnemonic::ATOM, Variant::I64, Mnemonic::ATOM, Variant::I64, "ATOM.i64", "msg", 9, 14, 0x01FFC0003C000000ULL, 0x0068400028000000ULL, 15, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom_op(mem[addr64 + offset], sr_src)", "OpAtomicIAdd / SMin / SMax / UMin / UMax / And / Or / Xor / Exchange", "" },
-    { 52, Mnemonic::ATOM1, Variant::I32, Mnemonic::ATOM1, Variant::I32, "ATOM1.i32", "msg", 9, 14, 0x01FFFF0E3C000000ULL, 0x0069400018000000ULL, 24, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom1_op(mem[addr64 + offset], 1)", "OpAtomicIIncrement / IDecrement", "" },
-    { 53, Mnemonic::ATOM1, Variant::I64, Mnemonic::ATOM1, Variant::I64, "ATOM1.i64", "msg", 9, 14, 0x01FFFF0E3C000000ULL, 0x0069400028000000ULL, 24, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom1_op(mem[addr64 + offset], 1)", "OpAtomicIIncrement / IDecrement", "" },
-    { 54, Mnemonic::ATOM1_RETURN, Variant::I32, Mnemonic::ATOM1_RETURN, Variant::I32, "ATOM1_RETURN.i32", "msg", 9, 14, 0x01FFC00E3C000000ULL, 0x0069800218000000ULL, 18, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom1_op, 1)", "OpAtomicIIncrement / IDecrement returning old value", "" },
-    { 55, Mnemonic::ATOM1_RETURN, Variant::I64, Mnemonic::ATOM1_RETURN, Variant::I64, "ATOM1_RETURN.i64", "msg", 9, 14, 0x01FFC00E3C000000ULL, 0x0069800428000000ULL, 18, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom1_op, 1)", "OpAtomicIIncrement / IDecrement returning old value", "" },
-    { 56, Mnemonic::ATOM_RETURN, Variant::I32, Mnemonic::ATOM_RETURN, Variant::I32, "ATOM_RETURN.i32", "msg", 9, 14, 0x01FFC07E3C000000ULL, 0x0120C00218000000ULL, 21, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom_op, sr_src)", "OpAtomic* returning old value", "" },
-    { 57, Mnemonic::ATOM_RETURN, Variant::I64, Mnemonic::ATOM_RETURN, Variant::I64, "ATOM_RETURN.i64", "msg", 9, 14, 0x01FFC0703C000000ULL, 0x0120C01028000000ULL, 18, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom_op, sr_src)", "OpAtomic* returning old value", "" },
-    { 58, Mnemonic::AXCHG, Variant::I32, Mnemonic::ATOM_RETURN, Variant::I32, "AXCHG.i32", "msg", 9, 14, 0x01FFC07E3FC00000ULL, 0x0120C0021BC00000ULL, 25, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_xchg(mem[addr64 + offset], sr_src)", "OpAtomicExchange", "" },
-    { 59, Mnemonic::AXCHG, Variant::I64, Mnemonic::ATOM_RETURN, Variant::I64, "AXCHG.i64", "msg", 9, 14, 0x01FFC07E3FC00000ULL, 0x0120C0142BC00000ULL, 25, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_xchg(mem[addr64 + offset], sr_src)", "OpAtomicExchange", "" },
-    { 60, Mnemonic::BARRIER, Variant::NONE, Mnemonic::BARRIER, Variant::NONE, "BARRIER", "msg", 9, 14, 0x07FFFF0FC0000000ULL, 0x0045C001C0000000ULL, 25, SemanticCategory::CONTROL_FLOW, "workgroup execution & memory barrier", "OpControlBarrier(Workgroup, Workgroup, AcquireRelease|WorkgroupMemory)", "General-purpose barrier. Must use slot #7. Must be paired with a `.wait` flow on the instruction." },
-    { 61, Mnemonic::BITREV, Variant::I32, Mnemonic::BITREV, Variant::I32, "BITREV.i32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x00910000000D0000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = reverse_bits(src0) [kraid::OpBitRev: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src) as u32; f.set_dst(&self.dst, src.reverse_bits]", "OpBitReverse", "Only available as 32-bit. Other bitsizes may be derived with swizzles." },
-    { 62, Mnemonic::BLEND, Variant::NONE, Mnemonic::BLEND, Variant::NONE, "BLEND", "msg", 9, 13, 0x01FFC00030000000ULL, 0x007F400030000000ULL, 13, SemanticCategory::FRAGMENT_OUT, "blend_to_rt(target_rt, sr_src_color, coverage, blend_desc)", "OpStore to Fragment Output location = target_rt", "Blends a given render target. This loads the API-specified blend state for the render target from the first source. Blend descriptors are available as special immediates. It then reads the colour to be blended from the first staging registe" },
-    { 63, Mnemonic::BLEND, Variant::NONE, Mnemonic::BLEND, Variant::NONE, "BLEND", "msg", 14, 14, 0x01FFC00030000000ULL, 0x007F400030000000ULL, 13, SemanticCategory::FRAGMENT_OUT, "blend_to_rt(target_rt, sr_src_color, coverage, blend_desc)", "OpStore to Fragment Output location = target_rt", "Blends a given render target. This loads the API-specified blend state for the render target from the first source. Blend descriptors are available as special immediates. It then reads the colour to be blended from the first staging registe" },
-    { 64, Mnemonic::BRANCH, Variant::NONE, Mnemonic::BRANCH, Variant::NONE, "BRANCH", "cvt", 9, 14, 0x01FFC00000000000ULL, 0x001FC00000000000ULL, 11, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = (pc + 8) + offset", "OpSelectionMerge / OpLoopMerge + OpBranchConditional", "" },
-    { 65, Mnemonic::CLPER, Variant::NONE, Mnemonic::CLPER, Variant::NONE, "CLPER", "sfu", 9, 10, 0x01FF0000000F0000ULL, 0x00A00000000F0000ULL, 13, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1))", "Quad/subgroup derivative shuffle (OpDPdx/OpDPdy/OpGroupNonUniformQuadBroadcast)", "Selects the value of A in the subgroup lane given by B. This implements subgroup broadcasts. It may be used as a primitive for screen space derivatives in fragment shaders." },
-    { 66, Mnemonic::CLPER, Variant::NONE, Mnemonic::CLPER, Variant::NONE, "CLPER", "cvt", 11, 14, 0x01FF0000000F0000ULL, 0x00A00000000F0000ULL, 13, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1))", "Quad/subgroup derivative shuffle (OpDPdx/OpDPdy/OpGroupNonUniformQuadBroadcast)", "Selects the value of A in the subgroup lane given by B. This implements subgroup broadcasts. It may be used as a primitive for screen space derivatives in fragment shaders." },
-    { 67, Mnemonic::CLPER_OR, Variant::NONE, Mnemonic::CLPER_OR, Variant::NONE, "CLPER_OR", "cvt", 14, 14, 0x01FF000000000000ULL, 0x00B1000000000000ULL, 9, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1)) | src2", "Quad shuffle + OR", "" },
-    { 68, Mnemonic::CLZ, Variant::U32, Mnemonic::CLZ, Variant::U32, "CLZ.u32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000040000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
-    { 69, Mnemonic::CLZ, Variant::V2U16, Mnemonic::CLZ, Variant::V2U16, "CLZ.v2u16", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000050000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
-    { 70, Mnemonic::CLZ, Variant::V4U8, Mnemonic::CLZ, Variant::V4U8, "CLZ.v4u8", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000060000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
-    { 71, Mnemonic::CSEL, Variant::F32, Mnemonic::CSEL, Variant::F32, "CSEL.f32", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0154000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 72, Mnemonic::CSEL, Variant::S32, Mnemonic::CSEL, Variant::S32, "CSEL.s32", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0158000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 73, Mnemonic::CSEL, Variant::U32, Mnemonic::CSEL, Variant::U32, "CSEL.u32", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0150000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 74, Mnemonic::CSEL, Variant::V2F16, Mnemonic::CSEL, Variant::V2F16, "CSEL.v2f16", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0155000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 75, Mnemonic::CSEL, Variant::V2S16, Mnemonic::CSEL, Variant::V2S16, "CSEL.v2s16", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0159000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 76, Mnemonic::CSEL, Variant::V2U16, Mnemonic::CSEL, Variant::V2U16, "CSEL.v2u16", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0151000000000000ULL, 9, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
-    { 77, Mnemonic::CUBEFACE1, Variant::NONE, Mnemonic::CUBEFACE1, Variant::NONE, "CUBEFACE1", "cvt", 9, 14, 0x01FF000000000000ULL, 0x00C0000000000000ULL, 9, SemanticCategory::CUBE_HELPER, "dst = max(|x|, |y|, |z|) [kraid::OpCubeFaceMax: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let x = f32::from_bits(f.get_src(&self.coords[0]) as u32); let y = f32::from]", "Cube map major axis magnitude", "Select the maximum absolute value of its arguments." },
-    { 78, Mnemonic::CUBEFACE2, Variant::NONE, Mnemonic::CUBEFACE2, Variant::NONE, "CUBEFACE2", "cvt", 9, 14, 0x01FF000000000000ULL, 0x00C1000000000000ULL, 9, SemanticCategory::CUBE_HELPER, "dst = cube_face_index(x, y, z) [kraid::OpCubeFaceIdx: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let x = f32::from_bits(f.get_src(&self.coords[0]) as u32); let y = f32::from]", "Cube map face index 0..5", "" },
-    { 79, Mnemonic::CUBE_SSEL, Variant::NONE, Mnemonic::CUBE_SSEL, Variant::NONE, "CUBE_SSEL", "sfu", 9, 14, 0x01FF000001000000ULL, 0x00BC000000000000ULL, 10, SemanticCategory::CUBE_HELPER, "dst = select_cube_s(z, x, y, face)", "Cube map S coordinate selection", "During a cube map transform, select the S coordinate given a selected face." },
-    { 80, Mnemonic::CUBE_TSEL, Variant::NONE, Mnemonic::CUBE_TSEL, Variant::NONE, "CUBE_TSEL", "sfu", 9, 14, 0x01FF000001000000ULL, 0x00BC000001000000ULL, 10, SemanticCategory::CUBE_HELPER, "dst = select_cube_t(y, z, face)", "Cube map T coordinate selection", "During a cube map transform, select the T coordinate given a selected face." },
-    { 81, Mnemonic::DISCARD, Variant::F32, Mnemonic::DISCARD, Variant::F32, "DISCARD.f32", "cvt", 9, 14, 0x01FFC00000000000ULL, 0x0020C00000000000ULL, 11, SemanticCategory::CONTROL_FLOW, "if (cond) discard_fragment()", "OpDemoteToHelperInvocation / OpKill", "Evaluates the given condition, and if it passes, discards the current fragment and terminates the thread. Only valid in a **fragment** shader." },
-    { 82, Mnemonic::DOORBELL, Variant::NONE, Mnemonic::DOORBELL, Variant::NONE, "DOORBELL", "msg", 9, 14, 0x07FFFF0E00000000ULL, 0x0004C00000000000ULL, 22, SemanticCategory::SYSTEM, "ring_hw_doorbell(src0)", "Hardware doorbell no-op in shader", "" },
-    { 83, Mnemonic::EUREKA, Variant::NONE, Mnemonic::EUREKA, Variant::NONE, "EUREKA", "msg", 9, 14, 0x07FFFF0E00000000ULL, 0x0005C00000000000ULL, 22, SemanticCategory::SYSTEM, "trace_marker()", "Hardware trace marker no-op", "" },
-    { 84, Mnemonic::F16_TO_F32, Variant::NONE, Mnemonic::F16_TO_F32, Variant::NONE, "F16_TO_F32", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x00900000000B0000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(f16(src0))", "GLSL.std.450 UnpackHalf2x16", "Converts up with the specified round mode." },
-    { 85, Mnemonic::F16_TO_F32, Variant::NONE, Mnemonic::F16_TO_F32, Variant::NONE, "F16_TO_F32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x00900000000B0000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(f16(src0))", "GLSL.std.450 UnpackHalf2x16", "Converts up with the specified round mode." },
-    { 86, Mnemonic::F16_TO_S32, Variant::NONE, Mnemonic::F16_TO_S32, Variant::NONE, "F16_TO_S32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000000A0000ULL, 14, SemanticCategory::CONVERSION, "dst = s32(round(f16(src0)))", "UnpackHalf2x16 + OpConvertFToS", "Performs the given data conversion." },
-    { 87, Mnemonic::F16_TO_U32, Variant::NONE, Mnemonic::F16_TO_U32, Variant::NONE, "F16_TO_U32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000001A0000ULL, 14, SemanticCategory::CONVERSION, "dst = u32(round(f16(src0)))", "UnpackHalf2x16 + OpConvertFToU", "Performs the given data conversion." },
-    { 88, Mnemonic::F32_TO_F16, Variant::NONE, Mnemonic::FADD, Variant::F32, "F32_TO_F16", "fma", 11, 14, 0x01FF00243C0FFF00ULL, 0x00A400000000C000ULL, 27, SemanticCategory::CONVERSION, "dst = pack_f16(round(src0), round(src1)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 PackHalf2x16", "$A + B$" },
-    { 89, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000000C0000ULL, 14, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
-    { 90, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 11, 13, 0x01FF0000001F0000ULL, 0x00900000000C0000ULL, 14, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
-    { 91, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x00900000000C0000ULL, 14, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
-    { 92, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000001C0000ULL, 14, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
-    { 93, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 11, 13, 0x01FF0000001F0000ULL, 0x00900000001C0000ULL, 14, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
-    { 94, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x00900000001C0000ULL, 14, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
-    { 95, Mnemonic::FABS, Variant::F32, Mnemonic::FADD, Variant::F32, "FABS.f32", "fma", 9, 14, 0x01FF00F4CC0FFF00ULL, 0x00A400900000C000ULL, 30, SemanticCategory::FP_ARITH, "dst = |src0| [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 FAbs", "$A + B$" },
-    { 96, Mnemonic::FABS, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FABS.v2f16", "fma", 9, 14, 0x01FF00F4CC0FFF00ULL, 0x00A500900800C000ULL, 30, SemanticCategory::FP_ARITH, "dst = |src0| [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 FAbs", "$A + B$" },
-    { 97, Mnemonic::FADD, Variant::F32, Mnemonic::FADD, Variant::F32, "FADD.f32", "fma", 9, 14, 0x01FF0000000F0000ULL, 0x00A4000000000000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) + mod(src1))) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFAdd (f32 / v2f16)", "$A + B$" },
-    { 98, Mnemonic::FADD, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FADD.v2f16", "fma", 9, 14, 0x01FF0000000F0000ULL, 0x00A5000000000000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) + mod(src1))) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFAdd (f32 / v2f16)", "$A + B$" },
-    { 99, Mnemonic::FADD_IMM, Variant::F32, Mnemonic::FADD_IMM, Variant::F32, "FADD_IMM.f32", "fma", 9, 14, 0x01FF000000000000ULL, 0x0114000000000000ULL, 9, SemanticCategory::FP_ARITH, "dst = src0 + bitcast<f32>(imm)", "OpFAdd with immediate constant", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `FADD.f32` with a constant accessed as a uniform. However, if the constant is available inline, `FADD.f32` is pref" },
-    { 100, Mnemonic::FADD_IMM, Variant::V2F16, Mnemonic::FADD_IMM, Variant::V2F16, "FADD_IMM.v2f16", "fma", 9, 14, 0x01FF000000000000ULL, 0x0115000000000000ULL, 9, SemanticCategory::FP_ARITH, "dst = src0 + bitcast<f32>(imm)", "OpFAdd with immediate constant", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `FADD.f32` with a constant accessed as a uniform. However, if the constant is available inline, `FADD.f32` is pref" },
-    { 101, Mnemonic::FADD_LSCALE, Variant::F32, Mnemonic::FADD_LSCALE, Variant::F32, "FADD_LSCALE.f32", "fma", 9, 14, 0x01FF0000000F0000ULL, 0x00A4000000090000ULL, 13, SemanticCategory::FP_SFU, "dst = ldexp(src0, src2) + src1", "OpFAdd(GLSL.std.450 Ldexp(src0, src2), src1)", "Performs a floating-point addition specialized for logarithm computation." },
-    { 102, Mnemonic::FADD_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FADD_RSCALE.f32", "fma", 9, 14, 0x01F800300000FF00ULL, 0x016000000000D000ULL, 16, SemanticCategory::FP_SFU, "dst = ldexp(mod(src0) + mod(src1), src3)", "GLSL.std.450 Ldexp(OpFAdd(src0, src1), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
-    { 103, Mnemonic::FATAN_ASSIST, Variant::F32, Mnemonic::FATAN_ASSIST, Variant::F32, "FATAN_ASSIST.f32", "sfu", 9, 14, 0x01FF0000030F0000ULL, 0x00A40000000E0000ULL, 15, SemanticCategory::FP_SFU, "dst = atan_assist(src0, src1)", "GLSL.std.450 Atan2", "Used for `atan2()` implementation. Destination is two 16-bit values (int and float) for the first form, and a single 32-bit float when `.second` is set (indicating the FATAN_TABLE.f32 instruction)." },
-    { 104, Mnemonic::FATAN_TABLE, Variant::F32, Mnemonic::FATAN_TABLE, Variant::F32, "FATAN_TABLE.f32", "sfu", 9, 14, 0x01FF0000030F0000ULL, 0x00A40000010E0000ULL, 15, SemanticCategory::FP_SFU, "dst = atan_table(src0)", "GLSL.std.450 Atan", "" },
-    { 105, Mnemonic::FCMP, Variant::F32, Mnemonic::FCMP_OR, Variant::F32, "FCMP.f32", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F4000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(mod(src0), mod(src1))) [kraid::OpFCmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpFOrd* / OpFUnord* -> OpSelect(mask, 1, 0)", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 106, Mnemonic::FCMP, Variant::V2F16, Mnemonic::FCMP_OR, Variant::V2F16, "FCMP.v2f16", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F5000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(mod(src0), mod(src1))) [kraid::OpFCmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpFOrd* / OpFUnord* -> OpSelect(mask, 1, 0)", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 107, Mnemonic::FCMP_AND, Variant::F32, Mnemonic::FCMP_AND, Variant::F32, "FCMP_AND.f32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F4000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Float compare combined with AND src2", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
-    { 108, Mnemonic::FCMP_AND, Variant::V2F16, Mnemonic::FCMP_AND, Variant::V2F16, "FCMP_AND.v2f16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F5000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Float compare combined with AND src2", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
-    { 109, Mnemonic::FCMP_OR, Variant::F32, Mnemonic::FCMP_OR, Variant::F32, "FCMP_OR.f32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F4000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Float compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 110, Mnemonic::FCMP_OR, Variant::V2F16, Mnemonic::FCMP_OR, Variant::V2F16, "FCMP_OR.v2f16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F5000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Float compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 111, Mnemonic::FCOS_TABLE, Variant::U6, Mnemonic::FCOS_TABLE, Variant::U6, "FCOS_TABLE.u6", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000050000ULL, 14, SemanticCategory::FP_SFU, "dst = cos(src0 * 2*pi)", "GLSL.std.450 Cos", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
-    { 112, Mnemonic::FEXP, Variant::F16, Mnemonic::FPOW, Variant::F16, "FEXP.f16", "sfu", 12, 14, 0x01FF00C0130F00FFULL, 0x00A60000130D00DCULL, 26, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "Calculates the base-2 exponent of an argument specified as a 8:24 fixed-point. The original argument is passed as well for correct handling of special cases." },
-    { 113, Mnemonic::FEXP, Variant::F32, Mnemonic::FEXP, Variant::F32, "FEXP.f32", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A4000000080000ULL, 13, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "Calculates the base-2 exponent of an argument specified as a 8:24 fixed-point. The original argument is passed as well for correct handling of special cases." },
-    { 114, Mnemonic::FEXPF, Variant::F32, Mnemonic::FEXPF, Variant::F32, "FEXPF.f32", "sfu", 14, 14, 0x01FF0000001F0000ULL, 0x009C000000110000ULL, 14, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "" },
-    { 115, Mnemonic::FEXP_TABLE, Variant::U4, Mnemonic::FEXP_TABLE, Variant::U4, "FEXP_TABLE.u4", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000D0000ULL, 14, SemanticCategory::FP_SFU, "dst = exp2_table_lookup(src0)", "GLSL.std.450 Exp2", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
-    { 116, Mnemonic::FLOG, Variant::F16, Mnemonic::FLOG, Variant::F16, "FLOG.f16", "sfu", 12, 14, 0x01FF0000001F0000ULL, 0x009C000000090000ULL, 14, SemanticCategory::FP_SFU, "dst = log2(src0)", "GLSL.std.450 Log2", "" },
-    { 117, Mnemonic::FLOG, Variant::F32, Mnemonic::FLOG, Variant::F32, "FLOG.f32", "sfu", 14, 14, 0x01FF0000001F0000ULL, 0x009C000000100000ULL, 14, SemanticCategory::FP_SFU, "dst = log2(src0)", "GLSL.std.450 Log2", "" },
-    { 118, Mnemonic::FLOGD, Variant::F32, Mnemonic::FLOGD, Variant::F32, "FLOGD.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000080000ULL, 14, SemanticCategory::FP_SFU, "dst = log2_mantissa_poly(src0)", "GLSL.std.450 Log2", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 119, Mnemonic::FLOG_TABLE, Variant::F32, Mnemonic::FLOG_TABLE, Variant::F32, "FLOG_TABLE.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000C0000ULL, 14, SemanticCategory::FP_SFU, "dst = log2_table(src0)", "GLSL.std.450 Log2", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 120, Mnemonic::FLUSH, Variant::F32, Mnemonic::FLUSH, Variant::F32, "FLUSH.f32", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0098000000000000ULL, 14, SemanticCategory::FP_ARITH, "dst = flush_subnormals(src0) [kraid::OpFlush: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_src(&self.src); let c = match self.src_type.scalar_type()]", "OpFAdd(src0, 0.0)", "Flush special float values. The ftz modifier flushes subnormal values to zero. The flush_inf modifier flushes +inf to the maximum finite value, and -inf to the minimum finite value. nan_mode may flush either all NaN values to zero or signal" },
-    { 121, Mnemonic::FLUSH, Variant::V2F16, Mnemonic::FLUSH, Variant::V2F16, "FLUSH.v2f16", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0098000000010000ULL, 14, SemanticCategory::FP_ARITH, "dst = flush_subnormals(src0) [kraid::OpFlush: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_src(&self.src); let c = match self.src_type.scalar_type()]", "OpFAdd(src0, 0.0)", "Flush special float values. The ftz modifier flushes subnormal values to zero. The flush_inf modifier flushes +inf to the maximum finite value, and -inf to the minimum finite value. nan_mode may flush either all NaN values to zero or signal" },
-    { 122, Mnemonic::FMA, Variant::F32, Mnemonic::FMA, Variant::F32, "FMA.f32", "fma", 9, 14, 0x01FF000000000000ULL, 0x00B2000000000000ULL, 9, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1) + mod(src2))) [kraid::OpFma: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 Fma / OpFAdd(OpFMul)", "$A \\cdot B + C$" },
-    { 123, Mnemonic::FMA, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMA.v2f16", "fma", 9, 14, 0x01FF000000000000ULL, 0x00B3000000000000ULL, 9, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1) + mod(src2))) [kraid::OpFma: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 Fma / OpFAdd(OpFMul)", "$A \\cdot B + C$" },
-    { 124, Mnemonic::FMAX, Variant::F32, Mnemonic::FMAX, Variant::F32, "FMAX.f32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A4000000030000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(ieee_max(mod(src0), mod(src1))) [kraid::OpFMax: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMax / FMax", "$\\max \\{ A, B \\}$" },
-    { 125, Mnemonic::FMAX, Variant::V2F16, Mnemonic::FMAX, Variant::V2F16, "FMAX.v2f16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A5000000030000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(ieee_max(mod(src0), mod(src1))) [kraid::OpFMax: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMax / FMax", "$\\max \\{ A, B \\}$" },
-    { 126, Mnemonic::FMA_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FMA_RSCALE.f32", "fma", 9, 14, 0x01F8000000000000ULL, 0x0160000000000000ULL, 6, SemanticCategory::FP_SFU, "dst = ldexp(fma(mod(src0), mod(src1), mod(src2)), src3)", "GLSL.std.450 Ldexp(Fma(src0, src1, src2), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
-    { 127, Mnemonic::FMIN, Variant::F32, Mnemonic::FMIN, Variant::F32, "FMIN.f32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A4000000020000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(ieee_min(mod(src0), mod(src1))) [kraid::OpFMin: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMin / FMin", "$\\min \\{ A, B \\}$" },
-    { 128, Mnemonic::FMIN, Variant::V2F16, Mnemonic::FMIN, Variant::V2F16, "FMIN.v2f16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A5000000020000ULL, 13, SemanticCategory::FP_ARITH, "dst = clamp(ieee_min(mod(src0), mod(src1))) [kraid::OpFMin: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMin / FMin", "$\\min \\{ A, B \\}$" },
-    { 129, Mnemonic::FMUL, Variant::F32, Mnemonic::FMA, Variant::F32, "FMUL.f32", "fma", 9, 13, 0x01FF000803FF0000ULL, 0x00B2000000C00000ULL, 20, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
-    { 130, Mnemonic::FMUL, Variant::F32, Mnemonic::FMA, Variant::F32, "FMUL.f32", "fma", 14, 14, 0x01FF000803FF0000ULL, 0x00B2000000C00000ULL, 20, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
-    { 131, Mnemonic::FMUL, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMUL.v2f16", "fma", 9, 13, 0x01FF000803FF0000ULL, 0x00B3000002C00000ULL, 20, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
-    { 132, Mnemonic::FMUL, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMUL.v2f16", "fma", 14, 14, 0x01FF000803FF0000ULL, 0x00B3000002C00000ULL, 20, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
-    { 133, Mnemonic::FMUL_CSLICE, Variant::NONE, Mnemonic::FMUL_CSLICE, Variant::NONE, "FMUL_CSLICE", "fma", 9, 14, 0x01FF0000000F0000ULL, 0x00A50000000A0000ULL, 13, SemanticCategory::FP_SFU, "dst = cslice_mul(src0, src1)", "OpFMul", "" },
-    { 134, Mnemonic::FMUL_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FMUL_RSCALE.f32", "fma", 9, 14, 0x01F8000C00FF0000ULL, 0x0160000400C00000ULL, 16, SemanticCategory::FP_SFU, "dst = ldexp(mod(src0) * mod(src1), src3)", "GLSL.std.450 Ldexp(OpFMul(src0, src1), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
-    { 135, Mnemonic::FMUL_SLICE, Variant::F32, Mnemonic::FMUL_SLICE, Variant::F32, "FMUL_SLICE.f32", "fma", 9, 14, 0x01FF0000000F0000ULL, 0x00A40000000A0000ULL, 13, SemanticCategory::FP_SFU, "dst = slice_mul(src0, src1)", "OpFMul", "" },
-    { 136, Mnemonic::FNEG, Variant::F32, Mnemonic::FADD, Variant::F32, "FNEG.f32", "fma", 9, 14, 0x01FF00F4CC0FFF00ULL, 0x00A400500000C000ULL, 30, SemanticCategory::FP_ARITH, "dst = -src0 [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFNegate", "$A + B$" },
-    { 137, Mnemonic::FNEG, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FNEG.v2f16", "fma", 9, 14, 0x01FF00F4CC0FFF00ULL, 0x00A500500800C000ULL, 30, SemanticCategory::FP_ARITH, "dst = -src0 [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFNegate", "$A + B$" },
-    { 138, Mnemonic::FPCLASS, Variant::F16, Mnemonic::FPCLASS, Variant::F16, "FPCLASS.f16", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000B0000ULL, 14, SemanticCategory::FP_SFU, "dst = classify_fp(src0)", "OpIsNan / OpIsInf", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 139, Mnemonic::FPCLASS, Variant::F32, Mnemonic::FPCLASS, Variant::F32, "FPCLASS.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000A0000ULL, 14, SemanticCategory::FP_SFU, "dst = classify_fp(src0)", "OpIsNan / OpIsInf", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 140, Mnemonic::FPOW, Variant::F16, Mnemonic::FPOW, Variant::F16, "FPOW.f16", "sfu", 12, 14, 0x01FF0000030F0000ULL, 0x00A60000030D0000ULL, 15, SemanticCategory::FP_SFU, "dst = pow(src0, src1)", "GLSL.std.450 Pow", "" },
-    { 141, Mnemonic::FPOW_SC_APPLY, Variant::NONE, Mnemonic::FPOW_SC_APPLY, Variant::NONE, "FPOW_SC_APPLY", "sfu", 9, 14, 0x01FF0000030F0000ULL, 0x00A40000010D0000ULL, 15, SemanticCategory::FP_SFU, "dst = pow_scale_apply(src0, src1)", "GLSL.std.450 Pow helper", "" },
-    { 142, Mnemonic::FPOW_SC_DET, Variant::F32, Mnemonic::FPOW_SC_DET, Variant::F32, "FPOW_SC_DET.f32", "sfu", 9, 14, 0x01FF0000030F0000ULL, 0x00A40000000D0000ULL, 15, SemanticCategory::FP_SFU, "dst = pow_scale_detect(src0, src1)", "GLSL.std.450 Pow helper", "" },
-    { 143, Mnemonic::FRCBRT_APPROX_A, Variant::F32, Mnemonic::FRCBRT_APPROX_A, Variant::F32, "FRCBRT_APPROX_A.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009E000000000000ULL, 14, SemanticCategory::FP_SFU, "dst = rcbrt_step_a(src0)", "Pow(src0, -1/3)", "" },
-    { 144, Mnemonic::FRCBRT_APPROX_B, Variant::F32, Mnemonic::FRCBRT_APPROX_B, Variant::F32, "FRCBRT_APPROX_B.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009E000000010000ULL, 14, SemanticCategory::FP_SFU, "dst = rcbrt_step_b(src0)", "Pow(src0, -1/3)", "" },
-    { 145, Mnemonic::FRCBRT_APPROX_C, Variant::F32, Mnemonic::FRCBRT_APPROX_C, Variant::F32, "FRCBRT_APPROX_C.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009E000000020000ULL, 14, SemanticCategory::FP_SFU, "dst = rcbrt_step_c(src0)", "Pow(src0, -1/3)", "" },
-    { 146, Mnemonic::FRCP, Variant::F16, Mnemonic::FRCP, Variant::F16, "FRCP.f16", "sfu", 9, 10, 0x01FF0000001F0000ULL, 0x009C000000010000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 147, Mnemonic::FRCP, Variant::F16, Mnemonic::FRCP, Variant::F16, "FRCP.f16", "sfu", 11, 14, 0x01FF0000001F0000ULL, 0x009C000000010000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 148, Mnemonic::FRCP, Variant::F32, Mnemonic::FRCP, Variant::F32, "FRCP.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000000000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 149, Mnemonic::FRCP_APPROX, Variant::F32, Mnemonic::FRCP_APPROX, Variant::F32, "FRCP_APPROX.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000E0000ULL, 14, SemanticCategory::FP_SFU, "dst = approx_rcp(src0)", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 150, Mnemonic::FREXPE, Variant::F32, Mnemonic::FREXPE, Variant::F32, "FREXPE.f32", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0099000000020000ULL, 14, SemanticCategory::FP_SFU, "dst = frexp_exp(src0)", "GLSL.std.450 FrexpStruct.exp", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
-    { 151, Mnemonic::FREXPE, Variant::V2F16, Mnemonic::FREXPE, Variant::V2F16, "FREXPE.v2f16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0099000000030000ULL, 14, SemanticCategory::FP_SFU, "dst = frexp_exp(src0)", "GLSL.std.450 FrexpStruct.exp", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
-    { 152, Mnemonic::FREXPM, Variant::F32, Mnemonic::FREXPM, Variant::F32, "FREXPM.f32", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0099000000000000ULL, 14, SemanticCategory::FP_SFU, "dst = frexp_mantissa(src0)", "GLSL.std.450 FrexpStruct.significand", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
-    { 153, Mnemonic::FREXPM, Variant::V2F16, Mnemonic::FREXPM, Variant::V2F16, "FREXPM.v2f16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0099000000010000ULL, 14, SemanticCategory::FP_SFU, "dst = frexp_mantissa(src0)", "GLSL.std.450 FrexpStruct.significand", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
-    { 154, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000000D0000ULL, 14, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
-    { 155, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "fma", 11, 13, 0x01FFC000301F0000ULL, 0x0090C000000D0000ULL, 18, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
-    { 156, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "fma", 14, 14, 0x01FFC000301F0000ULL, 0x0090C000000D0000ULL, 18, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
-    { 157, Mnemonic::FROUND, Variant::V2F16, Mnemonic::FROUND, Variant::V2F16, "FROUND.v2f16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000000F0000ULL, 14, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
-    { 158, Mnemonic::FRSQ, Variant::F16, Mnemonic::FRSQ, Variant::F16, "FRSQ.f16", "sfu", 9, 10, 0x01FF0000001F0000ULL, 0x009C000000030000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 159, Mnemonic::FRSQ, Variant::F16, Mnemonic::FRSQ, Variant::F16, "FRSQ.f16", "sfu", 11, 14, 0x01FF0000001F0000ULL, 0x009C000000030000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 160, Mnemonic::FRSQ, Variant::F32, Mnemonic::FRSQ, Variant::F32, "FRSQ.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000020000ULL, 14, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 161, Mnemonic::FRSQ_APPROX, Variant::F32, Mnemonic::FRSQ_APPROX, Variant::F32, "FRSQ_APPROX.f32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C0000000F0000ULL, 14, SemanticCategory::FP_SFU, "dst = approx_rsq(src0)", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
-    { 162, Mnemonic::FSINCOS, Variant::F32, Mnemonic::FSINCOS, Variant::F32, "FSINCOS.f32", "sfu", 14, 14, 0x01FF0000030F0000ULL, 0x00A40000020E0000ULL, 15, SemanticCategory::FP_SFU, "dst = sincos(src0)", "GLSL.std.450 Sin / Cos", "" },
-    { 163, Mnemonic::FSINCOS_OFFSET, Variant::U6, Mnemonic::FSINCOS_OFFSET, Variant::U6, "FSINCOS_OFFSET.u6", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000060000ULL, 14, SemanticCategory::FP_SFU, "dst = sincos_phase_offset(src0)", "Phase reduction for Sin/Cos", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
-    { 164, Mnemonic::FSIN_TABLE, Variant::U6, Mnemonic::FSIN_TABLE, Variant::U6, "FSIN_TABLE.u6", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x009C000000040000ULL, 14, SemanticCategory::FP_SFU, "dst = sin(src0 * 2*pi)", "GLSL.std.450 Sin", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
-    { 165, Mnemonic::FSQRT, Variant::F32, Mnemonic::FSQRT, Variant::F32, "FSQRT.f32", "sfu", 14, 14, 0x01FF0000001F0000ULL, 0x009C000000070000ULL, 14, SemanticCategory::FP_SFU, "dst = sqrt(mod(src0))", "GLSL.std.450 Sqrt", "" },
-    { 166, Mnemonic::HADD, Variant::S32, Mnemonic::HADD, Variant::S32, "HADD.s32", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A80000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 167, Mnemonic::HADD, Variant::U32, Mnemonic::HADD, Variant::U32, "HADD.u32", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A00000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 168, Mnemonic::HADD, Variant::V2S16, Mnemonic::HADD, Variant::V2S16, "HADD.v2s16", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A90000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 169, Mnemonic::HADD, Variant::V2U16, Mnemonic::HADD, Variant::V2U16, "HADD.v2u16", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A10000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 170, Mnemonic::HADD, Variant::V4S8, Mnemonic::HADD, Variant::V4S8, "HADD.v4s8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00AA0000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 171, Mnemonic::HADD, Variant::V4U8, Mnemonic::HADD, Variant::V4U8, "HADD.v4u8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A20000000B0000ULL, 13, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
-    { 172, Mnemonic::IABS, Variant::S32, Mnemonic::IABS, Variant::S32, "IABS.s32", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000080000ULL, 14, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
-    { 173, Mnemonic::IABS, Variant::V2S16, Mnemonic::IABS, Variant::V2S16, "IABS.v2s16", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000090000ULL, 14, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
-    { 174, Mnemonic::IABS, Variant::V4S8, Mnemonic::IABS, Variant::V4S8, "IABS.v4s8", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00910000000A0000ULL, 14, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
-    { 175, Mnemonic::IADD, Variant::S32, Mnemonic::IADD, Variant::S32, "IADD.s32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A8000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 176, Mnemonic::IADD, Variant::S64, Mnemonic::IADD, Variant::S64, "IADD.s64", "cvt", 9, 10, 0x01FFC000000F0000ULL, 0x01ABC00000000000ULL, 15, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 177, Mnemonic::IADD, Variant::S64, Mnemonic::IADD, Variant::S64, "IADD.s64", "cvt", 11, 14, 0x01FFC000400F0000ULL, 0x01ABC00000000000ULL, 16, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 178, Mnemonic::IADD, Variant::U32, Mnemonic::IADD, Variant::U32, "IADD.u32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A0000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 179, Mnemonic::IADD, Variant::U64, Mnemonic::IADD, Variant::U64, "IADD.u64", "cvt", 9, 10, 0x01FFC000000F0000ULL, 0x01A3C00000000000ULL, 15, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 180, Mnemonic::IADD, Variant::U64, Mnemonic::IADD, Variant::U64, "IADD.u64", "cvt", 11, 14, 0x01FFC000400F0000ULL, 0x01A3C00000000000ULL, 16, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 181, Mnemonic::IADD, Variant::V2S16, Mnemonic::IADD, Variant::V2S16, "IADD.v2s16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A9000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 182, Mnemonic::IADD, Variant::V2U16, Mnemonic::IADD, Variant::V2U16, "IADD.v2u16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A1000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 183, Mnemonic::IADD, Variant::V4S8, Mnemonic::IADD, Variant::V4S8, "IADD.v4s8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00AA000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 184, Mnemonic::IADD, Variant::V4U8, Mnemonic::IADD, Variant::V4U8, "IADD.v4u8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A2000000000000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 185, Mnemonic::IADDC, Variant::U32, Mnemonic::IADDC, Variant::U32, "IADDC.u32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00B0000000000000ULL, 11, SemanticCategory::INT_ARITH, "dst = src0 + src1 + carry", "OpIAddCarry", "" },
-    { 186, Mnemonic::IADD_IMM, Variant::I32, Mnemonic::IADD_IMM, Variant::I32, "IADD_IMM.i32", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0110000000000000ULL, 9, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 187, Mnemonic::IADD_IMM, Variant::V2I16, Mnemonic::IADD_IMM, Variant::V2I16, "IADD_IMM.v2i16", "cvt", 9, 14, 0x01FF000000000000ULL, 0x0111000000000000ULL, 9, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 188, Mnemonic::IADD_IMM, Variant::V4I8, Mnemonic::IADD_IMM, Variant::V4I8, "IADD_IMM.v4i8", "cvt", 9, 10, 0x01FF000000000000ULL, 0x0112000000000000ULL, 9, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 189, Mnemonic::ICMP, Variant::S32, Mnemonic::ICMP_OR, Variant::S32, "ICMP.s32", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F8000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 190, Mnemonic::ICMP, Variant::U32, Mnemonic::ICMP_OR, Variant::U32, "ICMP.u32", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F0000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 191, Mnemonic::ICMP, Variant::V2S16, Mnemonic::ICMP_OR, Variant::V2S16, "ICMP.v2s16", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F9000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 192, Mnemonic::ICMP, Variant::V2U16, Mnemonic::ICMP_OR, Variant::V2U16, "ICMP.v2u16", "cvt", 9, 14, 0x01FF000003FF0000ULL, 0x00F1000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 193, Mnemonic::ICMP, Variant::V4S8, Mnemonic::ICMP_OR, Variant::V4S8, "ICMP.v4s8", "cvt", 9, 10, 0x01FF000003FF0000ULL, 0x00FA000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 194, Mnemonic::ICMP, Variant::V4U8, Mnemonic::ICMP_OR, Variant::V4U8, "ICMP.v4u8", "cvt", 9, 10, 0x01FF000003FF0000ULL, 0x00F2000000C00000ULL, 19, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 195, Mnemonic::ICMP_AND, Variant::S32, Mnemonic::ICMP_AND, Variant::S32, "ICMP_AND.s32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F8000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 196, Mnemonic::ICMP_AND, Variant::U32, Mnemonic::ICMP_AND, Variant::U32, "ICMP_AND.u32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F0000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 197, Mnemonic::ICMP_AND, Variant::V2S16, Mnemonic::ICMP_AND, Variant::V2S16, "ICMP_AND.v2s16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F9000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 198, Mnemonic::ICMP_AND, Variant::V2U16, Mnemonic::ICMP_AND, Variant::V2U16, "ICMP_AND.v2u16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F1000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 199, Mnemonic::ICMP_AND, Variant::V4S8, Mnemonic::ICMP_AND, Variant::V4S8, "ICMP_AND.v4s8", "cvt", 9, 10, 0x01FF000003000000ULL, 0x00FA000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 200, Mnemonic::ICMP_AND, Variant::V4U8, Mnemonic::ICMP_AND, Variant::V4U8, "ICMP_AND.v4u8", "cvt", 9, 10, 0x01FF000003000000ULL, 0x00F2000001000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
-    { 201, Mnemonic::ICMP_MULTI, Variant::S32, Mnemonic::ICMP_MULTI, Variant::S32, "ICMP_MULTI.s32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F8000002000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = multi_lane_icmp(src0, src1, src2)", "Multi-component integer comparison", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
-    { 202, Mnemonic::ICMP_MULTI, Variant::U32, Mnemonic::ICMP_MULTI, Variant::U32, "ICMP_MULTI.u32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F0000002000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = multi_lane_icmp(src0, src1, src2)", "Multi-component integer comparison", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
-    { 203, Mnemonic::ICMP_OR, Variant::S32, Mnemonic::ICMP_OR, Variant::S32, "ICMP_OR.s32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F8000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 204, Mnemonic::ICMP_OR, Variant::U32, Mnemonic::ICMP_OR, Variant::U32, "ICMP_OR.u32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F0000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 205, Mnemonic::ICMP_OR, Variant::V2S16, Mnemonic::ICMP_OR, Variant::V2S16, "ICMP_OR.v2s16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F9000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 206, Mnemonic::ICMP_OR, Variant::V2U16, Mnemonic::ICMP_OR, Variant::V2U16, "ICMP_OR.v2u16", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00F1000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 207, Mnemonic::ICMP_OR, Variant::V4S8, Mnemonic::ICMP_OR, Variant::V4S8, "ICMP_OR.v4s8", "cvt", 9, 10, 0x01FF000003000000ULL, 0x00FA000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 208, Mnemonic::ICMP_OR, Variant::V4U8, Mnemonic::ICMP_OR, Variant::V4U8, "ICMP_OR.v4u8", "cvt", 9, 10, 0x01FF000003000000ULL, 0x00F2000000000000ULL, 11, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
-    { 209, Mnemonic::IDPADD, Variant::V4S8, Mnemonic::IDPADD, Variant::V4S8, "IDPADD.v4s8", "fma", 9, 13, 0x01FF000001000000ULL, 0x00C2000000000000ULL, 10, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
-    { 210, Mnemonic::IDPADD, Variant::V4S8, Mnemonic::IDPADD, Variant::V4S8, "IDPADD.v4s8", "fma", 14, 14, 0x01FF000001000000ULL, 0x00C2000000000000ULL, 10, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
-    { 211, Mnemonic::IDPADD, Variant::V4U8, Mnemonic::IDPADD, Variant::V4U8, "IDPADD.v4u8", "fma", 9, 14, 0x01FF000001000000ULL, 0x00C2000001000000ULL, 10, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
-    { 212, Mnemonic::ILOGB, Variant::F32, Mnemonic::ILOGB, Variant::F32, "ILOGB.f32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0098000000040000ULL, 14, SemanticCategory::FP_SFU, "dst = int(floor(log2(|src0|)))", "GLSL.std.450 FrexpStruct exponent", "" },
-    { 213, Mnemonic::ILOGB, Variant::V2F16, Mnemonic::ILOGB, Variant::V2F16, "ILOGB.v2f16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0098000000050000ULL, 14, SemanticCategory::FP_SFU, "dst = int(floor(log2(|src0|)))", "GLSL.std.450 FrexpStruct exponent", "" },
-    { 214, Mnemonic::IMUL, Variant::S32, Mnemonic::IMUL, Variant::S32, "IMUL.s32", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A80000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 215, Mnemonic::IMUL, Variant::S64, Mnemonic::IMUL, Variant::S64, "IMUL.s64", "sfu", 9, 14, 0x01FFC000000F0000ULL, 0x01ABC000000A0000ULL, 15, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 216, Mnemonic::IMUL, Variant::U32, Mnemonic::IMUL, Variant::U32, "IMUL.u32", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A00000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 217, Mnemonic::IMUL, Variant::U64, Mnemonic::IMUL, Variant::U64, "IMUL.u64", "sfu", 9, 14, 0x01FFC000000F0000ULL, 0x01A3C000000A0000ULL, 15, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 218, Mnemonic::IMUL, Variant::V2S16, Mnemonic::IMUL, Variant::V2S16, "IMUL.v2s16", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A90000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 219, Mnemonic::IMUL, Variant::V2U16, Mnemonic::IMUL, Variant::V2U16, "IMUL.v2u16", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A10000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 220, Mnemonic::IMUL, Variant::V4S8, Mnemonic::IMUL, Variant::V4S8, "IMUL.v4s8", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00AA0000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 221, Mnemonic::IMUL, Variant::V4U8, Mnemonic::IMUL, Variant::V4U8, "IMUL.v4u8", "sfu", 9, 14, 0x01FF0000000F0000ULL, 0x00A20000000A0000ULL, 13, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
-    { 222, Mnemonic::ISUB, Variant::S32, Mnemonic::ISUB, Variant::S32, "ISUB.s32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A8000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 223, Mnemonic::ISUB, Variant::S64, Mnemonic::ISUB, Variant::S64, "ISUB.s64", "cvt", 9, 10, 0x01FFC000000F0000ULL, 0x01ABC00000010000ULL, 15, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 224, Mnemonic::ISUB, Variant::S64, Mnemonic::ISUB, Variant::S64, "ISUB.s64", "cvt", 11, 14, 0x01FFC000400F0000ULL, 0x01ABC00000010000ULL, 16, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 225, Mnemonic::ISUB, Variant::U32, Mnemonic::ISUB, Variant::U32, "ISUB.u32", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A0000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 226, Mnemonic::ISUB, Variant::U64, Mnemonic::ISUB, Variant::U64, "ISUB.u64", "cvt", 9, 10, 0x01FFC000000F0000ULL, 0x01A3C00000010000ULL, 15, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 227, Mnemonic::ISUB, Variant::U64, Mnemonic::ISUB, Variant::U64, "ISUB.u64", "cvt", 11, 14, 0x01FFC000400F0000ULL, 0x01A3C00000010000ULL, 16, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 228, Mnemonic::ISUB, Variant::V2S16, Mnemonic::ISUB, Variant::V2S16, "ISUB.v2s16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A9000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 229, Mnemonic::ISUB, Variant::V2U16, Mnemonic::ISUB, Variant::V2U16, "ISUB.v2u16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A1000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 230, Mnemonic::ISUB, Variant::V4S8, Mnemonic::ISUB, Variant::V4S8, "ISUB.v4s8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00AA000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 231, Mnemonic::ISUB, Variant::V4U8, Mnemonic::ISUB, Variant::V4U8, "ISUB.v4u8", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A2000000010000ULL, 13, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
-    { 232, Mnemonic::ISUBB, Variant::U32, Mnemonic::ISUBB, Variant::U32, "ISUBB.u32", "cvt", 9, 14, 0x01FF000003000000ULL, 0x00B0000001000000ULL, 11, SemanticCategory::INT_ARITH, "dst = src0 - src1 - borrow", "OpISubBorrow", "" },
-    { 233, Mnemonic::JUMP, Variant::NONE, Mnemonic::JUMP, Variant::NONE, "JUMP", "cvt", 9, 10, 0x01FFC00000000000ULL, 0x002FC00000000000ULL, 11, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = target_va", "Indirect or absolute branch", "" },
-    { 234, Mnemonic::JUMP, Variant::NONE, Mnemonic::JUMP, Variant::NONE, "JUMP", "cvt", 11, 14, 0x01FFC10000000000ULL, 0x002FC10000000000ULL, 12, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = target_va", "Indirect or absolute branch", "" },
-    { 235, Mnemonic::JUMP_EX, Variant::NONE, Mnemonic::JUMP_EX, Variant::NONE, "JUMP_EX", "cvt", 9, 14, 0x01FFC00000000000ULL, 0x003FC00000000000ULL, 11, SemanticCategory::CONTROL_FLOW, "exception/blend jump to target_va", "Blend shader / exception call", "" },
-    { 236, Mnemonic::KABOOM, Variant::NONE, Mnemonic::KABOOM, Variant::NONE, "KABOOM", "msg", 9, 14, 0x07FFFF0E00000000ULL, 0x0006C00000000000ULL, 22, SemanticCategory::SYSTEM, "trap()", "Hardware trap", "" },
-    { 237, Mnemonic::LDEXP, Variant::F32, Mnemonic::LDEXP, Variant::F32, "LDEXP.f32", "fma", 9, 13, 0x01FF0000000F0000ULL, 0x00A4000000060000ULL, 13, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
-    { 238, Mnemonic::LDEXP, Variant::F32, Mnemonic::LDEXP, Variant::F32, "LDEXP.f32", "fma", 14, 14, 0x01FF0000000F0000ULL, 0x00A4000000060000ULL, 13, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
-    { 239, Mnemonic::LDEXP, Variant::V2F16, Mnemonic::LDEXP, Variant::V2F16, "LDEXP.v2f16", "fma", 9, 13, 0x01FF0000000F0000ULL, 0x00A5000000060000ULL, 13, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
-    { 240, Mnemonic::LDEXP, Variant::V2F16, Mnemonic::LDEXP, Variant::V2F16, "LDEXP.v2f16", "fma", 14, 14, 0x01FF0000000F0000ULL, 0x00A5000000060000ULL, 13, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
-    { 241, Mnemonic::LD_ATTR, Variant::NONE, Mnemonic::LD_ATTR, Variant::NONE, "LD_ATTR", "msg", 9, 14, 0x01FFC06000000000ULL, 0x0076800000000000ULL, 13, SemanticCategory::VERTEX_VARYING, "sr_dst = fetch_vertex_attr(table, attr_idx, vertex_id, instance_id)", "OpLoad from Input attribute variable (location = attr_idx)", "Load `vecsize` components from the attribute descriptor at the specified location at index (vertex ID, instance ID), converting to the specified register format. The index must not diverge within a warp." },
-    { 242, Mnemonic::LD_ATTR_IMM, Variant::NONE, Mnemonic::LD_ATTR_IMM, Variant::NONE, "LD_ATTR_IMM", "msg", 9, 14, 0x01FFC06000000000ULL, 0x0066800000000000ULL, 13, SemanticCategory::VERTEX_VARYING, "sr_dst = fetch_vertex_attr(table, imm_idx, vertex_id, instance_id)", "OpLoad from Input attribute variable (location = imm_idx)", "Load `vecsize` components from the attribute descriptor at entry `index` of resource table `table` at index (vertex ID, instance ID), converting to the specified register format." },
-    { 243, Mnemonic::LD_CHECKED, Variant::I128, Mnemonic::LD_CHECKED, Variant::I128, "LD_CHECKED.i128", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800838000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 244, Mnemonic::LD_CHECKED, Variant::I128, Mnemonic::LD_CHECKED, Variant::I128, "LD_CHECKED.i128", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800818000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 245, Mnemonic::LD_CHECKED, Variant::I16, Mnemonic::LD_CHECKED, Variant::I16, "LD_CHECKED.i16", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800208000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 246, Mnemonic::LD_CHECKED, Variant::I16, Mnemonic::LD_CHECKED, Variant::I16, "LD_CHECKED.i16", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800208000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 247, Mnemonic::LD_CHECKED, Variant::I24, Mnemonic::LD_CHECKED, Variant::I24, "LD_CHECKED.i24", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800210000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 248, Mnemonic::LD_CHECKED, Variant::I24, Mnemonic::LD_CHECKED, Variant::I24, "LD_CHECKED.i24", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800210000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 249, Mnemonic::LD_CHECKED, Variant::I32, Mnemonic::LD_CHECKED, Variant::I32, "LD_CHECKED.i32", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800218000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 250, Mnemonic::LD_CHECKED, Variant::I32, Mnemonic::LD_CHECKED, Variant::I32, "LD_CHECKED.i32", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800218000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 251, Mnemonic::LD_CHECKED, Variant::I48, Mnemonic::LD_CHECKED, Variant::I48, "LD_CHECKED.i48", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800420000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 252, Mnemonic::LD_CHECKED, Variant::I48, Mnemonic::LD_CHECKED, Variant::I48, "LD_CHECKED.i48", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800400000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 253, Mnemonic::LD_CHECKED, Variant::I64, Mnemonic::LD_CHECKED, Variant::I64, "LD_CHECKED.i64", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800428000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 254, Mnemonic::LD_CHECKED, Variant::I64, Mnemonic::LD_CHECKED, Variant::I64, "LD_CHECKED.i64", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800408000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 255, Mnemonic::LD_CHECKED, Variant::I8, Mnemonic::LD_CHECKED, Variant::I8, "LD_CHECKED.i8", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800200000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 256, Mnemonic::LD_CHECKED, Variant::I8, Mnemonic::LD_CHECKED, Variant::I8, "LD_CHECKED.i8", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800200000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 257, Mnemonic::LD_CHECKED, Variant::I96, Mnemonic::LD_CHECKED, Variant::I96, "LD_CHECKED.i96", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0172800630000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 258, Mnemonic::LD_CHECKED, Variant::I96, Mnemonic::LD_CHECKED, Variant::I96, "LD_CHECKED.i96", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0172800610000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
-    { 259, Mnemonic::LD_CHECKED_IMM, Variant::I128, Mnemonic::LD_CHECKED_IMM, Variant::I128, "LD_CHECKED_IMM.i128", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800838000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 260, Mnemonic::LD_CHECKED_IMM, Variant::I128, Mnemonic::LD_CHECKED_IMM, Variant::I128, "LD_CHECKED_IMM.i128", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800818000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 261, Mnemonic::LD_CHECKED_IMM, Variant::I16, Mnemonic::LD_CHECKED_IMM, Variant::I16, "LD_CHECKED_IMM.i16", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800208000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 262, Mnemonic::LD_CHECKED_IMM, Variant::I16, Mnemonic::LD_CHECKED_IMM, Variant::I16, "LD_CHECKED_IMM.i16", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800208000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 263, Mnemonic::LD_CHECKED_IMM, Variant::I24, Mnemonic::LD_CHECKED_IMM, Variant::I24, "LD_CHECKED_IMM.i24", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800210000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 264, Mnemonic::LD_CHECKED_IMM, Variant::I24, Mnemonic::LD_CHECKED_IMM, Variant::I24, "LD_CHECKED_IMM.i24", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800210000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 265, Mnemonic::LD_CHECKED_IMM, Variant::I32, Mnemonic::LD_CHECKED_IMM, Variant::I32, "LD_CHECKED_IMM.i32", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800218000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 266, Mnemonic::LD_CHECKED_IMM, Variant::I32, Mnemonic::LD_CHECKED_IMM, Variant::I32, "LD_CHECKED_IMM.i32", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800218000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 267, Mnemonic::LD_CHECKED_IMM, Variant::I48, Mnemonic::LD_CHECKED_IMM, Variant::I48, "LD_CHECKED_IMM.i48", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800420000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 268, Mnemonic::LD_CHECKED_IMM, Variant::I48, Mnemonic::LD_CHECKED_IMM, Variant::I48, "LD_CHECKED_IMM.i48", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800400000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 269, Mnemonic::LD_CHECKED_IMM, Variant::I64, Mnemonic::LD_CHECKED_IMM, Variant::I64, "LD_CHECKED_IMM.i64", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800428000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 270, Mnemonic::LD_CHECKED_IMM, Variant::I64, Mnemonic::LD_CHECKED_IMM, Variant::I64, "LD_CHECKED_IMM.i64", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800408000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 271, Mnemonic::LD_CHECKED_IMM, Variant::I8, Mnemonic::LD_CHECKED_IMM, Variant::I8, "LD_CHECKED_IMM.i8", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800200000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 272, Mnemonic::LD_CHECKED_IMM, Variant::I8, Mnemonic::LD_CHECKED_IMM, Variant::I8, "LD_CHECKED_IMM.i8", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800200000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 273, Mnemonic::LD_CHECKED_IMM, Variant::I96, Mnemonic::LD_CHECKED_IMM, Variant::I96, "LD_CHECKED_IMM.i96", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0072800630000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 274, Mnemonic::LD_CHECKED_IMM, Variant::I96, Mnemonic::LD_CHECKED_IMM, Variant::I96, "LD_CHECKED_IMM.i96", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0072800610000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
-    { 275, Mnemonic::LD_CVT, Variant::NONE, Mnemonic::LD_CVT, Variant::NONE, "LD_CVT", "msg", 9, 14, 0x01FFC00000000000ULL, 0x0070800000000000ULL, 11, SemanticCategory::MEMORY_LS, "sr_dst = format_convert(mem[addr64 + offset], fmt)", "Formatted load with conversion", "Load from memory with data conversion. The address to load from is given in the first source, which must be a 64-bit register (a pair of 32-bit registers). The other source is the conversion descriptor used for the load." },
-    { 276, Mnemonic::LD_GCLK, Variant::NONE, Mnemonic::LD_GCLK, Variant::NONE, "LD_GCLK", "msg", 9, 14, 0x07FFC00E00000000ULL, 0x0044800400000000ULL, 16, SemanticCategory::SYSTEM, "sr_dst = read_gpu_timestamp_counter()", "OpReadClockKHR", "" },
-    { 277, Mnemonic::LD_MULTI, Variant::NONE, Mnemonic::LD_MULTI, Variant::NONE, "LD_MULTI", "msg", 14, 14, 0x01FFC00000000000ULL, 0x0062800000000000ULL, 11, SemanticCategory::MEMORY_LS, "sr_dst[0..N] = mem[addr64 + offset]", "Multi-register burst load", "" },
-    { 278, Mnemonic::LD_PKA, Variant::I128, Mnemonic::LD_PKA, Variant::I128, "LD_PKA.i128", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006A80F838000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 279, Mnemonic::LD_PKA, Variant::I16, Mnemonic::LD_PKA, Variant::I16, "LD_PKA.i16", "msg", 9, 14, 0x01FFC00038000000ULL, 0x006A800008000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 280, Mnemonic::LD_PKA, Variant::I24, Mnemonic::LD_PKA, Variant::I24, "LD_PKA.i24", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006A808210000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 281, Mnemonic::LD_PKA, Variant::I32, Mnemonic::LD_PKA, Variant::I32, "LD_PKA.i32", "msg", 9, 14, 0x01FFC00038000000ULL, 0x006A800018000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 282, Mnemonic::LD_PKA, Variant::I48, Mnemonic::LD_PKA, Variant::I48, "LD_PKA.i48", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006A80C420000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 283, Mnemonic::LD_PKA, Variant::I64, Mnemonic::LD_PKA, Variant::I64, "LD_PKA.i64", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006A80F428000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 284, Mnemonic::LD_PKA, Variant::I8, Mnemonic::LD_PKA, Variant::I8, "LD_PKA.i8", "msg", 9, 14, 0x01FFC00038000000ULL, 0x006A800000000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 285, Mnemonic::LD_PKA, Variant::I96, Mnemonic::LD_PKA, Variant::I96, "LD_PKA.i96", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006A80E630000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
-    { 286, Mnemonic::LD_TEX, Variant::NONE, Mnemonic::LD_TEX, Variant::NONE, "LD_TEX", "msg", 9, 14, 0x01FFC06000000000ULL, 0x0076802000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = image_load(image_idx, coords)", "OpImageRead", "Load `vecsize` components from the texture descriptor at the specified location at index, converting to the specified register format." },
-    { 287, Mnemonic::LD_TEX_IMM, Variant::NONE, Mnemonic::LD_TEX_IMM, Variant::NONE, "LD_TEX_IMM", "msg", 9, 14, 0x01FFC06000000000ULL, 0x0066802000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = image_load(imm_image_idx, coords)", "OpImageRead", "Load `vecsize` components from the texture descriptor at entry `index` of resource table `table`, converting to the specified register format." },
-    { 288, Mnemonic::LD_TILE, Variant::NONE, Mnemonic::LD_TILE, Variant::NONE, "LD_TILE", "msg", 9, 10, 0x01FFC00000000000ULL, 0x0078800000000000ULL, 11, SemanticCategory::FRAGMENT_OUT, "sr_dst = read_tilebuffer(rt_index, sample, pixel_fmt)", "Subpass / framebuffer fetch read", "Loads a given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used to implement EXT_framebuffer_fetch and internally in ble" },
-    { 289, Mnemonic::LD_TILE, Variant::NONE, Mnemonic::LD_TILE, Variant::NONE, "LD_TILE", "msg", 11, 14, 0x01FFC00000000000ULL, 0x0078800000000000ULL, 11, SemanticCategory::FRAGMENT_OUT, "sr_dst = read_tilebuffer(rt_index, sample, pixel_fmt)", "Subpass / framebuffer fetch read", "Loads a given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used to implement EXT_framebuffer_fetch and internally in ble" },
-    { 290, Mnemonic::LD_VAR, Variant::NONE, Mnemonic::LD_VAR, Variant::NONE, "LD_VAR", "msg", 9, 14, 0x01FFC00000000000ULL, 0x0064800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying(index, sample_mode, perspective)", "OpLoad from Fragment Input varying", "Interpolates a given varying from a software buffer" },
-    { 291, Mnemonic::LD_VAR_BUF, Variant::F16, Mnemonic::LD_VAR_BUF, Variant::F16, "LD_VAR_BUF.f16", "msg", 9, 13, 0x01FFC00000000000ULL, 0x006D800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 292, Mnemonic::LD_VAR_BUF, Variant::F16, Mnemonic::LD_VAR_BUF, Variant::F16, "LD_VAR_BUF.f16", "msg", 14, 14, 0x01FFC00000000000ULL, 0x006D800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 293, Mnemonic::LD_VAR_BUF, Variant::F32, Mnemonic::LD_VAR_BUF, Variant::F32, "LD_VAR_BUF.f32", "msg", 9, 13, 0x01FFC00000000000ULL, 0x006C800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 294, Mnemonic::LD_VAR_BUF, Variant::F32, Mnemonic::LD_VAR_BUF, Variant::F32, "LD_VAR_BUF.f32", "msg", 14, 14, 0x01FFC00000000000ULL, 0x006C800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 295, Mnemonic::LD_VAR_BUF_FLAT, Variant::NONE, Mnemonic::LD_VAR_BUF_FLAT, Variant::NONE, "LD_VAR_BUF_FLAT", "msg", 14, 14, 0x01FFC00000000000ULL, 0x005F800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying_buf(offset)", "OpLoad from Flat Fragment Input varying at byte offset", "Fetches a given flat varying from hardware buffer" },
-    { 296, Mnemonic::LD_VAR_BUF_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_BUF_FLAT_IMM, Variant::NONE, "LD_VAR_BUF_FLAT_IMM", "msg", 14, 14, 0x01FFC00000000000ULL, 0x0040800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying_buf(imm_offset)", "OpLoad from Flat Fragment Input varying at byte offset", "Fetches a given flat varying from hardware buffer" },
-    { 297, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 9, 10, 0x01FFC00000000000ULL, 0x005D800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 298, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 11, 13, 0x01FFC00000000000ULL, 0x005D800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 299, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 14, 14, 0x01FFC00000000000ULL, 0x005D800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 300, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 9, 10, 0x01FFC00000000000ULL, 0x005C800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 301, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 11, 13, 0x01FFC00000000000ULL, 0x005C800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 302, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 14, 14, 0x01FFC00000000000ULL, 0x005C800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
-    { 303, Mnemonic::LD_VAR_FLAT, Variant::NONE, Mnemonic::LD_VAR_FLAT, Variant::NONE, "LD_VAR_FLAT", "msg", 9, 13, 0x01FFC00000000000ULL, 0x0055800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
-    { 304, Mnemonic::LD_VAR_FLAT, Variant::NONE, Mnemonic::LD_VAR_FLAT, Variant::NONE, "LD_VAR_FLAT", "msg", 14, 14, 0x01FFC00000000000ULL, 0x0055800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
-    { 305, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, "LD_VAR_FLAT_IMM", "msg", 9, 13, 0x07FFC00000000000ULL, 0x0041800000000000ULL, 13, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(imm_index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
-    { 306, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, "LD_VAR_FLAT_IMM", "msg", 14, 14, 0x07FFC00000000000ULL, 0x0041800000000000ULL, 13, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(imm_index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
-    { 307, Mnemonic::LD_VAR_IMM, Variant::NONE, Mnemonic::LD_VAR_IMM, Variant::NONE, "LD_VAR_IMM", "msg", 9, 14, 0x01FFC00000000000ULL, 0x0054800000000000ULL, 11, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying(imm_index, sample_mode, perspective)", "OpLoad from Fragment Input varying", "Interpolates a given varying from a software buffer" },
-    { 308, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, "LD_VAR_SPECIAL", "msg", 9, 13, 0x01FFC03007000000ULL, 0x0056803002000000ULL, 16, SemanticCategory::VERTEX_VARYING, "sr_dst = read_special_varying(special_id)", "BuiltIn FragCoord.z / FragCoord.w / PointCoord / FrontFacing", "" },
-    { 309, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, "LD_VAR_SPECIAL", "msg", 14, 14, 0x01FFC00007000000ULL, 0x0056800002000000ULL, 14, SemanticCategory::VERTEX_VARYING, "sr_dst = read_special_varying(special_id)", "BuiltIn FragCoord.z / FragCoord.w / PointCoord / FrontFacing", "" },
-    { 310, Mnemonic::LEA_ATTR, Variant::NONE, Mnemonic::LEA_ATTR, Variant::NONE, "LEA_ATTR", "msg", 9, 14, 0x01FFC06E00000000ULL, 0x0077800600000000ULL, 16, SemanticCategory::VERTEX_VARYING, "sr_dst = vertex_attr_address(table, attr_idx, vertex_id, instance_id)", "Effective address of vertex attribute", "Load the effective address of an attribute specified with the given index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor." },
-    { 311, Mnemonic::LEA_ATTR_IMM, Variant::NONE, Mnemonic::LEA_ATTR_IMM, Variant::NONE, "LEA_ATTR_IMM", "msg", 9, 14, 0x01FFC06E00000000ULL, 0x0067800600000000ULL, 16, SemanticCategory::VERTEX_VARYING, "sr_dst = vertex_attr_address(table, imm_idx, vertex_id, instance_id)", "Effective address of immediate vertex attribute", "Load the effective address of an attribute specified with the given immediate index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor." },
-    { 312, Mnemonic::LEA_BUF, Variant::NONE, Mnemonic::LEA_BUF, Variant::NONE, "LEA_BUF", "msg", 9, 14, 0x01FFC00E00000000ULL, 0x006E800400000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = resolve_buffer_va(table, index, offset)", "Compute 64-bit buffer VA from SRT Buffer descriptor", "Load effective address of a buffer with an offset added." },
-    { 313, Mnemonic::LEA_BUF_IMM, Variant::NONE, Mnemonic::LEA_BUF_IMM, Variant::NONE, "LEA_BUF_IMM", "msg", 9, 14, 0x01FFC00E00000000ULL, 0x005E800400000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = resolve_buffer_va(table, imm_index, offset)", "Compute 64-bit buffer VA (or Position/Varying FIFO slot)", "Load effective address of a buffer with an immediate offset added." },
-    { 314, Mnemonic::LEA_PKA, Variant::NONE, Mnemonic::LEA_PKA, Variant::NONE, "LEA_PKA", "msg", 9, 14, 0x01FFC00E00000000ULL, 0x006B800400000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = unpack_pka56(ptr) + offset", "Effective address from packaged pointer", "Load effective address of a simple buffer with an offset added." },
-    { 315, Mnemonic::LEA_TEX, Variant::NONE, Mnemonic::LEA_TEX, Variant::NONE, "LEA_TEX", "msg", 9, 14, 0x01FFC06E00000000ULL, 0x0077802600000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = image_texel_address(image_idx, coords)", "Compute texel memory address from Texture+Plane descriptor", "Load the effective address of a texel from the image specified with the given index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor. The format of the internal conversion descripto" },
-    { 316, Mnemonic::LEA_TEX_IMM, Variant::NONE, Mnemonic::LEA_TEX_IMM, Variant::NONE, "LEA_TEX_IMM", "msg", 9, 14, 0x01FFC06E00000000ULL, 0x0067802600000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = image_texel_address(imm_image_idx, coords)", "Compute texel memory address from Texture+Plane descriptor", "Load the effective address of a texel from the image specified with the given immediate index. Returns three staging registers: the low/high 32-bits of the address and the internal conversion descriptor. The format of the internal conversio" },
-    { 317, Mnemonic::LOAD, Variant::I128, Mnemonic::LOAD, Variant::I128, "LOAD.i128", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006080F838000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 318, Mnemonic::LOAD, Variant::I16, Mnemonic::LOAD, Variant::I16, "LOAD.i16", "msg", 9, 14, 0x01FFC00038000000ULL, 0x0060800008000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 319, Mnemonic::LOAD, Variant::I24, Mnemonic::LOAD, Variant::I24, "LOAD.i24", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x0060808210000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 320, Mnemonic::LOAD, Variant::I32, Mnemonic::LOAD, Variant::I32, "LOAD.i32", "msg", 9, 14, 0x01FFC00038000000ULL, 0x0060800018000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 321, Mnemonic::LOAD, Variant::I48, Mnemonic::LOAD, Variant::I48, "LOAD.i48", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006080C420000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 322, Mnemonic::LOAD, Variant::I64, Mnemonic::LOAD, Variant::I64, "LOAD.i64", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006080F428000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 323, Mnemonic::LOAD, Variant::I8, Mnemonic::LOAD, Variant::I8, "LOAD.i8", "msg", 9, 14, 0x01FFC00038000000ULL, 0x0060800000000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 324, Mnemonic::LOAD, Variant::I96, Mnemonic::LOAD, Variant::I96, "LOAD.i96", "msg", 9, 14, 0x01FFC0FE38000000ULL, 0x006080E630000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
-    { 325, Mnemonic::LOGB, Variant::F32, Mnemonic::LOGB, Variant::F32, "LOGB.f32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0098000000060000ULL, 14, SemanticCategory::FP_SFU, "dst = floor(log2(|src0|))", "GLSL.std.450 FrexpStruct exponent", "" },
-    { 326, Mnemonic::LOGB, Variant::V2F16, Mnemonic::LOGB, Variant::V2F16, "LOGB.v2f16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0098000000070000ULL, 14, SemanticCategory::FP_SFU, "dst = floor(log2(|src0|))", "GLSL.std.450 FrexpStruct exponent", "" },
-    { 327, Mnemonic::LROT, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT.i32", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B4000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 328, Mnemonic::LROT, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT.i32", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B4000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 329, Mnemonic::LROT, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT.i64", "sfu", 9, 13, 0x01FFC00F03FF0000ULL, 0x01B7C00301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 330, Mnemonic::LROT, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT.i64", "sfu", 14, 14, 0x01FFC00F03FF0000ULL, 0x01B7C00301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 331, Mnemonic::LROT, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT.v2i16", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B5000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 332, Mnemonic::LROT, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT.v2i16", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B5000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 333, Mnemonic::LROT, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT.v4i8", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B6000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 334, Mnemonic::LROT, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT.v4i8", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B6000301C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
-    { 335, Mnemonic::LROT_AND, Variant::I32, Mnemonic::LROT_AND, Variant::I32, "LROT_AND.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 336, Mnemonic::LROT_AND, Variant::I32, Mnemonic::LROT_AND, Variant::I32, "LROT_AND.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 337, Mnemonic::LROT_AND, Variant::I64, Mnemonic::LROT_AND, Variant::I64, "LROT_AND.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 338, Mnemonic::LROT_AND, Variant::I64, Mnemonic::LROT_AND, Variant::I64, "LROT_AND.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 339, Mnemonic::LROT_AND, Variant::V2I16, Mnemonic::LROT_AND, Variant::V2I16, "LROT_AND.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 340, Mnemonic::LROT_AND, Variant::V2I16, Mnemonic::LROT_AND, Variant::V2I16, "LROT_AND.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 341, Mnemonic::LROT_AND, Variant::V4I8, Mnemonic::LROT_AND, Variant::V4I8, "LROT_AND.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 342, Mnemonic::LROT_AND, Variant::V4I8, Mnemonic::LROT_AND, Variant::V4I8, "LROT_AND.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000300000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
-    { 343, Mnemonic::LROT_OR, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT_OR.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 344, Mnemonic::LROT_OR, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT_OR.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 345, Mnemonic::LROT_OR, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT_OR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 346, Mnemonic::LROT_OR, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT_OR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 347, Mnemonic::LROT_OR, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT_OR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 348, Mnemonic::LROT_OR, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT_OR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 349, Mnemonic::LROT_OR, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT_OR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 350, Mnemonic::LROT_OR, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT_OR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000301000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
-    { 351, Mnemonic::LROT_XOR, Variant::I32, Mnemonic::LROT_XOR, Variant::I32, "LROT_XOR.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 352, Mnemonic::LROT_XOR, Variant::I32, Mnemonic::LROT_XOR, Variant::I32, "LROT_XOR.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 353, Mnemonic::LROT_XOR, Variant::I64, Mnemonic::LROT_XOR, Variant::I64, "LROT_XOR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 354, Mnemonic::LROT_XOR, Variant::I64, Mnemonic::LROT_XOR, Variant::I64, "LROT_XOR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 355, Mnemonic::LROT_XOR, Variant::V2I16, Mnemonic::LROT_XOR, Variant::V2I16, "LROT_XOR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 356, Mnemonic::LROT_XOR, Variant::V2I16, Mnemonic::LROT_XOR, Variant::V2I16, "LROT_XOR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 357, Mnemonic::LROT_XOR, Variant::V4I8, Mnemonic::LROT_XOR, Variant::V4I8, "LROT_XOR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 358, Mnemonic::LROT_XOR, Variant::V4I8, Mnemonic::LROT_XOR, Variant::V4I8, "LROT_XOR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000302000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
-    { 359, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "sfu", 9, 10, 0x01FF000F03FF0000ULL, 0x00B4000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 360, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "cvt", 11, 13, 0x01FF000F03FF0000ULL, 0x00B4000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 361, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "cvt", 14, 14, 0x01FF000F03FF0000ULL, 0x00B4000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 362, Mnemonic::LSHIFT, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT.i64", "sfu", 9, 13, 0x01FFC00F03FF0000ULL, 0x01B7C00101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 363, Mnemonic::LSHIFT, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT.i64", "sfu", 14, 14, 0x01FFC00F03FF0000ULL, 0x01B7C00101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 364, Mnemonic::LSHIFT, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT.v2i16", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B5000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 365, Mnemonic::LSHIFT, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT.v2i16", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B5000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 366, Mnemonic::LSHIFT, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT.v4i8", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B6000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 367, Mnemonic::LSHIFT, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT.v4i8", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B6000101C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 368, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 369, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 370, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 371, Mnemonic::LSHIFT_AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "LSHIFT_AND.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 372, Mnemonic::LSHIFT_AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "LSHIFT_AND.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 373, Mnemonic::LSHIFT_AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "LSHIFT_AND.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 374, Mnemonic::LSHIFT_AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "LSHIFT_AND.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 375, Mnemonic::LSHIFT_AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "LSHIFT_AND.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 376, Mnemonic::LSHIFT_AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "LSHIFT_AND.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000100000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
-    { 377, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 378, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 379, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 380, Mnemonic::LSHIFT_OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT_OR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 381, Mnemonic::LSHIFT_OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT_OR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 382, Mnemonic::LSHIFT_OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT_OR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 383, Mnemonic::LSHIFT_OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT_OR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 384, Mnemonic::LSHIFT_OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT_OR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 385, Mnemonic::LSHIFT_OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT_OR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000101000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 386, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 387, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 388, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 389, Mnemonic::LSHIFT_XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "LSHIFT_XOR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 390, Mnemonic::LSHIFT_XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "LSHIFT_XOR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 391, Mnemonic::LSHIFT_XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "LSHIFT_XOR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 392, Mnemonic::LSHIFT_XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "LSHIFT_XOR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 393, Mnemonic::LSHIFT_XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "LSHIFT_XOR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 394, Mnemonic::LSHIFT_XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "LSHIFT_XOR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000102000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 395, Mnemonic::MKVEC, Variant::V2I16, Mnemonic::MKVEC, Variant::V2I16, "MKVEC.v2i16", "cvt", 9, 14, 0x01FF0000000F0000ULL, 0x00A1000000050000ULL, 13, SemanticCategory::MOVE_PACK, "dst = pack_lanes(src0, src1, src2)", "Bitwise lane packing into 32-bit word", "Calculates $A | (B \\ll 16)$. Used to implement `(ushort2)(A, B)`" },
-    { 396, Mnemonic::MKVEC, Variant::V2I8, Mnemonic::MKVEC, Variant::V2I8, "MKVEC.v2i8", "cvt", 9, 14, 0x01FF000000000000ULL, 0x00BD000000000000ULL, 9, SemanticCategory::MOVE_PACK, "dst = pack_lanes(src0, src1, src2)", "Bitwise lane packing into 32-bit word", "Calculates $A | (B \\ll 16)$. Used to implement `(ushort2)(A, B)`" },
-    { 397, Mnemonic::MMUL, Variant::F16, Mnemonic::MMUL, Variant::F16, "MMUL.f16", "fma", 14, 14, 0x07FFC0000C000000ULL, 0x0104C00008000000ULL, 15, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 398, Mnemonic::MMUL, Variant::F32, Mnemonic::MMUL, Variant::F32, "MMUL.f32", "fma", 11, 14, 0x07FFC00000000000ULL, 0x0102C00000000000ULL, 13, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 399, Mnemonic::MMUL, Variant::V2F16, Mnemonic::MMUL, Variant::V2F16, "MMUL.v2f16", "fma", 11, 14, 0x07FFC00000000000ULL, 0x0103C00000000000ULL, 13, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 400, Mnemonic::MMUL, Variant::V4S8, Mnemonic::MMUL, Variant::V4S8, "MMUL.v4s8", "fma", 11, 13, 0x07FFC00000000000ULL, 0x0100C00000000000ULL, 13, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 401, Mnemonic::MMUL, Variant::V4S8, Mnemonic::MMUL, Variant::V4S8, "MMUL.v4s8", "fma", 14, 14, 0x07FFC00040000000ULL, 0x0100C00000000000ULL, 14, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 402, Mnemonic::MMUL, Variant::V4U8, Mnemonic::MMUL, Variant::V4U8, "MMUL.v4u8", "fma", 11, 13, 0x07FFC00000000000ULL, 0x0101C00000000000ULL, 13, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 403, Mnemonic::MMUL, Variant::V4U8, Mnemonic::MMUL, Variant::V4U8, "MMUL.v4u8", "fma", 14, 14, 0x07FFC00000000000ULL, 0x0101C00000000000ULL, 13, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
-    { 404, Mnemonic::MOV, Variant::I32, Mnemonic::MOV, Variant::I32, "MOV.i32", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0091000000000000ULL, 14, SemanticCategory::MOVE_PACK, "dst = src0", "Register / staging copy", "Canonical register-to-register move." },
-    { 405, Mnemonic::MOV_IMM, Variant::I32, Mnemonic::IADD_IMM, Variant::I32, "MOV_IMM.i32", "cvt", 9, 14, 0x07FF0000000000FFULL, 0x01100000000000C0ULL, 19, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 406, Mnemonic::MOV_IMM, Variant::V2I16, Mnemonic::IADD_IMM, Variant::V2I16, "MOV_IMM.v2i16", "cvt", 9, 14, 0x07FF0000000000FFULL, 0x01110000000000C0ULL, 19, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 407, Mnemonic::MOV_IMM, Variant::V4I8, Mnemonic::IADD_IMM, Variant::V4I8, "MOV_IMM.v4i8", "cvt", 9, 10, 0x07FF0000000000FFULL, 0x01120000000000C0ULL, 19, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
-    { 408, Mnemonic::MUX, Variant::I32, Mnemonic::MUX, Variant::I32, "MUX.i32", "sfu", 9, 14, 0x01FF000000000000ULL, 0x00B8000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
-    { 409, Mnemonic::MUX, Variant::V2I16, Mnemonic::MUX, Variant::V2I16, "MUX.v2i16", "sfu", 9, 14, 0x01FF000000000000ULL, 0x00B9000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
-    { 410, Mnemonic::MUX, Variant::V4I8, Mnemonic::MUX, Variant::V4I8, "MUX.v4i8", "sfu", 9, 14, 0x01FF000000000000ULL, 0x00BA000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
-    { 411, Mnemonic::NOP, Variant::NONE, Mnemonic::NOP, Variant::NONE, "NOP", "cvt", 9, 14, 0x07FFC00000000000ULL, 0x0000C00000000000ULL, 13, SemanticCategory::CONTROL_FLOW, "no-op (applies flow control modifier: wait / reconverge / discard / end)", "Flow control action (OpReturn on .end)", "Do nothing. Useful at the start of a block for waiting on slots required by the first actual instruction of the block, to reconcile dependencies after a branch. Also useful as the sole instruction of an empty shader." },
-    { 412, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "sfu", 9, 10, 0x01FF000F7FFFFF00ULL, 0x00B4000912C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 413, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "cvt", 11, 13, 0x01FF000F7FFFFF00ULL, 0x00B4000912C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 414, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "cvt", 14, 14, 0x01FF000F7FFFFF00ULL, 0x00B4000912C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 415, Mnemonic::NOT, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "NOT.i64", "sfu", 9, 13, 0x01FFC00F7FFFFF00ULL, 0x01B7C00912C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 416, Mnemonic::NOT, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "NOT.i64", "sfu", 14, 14, 0x01FFC00F7FFFFF00ULL, 0x01B7C00912C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 417, Mnemonic::NOT, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "NOT.v2i16", "sfu", 9, 13, 0x01FF000F7FFFFF00ULL, 0x00B5000902C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 418, Mnemonic::NOT, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "NOT.v2i16", "sfu", 14, 14, 0x01FF000F7FFFFF00ULL, 0x00B5000902C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 419, Mnemonic::NOT, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "NOT.v4i8", "sfu", 9, 13, 0x01FF000F7FFFFF00ULL, 0x00B6000902C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 420, Mnemonic::NOT, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "NOT.v4i8", "sfu", 14, 14, 0x01FF000F7FFFFF00ULL, 0x00B6000902C0C000ULL, 36, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 421, Mnemonic::NOT_OLD, Variant::I32, Mnemonic::NOT_OLD, Variant::I32, "NOT_OLD.i32", "sfu", 9, 13, 0x01FF0000001F0000ULL, 0x00910000000E0000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "For fully featured bitwise operation, see the shift opcodes." },
-    { 422, Mnemonic::NOT_OLD, Variant::I64, Mnemonic::NOT_OLD, Variant::I64, "NOT_OLD.i64", "sfu", 9, 13, 0x01FFC000001F0000ULL, 0x0191C000000E0000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "For fully featured bitwise operation, see the shift opcodes." },
-    { 423, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "sfu", 9, 10, 0x01FF00073F00FF00ULL, 0x00B400011100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 424, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "cvt", 11, 13, 0x01FF00073F00FF00ULL, 0x00B400011100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 425, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "cvt", 14, 14, 0x01FF00073F00FF00ULL, 0x00B400011100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 426, Mnemonic::OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "OR.i64", "sfu", 9, 13, 0x01FFC0073F00FF00ULL, 0x01B7C0011100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 427, Mnemonic::OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "OR.i64", "sfu", 14, 14, 0x01FFC0073F00FF00ULL, 0x01B7C0011100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 428, Mnemonic::OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "OR.v2i16", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B500010100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 429, Mnemonic::OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "OR.v2i16", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B500010100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 430, Mnemonic::OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "OR.v4i8", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B600010100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 431, Mnemonic::OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "OR.v4i8", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B600010100C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
-    { 432, Mnemonic::OR_IMM, Variant::I32, Mnemonic::OR_IMM, Variant::I32, "OR_IMM.i32", "cvt", 11, 14, 0x01FF000000000000ULL, 0x0119000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = src0 | imm32", "OpBitwiseOr(src0, imm32)", "" },
-    { 433, Mnemonic::POPCOUNT, Variant::I32, Mnemonic::POPCOUNT, Variant::I32, "POPCOUNT.i32", "sfu", 9, 14, 0x01FF0000001F0000ULL, 0x00910000000C0000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = count_ones(src0) [kraid::OpPopCount: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src) as u32; f.set_dst(&self.dst, src.count_ones()]", "OpBitCount", "Only available as 32-bit. Smaller bitsizes require explicit conversions. 64-bit popcount may be constructed in 3 clocks by separate 32-bit popcounts of each half and a 32-bit add, which is guaranteed not to overflow." },
-    { 434, Mnemonic::RROT, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT.i32", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B4000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 435, Mnemonic::RROT, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT.i32", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B4000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 436, Mnemonic::RROT, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT.i64", "sfu", 9, 13, 0x01FFC00F03FF0000ULL, 0x01B7C00201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 437, Mnemonic::RROT, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT.i64", "sfu", 14, 14, 0x01FFC00F03FF0000ULL, 0x01B7C00201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 438, Mnemonic::RROT, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT.v2i16", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B5000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 439, Mnemonic::RROT, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT.v2i16", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B5000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 440, Mnemonic::RROT, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT.v4i8", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B6000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 441, Mnemonic::RROT, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT.v4i8", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B6000201C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
-    { 442, Mnemonic::RROT_AND, Variant::I32, Mnemonic::RROT_AND, Variant::I32, "RROT_AND.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 443, Mnemonic::RROT_AND, Variant::I32, Mnemonic::RROT_AND, Variant::I32, "RROT_AND.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 444, Mnemonic::RROT_AND, Variant::I64, Mnemonic::RROT_AND, Variant::I64, "RROT_AND.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 445, Mnemonic::RROT_AND, Variant::I64, Mnemonic::RROT_AND, Variant::I64, "RROT_AND.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 446, Mnemonic::RROT_AND, Variant::V2I16, Mnemonic::RROT_AND, Variant::V2I16, "RROT_AND.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 447, Mnemonic::RROT_AND, Variant::V2I16, Mnemonic::RROT_AND, Variant::V2I16, "RROT_AND.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 448, Mnemonic::RROT_AND, Variant::V4I8, Mnemonic::RROT_AND, Variant::V4I8, "RROT_AND.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 449, Mnemonic::RROT_AND, Variant::V4I8, Mnemonic::RROT_AND, Variant::V4I8, "RROT_AND.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000200000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
-    { 450, Mnemonic::RROT_OR, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT_OR.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 451, Mnemonic::RROT_OR, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT_OR.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 452, Mnemonic::RROT_OR, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT_OR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 453, Mnemonic::RROT_OR, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT_OR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 454, Mnemonic::RROT_OR, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT_OR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 455, Mnemonic::RROT_OR, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT_OR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 456, Mnemonic::RROT_OR, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT_OR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 457, Mnemonic::RROT_OR, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT_OR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000201000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
-    { 458, Mnemonic::RROT_XOR, Variant::I32, Mnemonic::RROT_XOR, Variant::I32, "RROT_XOR.i32", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B4000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 459, Mnemonic::RROT_XOR, Variant::I32, Mnemonic::RROT_XOR, Variant::I32, "RROT_XOR.i32", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B4000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 460, Mnemonic::RROT_XOR, Variant::I64, Mnemonic::RROT_XOR, Variant::I64, "RROT_XOR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 461, Mnemonic::RROT_XOR, Variant::I64, Mnemonic::RROT_XOR, Variant::I64, "RROT_XOR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 462, Mnemonic::RROT_XOR, Variant::V2I16, Mnemonic::RROT_XOR, Variant::V2I16, "RROT_XOR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 463, Mnemonic::RROT_XOR, Variant::V2I16, Mnemonic::RROT_XOR, Variant::V2I16, "RROT_XOR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 464, Mnemonic::RROT_XOR, Variant::V4I8, Mnemonic::RROT_XOR, Variant::V4I8, "RROT_XOR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 465, Mnemonic::RROT_XOR, Variant::V4I8, Mnemonic::RROT_XOR, Variant::V4I8, "RROT_XOR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000202000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
-    { 466, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "sfu", 9, 10, 0x01FF000F03FF0000ULL, 0x00B4000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 467, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "cvt", 11, 13, 0x01FF000F03FF0000ULL, 0x00B4000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 468, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "cvt", 14, 14, 0x01FF000F03FF0000ULL, 0x00B4000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 469, Mnemonic::RSHIFT, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT.i64", "sfu", 9, 13, 0x01FFC00F03FF0000ULL, 0x01B7C00001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 470, Mnemonic::RSHIFT, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT.i64", "sfu", 14, 14, 0x01FFC00F03FF0000ULL, 0x01B7C00001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 471, Mnemonic::RSHIFT, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT.v2i16", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B5000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 472, Mnemonic::RSHIFT, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT.v2i16", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B5000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 473, Mnemonic::RSHIFT, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT.v4i8", "sfu", 9, 13, 0x01FF000F03FF0000ULL, 0x00B6000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 474, Mnemonic::RSHIFT, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT.v4i8", "sfu", 14, 14, 0x01FF000F03FF0000ULL, 0x00B6000001C00000ULL, 23, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 475, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 476, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 477, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 478, Mnemonic::RSHIFT_AND, Variant::I64, Mnemonic::RSHIFT_AND, Variant::I64, "RSHIFT_AND.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 479, Mnemonic::RSHIFT_AND, Variant::I64, Mnemonic::RSHIFT_AND, Variant::I64, "RSHIFT_AND.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 480, Mnemonic::RSHIFT_AND, Variant::V2I16, Mnemonic::RSHIFT_AND, Variant::V2I16, "RSHIFT_AND.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 481, Mnemonic::RSHIFT_AND, Variant::V2I16, Mnemonic::RSHIFT_AND, Variant::V2I16, "RSHIFT_AND.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 482, Mnemonic::RSHIFT_AND, Variant::V4I8, Mnemonic::RSHIFT_AND, Variant::V4I8, "RSHIFT_AND.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 483, Mnemonic::RSHIFT_AND, Variant::V4I8, Mnemonic::RSHIFT_AND, Variant::V4I8, "RSHIFT_AND.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000000000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 484, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 485, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 486, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 487, Mnemonic::RSHIFT_OR, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT_OR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 488, Mnemonic::RSHIFT_OR, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT_OR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 489, Mnemonic::RSHIFT_OR, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT_OR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 490, Mnemonic::RSHIFT_OR, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT_OR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 491, Mnemonic::RSHIFT_OR, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT_OR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 492, Mnemonic::RSHIFT_OR, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT_OR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000001000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
-    { 493, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "sfu", 9, 10, 0x01FF000703000000ULL, 0x00B4000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 494, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "cvt", 11, 13, 0x01FF000703000000ULL, 0x00B4000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 495, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "cvt", 14, 14, 0x01FF000703000000ULL, 0x00B4000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 496, Mnemonic::RSHIFT_XOR, Variant::I64, Mnemonic::RSHIFT_XOR, Variant::I64, "RSHIFT_XOR.i64", "sfu", 9, 13, 0x01FFC00703000000ULL, 0x01B7C00002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 497, Mnemonic::RSHIFT_XOR, Variant::I64, Mnemonic::RSHIFT_XOR, Variant::I64, "RSHIFT_XOR.i64", "sfu", 14, 14, 0x01FFC00703000000ULL, 0x01B7C00002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 498, Mnemonic::RSHIFT_XOR, Variant::V2I16, Mnemonic::RSHIFT_XOR, Variant::V2I16, "RSHIFT_XOR.v2i16", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B5000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 499, Mnemonic::RSHIFT_XOR, Variant::V2I16, Mnemonic::RSHIFT_XOR, Variant::V2I16, "RSHIFT_XOR.v2i16", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B5000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 500, Mnemonic::RSHIFT_XOR, Variant::V4I8, Mnemonic::RSHIFT_XOR, Variant::V4I8, "RSHIFT_XOR.v4i8", "sfu", 9, 13, 0x01FF000703000000ULL, 0x00B6000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 501, Mnemonic::RSHIFT_XOR, Variant::V4I8, Mnemonic::RSHIFT_XOR, Variant::V4I8, "RSHIFT_XOR.v4i8", "sfu", 14, 14, 0x01FF000703000000ULL, 0x00B6000002000000ULL, 14, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
-    { 502, Mnemonic::S16_TO_F32, Variant::NONE, Mnemonic::S16_TO_F32, Variant::NONE, "S16_TO_F32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000050000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(sext16(src0))", "Sign-extend 16->32 + OpConvertSToF", "Performs the given data conversion." },
-    { 503, Mnemonic::S16_TO_S32, Variant::NONE, Mnemonic::S16_TO_S32, Variant::NONE, "S16_TO_S32", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000040000ULL, 14, SemanticCategory::CONVERSION, "dst = sext16(src0)", "OpBitFieldSExtract(src0, offset, 16)", "Performs the given data conversion." },
-    { 504, Mnemonic::S16_TO_S32, Variant::NONE, Mnemonic::S16_TO_S32, Variant::NONE, "S16_TO_S32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000040000ULL, 14, SemanticCategory::CONVERSION, "dst = sext16(src0)", "OpBitFieldSExtract(src0, offset, 16)", "Performs the given data conversion." },
-    { 505, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 9, 10, 0x01FF00F0001F0000ULL, 0x0090000000090000ULL, 18, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 506, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 11, 13, 0x01FF0000001F0000ULL, 0x0090000000090000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 507, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000090000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 508, Mnemonic::S8_TO_F32, Variant::NONE, Mnemonic::S8_TO_F32, Variant::NONE, "S8_TO_F32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000010000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(sext8(src0))", "Sign-extend 8->32 + OpConvertSToF", "Performs the given data conversion." },
-    { 509, Mnemonic::S8_TO_S32, Variant::NONE, Mnemonic::S8_TO_S32, Variant::NONE, "S8_TO_S32", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000000000ULL, 14, SemanticCategory::CONVERSION, "dst = sext8(src0)", "OpBitFieldSExtract(src0, offset, 8)", "Performs the given data conversion." },
-    { 510, Mnemonic::S8_TO_S32, Variant::NONE, Mnemonic::S8_TO_S32, Variant::NONE, "S8_TO_S32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000000000ULL, 14, SemanticCategory::CONVERSION, "dst = sext8(src0)", "OpBitFieldSExtract(src0, offset, 8)", "Performs the given data conversion." },
-    { 511, Mnemonic::SEG_ADD, Variant::U64, Mnemonic::SEG_ADD, Variant::U64, "SEG_ADD.u64", "cvt", 9, 14, 0x01FFC040000F0000ULL, 0x01A3C00000060000ULL, 16, SemanticCategory::INT_ARITH, "dst = segment_address_add(src0, src1)", "64-bit pointer + offset OpIAdd", "Similar to SHADDX, but especially used for loading offsets into WLS. Usually this is only required for atomic operations, which cannot directly use wls_pointer as an address. .neg indicates SEG_SUB instead." },
-    { 512, Mnemonic::SEG_SUB, Variant::U64, Mnemonic::SEG_SUB, Variant::U64, "SEG_SUB.u64", "cvt", 9, 14, 0x01FFC040000F0000ULL, 0x01A3C04000060000ULL, 16, SemanticCategory::INT_ARITH, "dst = segment_address_sub(src0, src1)", "64-bit pointer - offset OpISub", "" },
-    { 513, Mnemonic::SHADD, Variant::S64, Mnemonic::SHADD, Variant::S64, "SHADD.s64", "cvt", 9, 14, 0x01FFC000000F0000ULL, 0x01ABC00000070000ULL, 15, SemanticCategory::INT_ARITH, "dst = src0 + (widen(src1) << shift)", "OpIAdd(src0, OpShiftLeftLogical(src1, shift))", "" },
-    { 514, Mnemonic::SHADD, Variant::U64, Mnemonic::SHADD, Variant::U64, "SHADD.u64", "cvt", 9, 14, 0x01FFC000000F0000ULL, 0x01A3C00000070000ULL, 15, SemanticCategory::INT_ARITH, "dst = src0 + (widen(src1) << shift)", "OpIAdd(src0, OpShiftLeftLogical(src1, shift))", "" },
-    { 515, Mnemonic::STORE, Variant::I128, Mnemonic::STORE, Variant::I128, "STORE.i128", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400838000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 516, Mnemonic::STORE, Variant::I16, Mnemonic::STORE, Variant::I16, "STORE.i16", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400208000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 517, Mnemonic::STORE, Variant::I24, Mnemonic::STORE, Variant::I24, "STORE.i24", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400210000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 518, Mnemonic::STORE, Variant::I32, Mnemonic::STORE, Variant::I32, "STORE.i32", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400218000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 519, Mnemonic::STORE, Variant::I48, Mnemonic::STORE, Variant::I48, "STORE.i48", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400420000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 520, Mnemonic::STORE, Variant::I64, Mnemonic::STORE, Variant::I64, "STORE.i64", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400428000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 521, Mnemonic::STORE, Variant::I8, Mnemonic::STORE, Variant::I8, "STORE.i8", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400200000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 522, Mnemonic::STORE, Variant::I96, Mnemonic::STORE, Variant::I96, "STORE.i96", "msg", 9, 14, 0x01FFC00E38000000ULL, 0x0061400630000000ULL, 17, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
-    { 523, Mnemonic::ST_CHECKED, Variant::I128, Mnemonic::ST_CHECKED, Variant::I128, "ST_CHECKED.i128", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400838000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 524, Mnemonic::ST_CHECKED, Variant::I128, Mnemonic::ST_CHECKED, Variant::I128, "ST_CHECKED.i128", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400818000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 525, Mnemonic::ST_CHECKED, Variant::I16, Mnemonic::ST_CHECKED, Variant::I16, "ST_CHECKED.i16", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400208000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 526, Mnemonic::ST_CHECKED, Variant::I16, Mnemonic::ST_CHECKED, Variant::I16, "ST_CHECKED.i16", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400208000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 527, Mnemonic::ST_CHECKED, Variant::I24, Mnemonic::ST_CHECKED, Variant::I24, "ST_CHECKED.i24", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400210000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 528, Mnemonic::ST_CHECKED, Variant::I24, Mnemonic::ST_CHECKED, Variant::I24, "ST_CHECKED.i24", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400210000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 529, Mnemonic::ST_CHECKED, Variant::I32, Mnemonic::ST_CHECKED, Variant::I32, "ST_CHECKED.i32", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400218000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 530, Mnemonic::ST_CHECKED, Variant::I32, Mnemonic::ST_CHECKED, Variant::I32, "ST_CHECKED.i32", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400218000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 531, Mnemonic::ST_CHECKED, Variant::I48, Mnemonic::ST_CHECKED, Variant::I48, "ST_CHECKED.i48", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400420000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 532, Mnemonic::ST_CHECKED, Variant::I48, Mnemonic::ST_CHECKED, Variant::I48, "ST_CHECKED.i48", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400400000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 533, Mnemonic::ST_CHECKED, Variant::I64, Mnemonic::ST_CHECKED, Variant::I64, "ST_CHECKED.i64", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400428000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 534, Mnemonic::ST_CHECKED, Variant::I64, Mnemonic::ST_CHECKED, Variant::I64, "ST_CHECKED.i64", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400408000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 535, Mnemonic::ST_CHECKED, Variant::I8, Mnemonic::ST_CHECKED, Variant::I8, "ST_CHECKED.i8", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400200000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 536, Mnemonic::ST_CHECKED, Variant::I8, Mnemonic::ST_CHECKED, Variant::I8, "ST_CHECKED.i8", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400200000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 537, Mnemonic::ST_CHECKED, Variant::I96, Mnemonic::ST_CHECKED, Variant::I96, "ST_CHECKED.i96", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0173400630000000ULL, 17, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 538, Mnemonic::ST_CHECKED, Variant::I96, Mnemonic::ST_CHECKED, Variant::I96, "ST_CHECKED.i96", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0173400610000000ULL, 16, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
-    { 539, Mnemonic::ST_CHECKED_IMM, Variant::I128, Mnemonic::ST_CHECKED_IMM, Variant::I128, "ST_CHECKED_IMM.i128", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400838000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 540, Mnemonic::ST_CHECKED_IMM, Variant::I128, Mnemonic::ST_CHECKED_IMM, Variant::I128, "ST_CHECKED_IMM.i128", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400818000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 541, Mnemonic::ST_CHECKED_IMM, Variant::I16, Mnemonic::ST_CHECKED_IMM, Variant::I16, "ST_CHECKED_IMM.i16", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400208000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 542, Mnemonic::ST_CHECKED_IMM, Variant::I16, Mnemonic::ST_CHECKED_IMM, Variant::I16, "ST_CHECKED_IMM.i16", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400208000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 543, Mnemonic::ST_CHECKED_IMM, Variant::I24, Mnemonic::ST_CHECKED_IMM, Variant::I24, "ST_CHECKED_IMM.i24", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400210000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 544, Mnemonic::ST_CHECKED_IMM, Variant::I24, Mnemonic::ST_CHECKED_IMM, Variant::I24, "ST_CHECKED_IMM.i24", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400210000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 545, Mnemonic::ST_CHECKED_IMM, Variant::I32, Mnemonic::ST_CHECKED_IMM, Variant::I32, "ST_CHECKED_IMM.i32", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400218000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 546, Mnemonic::ST_CHECKED_IMM, Variant::I32, Mnemonic::ST_CHECKED_IMM, Variant::I32, "ST_CHECKED_IMM.i32", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400218000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 547, Mnemonic::ST_CHECKED_IMM, Variant::I48, Mnemonic::ST_CHECKED_IMM, Variant::I48, "ST_CHECKED_IMM.i48", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400420000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 548, Mnemonic::ST_CHECKED_IMM, Variant::I48, Mnemonic::ST_CHECKED_IMM, Variant::I48, "ST_CHECKED_IMM.i48", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400400000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 549, Mnemonic::ST_CHECKED_IMM, Variant::I64, Mnemonic::ST_CHECKED_IMM, Variant::I64, "ST_CHECKED_IMM.i64", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400428000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 550, Mnemonic::ST_CHECKED_IMM, Variant::I64, Mnemonic::ST_CHECKED_IMM, Variant::I64, "ST_CHECKED_IMM.i64", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400408000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 551, Mnemonic::ST_CHECKED_IMM, Variant::I8, Mnemonic::ST_CHECKED_IMM, Variant::I8, "ST_CHECKED_IMM.i8", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400200000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 552, Mnemonic::ST_CHECKED_IMM, Variant::I8, Mnemonic::ST_CHECKED_IMM, Variant::I8, "ST_CHECKED_IMM.i8", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400200000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 553, Mnemonic::ST_CHECKED_IMM, Variant::I96, Mnemonic::ST_CHECKED_IMM, Variant::I96, "ST_CHECKED_IMM.i96", "msg", 12, 13, 0x01FFC00E38000000ULL, 0x0073400630000000ULL, 17, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 554, Mnemonic::ST_CHECKED_IMM, Variant::I96, Mnemonic::ST_CHECKED_IMM, Variant::I96, "ST_CHECKED_IMM.i96", "msg", 14, 14, 0x01FFC00E18000000ULL, 0x0073400610000000ULL, 16, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
-    { 555, Mnemonic::ST_CVT, Variant::NONE, Mnemonic::ST_CVT, Variant::NONE, "ST_CVT", "msg", 9, 14, 0x01FFC00000000000ULL, 0x0071400000000000ULL, 11, SemanticCategory::MEMORY_LS, "mem[addr64 + offset] = format_encode(sr_src, fmt)", "Formatted store with pixel conversion", "Store to memory with data conversion. The address to store to is given in the first source, which must be a 64-bit register (a pair of 32-bit registers). The other source is the conversion descriptor used for the store. Used with LEA_TEX_IM" },
-    { 556, Mnemonic::ST_MULTI, Variant::NONE, Mnemonic::ST_MULTI, Variant::NONE, "ST_MULTI", "msg", 14, 14, 0x01FFC00000000000ULL, 0x0063400000000000ULL, 11, SemanticCategory::MEMORY_LS, "mem[addr64 + offset] = sr_src[0..N]", "Multi-register burst store", "" },
-    { 557, Mnemonic::ST_TILE, Variant::NONE, Mnemonic::ST_TILE, Variant::NONE, "ST_TILE", "msg", 9, 14, 0x01FFC00000000000ULL, 0x0079400000000000ULL, 11, SemanticCategory::FRAGMENT_OUT, "write_tilebuffer(rt_index, sample, pixel_fmt, sr_src)", "Direct tilebuffer write to Fragment Output", "Store to given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used internally in blend shaders." },
-    { 558, Mnemonic::SWZ, Variant::V2I16, Mnemonic::IADD, Variant::V2U16, "SWZ.v2i16", "cvt", 9, 14, 0x01FF00007C0FFF00ULL, 0x00A100000800C000ULL, 26, SemanticCategory::MOVE_PACK, "dst = swizzle(src0) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "Byte/half/word swizzle extraction", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 559, Mnemonic::SWZ, Variant::V4I8, Mnemonic::IADD, Variant::V4U8, "SWZ.v4i8", "cvt", 9, 10, 0x01FF00007C0FFF00ULL, 0x00A200000000C000ULL, 26, SemanticCategory::MOVE_PACK, "dst = swizzle(src0) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "Byte/half/word swizzle extraction", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
-    { 560, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 9, 9, 0x01FF000000000100ULL, 0x012F000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
-    { 561, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 10, 10, 0x01FF000000000100ULL, 0x012F000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
-    { 562, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 11, 14, 0x01FF000000000100ULL, 0x012F000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
-    { 563, Mnemonic::TEX_FETCH, Variant::NONE, Mnemonic::TEX_FETCH, Variant::NONE, "TEX_FETCH", "msg", 9, 10, 0x01FF800000000000ULL, 0x0125000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = texel_fetch(tex_idx, icords, lod_or_sample)", "OpImageFetch", "Unfiltered textured instruction." },
-    { 564, Mnemonic::TEX_FETCH, Variant::NONE, Mnemonic::TEX_FETCH, Variant::NONE, "TEX_FETCH", "msg", 11, 14, 0x01FF000000000000ULL, 0x0125000000000000ULL, 9, SemanticCategory::TEXTURE, "sr_dst = texel_fetch(tex_idx, icords, lod_or_sample)", "OpImageFetch", "Unfiltered textured instruction." },
-    { 565, Mnemonic::TEX_GATHER, Variant::NONE, Mnemonic::TEX_GATHER, Variant::NONE, "TEX_GATHER", "msg", 9, 10, 0x01FF800000000000ULL, 0x0129000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, coords, comp)", "OpImageGather / OpImageDrefGather", "Texture gather instruction." },
-    { 566, Mnemonic::TEX_GATHER, Variant::NONE, Mnemonic::TEX_GATHER, Variant::NONE, "TEX_GATHER", "msg", 11, 14, 0x01FF000000000000ULL, 0x0129000000000000ULL, 9, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, coords, comp)", "OpImageGather / OpImageDrefGather", "Texture gather instruction." },
-    { 567, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 9, 9, 0x01FF800000000000ULL, 0x012A000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
-    { 568, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 10, 10, 0x01FF800000000000ULL, 0x012A000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
-    { 569, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 11, 14, 0x01FF000000000000ULL, 0x012A000000000000ULL, 9, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
-    { 570, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 9, 9, 0x01FF800000000000ULL, 0x0128000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
-    { 571, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 10, 10, 0x01FF800000000000ULL, 0x0128000000000000ULL, 10, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
-    { 572, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 11, 14, 0x01FF000000000000ULL, 0x0128000000000000ULL, 9, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
-    { 573, Mnemonic::TEX_WEIGHTS, Variant::NONE, Mnemonic::TEX_WEIGHTS, Variant::NONE, "TEX_WEIGHTS", "msg", 9, 9, 0x01FF80003000C000ULL, 0x0126000010000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = bilinear_weights(coords)", "Fractional texel weights", "" },
-    { 574, Mnemonic::U16_TO_F32, Variant::NONE, Mnemonic::U16_TO_F32, Variant::NONE, "U16_TO_F32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000150000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(zext16(src0))", "Zero-extend 16->32 + OpConvertUToF", "Performs the given data conversion." },
-    { 575, Mnemonic::U16_TO_U32, Variant::NONE, Mnemonic::U16_TO_U32, Variant::NONE, "U16_TO_U32", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000140000ULL, 14, SemanticCategory::CONVERSION, "dst = zext16(src0)", "OpBitFieldUExtract(src0, offset, 16)", "Performs the given data conversion." },
-    { 576, Mnemonic::U16_TO_U32, Variant::NONE, Mnemonic::U16_TO_U32, Variant::NONE, "U16_TO_U32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000140000ULL, 14, SemanticCategory::CONVERSION, "dst = zext16(src0)", "OpBitFieldUExtract(src0, offset, 16)", "Performs the given data conversion." },
-    { 577, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 9, 10, 0x01FF00F0001F0000ULL, 0x0090000000190000ULL, 18, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 578, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 11, 13, 0x01FF0000001F0000ULL, 0x0090000000190000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 579, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000190000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 580, Mnemonic::U8_TO_F32, Variant::NONE, Mnemonic::U8_TO_F32, Variant::NONE, "U8_TO_F32", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000110000ULL, 14, SemanticCategory::CONVERSION, "dst = f32(zext8(src0))", "Zero-extend 8->32 + OpConvertUToF", "Performs the given data conversion." },
-    { 581, Mnemonic::U8_TO_U32, Variant::NONE, Mnemonic::U8_TO_U32, Variant::NONE, "U8_TO_U32", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000100000ULL, 14, SemanticCategory::CONVERSION, "dst = zext8(src0)", "OpBitFieldUExtract(src0, offset, 8)", "Performs the given data conversion." },
-    { 582, Mnemonic::U8_TO_U32, Variant::NONE, Mnemonic::U8_TO_U32, Variant::NONE, "U8_TO_U32", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000100000ULL, 14, SemanticCategory::CONVERSION, "dst = zext8(src0)", "OpBitFieldUExtract(src0, offset, 8)", "Performs the given data conversion." },
-    { 583, Mnemonic::V2F16_TO_V2S16, Variant::NONE, Mnemonic::V2F16_TO_V2S16, Variant::NONE, "V2F16_TO_V2S16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000000E0000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2s16(s16(f16_lo), s16(f16_hi))", "UnpackHalf2x16 -> OpConvertFToS -> pack", "Performs the given data conversion." },
-    { 584, Mnemonic::V2F16_TO_V2U16, Variant::NONE, Mnemonic::V2F16_TO_V2U16, Variant::NONE, "V2F16_TO_V2U16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x00900000001E0000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2u16(u16(f16_lo), u16(f16_hi))", "UnpackHalf2x16 -> OpConvertFToU -> pack", "Performs the given data conversion." },
-    { 585, Mnemonic::V2F32_TO_V2F16, Variant::NONE, Mnemonic::V2F32_TO_V2F16, Variant::NONE, "V2F32_TO_V2F16", "cvt", 9, 10, 0x01FF0000000F0000ULL, 0x00A5000000040000ULL, 13, SemanticCategory::CONVERSION, "dst = pack_v2f16(src0, src1)", "GLSL.std.450 PackHalf2x16", "Given a pair of 32-bit floats, output a pair of 16-bit floats packed into a 32-bit destination." },
-    { 586, Mnemonic::V2S16_TO_V2F16, Variant::NONE, Mnemonic::V2S16_TO_V2F16, Variant::NONE, "V2S16_TO_V2F16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000070000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(s16_lo), f16(s16_hi))", "Extract s16 -> OpConvertSToF -> PackHalf2x16", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 587, Mnemonic::V2S8_TO_V2F16, Variant::NONE, Mnemonic::V2S8_TO_V2F16, Variant::NONE, "V2S8_TO_V2F16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000030000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(s8_0), f16(s8_1))", "Extract s8 -> OpConvertSToF -> PackHalf2x16", "Performs the given data conversion." },
-    { 588, Mnemonic::V2S8_TO_V2S16, Variant::NONE, Mnemonic::V2S8_TO_V2S16, Variant::NONE, "V2S8_TO_V2S16", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000020000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2s16(sext8(b0), sext8(b1))", "Byte sign-extension to v2s16", "Performs the given data conversion." },
-    { 589, Mnemonic::V2S8_TO_V2S16, Variant::NONE, Mnemonic::V2S8_TO_V2S16, Variant::NONE, "V2S8_TO_V2S16", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000020000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2s16(sext8(b0), sext8(b1))", "Byte sign-extension to v2s16", "Performs the given data conversion." },
-    { 590, Mnemonic::V2U16_TO_V2F16, Variant::NONE, Mnemonic::V2U16_TO_V2F16, Variant::NONE, "V2U16_TO_V2F16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000170000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(u16_lo), f16(u16_hi))", "Extract u16 -> OpConvertUToF -> PackHalf2x16", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
-    { 591, Mnemonic::V2U8_TO_V2F16, Variant::NONE, Mnemonic::V2U8_TO_V2F16, Variant::NONE, "V2U8_TO_V2F16", "cvt", 9, 10, 0x01FF0000001F0000ULL, 0x0090000000130000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(u8_0), f16(u8_1))", "Extract u8 -> OpConvertUToF -> PackHalf2x16", "Performs the given data conversion." },
-    { 592, Mnemonic::V2U8_TO_V2U16, Variant::NONE, Mnemonic::V2U8_TO_V2U16, Variant::NONE, "V2U8_TO_V2U16", "cvt", 9, 13, 0x01FF0000001F0000ULL, 0x0090000000120000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2u16(zext8(b0), zext8(b1))", "Byte zero-extension to v2u16", "Performs the given data conversion." },
-    { 593, Mnemonic::V2U8_TO_V2U16, Variant::NONE, Mnemonic::V2U8_TO_V2U16, Variant::NONE, "V2U8_TO_V2U16", "cvt", 14, 14, 0x01FF0000001F0000ULL, 0x0090000000120000ULL, 14, SemanticCategory::CONVERSION, "dst = pack_v2u16(zext8(b0), zext8(b1))", "Byte zero-extension to v2u16", "Performs the given data conversion." },
-    { 594, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 9, 9, 0x01FFC00000000900ULL, 0x0137800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
-    { 595, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 10, 10, 0x01FFC00000000100ULL, 0x0137800000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
-    { 596, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 11, 14, 0x01FFC00000000100ULL, 0x0137800000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
-    { 597, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 9, 9, 0x01FFC00032002800ULL, 0x0131800010000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 598, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 10, 10, 0x01FFC00032002000ULL, 0x0131800010000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 599, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 11, 14, 0x01FFC00030002000ULL, 0x0131800010000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 600, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 9, 9, 0x01FFC00002008800ULL, 0x0132800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 601, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 10, 10, 0x01FFC00002009000ULL, 0x0132800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 602, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 11, 14, 0x01FFC00000009000ULL, 0x0132800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 603, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 9, 9, 0x01FFC00002000800ULL, 0x0130800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 604, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 10, 10, 0x01FFC00002000000ULL, 0x0130800000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 605, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 11, 14, 0x01FFC00000000000ULL, 0x0130800000000000ULL, 11, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 606, Mnemonic::VAR_TEX_DUAL, Variant::NONE, Mnemonic::VAR_TEX_DUAL, Variant::NONE, "VAR_TEX_DUAL", "msg", 9, 10, 0x01FFC00000000900ULL, 0x013F800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying(var_idx))", "Fused varying + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
-    { 607, Mnemonic::VAR_TEX_DUAL, Variant::NONE, Mnemonic::VAR_TEX_DUAL, Variant::NONE, "VAR_TEX_DUAL", "msg", 11, 14, 0x01FFC00000000900ULL, 0x013F800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying(var_idx))", "Fused varying + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
-    { 608, Mnemonic::VAR_TEX_GATHER, Variant::NONE, Mnemonic::VAR_TEX_GATHER, Variant::NONE, "VAR_TEX_GATHER", "msg", 9, 10, 0x01FFC00032002800ULL, 0x0139800010000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 609, Mnemonic::VAR_TEX_GATHER, Variant::NONE, Mnemonic::VAR_TEX_GATHER, Variant::NONE, "VAR_TEX_GATHER", "msg", 11, 14, 0x01FFC00030002800ULL, 0x0139800010000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 610, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 9, 9, 0x01FFC00002008000ULL, 0x013A800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 611, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 10, 10, 0x01FFC00002009000ULL, 0x013A800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 612, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 11, 14, 0x01FFC00000009000ULL, 0x013A800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 613, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, "VAR_TEX_SINGLE", "msg", 9, 10, 0x01FFC00002000800ULL, 0x0138800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 614, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, "VAR_TEX_SINGLE", "msg", 11, 14, 0x01FFC00000000800ULL, 0x0138800000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
-    { 615, Mnemonic::WMASK, Variant::NONE, Mnemonic::WMASK, Variant::NONE, "WMASK", "cvt", 9, 14, 0x01FF0000001F0000ULL, 0x0095000000000000ULL, 14, SemanticCategory::CONTROL_FLOW, "dst = subgroup_ballot(src0)", "OpSubgroupBallotKHR", "Returns the mask of lanes ever active within the warp (subgroup), such that the source is nonzero. The number of work-items in a subgroup is given as the popcount of this value with a nonzero input. An `all()` subgroup operation may be cons" },
-    { 616, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "sfu", 9, 10, 0x01FF00073F00FF00ULL, 0x00B400011200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 617, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "cvt", 11, 13, 0x01FF00073F00FF00ULL, 0x00B400011200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 618, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "cvt", 14, 14, 0x01FF00073F00FF00ULL, 0x00B400011200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 619, Mnemonic::XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "XOR.i64", "sfu", 9, 13, 0x01FFC0073F00FF00ULL, 0x01B7C0011200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 620, Mnemonic::XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "XOR.i64", "sfu", 14, 14, 0x01FFC0073F00FF00ULL, 0x01B7C0011200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 621, Mnemonic::XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "XOR.v2i16", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B500010200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 622, Mnemonic::XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "XOR.v2i16", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B500010200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 623, Mnemonic::XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "XOR.v4i8", "sfu", 9, 13, 0x01FF00073F00FF00ULL, 0x00B600010200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 624, Mnemonic::XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "XOR.v4i8", "sfu", 14, 14, 0x01FF00073F00FF00ULL, 0x00B600010200C000ULL, 26, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
-    { 625, Mnemonic::XOR_IMM, Variant::I32, Mnemonic::XOR_IMM, Variant::I32, "XOR_IMM.i32", "cvt", 11, 14, 0x01FF000000000000ULL, 0x011A000000000000ULL, 9, SemanticCategory::BITWISE_SHIFT, "dst = src0 ^ imm32", "OpBitwiseXor(src0, imm32)", "" },
-    { 626, Mnemonic::ZS_EMIT, Variant::NONE, Mnemonic::ZS_EMIT, Variant::NONE, "ZS_EMIT", "msg", 9, 14, 0x01FFC00FC0000000ULL, 0x007E800200000000ULL, 17, SemanticCategory::FRAGMENT_OUT, "emit_depth_stencil(z, stencil, coverage)", "OpStore BuiltIn FragDepth / FragStencilRefEXT", "Programatically writes out depth, stencil, or both, depending on which modifiers are set. Used to implement gl_FragDepth and gl_FragStencil." },
+    { 0, Mnemonic::ACMPXCHG, Variant::I32, Mnemonic::ACMPXCHG, Variant::I32, "ACMPXCHG.i32", "msg", 9, 14, 0x81FFC0FE3FC00000ULL, 0x0120C0041FC00000ULL, 27, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_cas(mem[addr64 + offset], sr_src[0], sr_src[1])", "OpAtomicCompareExchange", "" },
+    { 1, Mnemonic::ACMPXCHG, Variant::I64, Mnemonic::ACMPXCHG, Variant::I64, "ACMPXCHG.i64", "msg", 9, 14, 0x81FFC0FE3FC00000ULL, 0x0120C0182FC00000ULL, 27, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_cas(mem[addr64 + offset], sr_src[0], sr_src[1])", "OpAtomicCompareExchange", "" },
+    { 2, Mnemonic::ADR, Variant::NONE, Mnemonic::IADD_IMM, Variant::I32, "ADR", "cvt", 9, 14, 0x87FFC000000000FFULL, 0x0710C000000000FEULL, 22, SemanticCategory::INT_ARITH, "dst = (pc + 8) + sext(imm32)", "PC-relative address calculation", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 3, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "sfu", 9, 10, 0x81FF0007BF00FF00ULL, 0x00B400011000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 4, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "cvt", 11, 13, 0x81FF0007BF00FF00ULL, 0x00B400011000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 5, Mnemonic::AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "AND.i32", "cvt", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B400011000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 6, Mnemonic::AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "AND.i64", "sfu", 9, 13, 0x81FFC007BF00FF00ULL, 0x01B7C0011000C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 7, Mnemonic::AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "AND.i64", "sfu", 14, 14, 0x81FFC007BF00FF00ULL, 0x01B7C0011000C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 8, Mnemonic::AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "AND.v2i16", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B500010000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 9, Mnemonic::AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "AND.v2i16", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B500010000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 10, Mnemonic::AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "AND.v4i8", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B600010000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 11, Mnemonic::AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "AND.v4i8", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B600010000C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) & not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseAnd (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 12, Mnemonic::AND_IMM, Variant::I32, Mnemonic::AND_IMM, Variant::I32, "AND_IMM.i32", "cvt", 11, 14, 0x81FF000000000000ULL, 0x0118000000000000ULL, 10, SemanticCategory::BITWISE_SHIFT, "dst = src0 & imm32", "OpBitwiseAnd(src0, imm32)", "" },
+    { 13, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "sfu", 9, 10, 0x81FF000F83FF0000ULL, 0x00B4000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 14, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "cvt", 11, 13, 0x81FF000F83FF0000ULL, 0x00B4000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 15, Mnemonic::ARSHIFT, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT.i32", "cvt", 14, 14, 0x81FF000F83FF0000ULL, 0x00B4000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 16, Mnemonic::ARSHIFT, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT.i64", "sfu", 9, 13, 0x81FFC00F83FF0000ULL, 0x01B7C00401C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 17, Mnemonic::ARSHIFT, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT.i64", "sfu", 14, 14, 0x81FFC00F83FF0000ULL, 0x01B7C00401C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 18, Mnemonic::ARSHIFT, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT.v2i16", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B5000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 19, Mnemonic::ARSHIFT, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT.v2i16", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B5000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 20, Mnemonic::ARSHIFT, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT.v4i8", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B6000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 21, Mnemonic::ARSHIFT, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT.v4i8", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B6000401C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>s (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightArithmetic", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 22, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 23, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 24, Mnemonic::ARSHIFT_AND, Variant::I32, Mnemonic::ARSHIFT_AND, Variant::I32, "ARSHIFT_AND.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 25, Mnemonic::ARSHIFT_AND, Variant::I64, Mnemonic::ARSHIFT_AND, Variant::I64, "ARSHIFT_AND.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00400000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 26, Mnemonic::ARSHIFT_AND, Variant::I64, Mnemonic::ARSHIFT_AND, Variant::I64, "ARSHIFT_AND.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00400000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 27, Mnemonic::ARSHIFT_AND, Variant::V2I16, Mnemonic::ARSHIFT_AND, Variant::V2I16, "ARSHIFT_AND.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 28, Mnemonic::ARSHIFT_AND, Variant::V2I16, Mnemonic::ARSHIFT_AND, Variant::V2I16, "ARSHIFT_AND.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 29, Mnemonic::ARSHIFT_AND, Variant::V4I8, Mnemonic::ARSHIFT_AND, Variant::V4I8, "ARSHIFT_AND.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 30, Mnemonic::ARSHIFT_AND, Variant::V4I8, Mnemonic::ARSHIFT_AND, Variant::V4I8, "ARSHIFT_AND.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000400000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 31, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 32, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 33, Mnemonic::ARSHIFT_OR, Variant::I32, Mnemonic::ARSHIFT_OR, Variant::I32, "ARSHIFT_OR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 34, Mnemonic::ARSHIFT_OR, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT_OR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00401000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 35, Mnemonic::ARSHIFT_OR, Variant::I64, Mnemonic::ARSHIFT_OR, Variant::I64, "ARSHIFT_OR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00401000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 36, Mnemonic::ARSHIFT_OR, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT_OR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 37, Mnemonic::ARSHIFT_OR, Variant::V2I16, Mnemonic::ARSHIFT_OR, Variant::V2I16, "ARSHIFT_OR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 38, Mnemonic::ARSHIFT_OR, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT_OR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 39, Mnemonic::ARSHIFT_OR, Variant::V4I8, Mnemonic::ARSHIFT_OR, Variant::V4I8, "ARSHIFT_OR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000401000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) | not2(src2))", "OpBitwiseOr(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 40, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 41, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 42, Mnemonic::ARSHIFT_XOR, Variant::I32, Mnemonic::ARSHIFT_XOR, Variant::I32, "ARSHIFT_XOR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 43, Mnemonic::ARSHIFT_XOR, Variant::I64, Mnemonic::ARSHIFT_XOR, Variant::I64, "ARSHIFT_XOR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00402000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 44, Mnemonic::ARSHIFT_XOR, Variant::I64, Mnemonic::ARSHIFT_XOR, Variant::I64, "ARSHIFT_XOR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00402000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 45, Mnemonic::ARSHIFT_XOR, Variant::V2I16, Mnemonic::ARSHIFT_XOR, Variant::V2I16, "ARSHIFT_XOR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 46, Mnemonic::ARSHIFT_XOR, Variant::V2I16, Mnemonic::ARSHIFT_XOR, Variant::V2I16, "ARSHIFT_XOR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 47, Mnemonic::ARSHIFT_XOR, Variant::V4I8, Mnemonic::ARSHIFT_XOR, Variant::V4I8, "ARSHIFT_XOR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 48, Mnemonic::ARSHIFT_XOR, Variant::V4I8, Mnemonic::ARSHIFT_XOR, Variant::V4I8, "ARSHIFT_XOR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000402000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>s src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightArithmetic(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 49, Mnemonic::ATEST, Variant::NONE, Mnemonic::ATEST, Variant::NONE, "ATEST", "msg", 9, 14, 0x81FFC0FFF3000000ULL, 0x007D800200000000ULL, 26, SemanticCategory::FRAGMENT_OUT, "coverage_out = update_coverage(coverage_in, alpha, atest_datum)", "Alpha-to-coverage / discard test", "Does alpha-to-coverage testing, updating the sample coverage mask. ATEST does not do an implicit discard. It should be executed before the first ZS_EMIT or BLEND instruction." },
+    { 50, Mnemonic::ATOM, Variant::I32, Mnemonic::ATOM, Variant::I32, "ATOM.i32", "msg", 9, 14, 0x81FFC0FE3C3F0000ULL, 0x0068400218000000ULL, 29, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom_op(mem[addr64 + offset], sr_src)", "OpAtomicIAdd / SMin / SMax / UMin / UMax / And / Or / Xor / Exchange", "" },
+    { 51, Mnemonic::ATOM, Variant::I64, Mnemonic::ATOM, Variant::I64, "ATOM.i64", "msg", 9, 14, 0x81FFC0F03C3F0000ULL, 0x0068400028000000ULL, 26, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom_op(mem[addr64 + offset], sr_src)", "OpAtomicIAdd / SMin / SMax / UMin / UMax / And / Or / Xor / Exchange", "" },
+    { 52, Mnemonic::ATOM1, Variant::I32, Mnemonic::ATOM1, Variant::I32, "ATOM1.i32", "msg", 9, 14, 0x81FFFFFE3E3F0000ULL, 0x0069400018000000ULL, 36, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom1_op(mem[addr64 + offset], 1)", "OpAtomicIIncrement / IDecrement", "" },
+    { 53, Mnemonic::ATOM1, Variant::I64, Mnemonic::ATOM1, Variant::I64, "ATOM1.i64", "msg", 9, 14, 0x81FFFFFE3E3F0000ULL, 0x0069400028000000ULL, 36, SemanticCategory::MEMORY_ATOMIC, "mem[addr64 + offset] = atom1_op(mem[addr64 + offset], 1)", "OpAtomicIIncrement / IDecrement", "" },
+    { 54, Mnemonic::ATOM1_RETURN, Variant::I32, Mnemonic::ATOM1_RETURN, Variant::I32, "ATOM1_RETURN.i32", "msg", 9, 14, 0x81FFC0FE3E3F0000ULL, 0x0069800218000000ULL, 30, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom1_op, 1)", "OpAtomicIIncrement / IDecrement returning old value", "" },
+    { 55, Mnemonic::ATOM1_RETURN, Variant::I64, Mnemonic::ATOM1_RETURN, Variant::I64, "ATOM1_RETURN.i64", "msg", 9, 14, 0x81FFC0FE3E3F0000ULL, 0x0069800428000000ULL, 30, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom1_op, 1)", "OpAtomicIIncrement / IDecrement returning old value", "" },
+    { 56, Mnemonic::ATOM_RETURN, Variant::I32, Mnemonic::ATOM_RETURN, Variant::I32, "ATOM_RETURN.i32", "msg", 9, 14, 0x81FFC0FE3C000000ULL, 0x0120C00218000000ULL, 23, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom_op, sr_src)", "OpAtomic* returning old value", "" },
+    { 57, Mnemonic::ATOM_RETURN, Variant::I64, Mnemonic::ATOM_RETURN, Variant::I64, "ATOM_RETURN.i64", "msg", 9, 14, 0x81FFC0F03C000000ULL, 0x0120C01028000000ULL, 20, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_rmw(mem[addr64 + offset], atom_op, sr_src)", "OpAtomic* returning old value", "" },
+    { 58, Mnemonic::AXCHG, Variant::I32, Mnemonic::ATOM_RETURN, Variant::I32, "AXCHG.i32", "msg", 9, 14, 0x81FFC0FE3FC00000ULL, 0x0120C0021BC00000ULL, 27, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_xchg(mem[addr64 + offset], sr_src)", "OpAtomicExchange", "" },
+    { 59, Mnemonic::AXCHG, Variant::I64, Mnemonic::ATOM_RETURN, Variant::I64, "AXCHG.i64", "msg", 9, 14, 0x81FFC0FE3FC00000ULL, 0x0120C0142BC00000ULL, 27, SemanticCategory::MEMORY_ATOMIC, "sr_dst = atomic_xchg(mem[addr64 + offset], sr_src)", "OpAtomicExchange", "" },
+    { 60, Mnemonic::BARRIER, Variant::NONE, Mnemonic::BARRIER, Variant::NONE, "BARRIER", "msg", 9, 14, 0x87FFFFFFFFFFFFFFULL, 0x0045C001C0000000ULL, 60, SemanticCategory::CONTROL_FLOW, "workgroup execution & memory barrier", "OpControlBarrier(Workgroup, Workgroup, AcquireRelease|WorkgroupMemory)", "General-purpose barrier. Must use slot #7. Must be paired with a `.wait` flow on the instruction." },
+    { 61, Mnemonic::BITREV, Variant::I32, Mnemonic::BITREV, Variant::I32, "BITREV.i32", "sfu", 9, 14, 0x81FF00FFFFFFFF00ULL, 0x00910000000D0000ULL, 42, SemanticCategory::BITWISE_SHIFT, "dst = reverse_bits(src0) [kraid::OpBitRev: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src) as u32; f.set_dst(&self.dst, src.reverse_bits]", "OpBitReverse", "Only available as 32-bit. Other bitsizes may be derived with swizzles." },
+    { 62, Mnemonic::BLEND, Variant::NONE, Mnemonic::BLEND, Variant::NONE, "BLEND", "msg", 9, 13, 0x81FFC0F038000000ULL, 0x007F400030000000ULL, 19, SemanticCategory::FRAGMENT_OUT, "blend_to_rt(target_rt, sr_src_color, coverage, blend_desc)", "OpStore to Fragment Output location = target_rt", "Blends a given render target. This loads the API-specified blend state for the render target from the first source. Blend descriptors are available as special immediates. It then reads the colour to be blended from the first staging registe" },
+    { 63, Mnemonic::BLEND, Variant::NONE, Mnemonic::BLEND, Variant::NONE, "BLEND", "msg", 14, 14, 0x81FFC0F038000000ULL, 0x007F400030000000ULL, 19, SemanticCategory::FRAGMENT_OUT, "blend_to_rt(target_rt, sr_src_color, coverage, blend_desc)", "OpStore to Fragment Output location = target_rt", "Blends a given render target. This loads the API-specified blend state for the render target from the first source. Blend descriptors are available as special immediates. It then reads the colour to be blended from the first staging registe" },
+    { 64, Mnemonic::BRANCH, Variant::NONE, Mnemonic::BRANCH, Variant::NONE, "BRANCH", "cvt", 9, 14, 0x81FFFF0000000000ULL, 0x001FC00000000000ULL, 18, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = (pc + 8) + offset", "OpSelectionMerge / OpLoopMerge + OpBranchConditional", "" },
+    { 65, Mnemonic::CLPER, Variant::NONE, Mnemonic::CLPER, Variant::NONE, "CLPER", "sfu", 9, 10, 0x81FF0000C03F0000ULL, 0x00A00000000F0000ULL, 18, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1))", "Quad/subgroup derivative shuffle (OpDPdx/OpDPdy/OpGroupNonUniformQuadBroadcast)", "Selects the value of A in the subgroup lane given by B. This implements subgroup broadcasts. It may be used as a primitive for screen space derivatives in fragment shaders." },
+    { 66, Mnemonic::CLPER, Variant::NONE, Mnemonic::CLPER, Variant::NONE, "CLPER", "cvt", 11, 14, 0x81FF0000C03F0000ULL, 0x00A00000000F0000ULL, 18, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1))", "Quad/subgroup derivative shuffle (OpDPdx/OpDPdy/OpGroupNonUniformQuadBroadcast)", "Selects the value of A in the subgroup lane given by B. This implements subgroup broadcasts. It may be used as a primitive for screen space derivatives in fragment shaders." },
+    { 67, Mnemonic::CLPER_OR, Variant::NONE, Mnemonic::CLPER_OR, Variant::NONE, "CLPER_OR", "cvt", 14, 14, 0x81FF0001C3000000ULL, 0x00B1000000000000ULL, 15, SemanticCategory::SUBGROUP, "dst = subgroup_shuffle(src0, lane_op(src1)) | src2", "Quad shuffle + OR", "" },
+    { 68, Mnemonic::CLZ, Variant::U32, Mnemonic::CLZ, Variant::U32, "CLZ.u32", "sfu", 9, 14, 0x81FF00FFBFFFFF00ULL, 0x0091000000040000ULL, 41, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
+    { 69, Mnemonic::CLZ, Variant::V2U16, Mnemonic::CLZ, Variant::V2U16, "CLZ.v2u16", "sfu", 9, 14, 0x81FF00FF8FFFFF00ULL, 0x0091000000050000ULL, 39, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
+    { 70, Mnemonic::CLZ, Variant::V4U8, Mnemonic::CLZ, Variant::V4U8, "CLZ.v4u8", "sfu", 9, 14, 0x81FF00FFBFFFFF00ULL, 0x0091000000060000ULL, 41, SemanticCategory::BITWISE_SHIFT, "dst = count_leading_zeros(src0) [kraid::OpClz: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let mut res = src.leading_zeros() - (64]", "31 - GLSL.std.450 FindUMsb(src0)", "Used as a primitive for various bitwise operations." },
+    { 71, Mnemonic::CSEL, Variant::F32, Mnemonic::CSEL, Variant::F32, "CSEL.f32", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0154000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 72, Mnemonic::CSEL, Variant::S32, Mnemonic::CSEL, Variant::S32, "CSEL.s32", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0158000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 73, Mnemonic::CSEL, Variant::U32, Mnemonic::CSEL, Variant::U32, "CSEL.u32", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0150000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 74, Mnemonic::CSEL, Variant::V2F16, Mnemonic::CSEL, Variant::V2F16, "CSEL.v2f16", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0155000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 75, Mnemonic::CSEL, Variant::V2S16, Mnemonic::CSEL, Variant::V2S16, "CSEL.v2s16", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0159000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 76, Mnemonic::CSEL, Variant::V2U16, Mnemonic::CSEL, Variant::V2U16, "CSEL.v2u16", "cvt", 9, 14, 0x81FF00F800000000ULL, 0x0151000000000000ULL, 15, SemanticCategory::CMP_SELECT, "dst = cmp_op(src0, src1) ? src2 : src3 [kraid::OpCSel: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.cmp_srcs[0]); let cb = f.get_src(&self.cmp_src]", "OpSelect(cmp(src0, src1), src2, src3)", "Evaluates the given condition and outputs either the true source or the false source." },
+    { 77, Mnemonic::CUBEFACE1, Variant::NONE, Mnemonic::CUBEFACE1, Variant::NONE, "CUBEFACE1", "cvt", 9, 14, 0x81FF0003C0000000ULL, 0x00C0000000000000ULL, 14, SemanticCategory::CUBE_HELPER, "dst = max(|x|, |y|, |z|) [kraid::OpCubeFaceMax: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let x = f32::from_bits(f.get_src(&self.coords[0]) as u32); let y = f32::from]", "Cube map major axis magnitude", "Select the maximum absolute value of its arguments." },
+    { 78, Mnemonic::CUBEFACE2, Variant::NONE, Mnemonic::CUBEFACE2, Variant::NONE, "CUBEFACE2", "cvt", 9, 14, 0x81FF0003C0000000ULL, 0x00C1000000000000ULL, 14, SemanticCategory::CUBE_HELPER, "dst = cube_face_index(x, y, z) [kraid::OpCubeFaceIdx: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let x = f32::from_bits(f.get_src(&self.coords[0]) as u32); let y = f32::from]", "Cube map face index 0..5", "" },
+    { 79, Mnemonic::CUBE_SSEL, Variant::NONE, Mnemonic::CUBE_SSEL, Variant::NONE, "CUBE_SSEL", "sfu", 9, 14, 0x81FF000FC3000000ULL, 0x00BC000000000000ULL, 18, SemanticCategory::CUBE_HELPER, "dst = select_cube_s(z, x, y, face)", "Cube map S coordinate selection", "During a cube map transform, select the S coordinate given a selected face." },
+    { 80, Mnemonic::CUBE_TSEL, Variant::NONE, Mnemonic::CUBE_TSEL, Variant::NONE, "CUBE_TSEL", "sfu", 9, 14, 0x81FF000FC3000000ULL, 0x00BC000001000000ULL, 18, SemanticCategory::CUBE_HELPER, "dst = select_cube_t(y, z, face)", "Cube map T coordinate selection", "During a cube map transform, select the T coordinate given a selected face." },
+    { 81, Mnemonic::DISCARD, Variant::F32, Mnemonic::DISCARD, Variant::F32, "DISCARD.f32", "cvt", 9, 14, 0x81FFFF08C3FF0000ULL, 0x0020C00000000000ULL, 31, SemanticCategory::CONTROL_FLOW, "if (cond) discard_fragment()", "OpDemoteToHelperInvocation / OpKill", "Evaluates the given condition, and if it passes, discards the current fragment and terminates the thread. Only valid in a **fragment** shader." },
+    { 82, Mnemonic::DOORBELL, Variant::NONE, Mnemonic::DOORBELL, Variant::NONE, "DOORBELL", "msg", 9, 14, 0x87FFFFFFFFFFFFFFULL, 0x0004C00000000000ULL, 60, SemanticCategory::SYSTEM, "ring_hw_doorbell(src0)", "Hardware doorbell no-op in shader", "" },
+    { 83, Mnemonic::EUREKA, Variant::NONE, Mnemonic::EUREKA, Variant::NONE, "EUREKA", "msg", 9, 14, 0x87FFFFFFFFFFFFFFULL, 0x0005C00000000000ULL, 60, SemanticCategory::SYSTEM, "trace_marker()", "Hardware trace marker no-op", "" },
+    { 84, Mnemonic::F16_TO_F32, Variant::NONE, Mnemonic::F16_TO_F32, Variant::NONE, "F16_TO_F32", "cvt", 9, 13, 0x81FF003FEFFFFF00ULL, 0x00900000000B0000ULL, 39, SemanticCategory::CONVERSION, "dst = f32(f16(src0))", "GLSL.std.450 UnpackHalf2x16", "Converts up with the specified round mode." },
+    { 85, Mnemonic::F16_TO_F32, Variant::NONE, Mnemonic::F16_TO_F32, Variant::NONE, "F16_TO_F32", "cvt", 14, 14, 0x81FF003FEFFFFF00ULL, 0x00900000000B0000ULL, 39, SemanticCategory::CONVERSION, "dst = f32(f16(src0))", "GLSL.std.450 UnpackHalf2x16", "Converts up with the specified round mode." },
+    { 86, Mnemonic::F16_TO_S32, Variant::NONE, Mnemonic::F16_TO_S32, Variant::NONE, "F16_TO_S32", "cvt", 9, 10, 0x81FF00322FFFFF00ULL, 0x00900000000A0000ULL, 34, SemanticCategory::CONVERSION, "dst = s32(round(f16(src0)))", "UnpackHalf2x16 + OpConvertFToS", "Performs the given data conversion." },
+    { 87, Mnemonic::F16_TO_U32, Variant::NONE, Mnemonic::F16_TO_U32, Variant::NONE, "F16_TO_U32", "cvt", 9, 10, 0x81FF00322FFFFF00ULL, 0x00900000001A0000ULL, 34, SemanticCategory::CONVERSION, "dst = u32(round(f16(src0)))", "UnpackHalf2x16 + OpConvertFToU", "Performs the given data conversion." },
+    { 88, Mnemonic::F32_TO_F16, Variant::NONE, Mnemonic::FADD, Variant::F32, "F32_TO_F16", "fma", 11, 14, 0x81FF002C3FFFFF00ULL, 0x00A400000000C000ULL, 35, SemanticCategory::CONVERSION, "dst = pack_f16(round(src0), round(src1)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 PackHalf2x16", "$A + B$" },
+    { 89, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 9, 10, 0x81FF00323FFFFF00ULL, 0x00900000000C0000ULL, 35, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
+    { 90, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 11, 13, 0x81FF00320FFFFF00ULL, 0x00900000000C0000ULL, 33, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
+    { 91, Mnemonic::F32_TO_S32, Variant::NONE, Mnemonic::F32_TO_S32, Variant::NONE, "F32_TO_S32", "cvt", 14, 14, 0x81FF00320FFFFF00ULL, 0x00900000000C0000ULL, 33, SemanticCategory::CONVERSION, "dst = s32(round(src0))", "OpConvertFToS", "Performs the given data conversion." },
+    { 92, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 9, 10, 0x81FF00323FFFFF00ULL, 0x00900000001C0000ULL, 35, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
+    { 93, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 11, 13, 0x81FF00320FFFFF00ULL, 0x00900000001C0000ULL, 33, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
+    { 94, Mnemonic::F32_TO_U32, Variant::NONE, Mnemonic::F32_TO_U32, Variant::NONE, "F32_TO_U32", "cvt", 14, 14, 0x81FF00320FFFFF00ULL, 0x00900000001C0000ULL, 33, SemanticCategory::CONVERSION, "dst = u32(round(src0))", "OpConvertFToU", "Performs the given data conversion." },
+    { 95, Mnemonic::FABS, Variant::F32, Mnemonic::FADD, Variant::F32, "FABS.f32", "fma", 9, 14, 0x81FF00FCCFFFFF00ULL, 0x00A400900000C000ULL, 38, SemanticCategory::FP_ARITH, "dst = |src0| [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 FAbs", "$A + B$" },
+    { 96, Mnemonic::FABS, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FABS.v2f16", "fma", 9, 14, 0x81FF00FCCFFFFF00ULL, 0x00A500900800C000ULL, 38, SemanticCategory::FP_ARITH, "dst = |src0| [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 FAbs", "$A + B$" },
+    { 97, Mnemonic::FADD, Variant::F32, Mnemonic::FADD, Variant::F32, "FADD.f32", "fma", 9, 14, 0x81FF000803FF0000ULL, 0x00A4000000000000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) + mod(src1))) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFAdd (f32 / v2f16)", "$A + B$" },
+    { 98, Mnemonic::FADD, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FADD.v2f16", "fma", 9, 14, 0x81FF000803FF0000ULL, 0x00A5000000000000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) + mod(src1))) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFAdd (f32 / v2f16)", "$A + B$" },
+    { 99, Mnemonic::FADD_IMM, Variant::F32, Mnemonic::FADD_IMM, Variant::F32, "FADD_IMM.f32", "fma", 9, 14, 0x81FF000000000000ULL, 0x0114000000000000ULL, 10, SemanticCategory::FP_ARITH, "dst = src0 + bitcast<f32>(imm)", "OpFAdd with immediate constant", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `FADD.f32` with a constant accessed as a uniform. However, if the constant is available inline, `FADD.f32` is pref" },
+    { 100, Mnemonic::FADD_IMM, Variant::V2F16, Mnemonic::FADD_IMM, Variant::V2F16, "FADD_IMM.v2f16", "fma", 9, 14, 0x81FF000000000000ULL, 0x0115000000000000ULL, 10, SemanticCategory::FP_ARITH, "dst = src0 + bitcast<f32>(imm)", "OpFAdd with immediate constant", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `FADD.f32` with a constant accessed as a uniform. However, if the constant is available inline, `FADD.f32` is pref" },
+    { 101, Mnemonic::FADD_LSCALE, Variant::F32, Mnemonic::FADD_LSCALE, Variant::F32, "FADD_LSCALE.f32", "fma", 9, 14, 0x81FF000803FF0000ULL, 0x00A4000000090000ULL, 21, SemanticCategory::FP_SFU, "dst = ldexp(src0, src2) + src1", "OpFAdd(GLSL.std.450 Ldexp(src0, src2), src1)", "Performs a floating-point addition specialized for logarithm computation." },
+    { 102, Mnemonic::FADD_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FADD_RSCALE.f32", "fma", 9, 14, 0x81F800300000FF00ULL, 0x016000000000D000ULL, 17, SemanticCategory::FP_SFU, "dst = ldexp(mod(src0) + mod(src1), src3)", "GLSL.std.450 Ldexp(OpFAdd(src0, src1), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
+    { 103, Mnemonic::FATAN_ASSIST, Variant::F32, Mnemonic::FATAN_ASSIST, Variant::F32, "FATAN_ASSIST.f32", "sfu", 9, 14, 0x81FF00FFFFFF0000ULL, 0x00A40000000E0000ULL, 34, SemanticCategory::FP_SFU, "dst = atan_assist(src0, src1)", "GLSL.std.450 Atan2", "Used for `atan2()` implementation. Destination is two 16-bit values (int and float) for the first form, and a single 32-bit float when `.second` is set (indicating the FATAN_TABLE.f32 instruction)." },
+    { 104, Mnemonic::FATAN_TABLE, Variant::F32, Mnemonic::FATAN_TABLE, Variant::F32, "FATAN_TABLE.f32", "sfu", 9, 14, 0x81FF00FFFFFF0000ULL, 0x00A40000010E0000ULL, 34, SemanticCategory::FP_SFU, "dst = atan_table(src0)", "GLSL.std.450 Atan", "" },
+    { 105, Mnemonic::FCMP, Variant::F32, Mnemonic::FCMP_OR, Variant::F32, "FCMP.f32", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F4000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(mod(src0), mod(src1))) [kraid::OpFCmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpFOrd* / OpFUnord* -> OpSelect(mask, 1, 0)", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 106, Mnemonic::FCMP, Variant::V2F16, Mnemonic::FCMP_OR, Variant::V2F16, "FCMP.v2f16", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F5000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(mod(src0), mod(src1))) [kraid::OpFCmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpFOrd* / OpFUnord* -> OpSelect(mask, 1, 0)", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 107, Mnemonic::FCMP_AND, Variant::F32, Mnemonic::FCMP_AND, Variant::F32, "FCMP_AND.f32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F4000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Float compare combined with AND src2", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
+    { 108, Mnemonic::FCMP_AND, Variant::V2F16, Mnemonic::FCMP_AND, Variant::V2F16, "FCMP_AND.v2f16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F5000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Float compare combined with AND src2", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
+    { 109, Mnemonic::FCMP_OR, Variant::F32, Mnemonic::FCMP_OR, Variant::F32, "FCMP_OR.f32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F4000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Float compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 110, Mnemonic::FCMP_OR, Variant::V2F16, Mnemonic::FCMP_OR, Variant::V2F16, "FCMP_OR.v2f16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F5000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Float compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 111, Mnemonic::FCOS_TABLE, Variant::U6, Mnemonic::FCOS_TABLE, Variant::U6, "FCOS_TABLE.u6", "sfu", 9, 14, 0x81FF00FFBFFFFF00ULL, 0x009C000000050000ULL, 41, SemanticCategory::FP_SFU, "dst = cos(src0 * 2*pi)", "GLSL.std.450 Cos", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
+    { 112, Mnemonic::FEXP, Variant::F16, Mnemonic::FPOW, Variant::F16, "FEXP.f16", "sfu", 12, 14, 0x81FF00CFFBFF00FFULL, 0x00A60000130D00DCULL, 39, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "Calculates the base-2 exponent of an argument specified as a 8:24 fixed-point. The original argument is passed as well for correct handling of special cases." },
+    { 113, Mnemonic::FEXP, Variant::F32, Mnemonic::FEXP, Variant::F32, "FEXP.f32", "sfu", 9, 14, 0x81FF00CFF3FF0000ULL, 0x00A4000000080000ULL, 30, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "Calculates the base-2 exponent of an argument specified as a 8:24 fixed-point. The original argument is passed as well for correct handling of special cases." },
+    { 114, Mnemonic::FEXPF, Variant::F32, Mnemonic::FEXPF, Variant::F32, "FEXPF.f32", "sfu", 14, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000110000ULL, 38, SemanticCategory::FP_SFU, "dst = exp2(src0)", "GLSL.std.450 Exp2", "" },
+    { 115, Mnemonic::FEXP_TABLE, Variant::U4, Mnemonic::FEXP_TABLE, Variant::U4, "FEXP_TABLE.u4", "sfu", 9, 14, 0x81FF00FE7FFFFF00ULL, 0x009C0000000D0000ULL, 40, SemanticCategory::FP_SFU, "dst = exp2_table_lookup(src0)", "GLSL.std.450 Exp2", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
+    { 116, Mnemonic::FLOG, Variant::F16, Mnemonic::FLOG, Variant::F16, "FLOG.f16", "sfu", 12, 14, 0x81FF003FEFFFFF00ULL, 0x009C000000090000ULL, 39, SemanticCategory::FP_SFU, "dst = log2(src0)", "GLSL.std.450 Log2", "" },
+    { 117, Mnemonic::FLOG, Variant::F32, Mnemonic::FLOG, Variant::F32, "FLOG.f32", "sfu", 14, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000100000ULL, 38, SemanticCategory::FP_SFU, "dst = log2(src0)", "GLSL.std.450 Log2", "" },
+    { 118, Mnemonic::FLOGD, Variant::F32, Mnemonic::FLOGD, Variant::F32, "FLOGD.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000080000ULL, 38, SemanticCategory::FP_SFU, "dst = log2_mantissa_poly(src0)", "GLSL.std.450 Log2", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 119, Mnemonic::FLOG_TABLE, Variant::F32, Mnemonic::FLOG_TABLE, Variant::F32, "FLOG_TABLE.f32", "sfu", 9, 14, 0x81FF00384FFFFF00ULL, 0x009C0000000C0000ULL, 34, SemanticCategory::FP_SFU, "dst = log2_table(src0)", "GLSL.std.450 Log2", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 120, Mnemonic::FLUSH, Variant::F32, Mnemonic::FLUSH, Variant::F32, "FLUSH.f32", "cvt", 9, 14, 0x81FF003FCFFFF000ULL, 0x0098000000000000ULL, 34, SemanticCategory::FP_ARITH, "dst = flush_subnormals(src0) [kraid::OpFlush: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_src(&self.src); let c = match self.src_type.scalar_type()]", "OpFAdd(src0, 0.0)", "Flush special float values. The ftz modifier flushes subnormal values to zero. The flush_inf modifier flushes +inf to the maximum finite value, and -inf to the minimum finite value. nan_mode may flush either all NaN values to zero or signal" },
+    { 121, Mnemonic::FLUSH, Variant::V2F16, Mnemonic::FLUSH, Variant::V2F16, "FLUSH.v2f16", "cvt", 9, 14, 0x81FF003FCFFFF000ULL, 0x0098000000010000ULL, 34, SemanticCategory::FP_ARITH, "dst = flush_subnormals(src0) [kraid::OpFlush: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_src(&self.src); let c = match self.src_type.scalar_type()]", "OpFAdd(src0, 0.0)", "Flush special float values. The ftz modifier flushes subnormal values to zero. The flush_inf modifier flushes +inf to the maximum finite value, and -inf to the minimum finite value. nan_mode may flush either all NaN values to zero or signal" },
+    { 122, Mnemonic::FMA, Variant::F32, Mnemonic::FMA, Variant::F32, "FMA.f32", "fma", 9, 14, 0x81FF000000000000ULL, 0x00B2000000000000ULL, 10, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1) + mod(src2))) [kraid::OpFma: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 Fma / OpFAdd(OpFMul)", "$A \\cdot B + C$" },
+    { 123, Mnemonic::FMA, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMA.v2f16", "fma", 9, 14, 0x81FF000000000000ULL, 0x00B3000000000000ULL, 10, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1) + mod(src2))) [kraid::OpFma: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 Fma / OpFAdd(OpFMul)", "$A \\cdot B + C$" },
+    { 124, Mnemonic::FMAX, Variant::F32, Mnemonic::FMAX, Variant::F32, "FMAX.f32", "cvt", 9, 14, 0x81FF000C03FF0000ULL, 0x00A4000000030000ULL, 22, SemanticCategory::FP_ARITH, "dst = clamp(ieee_max(mod(src0), mod(src1))) [kraid::OpFMax: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMax / FMax", "$\\max \\{ A, B \\}$" },
+    { 125, Mnemonic::FMAX, Variant::V2F16, Mnemonic::FMAX, Variant::V2F16, "FMAX.v2f16", "cvt", 9, 14, 0x81FF000C03FF0000ULL, 0x00A5000000030000ULL, 22, SemanticCategory::FP_ARITH, "dst = clamp(ieee_max(mod(src0), mod(src1))) [kraid::OpFMax: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMax / FMax", "$\\max \\{ A, B \\}$" },
+    { 126, Mnemonic::FMA_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FMA_RSCALE.f32", "fma", 9, 14, 0x81F8000000000000ULL, 0x0160000000000000ULL, 7, SemanticCategory::FP_SFU, "dst = ldexp(fma(mod(src0), mod(src1), mod(src2)), src3)", "GLSL.std.450 Ldexp(Fma(src0, src1, src2), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
+    { 127, Mnemonic::FMIN, Variant::F32, Mnemonic::FMIN, Variant::F32, "FMIN.f32", "cvt", 9, 14, 0x81FF000C03FF0000ULL, 0x00A4000000020000ULL, 22, SemanticCategory::FP_ARITH, "dst = clamp(ieee_min(mod(src0), mod(src1))) [kraid::OpFMin: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMin / FMin", "$\\min \\{ A, B \\}$" },
+    { 128, Mnemonic::FMIN, Variant::V2F16, Mnemonic::FMIN, Variant::V2F16, "FMIN.v2f16", "cvt", 9, 14, 0x81FF000C03FF0000ULL, 0x00A5000000020000ULL, 22, SemanticCategory::FP_ARITH, "dst = clamp(ieee_min(mod(src0), mod(src1))) [kraid::OpFMin: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 NMin / FMin", "$\\min \\{ A, B \\}$" },
+    { 129, Mnemonic::FMUL, Variant::F32, Mnemonic::FMA, Variant::F32, "FMUL.f32", "fma", 9, 13, 0x81FF000803FF0000ULL, 0x00B2000000C00000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
+    { 130, Mnemonic::FMUL, Variant::F32, Mnemonic::FMA, Variant::F32, "FMUL.f32", "fma", 14, 14, 0x81FF000803FF0000ULL, 0x00B2000000C00000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
+    { 131, Mnemonic::FMUL, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMUL.v2f16", "fma", 9, 13, 0x81FF000803FF0000ULL, 0x00B3000002C00000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
+    { 132, Mnemonic::FMUL, Variant::V2F16, Mnemonic::FMA, Variant::V2F16, "FMUL.v2f16", "fma", 14, 14, 0x81FF000803FF0000ULL, 0x00B3000002C00000ULL, 21, SemanticCategory::FP_ARITH, "dst = clamp(round(mod(src0) * mod(src1))) [kraid::OpFMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); f]", "OpFMul (f32 / v2f16)", "$A \\cdot B + C$" },
+    { 133, Mnemonic::FMUL_CSLICE, Variant::NONE, Mnemonic::FMUL_CSLICE, Variant::NONE, "FMUL_CSLICE", "fma", 9, 14, 0x81FF003FEFFF0000ULL, 0x00A50000000A0000ULL, 31, SemanticCategory::FP_SFU, "dst = cslice_mul(src0, src1)", "OpFMul", "" },
+    { 134, Mnemonic::FMUL_RSCALE, Variant::F32, Mnemonic::FMA_RSCALE, Variant::F32, "FMUL_RSCALE.f32", "fma", 9, 14, 0x81F8000C00FF0000ULL, 0x0160000400C00000ULL, 17, SemanticCategory::FP_SFU, "dst = ldexp(mod(src0) * mod(src1), src3)", "GLSL.std.450 Ldexp(OpFMul(src0, src1), src3)", "First calculates $A \\cdot B + C$ and then biases the exponent by D. Used in special transcendental function sequences. It should not be used for general code as its special case handling differs from two back-to-back `FMA.f32` operations. E" },
+    { 135, Mnemonic::FMUL_SLICE, Variant::F32, Mnemonic::FMUL_SLICE, Variant::F32, "FMUL_SLICE.f32", "fma", 9, 14, 0x81FF00FFFFFF0000ULL, 0x00A40000000A0000ULL, 34, SemanticCategory::FP_SFU, "dst = slice_mul(src0, src1)", "OpFMul", "" },
+    { 136, Mnemonic::FNEG, Variant::F32, Mnemonic::FADD, Variant::F32, "FNEG.f32", "fma", 9, 14, 0x81FF00FCCFFFFF00ULL, 0x00A400500000C000ULL, 38, SemanticCategory::FP_ARITH, "dst = -src0 [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFNegate", "$A + B$" },
+    { 137, Mnemonic::FNEG, Variant::V2F16, Mnemonic::FADD, Variant::V2F16, "FNEG.v2f16", "fma", 9, 14, 0x81FF00FCCFFFFF00ULL, 0x00A500500800C000ULL, 38, SemanticCategory::FP_ARITH, "dst = -src0 [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "OpFNegate", "$A + B$" },
+    { 138, Mnemonic::FPCLASS, Variant::F16, Mnemonic::FPCLASS, Variant::F16, "FPCLASS.f16", "sfu", 9, 14, 0x81FF003FEFFFFF00ULL, 0x009C0000000B0000ULL, 39, SemanticCategory::FP_SFU, "dst = classify_fp(src0)", "OpIsNan / OpIsInf", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 139, Mnemonic::FPCLASS, Variant::F32, Mnemonic::FPCLASS, Variant::F32, "FPCLASS.f32", "sfu", 9, 14, 0x81FF003FFFFFFF00ULL, 0x009C0000000A0000ULL, 40, SemanticCategory::FP_SFU, "dst = classify_fp(src0)", "OpIsNan / OpIsInf", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 140, Mnemonic::FPOW, Variant::F16, Mnemonic::FPOW, Variant::F16, "FPOW.f16", "sfu", 12, 14, 0x81FF000FEBFF0000ULL, 0x00A60000030D0000ULL, 28, SemanticCategory::FP_SFU, "dst = pow(src0, src1)", "GLSL.std.450 Pow", "" },
+    { 141, Mnemonic::FPOW_SC_APPLY, Variant::NONE, Mnemonic::FPOW_SC_APPLY, Variant::NONE, "FPOW_SC_APPLY", "sfu", 9, 14, 0x81FF00FFFFFF0000ULL, 0x00A40000010D0000ULL, 34, SemanticCategory::FP_SFU, "dst = pow_scale_apply(src0, src1)", "GLSL.std.450 Pow helper", "" },
+    { 142, Mnemonic::FPOW_SC_DET, Variant::F32, Mnemonic::FPOW_SC_DET, Variant::F32, "FPOW_SC_DET.f32", "sfu", 9, 14, 0x81FF00FFFFCF0000ULL, 0x00A40000000D0000ULL, 32, SemanticCategory::FP_SFU, "dst = pow_scale_detect(src0, src1)", "GLSL.std.450 Pow helper", "" },
+    { 143, Mnemonic::FRCBRT_APPROX_A, Variant::F32, Mnemonic::FRCBRT_APPROX_A, Variant::F32, "FRCBRT_APPROX_A.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009E000000000000ULL, 38, SemanticCategory::FP_SFU, "dst = rcbrt_step_a(src0)", "Pow(src0, -1/3)", "" },
+    { 144, Mnemonic::FRCBRT_APPROX_B, Variant::F32, Mnemonic::FRCBRT_APPROX_B, Variant::F32, "FRCBRT_APPROX_B.f32", "sfu", 9, 14, 0x81FF00FFFFFFFF00ULL, 0x009E000000010000ULL, 42, SemanticCategory::FP_SFU, "dst = rcbrt_step_b(src0)", "Pow(src0, -1/3)", "" },
+    { 145, Mnemonic::FRCBRT_APPROX_C, Variant::F32, Mnemonic::FRCBRT_APPROX_C, Variant::F32, "FRCBRT_APPROX_C.f32", "sfu", 9, 14, 0x81FF00FFFFFFFF00ULL, 0x009E000000020000ULL, 42, SemanticCategory::FP_SFU, "dst = rcbrt_step_c(src0)", "Pow(src0, -1/3)", "" },
+    { 146, Mnemonic::FRCP, Variant::F16, Mnemonic::FRCP, Variant::F16, "FRCP.f16", "sfu", 9, 10, 0x81FF003FEFFFFF00ULL, 0x009C000000010000ULL, 39, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 147, Mnemonic::FRCP, Variant::F16, Mnemonic::FRCP, Variant::F16, "FRCP.f16", "sfu", 11, 14, 0x81FF003FEFFFFF00ULL, 0x009C000000010000ULL, 39, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 148, Mnemonic::FRCP, Variant::F32, Mnemonic::FRCP, Variant::F32, "FRCP.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000000000ULL, 38, SemanticCategory::FP_SFU, "dst = 1.0 / mod(src0) [kraid::OpFRcp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); let c = 1.0 / c.flush_subnormals(); f.set]", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 149, Mnemonic::FRCP_APPROX, Variant::F32, Mnemonic::FRCP_APPROX, Variant::F32, "FRCP_APPROX.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009C0000000E0000ULL, 38, SemanticCategory::FP_SFU, "dst = approx_rcp(src0)", "OpFDiv(1.0, src0)", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 150, Mnemonic::FREXPE, Variant::F32, Mnemonic::FREXPE, Variant::F32, "FREXPE.f32", "cvt", 9, 14, 0x81FF00FF8CFFFF00ULL, 0x0099000000020000ULL, 37, SemanticCategory::FP_SFU, "dst = frexp_exp(src0)", "GLSL.std.450 FrexpStruct.exp", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
+    { 151, Mnemonic::FREXPE, Variant::V2F16, Mnemonic::FREXPE, Variant::V2F16, "FREXPE.v2f16", "cvt", 9, 10, 0x81FF00FF8CFFFF00ULL, 0x0099000000030000ULL, 37, SemanticCategory::FP_SFU, "dst = frexp_exp(src0)", "GLSL.std.450 FrexpStruct.exp", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
+    { 152, Mnemonic::FREXPM, Variant::F32, Mnemonic::FREXPM, Variant::F32, "FREXPM.f32", "cvt", 9, 14, 0x81FF003FCCFFFF00ULL, 0x0099000000000000ULL, 36, SemanticCategory::FP_SFU, "dst = frexp_mantissa(src0)", "GLSL.std.450 FrexpStruct.significand", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
+    { 153, Mnemonic::FREXPM, Variant::V2F16, Mnemonic::FREXPM, Variant::V2F16, "FREXPM.v2f16", "cvt", 9, 10, 0x81FF003FCCFFFF00ULL, 0x0099000000010000ULL, 36, SemanticCategory::FP_SFU, "dst = frexp_mantissa(src0)", "GLSL.std.450 FrexpStruct.significand", "Breaks up the floating-point input into its fractional (mantissa) and exponent parts. By default, this is compatible with the `frexp()` function in APIs. With the log/sqrt modifiers, the floating point format is adjusted to be compatible wi" },
+    { 154, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "cvt", 9, 10, 0x81FF003E0FFFFF00ULL, 0x00900000000D0000ULL, 35, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
+    { 155, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "fma", 11, 13, 0x81FFC03E3FFFFF00ULL, 0x0090C000000D0000ULL, 39, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
+    { 156, Mnemonic::FROUND, Variant::F32, Mnemonic::FROUND, Variant::F32, "FROUND.f32", "fma", 14, 14, 0x81FFC03E3FFFFF00ULL, 0x0090C000000D0000ULL, 39, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
+    { 157, Mnemonic::FROUND, Variant::V2F16, Mnemonic::FROUND, Variant::V2F16, "FROUND.v2f16", "cvt", 9, 10, 0x81FF003E0FFFFF00ULL, 0x00900000000F0000ULL, 35, SemanticCategory::FP_ARITH, "dst = round_mode(mod(src0)) [kraid::OpFAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_f32(&self.srcs[0]); let cb = f.get_f32(&self.srcs[1]); l]", "GLSL.std.450 RoundEven / Trunc / Floor / Ceil", "Performs the given rounding, using the convert unit." },
+    { 158, Mnemonic::FRSQ, Variant::F16, Mnemonic::FRSQ, Variant::F16, "FRSQ.f16", "sfu", 9, 10, 0x81FF003FEFFFFF00ULL, 0x009C000000030000ULL, 39, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 159, Mnemonic::FRSQ, Variant::F16, Mnemonic::FRSQ, Variant::F16, "FRSQ.f16", "sfu", 11, 14, 0x81FF003FEFFFFF00ULL, 0x009C000000030000ULL, 39, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 160, Mnemonic::FRSQ, Variant::F32, Mnemonic::FRSQ, Variant::F32, "FRSQ.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000020000ULL, 38, SemanticCategory::FP_SFU, "dst = 1.0 / sqrt(mod(src0)) [kraid::OpFRsq: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let c = f.get_f32(&self.src); f.set_f32(&self.dst, 1.0 / c.flush_subnor]", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 161, Mnemonic::FRSQ_APPROX, Variant::F32, Mnemonic::FRSQ_APPROX, Variant::F32, "FRSQ_APPROX.f32", "sfu", 9, 14, 0x81FF003FCFFFFF00ULL, 0x009C0000000F0000ULL, 38, SemanticCategory::FP_SFU, "dst = approx_rsq(src0)", "GLSL.std.450 InverseSqrt", "Performs a given special function. The floating-point reciprocal (`FRCP`) and reciprocal square root (`FRSQ`) instructions may be freely used as-is. The logarithm instruction (`FLOGD.f32`) requires an argument reduction. See the transcenden" },
+    { 162, Mnemonic::FSINCOS, Variant::F32, Mnemonic::FSINCOS, Variant::F32, "FSINCOS.f32", "sfu", 14, 14, 0x81FF00FFBFFF0000ULL, 0x00A40000020E0000ULL, 33, SemanticCategory::FP_SFU, "dst = sincos(src0)", "GLSL.std.450 Sin / Cos", "" },
+    { 163, Mnemonic::FSINCOS_OFFSET, Variant::U6, Mnemonic::FSINCOS_OFFSET, Variant::U6, "FSINCOS_OFFSET.u6", "sfu", 9, 14, 0x81FF00FFBFFFFF00ULL, 0x009C000000060000ULL, 41, SemanticCategory::FP_SFU, "dst = sincos_phase_offset(src0)", "Phase reduction for Sin/Cos", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
+    { 164, Mnemonic::FSIN_TABLE, Variant::U6, Mnemonic::FSIN_TABLE, Variant::U6, "FSIN_TABLE.u6", "sfu", 9, 14, 0x81FF00FFBFFFFF00ULL, 0x009C000000040000ULL, 41, SemanticCategory::FP_SFU, "dst = sin(src0 * 2*pi)", "GLSL.std.450 Sin", "Performs a given special function. The trigonometric tables (`FSIN_TABLE.u6` and `FCOS_TABLE.u6`) are crude, requiring both an argument reduction and postprocessing." },
+    { 165, Mnemonic::FSQRT, Variant::F32, Mnemonic::FSQRT, Variant::F32, "FSQRT.f32", "sfu", 14, 14, 0x81FF003FCFFFFF00ULL, 0x009C000000070000ULL, 38, SemanticCategory::FP_SFU, "dst = sqrt(mod(src0))", "GLSL.std.450 Sqrt", "" },
+    { 166, Mnemonic::HADD, Variant::S32, Mnemonic::HADD, Variant::S32, "HADD.s32", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A80000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 167, Mnemonic::HADD, Variant::U32, Mnemonic::HADD, Variant::U32, "HADD.u32", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A00000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 168, Mnemonic::HADD, Variant::V2S16, Mnemonic::HADD, Variant::V2S16, "HADD.v2s16", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A90000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 169, Mnemonic::HADD, Variant::V2U16, Mnemonic::HADD, Variant::V2U16, "HADD.v2u16", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A10000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 170, Mnemonic::HADD, Variant::V4S8, Mnemonic::HADD, Variant::V4S8, "HADD.v4s8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00AA0000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 171, Mnemonic::HADD, Variant::V4U8, Mnemonic::HADD, Variant::V4U8, "HADD.v4u8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A20000000B0000ULL, 25, SemanticCategory::FP_ARITH, "dst = (src0 + src1) * 0.5", "Half-add average", "$(A + B) \\gg 1$ without intermediate overflow, corresponding to `hadd()` in OpenCL. With the `.rhadd` modifier set, it instead calculates $(A + B + 1) \\gg 1$ corresponding to `rhadd()` in OpenCL." },
+    { 172, Mnemonic::IABS, Variant::S32, Mnemonic::IABS, Variant::S32, "IABS.s32", "cvt", 9, 14, 0x81FF000FFFFFFF00ULL, 0x0091000000080000ULL, 38, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
+    { 173, Mnemonic::IABS, Variant::V2S16, Mnemonic::IABS, Variant::V2S16, "IABS.v2s16", "cvt", 9, 14, 0x81FF000FFFFFFF00ULL, 0x0091000000090000ULL, 38, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
+    { 174, Mnemonic::IABS, Variant::V4S8, Mnemonic::IABS, Variant::V4S8, "IABS.v4s8", "cvt", 9, 10, 0x81FF000FFFFFFF00ULL, 0x00910000000A0000ULL, 38, SemanticCategory::INT_ARITH, "dst = |src0| [kraid::OpIAbs: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src); let res = match self.dst_type.bits() { ]", "GLSL.std.450 SAbs", "64-bit abs may be constructed in 4 instructions (5 clocks) by checking the sign with `ICMP.s32.lt.m1 hi, 0` and negating based on the result with `IADD.s64` and `LSHIFT_XOR.i32` on each half." },
+    { 175, Mnemonic::IADD, Variant::S32, Mnemonic::IADD, Variant::S32, "IADD.s32", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A8000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 176, Mnemonic::IADD, Variant::S64, Mnemonic::IADD, Variant::S64, "IADD.s64", "cvt", 9, 10, 0x81FFC00F83FF0000ULL, 0x01ABC00000000000ULL, 27, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 177, Mnemonic::IADD, Variant::S64, Mnemonic::IADD, Variant::S64, "IADD.s64", "cvt", 11, 14, 0x81FFC00FC3FF0000ULL, 0x01ABC00000000000ULL, 28, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 178, Mnemonic::IADD, Variant::U32, Mnemonic::IADD, Variant::U32, "IADD.u32", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A0000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 179, Mnemonic::IADD, Variant::U64, Mnemonic::IADD, Variant::U64, "IADD.u64", "cvt", 9, 10, 0x81FFC00F83FF0000ULL, 0x01A3C00000000000ULL, 27, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 180, Mnemonic::IADD, Variant::U64, Mnemonic::IADD, Variant::U64, "IADD.u64", "cvt", 11, 14, 0x81FFC00FC3FF0000ULL, 0x01A3C00000000000ULL, 28, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 181, Mnemonic::IADD, Variant::V2S16, Mnemonic::IADD, Variant::V2S16, "IADD.v2s16", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A9000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 182, Mnemonic::IADD, Variant::V2U16, Mnemonic::IADD, Variant::V2U16, "IADD.v2u16", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A1000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 183, Mnemonic::IADD, Variant::V4S8, Mnemonic::IADD, Variant::V4S8, "IADD.v4s8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00AA000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 184, Mnemonic::IADD, Variant::V4U8, Mnemonic::IADD, Variant::V4U8, "IADD.v4u8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A2000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) + widen(src1)) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIAdd (with optional saturation)", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 185, Mnemonic::IADDC, Variant::U32, Mnemonic::IADDC, Variant::U32, "IADDC.u32", "cvt", 9, 14, 0x81FF00FFBF000000ULL, 0x00B0000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = src0 + src1 + carry", "OpIAddCarry", "" },
+    { 186, Mnemonic::IADD_IMM, Variant::I32, Mnemonic::IADD_IMM, Variant::I32, "IADD_IMM.i32", "cvt", 9, 14, 0x81FF000000000000ULL, 0x0110000000000000ULL, 10, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 187, Mnemonic::IADD_IMM, Variant::V2I16, Mnemonic::IADD_IMM, Variant::V2I16, "IADD_IMM.v2i16", "cvt", 9, 14, 0x81FF000000000000ULL, 0x0111000000000000ULL, 10, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 188, Mnemonic::IADD_IMM, Variant::V4I8, Mnemonic::IADD_IMM, Variant::V4I8, "IADD_IMM.v4i8", "cvt", 9, 10, 0x81FF000000000000ULL, 0x0112000000000000ULL, 10, SemanticCategory::INT_ARITH, "dst = src0 + imm32", "OpIAdd(src0, OpConstant(imm32))", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 189, Mnemonic::ICMP, Variant::S32, Mnemonic::ICMP_OR, Variant::S32, "ICMP.s32", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F8000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 190, Mnemonic::ICMP, Variant::U32, Mnemonic::ICMP_OR, Variant::U32, "ICMP.u32", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F0000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 191, Mnemonic::ICMP, Variant::V2S16, Mnemonic::ICMP_OR, Variant::V2S16, "ICMP.v2s16", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F9000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 192, Mnemonic::ICMP, Variant::V2U16, Mnemonic::ICMP_OR, Variant::V2U16, "ICMP.v2u16", "cvt", 9, 14, 0x81FF000803FF0000ULL, 0x00F1000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 193, Mnemonic::ICMP, Variant::V4S8, Mnemonic::ICMP_OR, Variant::V4S8, "ICMP.v4s8", "cvt", 9, 10, 0x81FF000803FF0000ULL, 0x00FA000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 194, Mnemonic::ICMP, Variant::V4U8, Mnemonic::ICMP_OR, Variant::V4U8, "ICMP.v4u8", "cvt", 9, 10, 0x81FF000803FF0000ULL, 0x00F2000000C00000ULL, 21, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(widen(src0), widen(src1))) [kraid::OpICmp: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let ca = f.get_src(&self.srcs[0]); let cb = f.get_src(&self.srcs[1]); l]", "OpIEqual / OpSLessThan / OpULessThan -> OpSelect", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 195, Mnemonic::ICMP_AND, Variant::S32, Mnemonic::ICMP_AND, Variant::S32, "ICMP_AND.s32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F8000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 196, Mnemonic::ICMP_AND, Variant::U32, Mnemonic::ICMP_AND, Variant::U32, "ICMP_AND.u32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F0000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 197, Mnemonic::ICMP_AND, Variant::V2S16, Mnemonic::ICMP_AND, Variant::V2S16, "ICMP_AND.v2s16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F9000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 198, Mnemonic::ICMP_AND, Variant::V2U16, Mnemonic::ICMP_AND, Variant::V2U16, "ICMP_AND.v2u16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F1000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 199, Mnemonic::ICMP_AND, Variant::V4S8, Mnemonic::ICMP_AND, Variant::V4S8, "ICMP_AND.v4s8", "cvt", 9, 10, 0x81FF000803000000ULL, 0x00FA000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 200, Mnemonic::ICMP_AND, Variant::V4U8, Mnemonic::ICMP_AND, Variant::V4U8, "ICMP_AND.v4u8", "cvt", 9, 10, 0x81FF000803000000ULL, 0x00F2000001000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) & src2", "Integer compare combined with AND src2", "Evaluates the given condition, do a logical and with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condition" },
+    { 201, Mnemonic::ICMP_MULTI, Variant::S32, Mnemonic::ICMP_MULTI, Variant::S32, "ICMP_MULTI.s32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F8000002000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = multi_lane_icmp(src0, src1, src2)", "Multi-component integer comparison", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
+    { 202, Mnemonic::ICMP_MULTI, Variant::U32, Mnemonic::ICMP_MULTI, Variant::U32, "ICMP_MULTI.u32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F0000002000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = multi_lane_icmp(src0, src1, src2)", "Multi-component integer comparison", "Evaluates the given condition, do a logical and/or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together condit" },
+    { 203, Mnemonic::ICMP_OR, Variant::S32, Mnemonic::ICMP_OR, Variant::S32, "ICMP_OR.s32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F8000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 204, Mnemonic::ICMP_OR, Variant::U32, Mnemonic::ICMP_OR, Variant::U32, "ICMP_OR.u32", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F0000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 205, Mnemonic::ICMP_OR, Variant::V2S16, Mnemonic::ICMP_OR, Variant::V2S16, "ICMP_OR.v2s16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F9000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 206, Mnemonic::ICMP_OR, Variant::V2U16, Mnemonic::ICMP_OR, Variant::V2U16, "ICMP_OR.v2u16", "cvt", 9, 14, 0x81FF000803000000ULL, 0x00F1000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 207, Mnemonic::ICMP_OR, Variant::V4S8, Mnemonic::ICMP_OR, Variant::V4S8, "ICMP_OR.v4s8", "cvt", 9, 10, 0x81FF000803000000ULL, 0x00FA000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 208, Mnemonic::ICMP_OR, Variant::V4U8, Mnemonic::ICMP_OR, Variant::V4U8, "ICMP_OR.v4u8", "cvt", 9, 10, 0x81FF000803000000ULL, 0x00F2000000000000ULL, 13, SemanticCategory::CMP_SELECT, "dst = result_type(cmp_op(src0, src1)) | src2", "Integer compare combined with OR src2", "Evaluates the given condition, do a logical or with the condition in the result source, and return in the given result type (integer one, integer minus one, or floating-point one). The third source is useful for chaining together conditions" },
+    { 209, Mnemonic::IDPADD, Variant::V4S8, Mnemonic::IDPADD, Variant::V4S8, "IDPADD.v4s8", "fma", 9, 13, 0x81FF00FFBF000000ULL, 0x00C2000000000000ULL, 25, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
+    { 210, Mnemonic::IDPADD, Variant::V4S8, Mnemonic::IDPADD, Variant::V4S8, "IDPADD.v4s8", "fma", 14, 14, 0x81FF00FFB3000000ULL, 0x00C2000000000000ULL, 23, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
+    { 211, Mnemonic::IDPADD, Variant::V4U8, Mnemonic::IDPADD, Variant::V4U8, "IDPADD.v4u8", "fma", 9, 14, 0x81FF00FFBF000000ULL, 0x00C2000001000000ULL, 25, SemanticCategory::INT_ARITH, "dst = dot4_i8(src0, src1) + src2 [kraid::OpIDpAdd: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let srcs = [ (f.get_src(&self.srcs[0]) as u32).to_le_bytes(), (f.get_src(&se]", "OpSDot / OpUDot + OpIAdd", "8-bit integer dot product between 4 channel vectors, intended for machine learning. Available in both unsigned and signed variants, controlling sign-extension/zero-extension behaviour to the final 32-bit destination. Saturation is available" },
+    { 212, Mnemonic::ILOGB, Variant::F32, Mnemonic::ILOGB, Variant::F32, "ILOGB.f32", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0098000000040000ULL, 40, SemanticCategory::FP_SFU, "dst = int(floor(log2(|src0|)))", "GLSL.std.450 FrexpStruct exponent", "" },
+    { 213, Mnemonic::ILOGB, Variant::V2F16, Mnemonic::ILOGB, Variant::V2F16, "ILOGB.v2f16", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0098000000050000ULL, 40, SemanticCategory::FP_SFU, "dst = int(floor(log2(|src0|)))", "GLSL.std.450 FrexpStruct exponent", "" },
+    { 214, Mnemonic::IMUL, Variant::S32, Mnemonic::IMUL, Variant::S32, "IMUL.s32", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00A80000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 215, Mnemonic::IMUL, Variant::S64, Mnemonic::IMUL, Variant::S64, "IMUL.s64", "sfu", 9, 14, 0x81FFC00FC3FF0000ULL, 0x01ABC000000A0000ULL, 28, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 216, Mnemonic::IMUL, Variant::U32, Mnemonic::IMUL, Variant::U32, "IMUL.u32", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00A00000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 217, Mnemonic::IMUL, Variant::U64, Mnemonic::IMUL, Variant::U64, "IMUL.u64", "sfu", 9, 14, 0x81FFC00FC3FF0000ULL, 0x01A3C000000A0000ULL, 28, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 218, Mnemonic::IMUL, Variant::V2S16, Mnemonic::IMUL, Variant::V2S16, "IMUL.v2s16", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00A90000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 219, Mnemonic::IMUL, Variant::V2U16, Mnemonic::IMUL, Variant::V2U16, "IMUL.v2u16", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00A10000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 220, Mnemonic::IMUL, Variant::V4S8, Mnemonic::IMUL, Variant::V4S8, "IMUL.v4s8", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00AA0000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 221, Mnemonic::IMUL, Variant::V4U8, Mnemonic::IMUL, Variant::V4U8, "IMUL.v4u8", "sfu", 9, 14, 0x81FF000F83FF0000ULL, 0x00A20000000A0000ULL, 25, SemanticCategory::INT_ARITH, "dst = low_bits(widen(src0) * widen(src1)) [kraid::OpIMul: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpIMul", "$A \\cdot B$ with optional saturation. Note the multipliers can only handle up to 32-bit by 32-bit multiplies. The 64-bit \"multiply\" acts like IMUL.u32 but additionally writes the high half of the product to the high half of the 64-bit desti" },
+    { 222, Mnemonic::ISUB, Variant::S32, Mnemonic::ISUB, Variant::S32, "ISUB.s32", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A8000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 223, Mnemonic::ISUB, Variant::S64, Mnemonic::ISUB, Variant::S64, "ISUB.s64", "cvt", 9, 10, 0x81FFC00F83FF0000ULL, 0x01ABC00000010000ULL, 27, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 224, Mnemonic::ISUB, Variant::S64, Mnemonic::ISUB, Variant::S64, "ISUB.s64", "cvt", 11, 14, 0x81FFC00FC3FF0000ULL, 0x01ABC00000010000ULL, 28, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 225, Mnemonic::ISUB, Variant::U32, Mnemonic::ISUB, Variant::U32, "ISUB.u32", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A0000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 226, Mnemonic::ISUB, Variant::U64, Mnemonic::ISUB, Variant::U64, "ISUB.u64", "cvt", 9, 10, 0x81FFC00F83FF0000ULL, 0x01A3C00000010000ULL, 27, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 227, Mnemonic::ISUB, Variant::U64, Mnemonic::ISUB, Variant::U64, "ISUB.u64", "cvt", 11, 14, 0x81FFC00FC3FF0000ULL, 0x01A3C00000010000ULL, 28, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 228, Mnemonic::ISUB, Variant::V2S16, Mnemonic::ISUB, Variant::V2S16, "ISUB.v2s16", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A9000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 229, Mnemonic::ISUB, Variant::V2U16, Mnemonic::ISUB, Variant::V2U16, "ISUB.v2u16", "cvt", 9, 14, 0x81FF000F83FF0000ULL, 0x00A1000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 230, Mnemonic::ISUB, Variant::V4S8, Mnemonic::ISUB, Variant::V4S8, "ISUB.v4s8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00AA000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 231, Mnemonic::ISUB, Variant::V4U8, Mnemonic::ISUB, Variant::V4U8, "ISUB.v4u8", "cvt", 9, 10, 0x81FF000F83FF0000ULL, 0x00A2000000010000ULL, 25, SemanticCategory::INT_ARITH, "dst = sat(widen(src0) - widen(src1)) [kraid::OpISub: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "OpISub (with optional saturation)", "$A - B$ with optional saturation" },
+    { 232, Mnemonic::ISUBB, Variant::U32, Mnemonic::ISUBB, Variant::U32, "ISUBB.u32", "cvt", 9, 14, 0x81FF00FFBF000000ULL, 0x00B0000001000000ULL, 25, SemanticCategory::INT_ARITH, "dst = src0 - src1 - borrow", "OpISubBorrow", "" },
+    { 233, Mnemonic::JUMP, Variant::NONE, Mnemonic::JUMP, Variant::NONE, "JUMP", "cvt", 9, 10, 0x81FFFE07FFFF0000ULL, 0x002FC00000000000ULL, 36, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = target_va", "Indirect or absolute branch", "" },
+    { 234, Mnemonic::JUMP, Variant::NONE, Mnemonic::JUMP, Variant::NONE, "JUMP", "cvt", 11, 14, 0x81FFFF07FFFF0000ULL, 0x002FC10000000000ULL, 37, SemanticCategory::CONTROL_FLOW, "if (cond(src0)) pc = target_va", "Indirect or absolute branch", "" },
+    { 235, Mnemonic::JUMP_EX, Variant::NONE, Mnemonic::JUMP_EX, Variant::NONE, "JUMP_EX", "cvt", 9, 14, 0x81FFFF00FF000000ULL, 0x003FC00000000000ULL, 26, SemanticCategory::CONTROL_FLOW, "exception/blend jump to target_va", "Blend shader / exception call", "" },
+    { 236, Mnemonic::KABOOM, Variant::NONE, Mnemonic::KABOOM, Variant::NONE, "KABOOM", "msg", 9, 14, 0x87FFFFFFFFFFFFFFULL, 0x0006C00000000000ULL, 60, SemanticCategory::SYSTEM, "trap()", "Hardware trap", "" },
+    { 237, Mnemonic::LDEXP, Variant::F32, Mnemonic::LDEXP, Variant::F32, "LDEXP.f32", "fma", 9, 13, 0x81FF003E0FFF0000ULL, 0x00A4000000060000ULL, 27, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
+    { 238, Mnemonic::LDEXP, Variant::F32, Mnemonic::LDEXP, Variant::F32, "LDEXP.f32", "fma", 14, 14, 0x81FF003E0FFF0000ULL, 0x00A4000000060000ULL, 27, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
+    { 239, Mnemonic::LDEXP, Variant::V2F16, Mnemonic::LDEXP, Variant::V2F16, "LDEXP.v2f16", "fma", 9, 13, 0x81FF003E0FFF0000ULL, 0x00A5000000060000ULL, 27, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
+    { 240, Mnemonic::LDEXP, Variant::V2F16, Mnemonic::LDEXP, Variant::V2F16, "LDEXP.v2f16", "fma", 14, 14, 0x81FF003E0FFF0000ULL, 0x00A5000000060000ULL, 27, SemanticCategory::FP_SFU, "dst = src0 * 2^(src1)", "GLSL.std.450 Ldexp", "Computes $A \\cdot 2^B$ by adding B to the exponent of A. Used to calculate various special functions, particularly base-2 exponents. Special case handling differs from an actual floating-point multiply, so this should not be used outside fi" },
+    { 241, Mnemonic::LD_ATTR, Variant::NONE, Mnemonic::LD_ATTR, Variant::NONE, "LD_ATTR", "msg", 9, 14, 0x81FFC0F008000000ULL, 0x0076800000000000ULL, 17, SemanticCategory::VERTEX_VARYING, "sr_dst = fetch_vertex_attr(table, attr_idx, vertex_id, instance_id)", "OpLoad from Input attribute variable (location = attr_idx)", "Load `vecsize` components from the attribute descriptor at the specified location at index (vertex ID, instance ID), converting to the specified register format. The index must not diverge within a warp." },
+    { 242, Mnemonic::LD_ATTR_IMM, Variant::NONE, Mnemonic::LD_ATTR_IMM, Variant::NONE, "LD_ATTR_IMM", "msg", 9, 14, 0x81FFC0F008000000ULL, 0x0066800000000000ULL, 17, SemanticCategory::VERTEX_VARYING, "sr_dst = fetch_vertex_attr(table, imm_idx, vertex_id, instance_id)", "OpLoad from Input attribute variable (location = imm_idx)", "Load `vecsize` components from the attribute descriptor at entry `index` of resource table `table` at index (vertex ID, instance ID), converting to the specified register format." },
+    { 243, Mnemonic::LD_CHECKED, Variant::I128, Mnemonic::LD_CHECKED, Variant::I128, "LD_CHECKED.i128", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800838000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 244, Mnemonic::LD_CHECKED, Variant::I128, Mnemonic::LD_CHECKED, Variant::I128, "LD_CHECKED.i128", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800818000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 245, Mnemonic::LD_CHECKED, Variant::I16, Mnemonic::LD_CHECKED, Variant::I16, "LD_CHECKED.i16", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800208000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 246, Mnemonic::LD_CHECKED, Variant::I16, Mnemonic::LD_CHECKED, Variant::I16, "LD_CHECKED.i16", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800208000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 247, Mnemonic::LD_CHECKED, Variant::I24, Mnemonic::LD_CHECKED, Variant::I24, "LD_CHECKED.i24", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800210000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 248, Mnemonic::LD_CHECKED, Variant::I24, Mnemonic::LD_CHECKED, Variant::I24, "LD_CHECKED.i24", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800210000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 249, Mnemonic::LD_CHECKED, Variant::I32, Mnemonic::LD_CHECKED, Variant::I32, "LD_CHECKED.i32", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800218000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 250, Mnemonic::LD_CHECKED, Variant::I32, Mnemonic::LD_CHECKED, Variant::I32, "LD_CHECKED.i32", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800218000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 251, Mnemonic::LD_CHECKED, Variant::I48, Mnemonic::LD_CHECKED, Variant::I48, "LD_CHECKED.i48", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800420000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 252, Mnemonic::LD_CHECKED, Variant::I48, Mnemonic::LD_CHECKED, Variant::I48, "LD_CHECKED.i48", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800400000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 253, Mnemonic::LD_CHECKED, Variant::I64, Mnemonic::LD_CHECKED, Variant::I64, "LD_CHECKED.i64", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800428000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 254, Mnemonic::LD_CHECKED, Variant::I64, Mnemonic::LD_CHECKED, Variant::I64, "LD_CHECKED.i64", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800408000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 255, Mnemonic::LD_CHECKED, Variant::I8, Mnemonic::LD_CHECKED, Variant::I8, "LD_CHECKED.i8", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800200000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 256, Mnemonic::LD_CHECKED, Variant::I8, Mnemonic::LD_CHECKED, Variant::I8, "LD_CHECKED.i8", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800200000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 257, Mnemonic::LD_CHECKED, Variant::I96, Mnemonic::LD_CHECKED, Variant::I96, "LD_CHECKED.i96", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0172800630000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 258, Mnemonic::LD_CHECKED, Variant::I96, Mnemonic::LD_CHECKED, Variant::I96, "LD_CHECKED.i96", "msg", 14, 14, 0x81FFC0FE18000000ULL, 0x0172800610000000ULL, 21, SemanticCategory::MEMORY_LS, "sr_dst = (offset < bound) ? mem[addr64 + offset] : 0", "Bounds-checked memory load", "" },
+    { 259, Mnemonic::LD_CHECKED_IMM, Variant::I128, Mnemonic::LD_CHECKED_IMM, Variant::I128, "LD_CHECKED_IMM.i128", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800838000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 260, Mnemonic::LD_CHECKED_IMM, Variant::I128, Mnemonic::LD_CHECKED_IMM, Variant::I128, "LD_CHECKED_IMM.i128", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800818000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 261, Mnemonic::LD_CHECKED_IMM, Variant::I16, Mnemonic::LD_CHECKED_IMM, Variant::I16, "LD_CHECKED_IMM.i16", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800208000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 262, Mnemonic::LD_CHECKED_IMM, Variant::I16, Mnemonic::LD_CHECKED_IMM, Variant::I16, "LD_CHECKED_IMM.i16", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800208000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 263, Mnemonic::LD_CHECKED_IMM, Variant::I24, Mnemonic::LD_CHECKED_IMM, Variant::I24, "LD_CHECKED_IMM.i24", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800210000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 264, Mnemonic::LD_CHECKED_IMM, Variant::I24, Mnemonic::LD_CHECKED_IMM, Variant::I24, "LD_CHECKED_IMM.i24", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800210000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 265, Mnemonic::LD_CHECKED_IMM, Variant::I32, Mnemonic::LD_CHECKED_IMM, Variant::I32, "LD_CHECKED_IMM.i32", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800218000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 266, Mnemonic::LD_CHECKED_IMM, Variant::I32, Mnemonic::LD_CHECKED_IMM, Variant::I32, "LD_CHECKED_IMM.i32", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800218000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 267, Mnemonic::LD_CHECKED_IMM, Variant::I48, Mnemonic::LD_CHECKED_IMM, Variant::I48, "LD_CHECKED_IMM.i48", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800420000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 268, Mnemonic::LD_CHECKED_IMM, Variant::I48, Mnemonic::LD_CHECKED_IMM, Variant::I48, "LD_CHECKED_IMM.i48", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800400000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 269, Mnemonic::LD_CHECKED_IMM, Variant::I64, Mnemonic::LD_CHECKED_IMM, Variant::I64, "LD_CHECKED_IMM.i64", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800428000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 270, Mnemonic::LD_CHECKED_IMM, Variant::I64, Mnemonic::LD_CHECKED_IMM, Variant::I64, "LD_CHECKED_IMM.i64", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800408000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 271, Mnemonic::LD_CHECKED_IMM, Variant::I8, Mnemonic::LD_CHECKED_IMM, Variant::I8, "LD_CHECKED_IMM.i8", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800200000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 272, Mnemonic::LD_CHECKED_IMM, Variant::I8, Mnemonic::LD_CHECKED_IMM, Variant::I8, "LD_CHECKED_IMM.i8", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800200000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 273, Mnemonic::LD_CHECKED_IMM, Variant::I96, Mnemonic::LD_CHECKED_IMM, Variant::I96, "LD_CHECKED_IMM.i96", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0072800630000000ULL, 18, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 274, Mnemonic::LD_CHECKED_IMM, Variant::I96, Mnemonic::LD_CHECKED_IMM, Variant::I96, "LD_CHECKED_IMM.i96", "msg", 14, 14, 0x81FFC00E18000000ULL, 0x0072800610000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = (imm_offset < bound) ? mem[addr64 + imm_offset] : 0", "Bounds-checked immediate memory load", "" },
+    { 275, Mnemonic::LD_CVT, Variant::NONE, Mnemonic::LD_CVT, Variant::NONE, "LD_CVT", "msg", 9, 14, 0x81FFC01008000000ULL, 0x0070800000000000ULL, 14, SemanticCategory::MEMORY_LS, "sr_dst = format_convert(mem[addr64 + offset], fmt)", "Formatted load with conversion", "Load from memory with data conversion. The address to load from is given in the first source, which must be a 64-bit register (a pair of 32-bit registers). The other source is the conversion descriptor used for the load." },
+    { 276, Mnemonic::LD_GCLK, Variant::NONE, Mnemonic::LD_GCLK, Variant::NONE, "LD_GCLK", "msg", 9, 14, 0x87FFC0FE3FFFFFF8ULL, 0x0044800400000000ULL, 48, SemanticCategory::SYSTEM, "sr_dst = read_gpu_timestamp_counter()", "OpReadClockKHR", "" },
+    { 277, Mnemonic::LD_MULTI, Variant::NONE, Mnemonic::LD_MULTI, Variant::NONE, "LD_MULTI", "msg", 14, 14, 0x81FFC08038000000ULL, 0x0062800000000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst[0..N] = mem[addr64 + offset]", "Multi-register burst load", "" },
+    { 278, Mnemonic::LD_PKA, Variant::I128, Mnemonic::LD_PKA, Variant::I128, "LD_PKA.i128", "msg", 9, 14, 0x81FFC0FE38FF0000ULL, 0x006A80F838000000ULL, 30, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 279, Mnemonic::LD_PKA, Variant::I16, Mnemonic::LD_PKA, Variant::I16, "LD_PKA.i16", "msg", 9, 14, 0x81FFC04038FF0000ULL, 0x006A800008000000ULL, 24, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 280, Mnemonic::LD_PKA, Variant::I24, Mnemonic::LD_PKA, Variant::I24, "LD_PKA.i24", "msg", 9, 14, 0x81FFC0FE38FF0000ULL, 0x006A808210000000ULL, 30, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 281, Mnemonic::LD_PKA, Variant::I32, Mnemonic::LD_PKA, Variant::I32, "LD_PKA.i32", "msg", 9, 14, 0x81FFC06038FF0000ULL, 0x006A800018000000ULL, 25, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 282, Mnemonic::LD_PKA, Variant::I48, Mnemonic::LD_PKA, Variant::I48, "LD_PKA.i48", "msg", 9, 14, 0x81FFC0FE38FF0000ULL, 0x006A80C420000000ULL, 30, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 283, Mnemonic::LD_PKA, Variant::I64, Mnemonic::LD_PKA, Variant::I64, "LD_PKA.i64", "msg", 9, 14, 0x81FFC0FE38FF0000ULL, 0x006A80F428000000ULL, 30, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 284, Mnemonic::LD_PKA, Variant::I8, Mnemonic::LD_PKA, Variant::I8, "LD_PKA.i8", "msg", 9, 14, 0x81FFC00038FF0000ULL, 0x006A800000000000ULL, 23, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 285, Mnemonic::LD_PKA, Variant::I96, Mnemonic::LD_PKA, Variant::I96, "LD_PKA.i96", "msg", 9, 14, 0x81FFC0FE38FF0000ULL, 0x006A80E630000000ULL, 30, SemanticCategory::MEMORY_LS, "sr_dst = mem[unpack_pka56(ptr) + offset]", "Packaged 56-bit pointer load", "Loads a buffer descriptor. If bits 25...31 of the mode descriptor are all-ones, load from the buffer descriptors in the table indexed by the bottom byte of the mode descriptor. If they are all zeroes, load the contents of the buffer in the " },
+    { 286, Mnemonic::LD_TEX, Variant::NONE, Mnemonic::LD_TEX, Variant::NONE, "LD_TEX", "msg", 9, 14, 0x81FFC0F008000000ULL, 0x0076802000000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = image_load(image_idx, coords)", "OpImageRead", "Load `vecsize` components from the texture descriptor at the specified location at index, converting to the specified register format." },
+    { 287, Mnemonic::LD_TEX_IMM, Variant::NONE, Mnemonic::LD_TEX_IMM, Variant::NONE, "LD_TEX_IMM", "msg", 9, 14, 0x81FFC0F008000000ULL, 0x0066802000000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = image_load(imm_image_idx, coords)", "OpImageRead", "Load `vecsize` components from the texture descriptor at entry `index` of resource table `table`, converting to the specified register format." },
+    { 288, Mnemonic::LD_TILE, Variant::NONE, Mnemonic::LD_TILE, Variant::NONE, "LD_TILE", "msg", 9, 10, 0x81FFC0E008000000ULL, 0x0078800000000000ULL, 16, SemanticCategory::FRAGMENT_OUT, "sr_dst = read_tilebuffer(rt_index, sample, pixel_fmt)", "Subpass / framebuffer fetch read", "Loads a given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used to implement EXT_framebuffer_fetch and internally in ble" },
+    { 289, Mnemonic::LD_TILE, Variant::NONE, Mnemonic::LD_TILE, Variant::NONE, "LD_TILE", "msg", 11, 14, 0x81FFC06008000000ULL, 0x0078800000000000ULL, 15, SemanticCategory::FRAGMENT_OUT, "sr_dst = read_tilebuffer(rt_index, sample, pixel_fmt)", "Subpass / framebuffer fetch read", "Loads a given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used to implement EXT_framebuffer_fetch and internally in ble" },
+    { 290, Mnemonic::LD_VAR, Variant::NONE, Mnemonic::LD_VAR, Variant::NONE, "LD_VAR", "msg", 9, 14, 0x81FFC00008FF0000ULL, 0x0064800000000000ULL, 21, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying(index, sample_mode, perspective)", "OpLoad from Fragment Input varying", "Interpolates a given varying from a software buffer" },
+    { 291, Mnemonic::LD_VAR_BUF, Variant::F16, Mnemonic::LD_VAR_BUF, Variant::F16, "LD_VAR_BUF.f16", "msg", 9, 13, 0x81FFC0000CFF0000ULL, 0x006D800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 292, Mnemonic::LD_VAR_BUF, Variant::F16, Mnemonic::LD_VAR_BUF, Variant::F16, "LD_VAR_BUF.f16", "msg", 14, 14, 0x81FFC0000CFF0000ULL, 0x006D800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 293, Mnemonic::LD_VAR_BUF, Variant::F32, Mnemonic::LD_VAR_BUF, Variant::F32, "LD_VAR_BUF.f32", "msg", 9, 13, 0x81FFC0000CFF0000ULL, 0x006C800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 294, Mnemonic::LD_VAR_BUF, Variant::F32, Mnemonic::LD_VAR_BUF, Variant::F32, "LD_VAR_BUF.f32", "msg", 14, 14, 0x81FFC0000CFF0000ULL, 0x006C800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 295, Mnemonic::LD_VAR_BUF_FLAT, Variant::NONE, Mnemonic::LD_VAR_BUF_FLAT, Variant::NONE, "LD_VAR_BUF_FLAT", "msg", 14, 14, 0x81FFC0E00CFFFF00ULL, 0x005F800000000000ULL, 33, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying_buf(offset)", "OpLoad from Flat Fragment Input varying at byte offset", "Fetches a given flat varying from hardware buffer" },
+    { 296, Mnemonic::LD_VAR_BUF_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_BUF_FLAT_IMM, Variant::NONE, "LD_VAR_BUF_FLAT_IMM", "msg", 14, 14, 0x81FFC0800CF800FFULL, 0x0040800000000000ULL, 28, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying_buf(imm_offset)", "OpLoad from Flat Fragment Input varying at byte offset", "Fetches a given flat varying from hardware buffer" },
+    { 297, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 9, 10, 0x81FFC0000C00FF00ULL, 0x005D800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 298, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 11, 13, 0x81FFC0000CF80000ULL, 0x005D800000000000ULL, 19, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 299, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, Mnemonic::LD_VAR_BUF_IMM, Variant::F16, "LD_VAR_BUF_IMM.f16", "msg", 14, 14, 0x81FFC0000CF80000ULL, 0x005D800000000000ULL, 19, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 300, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 9, 10, 0x81FFC0000C00FF00ULL, 0x005C800000000000ULL, 22, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 301, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 11, 13, 0x81FFC0000CF80000ULL, 0x005C800000000000ULL, 19, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 302, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, Mnemonic::LD_VAR_BUF_IMM, Variant::F32, "LD_VAR_BUF_IMM.f32", "msg", 14, 14, 0x81FFC0000CF80000ULL, 0x005C800000000000ULL, 19, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying_buf(imm_offset, sample_mode)", "OpLoad from Fragment Input varying at byte offset", "Interpolates a given varying from hardware buffer" },
+    { 303, Mnemonic::LD_VAR_FLAT, Variant::NONE, Mnemonic::LD_VAR_FLAT, Variant::NONE, "LD_VAR_FLAT", "msg", 9, 13, 0x81FFC0F008FFFF00ULL, 0x0055800000000000ULL, 33, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
+    { 304, Mnemonic::LD_VAR_FLAT, Variant::NONE, Mnemonic::LD_VAR_FLAT, Variant::NONE, "LD_VAR_FLAT", "msg", 14, 14, 0x81FFC0E008FFFF00ULL, 0x0055800000000000ULL, 32, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
+    { 305, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, "LD_VAR_FLAT_IMM", "msg", 9, 13, 0x87FFC0F008F000FFULL, 0x0041800000000000ULL, 31, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(imm_index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
+    { 306, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, Mnemonic::LD_VAR_FLAT_IMM, Variant::NONE, "LD_VAR_FLAT_IMM", "msg", 14, 14, 0x87FFC08008F000FFULL, 0x0041800000000000ULL, 28, SemanticCategory::VERTEX_VARYING, "sr_dst = read_flat_varying(imm_index)", "OpLoad from Flat Fragment Input varying", "Fetches a given varying from a software buffer" },
+    { 307, Mnemonic::LD_VAR_IMM, Variant::NONE, Mnemonic::LD_VAR_IMM, Variant::NONE, "LD_VAR_IMM", "msg", 9, 14, 0x81FFC00008F00000ULL, 0x0054800000000000ULL, 17, SemanticCategory::VERTEX_VARYING, "sr_dst = interpolate_varying(imm_index, sample_mode, perspective)", "OpLoad from Fragment Input varying", "Interpolates a given varying from a software buffer" },
+    { 308, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, "LD_VAR_SPECIAL", "msg", 9, 13, 0x81FFC0300FFF8F00ULL, 0x0056803002000000ULL, 31, SemanticCategory::VERTEX_VARYING, "sr_dst = read_special_varying(special_id)", "BuiltIn FragCoord.z / FragCoord.w / PointCoord / FrontFacing", "" },
+    { 309, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, Mnemonic::LD_VAR_SPECIAL, Variant::NONE, "LD_VAR_SPECIAL", "msg", 14, 14, 0x81FFC0000FFF8F00ULL, 0x0056800002000000ULL, 29, SemanticCategory::VERTEX_VARYING, "sr_dst = read_special_varying(special_id)", "BuiltIn FragCoord.z / FragCoord.w / PointCoord / FrontFacing", "" },
+    { 310, Mnemonic::LEA_ATTR, Variant::NONE, Mnemonic::LEA_ATTR, Variant::NONE, "LEA_ATTR", "msg", 9, 14, 0x81FFC0FE3F000000ULL, 0x0077800600000000ULL, 25, SemanticCategory::VERTEX_VARYING, "sr_dst = vertex_attr_address(table, attr_idx, vertex_id, instance_id)", "Effective address of vertex attribute", "Load the effective address of an attribute specified with the given index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor." },
+    { 311, Mnemonic::LEA_ATTR_IMM, Variant::NONE, Mnemonic::LEA_ATTR_IMM, Variant::NONE, "LEA_ATTR_IMM", "msg", 9, 14, 0x81FFC0FE3F000000ULL, 0x0067800600000000ULL, 25, SemanticCategory::VERTEX_VARYING, "sr_dst = vertex_attr_address(table, imm_idx, vertex_id, instance_id)", "Effective address of immediate vertex attribute", "Load the effective address of an attribute specified with the given immediate index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor." },
+    { 312, Mnemonic::LEA_BUF, Variant::NONE, Mnemonic::LEA_BUF, Variant::NONE, "LEA_BUF", "msg", 9, 14, 0x81FFC0FE3FFF0000ULL, 0x006E800400000000ULL, 33, SemanticCategory::MEMORY_LS, "sr_dst = resolve_buffer_va(table, index, offset)", "Compute 64-bit buffer VA from SRT Buffer descriptor", "Load effective address of a buffer with an offset added." },
+    { 313, Mnemonic::LEA_BUF_IMM, Variant::NONE, Mnemonic::LEA_BUF_IMM, Variant::NONE, "LEA_BUF_IMM", "msg", 9, 14, 0x81FFC0FE3FF00000ULL, 0x005E800400000000ULL, 29, SemanticCategory::MEMORY_LS, "sr_dst = resolve_buffer_va(table, imm_index, offset)", "Compute 64-bit buffer VA (or Position/Varying FIFO slot)", "Load effective address of a buffer with an immediate offset added." },
+    { 314, Mnemonic::LEA_PKA, Variant::NONE, Mnemonic::LEA_PKA, Variant::NONE, "LEA_PKA", "msg", 9, 14, 0x81FFC0FE3FFF0000ULL, 0x006B800400000000ULL, 33, SemanticCategory::MEMORY_LS, "sr_dst = unpack_pka56(ptr) + offset", "Effective address from packaged pointer", "Load effective address of a simple buffer with an offset added." },
+    { 315, Mnemonic::LEA_TEX, Variant::NONE, Mnemonic::LEA_TEX, Variant::NONE, "LEA_TEX", "msg", 9, 14, 0x81FFC0FE3F000000ULL, 0x0077802600000000ULL, 25, SemanticCategory::TEXTURE, "sr_dst = image_texel_address(image_idx, coords)", "Compute texel memory address from Texture+Plane descriptor", "Load the effective address of a texel from the image specified with the given index. Returns three staging register: the low/high 32-bits of the address and the internal conversion descriptor. The format of the internal conversion descripto" },
+    { 316, Mnemonic::LEA_TEX_IMM, Variant::NONE, Mnemonic::LEA_TEX_IMM, Variant::NONE, "LEA_TEX_IMM", "msg", 9, 14, 0x81FFC0FE3F000000ULL, 0x0067802600000000ULL, 25, SemanticCategory::TEXTURE, "sr_dst = image_texel_address(imm_image_idx, coords)", "Compute texel memory address from Texture+Plane descriptor", "Load the effective address of a texel from the image specified with the given immediate index. Returns three staging registers: the low/high 32-bits of the address and the internal conversion descriptor. The format of the internal conversio" },
+    { 317, Mnemonic::LOAD, Variant::I128, Mnemonic::LOAD, Variant::I128, "LOAD.i128", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x006080F838000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 318, Mnemonic::LOAD, Variant::I16, Mnemonic::LOAD, Variant::I16, "LOAD.i16", "msg", 9, 14, 0x81FFC04038000000ULL, 0x0060800008000000ULL, 16, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 319, Mnemonic::LOAD, Variant::I24, Mnemonic::LOAD, Variant::I24, "LOAD.i24", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0060808210000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 320, Mnemonic::LOAD, Variant::I32, Mnemonic::LOAD, Variant::I32, "LOAD.i32", "msg", 9, 14, 0x81FFC06038000000ULL, 0x0060800018000000ULL, 17, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 321, Mnemonic::LOAD, Variant::I48, Mnemonic::LOAD, Variant::I48, "LOAD.i48", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x006080C420000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 322, Mnemonic::LOAD, Variant::I64, Mnemonic::LOAD, Variant::I64, "LOAD.i64", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x006080F428000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 323, Mnemonic::LOAD, Variant::I8, Mnemonic::LOAD, Variant::I8, "LOAD.i8", "msg", 9, 14, 0x81FFC00038000000ULL, 0x0060800000000000ULL, 15, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 324, Mnemonic::LOAD, Variant::I96, Mnemonic::LOAD, Variant::I96, "LOAD.i96", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x006080E630000000ULL, 22, SemanticCategory::MEMORY_LS, "sr_dst = mem[addr64 + sext(offset)]", "PhysicalStorageBuffer64 / SSBO OpLoad", "Loads from main memory" },
+    { 325, Mnemonic::LOGB, Variant::F32, Mnemonic::LOGB, Variant::F32, "LOGB.f32", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0098000000060000ULL, 40, SemanticCategory::FP_SFU, "dst = floor(log2(|src0|))", "GLSL.std.450 FrexpStruct exponent", "" },
+    { 326, Mnemonic::LOGB, Variant::V2F16, Mnemonic::LOGB, Variant::V2F16, "LOGB.v2f16", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0098000000070000ULL, 40, SemanticCategory::FP_SFU, "dst = floor(log2(|src0|))", "GLSL.std.450 FrexpStruct exponent", "" },
+    { 327, Mnemonic::LROT, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT.i32", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B4000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 328, Mnemonic::LROT, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT.i32", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B4000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 329, Mnemonic::LROT, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT.i64", "sfu", 9, 13, 0x81FFC00F83FF0000ULL, 0x01B7C00301C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 330, Mnemonic::LROT, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT.i64", "sfu", 14, 14, 0x81FFC00F83FF0000ULL, 0x01B7C00301C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 331, Mnemonic::LROT, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT.v2i16", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B5000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 332, Mnemonic::LROT, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT.v2i16", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B5000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 333, Mnemonic::LROT, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT.v4i8", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B6000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 334, Mnemonic::LROT, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT.v4i8", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B6000301C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 << s) | (src0 >> (32 - s))", "" },
+    { 335, Mnemonic::LROT_AND, Variant::I32, Mnemonic::LROT_AND, Variant::I32, "LROT_AND.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 336, Mnemonic::LROT_AND, Variant::I32, Mnemonic::LROT_AND, Variant::I32, "LROT_AND.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 337, Mnemonic::LROT_AND, Variant::I64, Mnemonic::LROT_AND, Variant::I64, "LROT_AND.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00300000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 338, Mnemonic::LROT_AND, Variant::I64, Mnemonic::LROT_AND, Variant::I64, "LROT_AND.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00300000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 339, Mnemonic::LROT_AND, Variant::V2I16, Mnemonic::LROT_AND, Variant::V2I16, "LROT_AND.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 340, Mnemonic::LROT_AND, Variant::V2I16, Mnemonic::LROT_AND, Variant::V2I16, "LROT_AND.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 341, Mnemonic::LROT_AND, Variant::V4I8, Mnemonic::LROT_AND, Variant::V4I8, "LROT_AND.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 342, Mnemonic::LROT_AND, Variant::V4I8, Mnemonic::LROT_AND, Variant::V4I8, "LROT_AND.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000300000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) & not2(src2)", "Rotate-left + OpBitwiseAnd", "" },
+    { 343, Mnemonic::LROT_OR, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT_OR.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 344, Mnemonic::LROT_OR, Variant::I32, Mnemonic::LROT_OR, Variant::I32, "LROT_OR.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 345, Mnemonic::LROT_OR, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT_OR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00301000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 346, Mnemonic::LROT_OR, Variant::I64, Mnemonic::LROT_OR, Variant::I64, "LROT_OR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00301000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 347, Mnemonic::LROT_OR, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT_OR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 348, Mnemonic::LROT_OR, Variant::V2I16, Mnemonic::LROT_OR, Variant::V2I16, "LROT_OR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 349, Mnemonic::LROT_OR, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT_OR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 350, Mnemonic::LROT_OR, Variant::V4I8, Mnemonic::LROT_OR, Variant::V4I8, "LROT_OR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000301000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) | not2(src2)", "Rotate-left + OpBitwiseOr", "" },
+    { 351, Mnemonic::LROT_XOR, Variant::I32, Mnemonic::LROT_XOR, Variant::I32, "LROT_XOR.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 352, Mnemonic::LROT_XOR, Variant::I32, Mnemonic::LROT_XOR, Variant::I32, "LROT_XOR.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 353, Mnemonic::LROT_XOR, Variant::I64, Mnemonic::LROT_XOR, Variant::I64, "LROT_XOR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00302000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 354, Mnemonic::LROT_XOR, Variant::I64, Mnemonic::LROT_XOR, Variant::I64, "LROT_XOR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00302000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 355, Mnemonic::LROT_XOR, Variant::V2I16, Mnemonic::LROT_XOR, Variant::V2I16, "LROT_XOR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 356, Mnemonic::LROT_XOR, Variant::V2I16, Mnemonic::LROT_XOR, Variant::V2I16, "LROT_XOR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 357, Mnemonic::LROT_XOR, Variant::V4I8, Mnemonic::LROT_XOR, Variant::V4I8, "LROT_XOR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 358, Mnemonic::LROT_XOR, Variant::V4I8, Mnemonic::LROT_XOR, Variant::V4I8, "LROT_XOR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000302000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotl(src0, src1) ^ not2(src2)", "Rotate-left + OpBitwiseXor", "" },
+    { 359, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "sfu", 9, 10, 0x81FF000F83FF0000ULL, 0x00B4000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 360, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "cvt", 11, 13, 0x81FF000F83FF0000ULL, 0x00B4000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 361, Mnemonic::LSHIFT, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT.i32", "cvt", 14, 14, 0x81FF000F83FF0000ULL, 0x00B4000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 362, Mnemonic::LSHIFT, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT.i64", "sfu", 9, 13, 0x81FFC00F83FF0000ULL, 0x01B7C00101C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 363, Mnemonic::LSHIFT, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT.i64", "sfu", 14, 14, 0x81FFC00F83FF0000ULL, 0x01B7C00101C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 364, Mnemonic::LSHIFT, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT.v2i16", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B5000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 365, Mnemonic::LSHIFT, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT.v2i16", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B5000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 366, Mnemonic::LSHIFT, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT.v4i8", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B6000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 367, Mnemonic::LSHIFT, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT.v4i8", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B6000101C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) << (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftLeftLogical", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 368, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 369, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 370, Mnemonic::LSHIFT_AND, Variant::I32, Mnemonic::LSHIFT_AND, Variant::I32, "LSHIFT_AND.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 371, Mnemonic::LSHIFT_AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "LSHIFT_AND.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00100000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 372, Mnemonic::LSHIFT_AND, Variant::I64, Mnemonic::LSHIFT_AND, Variant::I64, "LSHIFT_AND.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00100000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 373, Mnemonic::LSHIFT_AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "LSHIFT_AND.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 374, Mnemonic::LSHIFT_AND, Variant::V2I16, Mnemonic::LSHIFT_AND, Variant::V2I16, "LSHIFT_AND.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 375, Mnemonic::LSHIFT_AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "LSHIFT_AND.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 376, Mnemonic::LSHIFT_AND, Variant::V4I8, Mnemonic::LSHIFT_AND, Variant::V4I8, "LSHIFT_AND.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000100000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) & not2(src2))", "OpBitwiseAnd(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result." },
+    { 377, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 378, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 379, Mnemonic::LSHIFT_OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "LSHIFT_OR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 380, Mnemonic::LSHIFT_OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT_OR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00101000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 381, Mnemonic::LSHIFT_OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "LSHIFT_OR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00101000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 382, Mnemonic::LSHIFT_OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT_OR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 383, Mnemonic::LSHIFT_OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "LSHIFT_OR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 384, Mnemonic::LSHIFT_OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT_OR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 385, Mnemonic::LSHIFT_OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "LSHIFT_OR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000101000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) | not2(src2))", "OpBitwiseOr(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 386, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 387, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 388, Mnemonic::LSHIFT_XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "LSHIFT_XOR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 389, Mnemonic::LSHIFT_XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "LSHIFT_XOR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00102000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 390, Mnemonic::LSHIFT_XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "LSHIFT_XOR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00102000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 391, Mnemonic::LSHIFT_XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "LSHIFT_XOR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 392, Mnemonic::LSHIFT_XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "LSHIFT_XOR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 393, Mnemonic::LSHIFT_XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "LSHIFT_XOR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 394, Mnemonic::LSHIFT_XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "LSHIFT_XOR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000102000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) << src1) ^ not2(src2))", "OpBitwiseXor(OpShiftLeftLogical(src0, src1), src2)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 395, Mnemonic::MKVEC, Variant::V2I16, Mnemonic::MKVEC, Variant::V2I16, "MKVEC.v2i16", "cvt", 9, 14, 0x81FF00FFEBFF0000ULL, 0x00A1000000050000ULL, 32, SemanticCategory::MOVE_PACK, "dst = pack_lanes(src0, src1, src2)", "Bitwise lane packing into 32-bit word", "Calculates $A | (B \\ll 16)$. Used to implement `(ushort2)(A, B)`" },
+    { 396, Mnemonic::MKVEC, Variant::V2I8, Mnemonic::MKVEC, Variant::V2I8, "MKVEC.v2i8", "cvt", 9, 14, 0x81FF000FFF000000ULL, 0x00BD000000000000ULL, 22, SemanticCategory::MOVE_PACK, "dst = pack_lanes(src0, src1, src2)", "Bitwise lane packing into 32-bit word", "Calculates $A | (B \\ll 16)$. Used to implement `(ushort2)(A, B)`" },
+    { 397, Mnemonic::MMUL, Variant::F16, Mnemonic::MMUL, Variant::F16, "MMUL.f16", "fma", 14, 14, 0x87FFC0FFCF000000ULL, 0x0104C00008000000ULL, 28, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 398, Mnemonic::MMUL, Variant::F32, Mnemonic::MMUL, Variant::F32, "MMUL.f32", "fma", 11, 14, 0x87FFC0FFFF000000ULL, 0x0102C00000000000ULL, 30, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 399, Mnemonic::MMUL, Variant::V2F16, Mnemonic::MMUL, Variant::V2F16, "MMUL.v2f16", "fma", 11, 14, 0x87FFC0FFC3000000ULL, 0x0103C00000000000ULL, 26, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 400, Mnemonic::MMUL, Variant::V4S8, Mnemonic::MMUL, Variant::V4S8, "MMUL.v4s8", "fma", 11, 13, 0x87FFC0FFFF000000ULL, 0x0100C00000000000ULL, 30, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 401, Mnemonic::MMUL, Variant::V4S8, Mnemonic::MMUL, Variant::V4S8, "MMUL.v4s8", "fma", 14, 14, 0x87FFC0FFF3000000ULL, 0x0100C00000000000ULL, 28, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 402, Mnemonic::MMUL, Variant::V4U8, Mnemonic::MMUL, Variant::V4U8, "MMUL.v4u8", "fma", 11, 13, 0x87FFC0FFFF000000ULL, 0x0101C00000000000ULL, 30, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 403, Mnemonic::MMUL, Variant::V4U8, Mnemonic::MMUL, Variant::V4U8, "MMUL.v4u8", "fma", 14, 14, 0x87FFC0FFBF000000ULL, 0x0101C00000000000ULL, 29, SemanticCategory::MATRIX, "sr_dst = matrix_multiply(sr_src, src0)", "Subgroup matrix multiply-accumulate", "4x4 cooperative matrix multiply and accumulate, calculating $A \\cdot B + C$. The matrices are spread across the subgroup with one element per lane. The destination register must differ from A and B (it may reuse the accumulator C)." },
+    { 404, Mnemonic::MOV, Variant::I32, Mnemonic::MOV, Variant::I32, "MOV.i32", "cvt", 9, 14, 0x81FF00FFFFFFFF00ULL, 0x0091000000000000ULL, 42, SemanticCategory::MOVE_PACK, "dst = src0", "Register / staging copy", "Canonical register-to-register move." },
+    { 405, Mnemonic::MOV_IMM, Variant::I32, Mnemonic::IADD_IMM, Variant::I32, "MOV_IMM.i32", "cvt", 9, 14, 0x87FF0000000000FFULL, 0x01100000000000C0ULL, 20, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 406, Mnemonic::MOV_IMM, Variant::V2I16, Mnemonic::IADD_IMM, Variant::V2I16, "MOV_IMM.v2i16", "cvt", 9, 14, 0x87FF0000000000FFULL, 0x01110000000000C0ULL, 20, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 407, Mnemonic::MOV_IMM, Variant::V4I8, Mnemonic::IADD_IMM, Variant::V4I8, "MOV_IMM.v4i8", "cvt", 9, 10, 0x87FF0000000000FFULL, 0x01120000000000C0ULL, 20, SemanticCategory::MOVE_PACK, "dst = imm32", "Constant materialization", "Adds an arbitrary 32-bit immediate embedded within the instruction stream. If no modifiers are required, this is preferred to `IADD.i32` with a constant accessed as a uniform. However, if the constant is available inline, `IADD.i32` is pref" },
+    { 408, Mnemonic::MUX, Variant::I32, Mnemonic::MUX, Variant::I32, "MUX.i32", "sfu", 9, 14, 0x81FF00FCFF000000ULL, 0x00B8000000000000ULL, 24, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
+    { 409, Mnemonic::MUX, Variant::V2I16, Mnemonic::MUX, Variant::V2I16, "MUX.v2i16", "sfu", 9, 14, 0x81FF00FCC0000000ULL, 0x00B9000000000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
+    { 410, Mnemonic::MUX, Variant::V4I8, Mnemonic::MUX, Variant::V4I8, "MUX.v4i8", "sfu", 9, 14, 0x81FF00FCFF000000ULL, 0x00BA000000000000ULL, 24, SemanticCategory::BITWISE_SHIFT, "dst = (src0 & src2) | (src1 & ~src2) [kraid::OpMux: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.src0); let b = f.get_src(&self.src1); let sel =]", "Bitwise multiplex: (src0 & mask) | (src1 & ~mask)", "Mux between A and B based on the provided mask. The condition specified as the `mux` modifier is evaluated on the mask. If true, `A` is chosen, else `B` is chosen. The `bit` modifier acts bitwise, equivalent to `bitselect()` in OpenCL, so `" },
+    { 411, Mnemonic::NOP, Variant::NONE, Mnemonic::NOP, Variant::NONE, "NOP", "cvt", 9, 14, 0x87FFFFFFFFFFFFFFULL, 0x0000C00000000000ULL, 60, SemanticCategory::CONTROL_FLOW, "no-op (applies flow control modifier: wait / reconverge / discard / end)", "Flow control action (OpReturn on .end)", "Do nothing. Useful at the start of a block for waiting on slots required by the first actual instruction of the block, to reconcile dependencies after a branch. Also useful as the sole instruction of an empty shader." },
+    { 412, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "sfu", 9, 10, 0x81FF000FFFFFFF00ULL, 0x00B4000912C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 413, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "cvt", 11, 13, 0x81FF000FFFFFFF00ULL, 0x00B4000912C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 414, Mnemonic::NOT, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "NOT.i32", "cvt", 14, 14, 0x81FF000FFFFFFF00ULL, 0x00B4000912C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 415, Mnemonic::NOT, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "NOT.i64", "sfu", 9, 13, 0x81FFC00FFFFFFF00ULL, 0x01B7C00912C0C000ULL, 40, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 416, Mnemonic::NOT, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "NOT.i64", "sfu", 14, 14, 0x81FFC00FFFFFFF00ULL, 0x01B7C00912C0C000ULL, 40, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 417, Mnemonic::NOT, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "NOT.v2i16", "sfu", 9, 13, 0x81FF000FFFFFFF00ULL, 0x00B5000902C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 418, Mnemonic::NOT, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "NOT.v2i16", "sfu", 14, 14, 0x81FF000FFFFFFF00ULL, 0x00B5000902C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 419, Mnemonic::NOT, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "NOT.v4i8", "sfu", 9, 13, 0x81FF000FFFFFFF00ULL, 0x00B6000902C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 420, Mnemonic::NOT, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "NOT.v4i8", "sfu", 14, 14, 0x81FF000FFFFFFF00ULL, 0x00B6000902C0C000ULL, 38, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 421, Mnemonic::NOT_OLD, Variant::I32, Mnemonic::NOT_OLD, Variant::I32, "NOT_OLD.i32", "sfu", 9, 13, 0x81FF00FFFFFFFF00ULL, 0x00910000000E0000ULL, 42, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "For fully featured bitwise operation, see the shift opcodes." },
+    { 422, Mnemonic::NOT_OLD, Variant::I64, Mnemonic::NOT_OLD, Variant::I64, "NOT_OLD.i64", "sfu", 9, 13, 0x81FFC0FFFFFFFF00ULL, 0x0191C000000E0000ULL, 44, SemanticCategory::BITWISE_SHIFT, "dst = ~widen(src0)", "OpNot", "For fully featured bitwise operation, see the shift opcodes." },
+    { 423, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "sfu", 9, 10, 0x81FF0007BF00FF00ULL, 0x00B400011100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 424, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "cvt", 11, 13, 0x81FF0007BF00FF00ULL, 0x00B400011100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 425, Mnemonic::OR, Variant::I32, Mnemonic::LSHIFT_OR, Variant::I32, "OR.i32", "cvt", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B400011100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 426, Mnemonic::OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "OR.i64", "sfu", 9, 13, 0x81FFC007BF00FF00ULL, 0x01B7C0011100C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 427, Mnemonic::OR, Variant::I64, Mnemonic::LSHIFT_OR, Variant::I64, "OR.i64", "sfu", 14, 14, 0x81FFC007BF00FF00ULL, 0x01B7C0011100C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 428, Mnemonic::OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "OR.v2i16", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B500010100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 429, Mnemonic::OR, Variant::V2I16, Mnemonic::LSHIFT_OR, Variant::V2I16, "OR.v2i16", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B500010100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 430, Mnemonic::OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "OR.v4i8", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B600010100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 431, Mnemonic::OR, Variant::V4I8, Mnemonic::LSHIFT_OR, Variant::V4I8, "OR.v4i8", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B600010100C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) | not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseOr (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result." },
+    { 432, Mnemonic::OR_IMM, Variant::I32, Mnemonic::OR_IMM, Variant::I32, "OR_IMM.i32", "cvt", 11, 14, 0x81FF000000000000ULL, 0x0119000000000000ULL, 10, SemanticCategory::BITWISE_SHIFT, "dst = src0 | imm32", "OpBitwiseOr(src0, imm32)", "" },
+    { 433, Mnemonic::POPCOUNT, Variant::I32, Mnemonic::POPCOUNT, Variant::I32, "POPCOUNT.i32", "sfu", 9, 14, 0x81FF00FFFFFFFF00ULL, 0x00910000000C0000ULL, 42, SemanticCategory::BITWISE_SHIFT, "dst = count_ones(src0) [kraid::OpPopCount: fn fold(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let src = f.get_src(&self.src) as u32; f.set_dst(&self.dst, src.count_ones()]", "OpBitCount", "Only available as 32-bit. Smaller bitsizes require explicit conversions. 64-bit popcount may be constructed in 3 clocks by separate 32-bit popcounts of each half and a 32-bit add, which is guaranteed not to overflow." },
+    { 434, Mnemonic::RROT, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT.i32", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B4000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 435, Mnemonic::RROT, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT.i32", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B4000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 436, Mnemonic::RROT, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT.i64", "sfu", 9, 13, 0x81FFC00F83FF0000ULL, 0x01B7C00201C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 437, Mnemonic::RROT, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT.i64", "sfu", 14, 14, 0x81FFC00F83FF0000ULL, 0x01B7C00201C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 438, Mnemonic::RROT, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT.v2i16", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B5000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 439, Mnemonic::RROT, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT.v2i16", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B5000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 440, Mnemonic::RROT, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT.v4i8", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B6000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 441, Mnemonic::RROT, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT.v4i8", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B6000201C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "(src0 >> s) | (src0 << (32 - s))", "" },
+    { 442, Mnemonic::RROT_AND, Variant::I32, Mnemonic::RROT_AND, Variant::I32, "RROT_AND.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 443, Mnemonic::RROT_AND, Variant::I32, Mnemonic::RROT_AND, Variant::I32, "RROT_AND.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 444, Mnemonic::RROT_AND, Variant::I64, Mnemonic::RROT_AND, Variant::I64, "RROT_AND.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00200000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 445, Mnemonic::RROT_AND, Variant::I64, Mnemonic::RROT_AND, Variant::I64, "RROT_AND.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00200000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 446, Mnemonic::RROT_AND, Variant::V2I16, Mnemonic::RROT_AND, Variant::V2I16, "RROT_AND.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 447, Mnemonic::RROT_AND, Variant::V2I16, Mnemonic::RROT_AND, Variant::V2I16, "RROT_AND.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 448, Mnemonic::RROT_AND, Variant::V4I8, Mnemonic::RROT_AND, Variant::V4I8, "RROT_AND.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 449, Mnemonic::RROT_AND, Variant::V4I8, Mnemonic::RROT_AND, Variant::V4I8, "RROT_AND.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000200000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) & not2(src2)", "Rotate-right + OpBitwiseAnd", "" },
+    { 450, Mnemonic::RROT_OR, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT_OR.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 451, Mnemonic::RROT_OR, Variant::I32, Mnemonic::RROT_OR, Variant::I32, "RROT_OR.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 452, Mnemonic::RROT_OR, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT_OR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00201000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 453, Mnemonic::RROT_OR, Variant::I64, Mnemonic::RROT_OR, Variant::I64, "RROT_OR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00201000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 454, Mnemonic::RROT_OR, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT_OR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 455, Mnemonic::RROT_OR, Variant::V2I16, Mnemonic::RROT_OR, Variant::V2I16, "RROT_OR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 456, Mnemonic::RROT_OR, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT_OR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 457, Mnemonic::RROT_OR, Variant::V4I8, Mnemonic::RROT_OR, Variant::V4I8, "RROT_OR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000201000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) | not2(src2)", "Rotate-right + OpBitwiseOr", "" },
+    { 458, Mnemonic::RROT_XOR, Variant::I32, Mnemonic::RROT_XOR, Variant::I32, "RROT_XOR.i32", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B4000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 459, Mnemonic::RROT_XOR, Variant::I32, Mnemonic::RROT_XOR, Variant::I32, "RROT_XOR.i32", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B4000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 460, Mnemonic::RROT_XOR, Variant::I64, Mnemonic::RROT_XOR, Variant::I64, "RROT_XOR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00202000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 461, Mnemonic::RROT_XOR, Variant::I64, Mnemonic::RROT_XOR, Variant::I64, "RROT_XOR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00202000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 462, Mnemonic::RROT_XOR, Variant::V2I16, Mnemonic::RROT_XOR, Variant::V2I16, "RROT_XOR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 463, Mnemonic::RROT_XOR, Variant::V2I16, Mnemonic::RROT_XOR, Variant::V2I16, "RROT_XOR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 464, Mnemonic::RROT_XOR, Variant::V4I8, Mnemonic::RROT_XOR, Variant::V4I8, "RROT_XOR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 465, Mnemonic::RROT_XOR, Variant::V4I8, Mnemonic::RROT_XOR, Variant::V4I8, "RROT_XOR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000202000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = rotr(src0, src1) ^ not2(src2)", "Rotate-right + OpBitwiseXor", "" },
+    { 466, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "sfu", 9, 10, 0x81FF000F83FF0000ULL, 0x00B4000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 467, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "cvt", 11, 13, 0x81FF000F83FF0000ULL, 0x00B4000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 468, Mnemonic::RSHIFT, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT.i32", "cvt", 14, 14, 0x81FF000F83FF0000ULL, 0x00B4000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 469, Mnemonic::RSHIFT, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT.i64", "sfu", 9, 13, 0x81FFC00F83FF0000ULL, 0x01B7C00001C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 470, Mnemonic::RSHIFT, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT.i64", "sfu", 14, 14, 0x81FFC00F83FF0000ULL, 0x01B7C00001C00000ULL, 27, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 471, Mnemonic::RSHIFT, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT.v2i16", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B5000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 472, Mnemonic::RSHIFT, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT.v2i16", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B5000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 473, Mnemonic::RSHIFT, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT.v4i8", "sfu", 9, 13, 0x81FF000F83FF0000ULL, 0x00B6000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 474, Mnemonic::RSHIFT, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT.v4i8", "sfu", 14, 14, 0x81FF000F83FF0000ULL, 0x00B6000001C00000ULL, 25, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) >>u (src1 & mask)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpShiftRightLogical", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 475, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 476, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 477, Mnemonic::RSHIFT_AND, Variant::I32, Mnemonic::RSHIFT_AND, Variant::I32, "RSHIFT_AND.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 478, Mnemonic::RSHIFT_AND, Variant::I64, Mnemonic::RSHIFT_AND, Variant::I64, "RSHIFT_AND.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00000000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 479, Mnemonic::RSHIFT_AND, Variant::I64, Mnemonic::RSHIFT_AND, Variant::I64, "RSHIFT_AND.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00000000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 480, Mnemonic::RSHIFT_AND, Variant::V2I16, Mnemonic::RSHIFT_AND, Variant::V2I16, "RSHIFT_AND.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 481, Mnemonic::RSHIFT_AND, Variant::V2I16, Mnemonic::RSHIFT_AND, Variant::V2I16, "RSHIFT_AND.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 482, Mnemonic::RSHIFT_AND, Variant::V4I8, Mnemonic::RSHIFT_AND, Variant::V4I8, "RSHIFT_AND.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 483, Mnemonic::RSHIFT_AND, Variant::V4I8, Mnemonic::RSHIFT_AND, Variant::V4I8, "RSHIFT_AND.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000000000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) & not2(src2))", "OpBitwiseAnd(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ANDs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 484, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 485, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 486, Mnemonic::RSHIFT_OR, Variant::I32, Mnemonic::RSHIFT_OR, Variant::I32, "RSHIFT_OR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 487, Mnemonic::RSHIFT_OR, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT_OR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00001000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 488, Mnemonic::RSHIFT_OR, Variant::I64, Mnemonic::RSHIFT_OR, Variant::I64, "RSHIFT_OR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00001000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 489, Mnemonic::RSHIFT_OR, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT_OR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 490, Mnemonic::RSHIFT_OR, Variant::V2I16, Mnemonic::RSHIFT_OR, Variant::V2I16, "RSHIFT_OR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 491, Mnemonic::RSHIFT_OR, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT_OR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 492, Mnemonic::RSHIFT_OR, Variant::V4I8, Mnemonic::RSHIFT_OR, Variant::V4I8, "RSHIFT_OR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000001000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) | not2(src2))", "OpBitwiseOr(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise ORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it performs" },
+    { 493, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "sfu", 9, 10, 0x81FF000783000000ULL, 0x00B4000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 494, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "cvt", 11, 13, 0x81FF000783000000ULL, 0x00B4000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 495, Mnemonic::RSHIFT_XOR, Variant::I32, Mnemonic::RSHIFT_XOR, Variant::I32, "RSHIFT_XOR.i32", "cvt", 14, 14, 0x81FF000783000000ULL, 0x00B4000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 496, Mnemonic::RSHIFT_XOR, Variant::I64, Mnemonic::RSHIFT_XOR, Variant::I64, "RSHIFT_XOR.i64", "sfu", 9, 13, 0x81FFC00783000000ULL, 0x01B7C00002000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 497, Mnemonic::RSHIFT_XOR, Variant::I64, Mnemonic::RSHIFT_XOR, Variant::I64, "RSHIFT_XOR.i64", "sfu", 14, 14, 0x81FFC00783000000ULL, 0x01B7C00002000000ULL, 18, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 498, Mnemonic::RSHIFT_XOR, Variant::V2I16, Mnemonic::RSHIFT_XOR, Variant::V2I16, "RSHIFT_XOR.v2i16", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B5000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 499, Mnemonic::RSHIFT_XOR, Variant::V2I16, Mnemonic::RSHIFT_XOR, Variant::V2I16, "RSHIFT_XOR.v2i16", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B5000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 500, Mnemonic::RSHIFT_XOR, Variant::V4I8, Mnemonic::RSHIFT_XOR, Variant::V4I8, "RSHIFT_XOR.v4i8", "sfu", 9, 13, 0x81FF000783000000ULL, 0x00B6000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 501, Mnemonic::RSHIFT_XOR, Variant::V4I8, Mnemonic::RSHIFT_XOR, Variant::V4I8, "RSHIFT_XOR.v4i8", "sfu", 14, 14, 0x81FF000783000000ULL, 0x00B6000002000000ULL, 16, SemanticCategory::BITWISE_SHIFT, "dst = not_result((widen(src0) >>u src1) ^ not2(src2))", "OpBitwiseXor(OpShiftRightLogical(src0, src1), src2)", "Right shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result. If `signed` is set, the hardware performs an arithmetic right shift; otherwise, it perform" },
+    { 502, Mnemonic::S16_TO_F32, Variant::NONE, Mnemonic::S16_TO_F32, Variant::NONE, "S16_TO_F32", "cvt", 9, 10, 0x81FF00FFEFFFFF00ULL, 0x0090000000050000ULL, 41, SemanticCategory::CONVERSION, "dst = f32(sext16(src0))", "Sign-extend 16->32 + OpConvertSToF", "Performs the given data conversion." },
+    { 503, Mnemonic::S16_TO_S32, Variant::NONE, Mnemonic::S16_TO_S32, Variant::NONE, "S16_TO_S32", "cvt", 9, 13, 0x81FF00FFEFFFFF00ULL, 0x0090000000040000ULL, 41, SemanticCategory::CONVERSION, "dst = sext16(src0)", "OpBitFieldSExtract(src0, offset, 16)", "Performs the given data conversion." },
+    { 504, Mnemonic::S16_TO_S32, Variant::NONE, Mnemonic::S16_TO_S32, Variant::NONE, "S16_TO_S32", "cvt", 14, 14, 0x81FF00FFEFFFFF00ULL, 0x0090000000040000ULL, 41, SemanticCategory::CONVERSION, "dst = sext16(src0)", "OpBitFieldSExtract(src0, offset, 16)", "Performs the given data conversion." },
+    { 505, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 9, 10, 0x81FF00F23FFFFF00ULL, 0x0090000000090000ULL, 37, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 506, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 11, 13, 0x81FF00023FFFFF00ULL, 0x0090000000090000ULL, 33, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 507, Mnemonic::S32_TO_F32, Variant::NONE, Mnemonic::S32_TO_F32, Variant::NONE, "S32_TO_F32", "cvt", 14, 14, 0x81FF00023FFFFF00ULL, 0x0090000000090000ULL, 33, SemanticCategory::CONVERSION, "dst = f32(s32(src0))", "OpConvertSToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 508, Mnemonic::S8_TO_F32, Variant::NONE, Mnemonic::S8_TO_F32, Variant::NONE, "S8_TO_F32", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0090000000010000ULL, 40, SemanticCategory::CONVERSION, "dst = f32(sext8(src0))", "Sign-extend 8->32 + OpConvertSToF", "Performs the given data conversion." },
+    { 509, Mnemonic::S8_TO_S32, Variant::NONE, Mnemonic::S8_TO_S32, Variant::NONE, "S8_TO_S32", "cvt", 9, 13, 0x81FF00FFCFFFFF00ULL, 0x0090000000000000ULL, 40, SemanticCategory::CONVERSION, "dst = sext8(src0)", "OpBitFieldSExtract(src0, offset, 8)", "Performs the given data conversion." },
+    { 510, Mnemonic::S8_TO_S32, Variant::NONE, Mnemonic::S8_TO_S32, Variant::NONE, "S8_TO_S32", "cvt", 14, 14, 0x81FF00FFCFFFFF00ULL, 0x0090000000000000ULL, 40, SemanticCategory::CONVERSION, "dst = sext8(src0)", "OpBitFieldSExtract(src0, offset, 8)", "Performs the given data conversion." },
+    { 511, Mnemonic::SEG_ADD, Variant::U64, Mnemonic::SEG_ADD, Variant::U64, "SEG_ADD.u64", "cvt", 9, 14, 0x81FFC07FC3FF0000ULL, 0x01A3C00000060000ULL, 31, SemanticCategory::INT_ARITH, "dst = segment_address_add(src0, src1)", "64-bit pointer + offset OpIAdd", "Similar to SHADDX, but especially used for loading offsets into WLS. Usually this is only required for atomic operations, which cannot directly use wls_pointer as an address. .neg indicates SEG_SUB instead." },
+    { 512, Mnemonic::SEG_SUB, Variant::U64, Mnemonic::SEG_SUB, Variant::U64, "SEG_SUB.u64", "cvt", 9, 14, 0x81FFC07FC3FF0000ULL, 0x01A3C04000060000ULL, 31, SemanticCategory::INT_ARITH, "dst = segment_address_sub(src0, src1)", "64-bit pointer - offset OpISub", "" },
+    { 513, Mnemonic::SHADD, Variant::S64, Mnemonic::SHADD, Variant::S64, "SHADD.s64", "cvt", 9, 14, 0x81FFC0FFC38F0000ULL, 0x01ABC00000070000ULL, 29, SemanticCategory::INT_ARITH, "dst = src0 + (widen(src1) << shift)", "OpIAdd(src0, OpShiftLeftLogical(src1, shift))", "" },
+    { 514, Mnemonic::SHADD, Variant::U64, Mnemonic::SHADD, Variant::U64, "SHADD.u64", "cvt", 9, 14, 0x81FFC0FFC38F0000ULL, 0x01A3C00000070000ULL, 29, SemanticCategory::INT_ARITH, "dst = src0 + (widen(src1) << shift)", "OpIAdd(src0, OpShiftLeftLogical(src1, shift))", "" },
+    { 515, Mnemonic::STORE, Variant::I128, Mnemonic::STORE, Variant::I128, "STORE.i128", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400838000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 516, Mnemonic::STORE, Variant::I16, Mnemonic::STORE, Variant::I16, "STORE.i16", "msg", 9, 14, 0x81FFC0EE38000000ULL, 0x0061400208000000ULL, 21, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 517, Mnemonic::STORE, Variant::I24, Mnemonic::STORE, Variant::I24, "STORE.i24", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400210000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 518, Mnemonic::STORE, Variant::I32, Mnemonic::STORE, Variant::I32, "STORE.i32", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400218000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 519, Mnemonic::STORE, Variant::I48, Mnemonic::STORE, Variant::I48, "STORE.i48", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400420000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 520, Mnemonic::STORE, Variant::I64, Mnemonic::STORE, Variant::I64, "STORE.i64", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400428000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 521, Mnemonic::STORE, Variant::I8, Mnemonic::STORE, Variant::I8, "STORE.i8", "msg", 9, 14, 0x81FFC0CE38000000ULL, 0x0061400200000000ULL, 20, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 522, Mnemonic::STORE, Variant::I96, Mnemonic::STORE, Variant::I96, "STORE.i96", "msg", 9, 14, 0x81FFC0FE38000000ULL, 0x0061400630000000ULL, 22, SemanticCategory::MEMORY_LS, "mem[addr64 + sext(offset)] = sr_src", "PhysicalStorageBuffer64 / SSBO OpStore (or Position/Varying output on istream/estream)", "Stores to main memory" },
+    { 523, Mnemonic::ST_CHECKED, Variant::I128, Mnemonic::ST_CHECKED, Variant::I128, "ST_CHECKED.i128", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400838000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 524, Mnemonic::ST_CHECKED, Variant::I128, Mnemonic::ST_CHECKED, Variant::I128, "ST_CHECKED.i128", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400818000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 525, Mnemonic::ST_CHECKED, Variant::I16, Mnemonic::ST_CHECKED, Variant::I16, "ST_CHECKED.i16", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400208000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 526, Mnemonic::ST_CHECKED, Variant::I16, Mnemonic::ST_CHECKED, Variant::I16, "ST_CHECKED.i16", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400208000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 527, Mnemonic::ST_CHECKED, Variant::I24, Mnemonic::ST_CHECKED, Variant::I24, "ST_CHECKED.i24", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400210000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 528, Mnemonic::ST_CHECKED, Variant::I24, Mnemonic::ST_CHECKED, Variant::I24, "ST_CHECKED.i24", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400210000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 529, Mnemonic::ST_CHECKED, Variant::I32, Mnemonic::ST_CHECKED, Variant::I32, "ST_CHECKED.i32", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400218000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 530, Mnemonic::ST_CHECKED, Variant::I32, Mnemonic::ST_CHECKED, Variant::I32, "ST_CHECKED.i32", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400218000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 531, Mnemonic::ST_CHECKED, Variant::I48, Mnemonic::ST_CHECKED, Variant::I48, "ST_CHECKED.i48", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400420000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 532, Mnemonic::ST_CHECKED, Variant::I48, Mnemonic::ST_CHECKED, Variant::I48, "ST_CHECKED.i48", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400400000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 533, Mnemonic::ST_CHECKED, Variant::I64, Mnemonic::ST_CHECKED, Variant::I64, "ST_CHECKED.i64", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400428000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 534, Mnemonic::ST_CHECKED, Variant::I64, Mnemonic::ST_CHECKED, Variant::I64, "ST_CHECKED.i64", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400408000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 535, Mnemonic::ST_CHECKED, Variant::I8, Mnemonic::ST_CHECKED, Variant::I8, "ST_CHECKED.i8", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400200000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 536, Mnemonic::ST_CHECKED, Variant::I8, Mnemonic::ST_CHECKED, Variant::I8, "ST_CHECKED.i8", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400200000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 537, Mnemonic::ST_CHECKED, Variant::I96, Mnemonic::ST_CHECKED, Variant::I96, "ST_CHECKED.i96", "msg", 12, 13, 0x81FFC0FE38000000ULL, 0x0173400630000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 538, Mnemonic::ST_CHECKED, Variant::I96, Mnemonic::ST_CHECKED, Variant::I96, "ST_CHECKED.i96", "msg", 14, 14, 0x81FFC0FE38000000ULL, 0x0173400610000000ULL, 22, SemanticCategory::MEMORY_LS, "if (offset < bound) mem[addr64 + offset] = sr_src", "Bounds-checked memory store", "" },
+    { 539, Mnemonic::ST_CHECKED_IMM, Variant::I128, Mnemonic::ST_CHECKED_IMM, Variant::I128, "ST_CHECKED_IMM.i128", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400838000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 540, Mnemonic::ST_CHECKED_IMM, Variant::I128, Mnemonic::ST_CHECKED_IMM, Variant::I128, "ST_CHECKED_IMM.i128", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400818000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 541, Mnemonic::ST_CHECKED_IMM, Variant::I16, Mnemonic::ST_CHECKED_IMM, Variant::I16, "ST_CHECKED_IMM.i16", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400208000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 542, Mnemonic::ST_CHECKED_IMM, Variant::I16, Mnemonic::ST_CHECKED_IMM, Variant::I16, "ST_CHECKED_IMM.i16", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400208000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 543, Mnemonic::ST_CHECKED_IMM, Variant::I24, Mnemonic::ST_CHECKED_IMM, Variant::I24, "ST_CHECKED_IMM.i24", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400210000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 544, Mnemonic::ST_CHECKED_IMM, Variant::I24, Mnemonic::ST_CHECKED_IMM, Variant::I24, "ST_CHECKED_IMM.i24", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400210000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 545, Mnemonic::ST_CHECKED_IMM, Variant::I32, Mnemonic::ST_CHECKED_IMM, Variant::I32, "ST_CHECKED_IMM.i32", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400218000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 546, Mnemonic::ST_CHECKED_IMM, Variant::I32, Mnemonic::ST_CHECKED_IMM, Variant::I32, "ST_CHECKED_IMM.i32", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400218000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 547, Mnemonic::ST_CHECKED_IMM, Variant::I48, Mnemonic::ST_CHECKED_IMM, Variant::I48, "ST_CHECKED_IMM.i48", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400420000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 548, Mnemonic::ST_CHECKED_IMM, Variant::I48, Mnemonic::ST_CHECKED_IMM, Variant::I48, "ST_CHECKED_IMM.i48", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400400000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 549, Mnemonic::ST_CHECKED_IMM, Variant::I64, Mnemonic::ST_CHECKED_IMM, Variant::I64, "ST_CHECKED_IMM.i64", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400428000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 550, Mnemonic::ST_CHECKED_IMM, Variant::I64, Mnemonic::ST_CHECKED_IMM, Variant::I64, "ST_CHECKED_IMM.i64", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400408000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 551, Mnemonic::ST_CHECKED_IMM, Variant::I8, Mnemonic::ST_CHECKED_IMM, Variant::I8, "ST_CHECKED_IMM.i8", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400200000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 552, Mnemonic::ST_CHECKED_IMM, Variant::I8, Mnemonic::ST_CHECKED_IMM, Variant::I8, "ST_CHECKED_IMM.i8", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400200000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 553, Mnemonic::ST_CHECKED_IMM, Variant::I96, Mnemonic::ST_CHECKED_IMM, Variant::I96, "ST_CHECKED_IMM.i96", "msg", 12, 13, 0x81FFC00E38000000ULL, 0x0073400630000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 554, Mnemonic::ST_CHECKED_IMM, Variant::I96, Mnemonic::ST_CHECKED_IMM, Variant::I96, "ST_CHECKED_IMM.i96", "msg", 14, 14, 0x81FFC00E38000000ULL, 0x0073400610000000ULL, 18, SemanticCategory::MEMORY_LS, "if (imm_offset < bound) mem[addr64 + imm_offset] = sr_src", "Bounds-checked immediate memory store", "" },
+    { 555, Mnemonic::ST_CVT, Variant::NONE, Mnemonic::ST_CVT, Variant::NONE, "ST_CVT", "msg", 9, 14, 0x81FFC01008000000ULL, 0x0071400000000000ULL, 14, SemanticCategory::MEMORY_LS, "mem[addr64 + offset] = format_encode(sr_src, fmt)", "Formatted store with pixel conversion", "Store to memory with data conversion. The address to store to is given in the first source, which must be a 64-bit register (a pair of 32-bit registers). The other source is the conversion descriptor used for the store. Used with LEA_TEX_IM" },
+    { 556, Mnemonic::ST_MULTI, Variant::NONE, Mnemonic::ST_MULTI, Variant::NONE, "ST_MULTI", "msg", 14, 14, 0x81FFC08038000000ULL, 0x0063400000000000ULL, 16, SemanticCategory::MEMORY_LS, "mem[addr64 + offset] = sr_src[0..N]", "Multi-register burst store", "" },
+    { 557, Mnemonic::ST_TILE, Variant::NONE, Mnemonic::ST_TILE, Variant::NONE, "ST_TILE", "msg", 9, 14, 0x81FFC0F008000000ULL, 0x0079400000000000ULL, 17, SemanticCategory::FRAGMENT_OUT, "write_tilebuffer(rt_index, sample, pixel_fmt, sr_src)", "Direct tilebuffer write to Fragment Output", "Store to given render target, specified in the pixel indices descriptor, at a given location and sample, and convert to the format specified in the internal conversion descriptor. Used internally in blend shaders." },
+    { 558, Mnemonic::SWZ, Variant::V2I16, Mnemonic::IADD, Variant::V2U16, "SWZ.v2i16", "cvt", 9, 14, 0x81FF000FFFFFFF00ULL, 0x00A100000800C000ULL, 38, SemanticCategory::MOVE_PACK, "dst = swizzle(src0) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "Byte/half/word swizzle extraction", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 559, Mnemonic::SWZ, Variant::V4I8, Mnemonic::IADD, Variant::V4U8, "SWZ.v4i8", "cvt", 9, 10, 0x81FF000FFFFFFF00ULL, 0x00A200000000C000ULL, 38, SemanticCategory::MOVE_PACK, "dst = swizzle(src0) [kraid::OpIAdd: fn fold_comp(&self, _model: &dyn Model, f: &mut impl FoldDataView) { let a = f.get_src(&self.srcs[0]); let b = f.get_src(&self.srcs[1]); let]", "Byte/half/word swizzle extraction", "$A + B$ with optional saturation. As Valhall lacks swizzle instructions, `IADD.v2i16` with zero is the canonical lowering for swizzles." },
+    { 560, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 9, 9, 0x81FF000000000300ULL, 0x012F000000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
+    { 561, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 10, 10, 0x81FF000000000300ULL, 0x012F000000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
+    { 562, Mnemonic::TEX_DUAL, Variant::NONE, Mnemonic::TEX_DUAL, Variant::NONE, "TEX_DUAL", "msg", 11, 14, 0x81FF000000000100ULL, 0x012F000000000000ULL, 11, SemanticCategory::TEXTURE, "sr_dst0, sr_dst1 = dual_texture_sample(tex0, tex1, coords)", "Two OpImageSample* calls", "Pair of texture instructions." },
+    { 563, Mnemonic::TEX_FETCH, Variant::NONE, Mnemonic::TEX_FETCH, Variant::NONE, "TEX_FETCH", "msg", 9, 10, 0x81FF80000000F200ULL, 0x0125000000000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = texel_fetch(tex_idx, icords, lod_or_sample)", "OpImageFetch", "Unfiltered textured instruction." },
+    { 564, Mnemonic::TEX_FETCH, Variant::NONE, Mnemonic::TEX_FETCH, Variant::NONE, "TEX_FETCH", "msg", 11, 14, 0x81FF80000000F200ULL, 0x0125000000000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = texel_fetch(tex_idx, icords, lod_or_sample)", "OpImageFetch", "Unfiltered textured instruction." },
+    { 565, Mnemonic::TEX_GATHER, Variant::NONE, Mnemonic::TEX_GATHER, Variant::NONE, "TEX_GATHER", "msg", 9, 10, 0x81FF800000000200ULL, 0x0129000000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, coords, comp)", "OpImageGather / OpImageDrefGather", "Texture gather instruction." },
+    { 566, Mnemonic::TEX_GATHER, Variant::NONE, Mnemonic::TEX_GATHER, Variant::NONE, "TEX_GATHER", "msg", 11, 14, 0x81FF800000000000ULL, 0x0129000000000000ULL, 11, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, coords, comp)", "OpImageGather / OpImageDrefGather", "Texture gather instruction." },
+    { 567, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 9, 9, 0x81FF800000001E00ULL, 0x012A000000000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
+    { 568, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 10, 10, 0x81FF800000000E00ULL, 0x012A000000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
+    { 569, Mnemonic::TEX_GRADIENT, Variant::NONE, Mnemonic::TEX_GRADIENT, Variant::NONE, "TEX_GRADIENT", "msg", 11, 14, 0x81FF800000000C00ULL, 0x012A000000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, coords, dPdx, dPdy)", "OpImageSampleExplicitLod Grad", "Texture sample with explicit gradient." },
+    { 570, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 9, 9, 0x81FF800000000200ULL, 0x0128000000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
+    { 571, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 10, 10, 0x81FF800000000200ULL, 0x0128000000000000ULL, 12, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
+    { 572, Mnemonic::TEX_SINGLE, Variant::NONE, Mnemonic::TEX_SINGLE, Variant::NONE, "TEX_SINGLE", "msg", 11, 14, 0x81FF800000000000ULL, 0x0128000000000000ULL, 11, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, coords, lod_mode)", "OpImageSampleImplicitLod / OpImageSampleExplicitLod", "Ordinary texturing instruction using a sampler." },
+    { 573, Mnemonic::TEX_WEIGHTS, Variant::NONE, Mnemonic::TEX_WEIGHTS, Variant::NONE, "TEX_WEIGHTS", "msg", 9, 9, 0x81FF80003000D200ULL, 0x0126000010000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = bilinear_weights(coords)", "Fractional texel weights", "" },
+    { 574, Mnemonic::U16_TO_F32, Variant::NONE, Mnemonic::U16_TO_F32, Variant::NONE, "U16_TO_F32", "cvt", 9, 10, 0x81FF00FFEFFFFF00ULL, 0x0090000000150000ULL, 41, SemanticCategory::CONVERSION, "dst = f32(zext16(src0))", "Zero-extend 16->32 + OpConvertUToF", "Performs the given data conversion." },
+    { 575, Mnemonic::U16_TO_U32, Variant::NONE, Mnemonic::U16_TO_U32, Variant::NONE, "U16_TO_U32", "cvt", 9, 13, 0x81FF00FFEFFFFF00ULL, 0x0090000000140000ULL, 41, SemanticCategory::CONVERSION, "dst = zext16(src0)", "OpBitFieldUExtract(src0, offset, 16)", "Performs the given data conversion." },
+    { 576, Mnemonic::U16_TO_U32, Variant::NONE, Mnemonic::U16_TO_U32, Variant::NONE, "U16_TO_U32", "cvt", 14, 14, 0x81FF00FFEFFFFF00ULL, 0x0090000000140000ULL, 41, SemanticCategory::CONVERSION, "dst = zext16(src0)", "OpBitFieldUExtract(src0, offset, 16)", "Performs the given data conversion." },
+    { 577, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 9, 10, 0x81FF00F23FFFFF00ULL, 0x0090000000190000ULL, 37, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 578, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 11, 13, 0x81FF00023FFFFF00ULL, 0x0090000000190000ULL, 33, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 579, Mnemonic::U32_TO_F32, Variant::NONE, Mnemonic::U32_TO_F32, Variant::NONE, "U32_TO_F32", "cvt", 14, 14, 0x81FF00023FFFFF00ULL, 0x0090000000190000ULL, 33, SemanticCategory::CONVERSION, "dst = f32(u32(src0))", "OpConvertUToF", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 580, Mnemonic::U8_TO_F32, Variant::NONE, Mnemonic::U8_TO_F32, Variant::NONE, "U8_TO_F32", "cvt", 9, 10, 0x81FF00FFCFFFFF00ULL, 0x0090000000110000ULL, 40, SemanticCategory::CONVERSION, "dst = f32(zext8(src0))", "Zero-extend 8->32 + OpConvertUToF", "Performs the given data conversion." },
+    { 581, Mnemonic::U8_TO_U32, Variant::NONE, Mnemonic::U8_TO_U32, Variant::NONE, "U8_TO_U32", "cvt", 9, 13, 0x81FF00FFCFFFFF00ULL, 0x0090000000100000ULL, 40, SemanticCategory::CONVERSION, "dst = zext8(src0)", "OpBitFieldUExtract(src0, offset, 8)", "Performs the given data conversion." },
+    { 582, Mnemonic::U8_TO_U32, Variant::NONE, Mnemonic::U8_TO_U32, Variant::NONE, "U8_TO_U32", "cvt", 14, 14, 0x81FF00FFCFFFFF00ULL, 0x0090000000100000ULL, 40, SemanticCategory::CONVERSION, "dst = zext8(src0)", "OpBitFieldUExtract(src0, offset, 8)", "Performs the given data conversion." },
+    { 583, Mnemonic::V2F16_TO_V2S16, Variant::NONE, Mnemonic::V2F16_TO_V2S16, Variant::NONE, "V2F16_TO_V2S16", "cvt", 9, 10, 0x81FF00320FFFFF00ULL, 0x00900000000E0000ULL, 33, SemanticCategory::CONVERSION, "dst = pack_v2s16(s16(f16_lo), s16(f16_hi))", "UnpackHalf2x16 -> OpConvertFToS -> pack", "Performs the given data conversion." },
+    { 584, Mnemonic::V2F16_TO_V2U16, Variant::NONE, Mnemonic::V2F16_TO_V2U16, Variant::NONE, "V2F16_TO_V2U16", "cvt", 9, 10, 0x81FF00320FFFFF00ULL, 0x00900000001E0000ULL, 33, SemanticCategory::CONVERSION, "dst = pack_v2u16(u16(f16_lo), u16(f16_hi))", "UnpackHalf2x16 -> OpConvertFToU -> pack", "Performs the given data conversion." },
+    { 585, Mnemonic::V2F32_TO_V2F16, Variant::NONE, Mnemonic::V2F32_TO_V2F16, Variant::NONE, "V2F32_TO_V2F16", "cvt", 9, 10, 0x81FF00003FFF0000ULL, 0x00A5000000040000ULL, 24, SemanticCategory::CONVERSION, "dst = pack_v2f16(src0, src1)", "GLSL.std.450 PackHalf2x16", "Given a pair of 32-bit floats, output a pair of 16-bit floats packed into a 32-bit destination." },
+    { 586, Mnemonic::V2S16_TO_V2F16, Variant::NONE, Mnemonic::V2S16_TO_V2F16, Variant::NONE, "V2S16_TO_V2F16", "cvt", 9, 10, 0x81FF00023FFFFF00ULL, 0x0090000000070000ULL, 33, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(s16_lo), f16(s16_hi))", "Extract s16 -> OpConvertSToF -> PackHalf2x16", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 587, Mnemonic::V2S8_TO_V2F16, Variant::NONE, Mnemonic::V2S8_TO_V2F16, Variant::NONE, "V2S8_TO_V2F16", "cvt", 9, 10, 0x81FF000FFFFFFF00ULL, 0x0090000000030000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(s8_0), f16(s8_1))", "Extract s8 -> OpConvertSToF -> PackHalf2x16", "Performs the given data conversion." },
+    { 588, Mnemonic::V2S8_TO_V2S16, Variant::NONE, Mnemonic::V2S8_TO_V2S16, Variant::NONE, "V2S8_TO_V2S16", "cvt", 9, 13, 0x81FF000FFFFFFF00ULL, 0x0090000000020000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2s16(sext8(b0), sext8(b1))", "Byte sign-extension to v2s16", "Performs the given data conversion." },
+    { 589, Mnemonic::V2S8_TO_V2S16, Variant::NONE, Mnemonic::V2S8_TO_V2S16, Variant::NONE, "V2S8_TO_V2S16", "cvt", 14, 14, 0x81FF000FFFFFFF00ULL, 0x0090000000020000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2s16(sext8(b0), sext8(b1))", "Byte sign-extension to v2s16", "Performs the given data conversion." },
+    { 590, Mnemonic::V2U16_TO_V2F16, Variant::NONE, Mnemonic::V2U16_TO_V2F16, Variant::NONE, "V2U16_TO_V2F16", "cvt", 9, 10, 0x81FF00023FFFFF00ULL, 0x0090000000170000ULL, 33, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(u16_lo), f16(u16_hi))", "Extract u16 -> OpConvertUToF -> PackHalf2x16", "Performs the given data conversion. Note that floating-point rounding is handled via the same hardware and therefore shares an encoding. Round mode is specified where it makes sense." },
+    { 591, Mnemonic::V2U8_TO_V2F16, Variant::NONE, Mnemonic::V2U8_TO_V2F16, Variant::NONE, "V2U8_TO_V2F16", "cvt", 9, 10, 0x81FF000FFFFFFF00ULL, 0x0090000000130000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2f16(f16(u8_0), f16(u8_1))", "Extract u8 -> OpConvertUToF -> PackHalf2x16", "Performs the given data conversion." },
+    { 592, Mnemonic::V2U8_TO_V2U16, Variant::NONE, Mnemonic::V2U8_TO_V2U16, Variant::NONE, "V2U8_TO_V2U16", "cvt", 9, 13, 0x81FF000FFFFFFF00ULL, 0x0090000000120000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2u16(zext8(b0), zext8(b1))", "Byte zero-extension to v2u16", "Performs the given data conversion." },
+    { 593, Mnemonic::V2U8_TO_V2U16, Variant::NONE, Mnemonic::V2U8_TO_V2U16, Variant::NONE, "V2U8_TO_V2U16", "cvt", 14, 14, 0x81FF000FFFFFFF00ULL, 0x0090000000120000ULL, 38, SemanticCategory::CONVERSION, "dst = pack_v2u16(zext8(b0), zext8(b1))", "Byte zero-extension to v2u16", "Performs the given data conversion." },
+    { 594, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 9, 9, 0x81FFC00000000B00ULL, 0x0137800000000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
+    { 595, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 10, 10, 0x81FFC00000000300ULL, 0x0137800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
+    { 596, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, Mnemonic::VAR_TEX_BUF_DUAL, Variant::NONE, "VAR_TEX_BUF_DUAL", "msg", 11, 14, 0x81FFC00000000100ULL, 0x0137800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying_buf(off))", "Fused varying buffer load + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
+    { 597, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 9, 9, 0x81FFC00032002A00ULL, 0x0131800010000000ULL, 18, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 598, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 10, 10, 0x81FFC00032002200ULL, 0x0131800010000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 599, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, Mnemonic::VAR_TEX_BUF_GATHER, Variant::NONE, "VAR_TEX_BUF_GATHER", "msg", 11, 14, 0x81FFC00032002000ULL, 0x0131800010000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 600, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 9, 9, 0x81FFC00002009E00ULL, 0x0132800000000000ULL, 18, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 601, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 10, 10, 0x81FFC00002009600ULL, 0x0132800000000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 602, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_BUF_GRADIENT, Variant::NONE, "VAR_TEX_BUF_GRADIENT", "msg", 11, 14, 0x81FFC00002009400ULL, 0x0132800000000000ULL, 16, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 603, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 9, 9, 0x81FFC00002000A00ULL, 0x0130800000000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 604, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 10, 10, 0x81FFC00002000200ULL, 0x0130800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 605, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_BUF_SINGLE, Variant::NONE, "VAR_TEX_BUF_SINGLE", "msg", 11, 14, 0x81FFC00002000000ULL, 0x0130800000000000ULL, 13, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying_buf(off))", "Fused varying buffer load + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_BUF_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 606, Mnemonic::VAR_TEX_DUAL, Variant::NONE, Mnemonic::VAR_TEX_DUAL, Variant::NONE, "VAR_TEX_DUAL", "msg", 9, 10, 0x81FFC00000000B00ULL, 0x013F800000000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying(var_idx))", "Fused varying + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
+    { 607, Mnemonic::VAR_TEX_DUAL, Variant::NONE, Mnemonic::VAR_TEX_DUAL, Variant::NONE, "VAR_TEX_DUAL", "msg", 11, 14, 0x81FFC00000000900ULL, 0x013F800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = dual_sample(interpolate_varying(var_idx))", "Fused varying + dual texture sample", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX_DUAL, using both V and T units." },
+    { 608, Mnemonic::VAR_TEX_GATHER, Variant::NONE, Mnemonic::VAR_TEX_GATHER, Variant::NONE, "VAR_TEX_GATHER", "msg", 9, 10, 0x81FFC00032002A00ULL, 0x0139800010000000ULL, 18, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 609, Mnemonic::VAR_TEX_GATHER, Variant::NONE, Mnemonic::VAR_TEX_GATHER, Variant::NONE, "VAR_TEX_GATHER", "msg", 11, 14, 0x81FFC00032002800ULL, 0x0139800010000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = texture_gather(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageGather", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 610, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 9, 9, 0x81FFC00002009E00ULL, 0x013A800000000000ULL, 18, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 611, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 10, 10, 0x81FFC00002009E00ULL, 0x013A800000000000ULL, 18, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 612, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, Mnemonic::VAR_TEX_GRADIENT, Variant::NONE, "VAR_TEX_GRADIENT", "msg", 11, 14, 0x81FFC00002009C00ULL, 0x013A800000000000ULL, 17, SemanticCategory::TEXTURE, "sr_dst = sample_texture_grad(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleExplicitLod Grad", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 613, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, "VAR_TEX_SINGLE", "msg", 9, 10, 0x81FFC00002000A00ULL, 0x0138800000000000ULL, 15, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 614, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, Mnemonic::VAR_TEX_SINGLE, Variant::NONE, "VAR_TEX_SINGLE", "msg", 11, 14, 0x81FFC00002000800ULL, 0x0138800000000000ULL, 14, SemanticCategory::TEXTURE, "sr_dst = sample_texture(tex_idx, samp_idx, interpolate_varying(var_idx))", "Fused OpLoad(Input varying) + OpImageSampleImplicitLod", "Only works for FP32 varyings. Performance characteristics are similar to LD_VAR_IMM_F32.v2.f32 followed by TEX, using both V and T units." },
+    { 615, Mnemonic::WMASK, Variant::NONE, Mnemonic::WMASK, Variant::NONE, "WMASK", "cvt", 9, 14, 0x81FF000FFFFFFF00ULL, 0x0095000000000000ULL, 38, SemanticCategory::CONTROL_FLOW, "dst = subgroup_ballot(src0)", "OpSubgroupBallotKHR", "Returns the mask of lanes ever active within the warp (subgroup), such that the source is nonzero. The number of work-items in a subgroup is given as the popcount of this value with a nonzero input. An `all()` subgroup operation may be cons" },
+    { 616, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "sfu", 9, 10, 0x81FF0007BF00FF00ULL, 0x00B400011200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 617, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "cvt", 11, 13, 0x81FF0007BF00FF00ULL, 0x00B400011200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 618, Mnemonic::XOR, Variant::I32, Mnemonic::LSHIFT_XOR, Variant::I32, "XOR.i32", "cvt", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B400011200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 619, Mnemonic::XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "XOR.i64", "sfu", 9, 13, 0x81FFC007BF00FF00ULL, 0x01B7C0011200C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 620, Mnemonic::XOR, Variant::I64, Mnemonic::LSHIFT_XOR, Variant::I64, "XOR.i64", "sfu", 14, 14, 0x81FFC007BF00FF00ULL, 0x01B7C0011200C000ULL, 30, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 621, Mnemonic::XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "XOR.v2i16", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B500010200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 622, Mnemonic::XOR, Variant::V2I16, Mnemonic::LSHIFT_XOR, Variant::V2I16, "XOR.v2i16", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B500010200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 623, Mnemonic::XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "XOR.v4i8", "sfu", 9, 13, 0x81FF0007BF00FF00ULL, 0x00B600010200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 624, Mnemonic::XOR, Variant::V4I8, Mnemonic::LSHIFT_XOR, Variant::V4I8, "XOR.v4i8", "sfu", 14, 14, 0x81FF0007BF00FF00ULL, 0x00B600010200C000ULL, 28, SemanticCategory::BITWISE_SHIFT, "dst = not_result(widen(src0) ^ not2(src2)) [kraid::OpShiftLop: fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) { let src0 = f.get_src(&self.src0); let shift = f.get_src(&self.shift) as u3]", "OpBitwiseXor (+ optional OpNot)", "Left shifts its first source by a specified amount and bitwise XORs it with the second source, optionally inverting the second source or the result." },
+    { 625, Mnemonic::XOR_IMM, Variant::I32, Mnemonic::XOR_IMM, Variant::I32, "XOR_IMM.i32", "cvt", 11, 14, 0x81FF000000000000ULL, 0x011A000000000000ULL, 10, SemanticCategory::BITWISE_SHIFT, "dst = src0 ^ imm32", "OpBitwiseXor(src0, imm32)", "" },
+    { 626, Mnemonic::ZS_EMIT, Variant::NONE, Mnemonic::ZS_EMIT, Variant::NONE, "ZS_EMIT", "msg", 9, 14, 0x81FFC0FFFC000000ULL, 0x007E800200000000ULL, 26, SemanticCategory::FRAGMENT_OUT, "emit_depth_stencil(z, stencil, coverage)", "OpStore BuiltIn FragDepth / FragStencilRefEXT", "Programatically writes out depth, stencil, or both, depending on which modifiers are set. Used to implement gl_FragDepth and gl_FragStencil." },
 };
 
 const InstructionSemanticsSpec* get_all_instruction_specs(size_t* out_count) {
@@ -7305,7 +7305,7 @@ const InstructionSemanticsSpec* get_all_instruction_specs(size_t* out_count) {
 
 static bool decode_spec_0(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC07E3FC00000ULL) != 0x0120C0041FC00000ULL) return false;
+    if ((v & 0x81FFC0FE3FC00000ULL) != 0x0120C0041FC00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -7449,7 +7449,7 @@ static bool decode_spec_0(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_1(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC07E3FC00000ULL) != 0x0120C0182FC00000ULL) return false;
+    if ((v & 0x81FFC0FE3FC00000ULL) != 0x0120C0182FC00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -7593,7 +7593,7 @@ static bool decode_spec_1(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_2(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFC000000000FFULL) != 0x0710C000000000FEULL) return false;
+    if ((v & 0x87FFC000000000FFULL) != 0x0710C000000000FEULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -7668,7 +7668,7 @@ static bool decode_spec_2(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_3(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -7823,7 +7823,7 @@ static bool decode_spec_3(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_4(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -7978,7 +7978,7 @@ static bool decode_spec_4(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_5(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8133,7 +8133,7 @@ static bool decode_spec_5(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_6(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011000C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8284,7 +8284,7 @@ static bool decode_spec_6(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_7(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011000C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8435,7 +8435,7 @@ static bool decode_spec_7(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_8(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8589,7 +8589,7 @@ static bool decode_spec_8(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_9(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8743,7 +8743,7 @@ static bool decode_spec_9(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, Dec
 
 static bool decode_spec_10(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -8897,7 +8897,7 @@ static bool decode_spec_10(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_11(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010000C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9051,7 +9051,7 @@ static bool decode_spec_11(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_12(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0118000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0118000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -9146,7 +9146,7 @@ static bool decode_spec_12(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_13(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9301,7 +9301,7 @@ static bool decode_spec_13(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_14(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9456,7 +9456,7 @@ static bool decode_spec_14(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_15(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9611,7 +9611,7 @@ static bool decode_spec_15(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_16(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00401C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9762,7 +9762,7 @@ static bool decode_spec_16(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_17(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00401C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -9913,7 +9913,7 @@ static bool decode_spec_17(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_18(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10067,7 +10067,7 @@ static bool decode_spec_18(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_19(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10221,7 +10221,7 @@ static bool decode_spec_19(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_20(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10375,7 +10375,7 @@ static bool decode_spec_20(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_21(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000401C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000401C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10529,7 +10529,7 @@ static bool decode_spec_21(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_22(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10706,7 +10706,7 @@ static bool decode_spec_22(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_23(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -10883,7 +10883,7 @@ static bool decode_spec_23(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_24(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11060,7 +11060,7 @@ static bool decode_spec_24(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_25(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00400000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11233,7 +11233,7 @@ static bool decode_spec_25(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_26(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00400000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11406,7 +11406,7 @@ static bool decode_spec_26(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_27(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11582,7 +11582,7 @@ static bool decode_spec_27(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_28(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11758,7 +11758,7 @@ static bool decode_spec_28(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_29(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -11934,7 +11934,7 @@ static bool decode_spec_29(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_30(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000400000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12110,7 +12110,7 @@ static bool decode_spec_30(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_31(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12287,7 +12287,7 @@ static bool decode_spec_31(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_32(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12464,7 +12464,7 @@ static bool decode_spec_32(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_33(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12641,7 +12641,7 @@ static bool decode_spec_33(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_34(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00401000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12814,7 +12814,7 @@ static bool decode_spec_34(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_35(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00401000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -12987,7 +12987,7 @@ static bool decode_spec_35(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_36(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -13163,7 +13163,7 @@ static bool decode_spec_36(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_37(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -13339,7 +13339,7 @@ static bool decode_spec_37(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_38(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -13515,7 +13515,7 @@ static bool decode_spec_38(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_39(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000401000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000401000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -13691,7 +13691,7 @@ static bool decode_spec_39(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_40(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -13868,7 +13868,7 @@ static bool decode_spec_40(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_41(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14045,7 +14045,7 @@ static bool decode_spec_41(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_42(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14222,7 +14222,7 @@ static bool decode_spec_42(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_43(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00402000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14395,7 +14395,7 @@ static bool decode_spec_43(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_44(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00402000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14568,7 +14568,7 @@ static bool decode_spec_44(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_45(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14744,7 +14744,7 @@ static bool decode_spec_45(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_46(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -14920,7 +14920,7 @@ static bool decode_spec_46(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_47(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -15096,7 +15096,7 @@ static bool decode_spec_47(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_48(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000402000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000402000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -15272,7 +15272,7 @@ static bool decode_spec_48(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_49(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00FC0000000ULL) != 0x007D800200000000ULL) return false;
+    if ((v & 0x81FFC0FFF3000000ULL) != 0x007D800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -15427,7 +15427,7 @@ static bool decode_spec_49(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_50(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E3C000000ULL) != 0x0068400218000000ULL) return false;
+    if ((v & 0x81FFC0FE3C3F0000ULL) != 0x0068400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom_opc = uint32_t((v >> 22) & 0xFULL);
@@ -15557,7 +15557,7 @@ static bool decode_spec_50(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_51(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0003C000000ULL) != 0x0068400028000000ULL) return false;
+    if ((v & 0x81FFC0F03C3F0000ULL) != 0x0068400028000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom_opc = uint32_t((v >> 22) & 0xFULL);
@@ -15688,7 +15688,7 @@ static bool decode_spec_51(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_52(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFFF0E3C000000ULL) != 0x0069400018000000ULL) return false;
+    if ((v & 0x81FFFFFE3E3F0000ULL) != 0x0069400018000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom1_opc = uint32_t((v >> 22) & 0x7ULL);
@@ -15810,7 +15810,7 @@ static bool decode_spec_52(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_53(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFFF0E3C000000ULL) != 0x0069400028000000ULL) return false;
+    if ((v & 0x81FFFFFE3E3F0000ULL) != 0x0069400028000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom1_opc = uint32_t((v >> 22) & 0x7ULL);
@@ -15932,7 +15932,7 @@ static bool decode_spec_53(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_54(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E3C000000ULL) != 0x0069800218000000ULL) return false;
+    if ((v & 0x81FFC0FE3E3F0000ULL) != 0x0069800218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom1_opc = uint32_t((v >> 22) & 0x7ULL);
@@ -16061,7 +16061,7 @@ static bool decode_spec_54(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_55(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E3C000000ULL) != 0x0069800428000000ULL) return false;
+    if ((v & 0x81FFC0FE3E3F0000ULL) != 0x0069800428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_atom1_opc = uint32_t((v >> 22) & 0x7ULL);
@@ -16190,7 +16190,7 @@ static bool decode_spec_55(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_56(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC07E3C000000ULL) != 0x0120C00218000000ULL) return false;
+    if ((v & 0x81FFC0FE3C000000ULL) != 0x0120C00218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -16336,7 +16336,7 @@ static bool decode_spec_56(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_57(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0703C000000ULL) != 0x0120C01028000000ULL) return false;
+    if ((v & 0x81FFC0F03C000000ULL) != 0x0120C01028000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -16482,7 +16482,7 @@ static bool decode_spec_57(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_58(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC07E3FC00000ULL) != 0x0120C0021BC00000ULL) return false;
+    if ((v & 0x81FFC0FE3FC00000ULL) != 0x0120C0021BC00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -16626,7 +16626,7 @@ static bool decode_spec_58(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_59(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC07E3FC00000ULL) != 0x0120C0142BC00000ULL) return false;
+    if ((v & 0x81FFC0FE3FC00000ULL) != 0x0120C0142BC00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_staging_register_write_index = uint32_t((v >> 16) & 0x3FULL);
@@ -16770,7 +16770,7 @@ static bool decode_spec_59(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_60(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFFF0FC0000000ULL) != 0x0045C001C0000000ULL) return false;
+    if ((v & 0x87FFFFFFFFFFFFFFULL) != 0x0045C001C0000000ULL) return false;
     uint32_t f_message_slot_index = uint32_t((v >> 30) & 0x7ULL);
     (void)f_message_slot_index;
     MessageSlotIndexM e_message_slot_index{};
@@ -16841,7 +16841,7 @@ static bool decode_spec_60(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_61(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00910000000D0000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x00910000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -16934,7 +16934,7 @@ static bool decode_spec_61(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_62(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00030000000ULL) != 0x007F400030000000ULL) return false;
+    if ((v & 0x81FFC0F038000000ULL) != 0x007F400030000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -17082,7 +17082,7 @@ static bool decode_spec_62(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_63(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00030000000ULL) != 0x007F400030000000ULL) return false;
+    if ((v & 0x81FFC0F038000000ULL) != 0x007F400030000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -17231,7 +17231,7 @@ static bool decode_spec_63(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_64(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x001FC00000000000ULL) return false;
+    if ((v & 0x81FFFF0000000000ULL) != 0x001FC00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_conservative = uint32_t((v >> 35) & 0x1ULL);
@@ -17339,7 +17339,7 @@ static bool decode_spec_64(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_65(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A00000000F0000ULL) return false;
+    if ((v & 0x81FF0000C03F0000ULL) != 0x00A00000000F0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -17484,7 +17484,7 @@ static bool decode_spec_65(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_66(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A00000000F0000ULL) return false;
+    if ((v & 0x81FF0000C03F0000ULL) != 0x00A00000000F0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -17629,7 +17629,7 @@ static bool decode_spec_66(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_67(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00B1000000000000ULL) return false;
+    if ((v & 0x81FF0001C3000000ULL) != 0x00B1000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -17785,7 +17785,7 @@ static bool decode_spec_67(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_68(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000040000ULL) return false;
+    if ((v & 0x81FF00FFBFFFFF00ULL) != 0x0091000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -17885,7 +17885,7 @@ static bool decode_spec_68(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_69(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000050000ULL) return false;
+    if ((v & 0x81FF00FF8FFFFF00ULL) != 0x0091000000050000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -17993,7 +17993,7 @@ static bool decode_spec_69(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_70(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000060000ULL) return false;
+    if ((v & 0x81FF00FFBFFFFF00ULL) != 0x0091000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -18093,7 +18093,7 @@ static bool decode_spec_70(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_71(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0154000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0154000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -18256,7 +18256,7 @@ static bool decode_spec_71(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_72(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0158000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0158000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -18420,7 +18420,7 @@ static bool decode_spec_72(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_73(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0150000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0150000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -18584,7 +18584,7 @@ static bool decode_spec_73(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_74(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0155000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0155000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -18747,7 +18747,7 @@ static bool decode_spec_74(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_75(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0159000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0159000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -18911,7 +18911,7 @@ static bool decode_spec_75(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_76(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0151000000000000ULL) return false;
+    if ((v & 0x81FF00F800000000ULL) != 0x0151000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -19075,7 +19075,7 @@ static bool decode_spec_76(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_77(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00C0000000000000ULL) return false;
+    if ((v & 0x81FF0003C0000000ULL) != 0x00C0000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -19280,7 +19280,7 @@ static bool decode_spec_77(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_78(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00C1000000000000ULL) return false;
+    if ((v & 0x81FF0003C0000000ULL) != 0x00C1000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -19485,7 +19485,7 @@ static bool decode_spec_78(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_79(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000001000000ULL) != 0x00BC000000000000ULL) return false;
+    if ((v & 0x81FF000FC3000000ULL) != 0x00BC000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -19672,7 +19672,7 @@ static bool decode_spec_79(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_80(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000001000000ULL) != 0x00BC000001000000ULL) return false;
+    if ((v & 0x81FF000FC3000000ULL) != 0x00BC000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -19859,7 +19859,7 @@ static bool decode_spec_80(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_81(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0020C00000000000ULL) return false;
+    if ((v & 0x81FFFF08C3FF0000ULL) != 0x0020C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_widen1 = uint32_t((v >> 26) & 0x3ULL);
@@ -20015,7 +20015,7 @@ static bool decode_spec_81(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_82(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFFF0E00000000ULL) != 0x0004C00000000000ULL) return false;
+    if ((v & 0x87FFFFFFFFFFFFFFULL) != 0x0004C00000000000ULL) return false;
     uint32_t f_sr_count = uint32_t((v >> 33) & 0x7ULL);
     (void)f_sr_count;
     SrCountT e_sr_count{};
@@ -20079,7 +20079,7 @@ static bool decode_spec_82(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_83(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFFF0E00000000ULL) != 0x0005C00000000000ULL) return false;
+    if ((v & 0x87FFFFFFFFFFFFFFULL) != 0x0005C00000000000ULL) return false;
     uint32_t f_sr_count = uint32_t((v >> 33) & 0x7ULL);
     (void)f_sr_count;
     SrCountT e_sr_count{};
@@ -20143,7 +20143,7 @@ static bool decode_spec_83(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_84(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000B0000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x00900000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -20260,7 +20260,7 @@ static bool decode_spec_84(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_85(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000B0000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x00900000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -20383,7 +20383,7 @@ static bool decode_spec_85(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_86(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000A0000ULL) return false;
+    if ((v & 0x81FF00322FFFFF00ULL) != 0x00900000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -20507,7 +20507,7 @@ static bool decode_spec_86(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_87(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000001A0000ULL) return false;
+    if ((v & 0x81FF00322FFFFF00ULL) != 0x00900000001A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -20631,7 +20631,7 @@ static bool decode_spec_87(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_88(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF00243C0FFF00ULL) != 0x00A400000000C000ULL) return false;
+    if ((v & 0x81FF002C3FFFFF00ULL) != 0x00A400000000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -20788,7 +20788,7 @@ static bool decode_spec_88(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_89(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000C0000ULL) return false;
+    if ((v & 0x81FF00323FFFFF00ULL) != 0x00900000000C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -20904,7 +20904,7 @@ static bool decode_spec_89(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_90(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000C0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000000C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -21028,7 +21028,7 @@ static bool decode_spec_90(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_91(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000C0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000000C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -21158,7 +21158,7 @@ static bool decode_spec_91(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_92(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000001C0000ULL) return false;
+    if ((v & 0x81FF00323FFFFF00ULL) != 0x00900000001C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -21274,7 +21274,7 @@ static bool decode_spec_92(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_93(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000001C0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000001C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -21398,7 +21398,7 @@ static bool decode_spec_93(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_94(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000001C0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000001C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -21528,7 +21528,7 @@ static bool decode_spec_94(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_95(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF00F4CC0FFF00ULL) != 0x00A400900000C000ULL) return false;
+    if ((v & 0x81FF00FCCFFFFF00ULL) != 0x00A400900000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -21681,7 +21681,7 @@ static bool decode_spec_95(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_96(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF00F4CC0FFF00ULL) != 0x00A500900800C000ULL) return false;
+    if ((v & 0x81FF00FCCFFFFF00ULL) != 0x00A500900800C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -21834,7 +21834,7 @@ static bool decode_spec_96(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_97(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000000000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00A4000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -22019,7 +22019,7 @@ static bool decode_spec_97(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_98(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000000000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00A5000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -22204,7 +22204,7 @@ static bool decode_spec_98(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_99(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0114000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0114000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -22299,7 +22299,7 @@ static bool decode_spec_99(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, De
 
 static bool decode_spec_100(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0115000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0115000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -22394,7 +22394,7 @@ static bool decode_spec_100(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_101(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000090000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00A4000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -22579,7 +22579,7 @@ static bool decode_spec_101(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_102(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01F800300000FF00ULL) != 0x016000000000D000ULL) return false;
+    if ((v & 0x81F800300000FF00ULL) != 0x016000000000D000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -22781,7 +22781,7 @@ static bool decode_spec_102(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_103(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A40000000E0000ULL) return false;
+    if ((v & 0x81FF00FFFFFF0000ULL) != 0x00A40000000E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -22903,7 +22903,7 @@ static bool decode_spec_103(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_104(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A40000010E0000ULL) return false;
+    if ((v & 0x81FF00FFFFFF0000ULL) != 0x00A40000010E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -23025,7 +23025,7 @@ static bool decode_spec_104(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_105(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F4000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F4000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -23207,7 +23207,7 @@ static bool decode_spec_105(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_106(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F5000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F5000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -23389,7 +23389,7 @@ static bool decode_spec_106(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_107(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F4000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F4000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -23591,7 +23591,7 @@ static bool decode_spec_107(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_108(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F5000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F5000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -23793,7 +23793,7 @@ static bool decode_spec_108(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_109(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F4000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F4000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -23995,7 +23995,7 @@ static bool decode_spec_109(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_110(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F5000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F5000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -24197,7 +24197,7 @@ static bool decode_spec_110(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_111(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000050000ULL) return false;
+    if ((v & 0x81FF00FFBFFFFF00ULL) != 0x009C000000050000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -24297,7 +24297,7 @@ static bool decode_spec_111(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_112(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 14) return false;
-    if ((v & 0x01FF00C0130F00FFULL) != 0x00A60000130D00DCULL) return false;
+    if ((v & 0x81FF00CFFBFF00FFULL) != 0x00A60000130D00DCULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -24441,7 +24441,7 @@ static bool decode_spec_112(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_113(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000080000ULL) return false;
+    if ((v & 0x81FF00CFF3FF0000ULL) != 0x00A4000000080000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -24581,7 +24581,7 @@ static bool decode_spec_113(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_114(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000110000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000110000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -24698,7 +24698,7 @@ static bool decode_spec_114(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_115(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000D0000ULL) return false;
+    if ((v & 0x81FF00FE7FFFFF00ULL) != 0x009C0000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -24798,7 +24798,7 @@ static bool decode_spec_115(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_116(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000090000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -24915,7 +24915,7 @@ static bool decode_spec_116(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_117(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000100000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000100000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -25032,7 +25032,7 @@ static bool decode_spec_117(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_118(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000080000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000080000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -25149,7 +25149,7 @@ static bool decode_spec_118(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_119(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000C0000ULL) return false;
+    if ((v & 0x81FF00384FFFFF00ULL) != 0x009C0000000C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -25280,7 +25280,7 @@ static bool decode_spec_119(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_120(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000000000ULL) return false;
+    if ((v & 0x81FF003FCFFFF000ULL) != 0x0098000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_flush_to_zero_mode = uint32_t((v >> 10) & 0x1ULL);
@@ -25418,7 +25418,7 @@ static bool decode_spec_120(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_121(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000010000ULL) return false;
+    if ((v & 0x81FF003FCFFFF000ULL) != 0x0098000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_flush_to_zero_mode = uint32_t((v >> 10) & 0x1ULL);
@@ -25556,7 +25556,7 @@ static bool decode_spec_121(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_122(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00B2000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x00B2000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -25775,7 +25775,7 @@ static bool decode_spec_122(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_123(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00B3000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x00B3000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -25994,7 +25994,7 @@ static bool decode_spec_123(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_124(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000030000ULL) return false;
+    if ((v & 0x81FF000C03FF0000ULL) != 0x00A4000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -26172,7 +26172,7 @@ static bool decode_spec_124(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_125(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000030000ULL) return false;
+    if ((v & 0x81FF000C03FF0000ULL) != 0x00A5000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -26350,7 +26350,7 @@ static bool decode_spec_125(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_126(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01F8000000000000ULL) != 0x0160000000000000ULL) return false;
+    if ((v & 0x81F8000000000000ULL) != 0x0160000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -26575,7 +26575,7 @@ static bool decode_spec_126(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_127(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000020000ULL) return false;
+    if ((v & 0x81FF000C03FF0000ULL) != 0x00A4000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -26753,7 +26753,7 @@ static bool decode_spec_127(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_128(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000020000ULL) return false;
+    if ((v & 0x81FF000C03FF0000ULL) != 0x00A5000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -26931,7 +26931,7 @@ static bool decode_spec_128(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_129(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000803FF0000ULL) != 0x00B2000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00B2000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -27124,7 +27124,7 @@ static bool decode_spec_129(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_130(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000803FF0000ULL) != 0x00B2000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00B2000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -27317,7 +27317,7 @@ static bool decode_spec_130(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_131(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000803FF0000ULL) != 0x00B3000002C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00B3000002C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -27510,7 +27510,7 @@ static bool decode_spec_131(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_132(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000803FF0000ULL) != 0x00B3000002C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00B3000002C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -27703,7 +27703,7 @@ static bool decode_spec_132(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_133(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A50000000A0000ULL) return false;
+    if ((v & 0x81FF003FEFFF0000ULL) != 0x00A50000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -27843,7 +27843,7 @@ static bool decode_spec_133(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_134(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01F8000C00FF0000ULL) != 0x0160000400C00000ULL) return false;
+    if ((v & 0x81F8000C00FF0000ULL) != 0x0160000400C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -28045,7 +28045,7 @@ static bool decode_spec_134(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_135(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A40000000A0000ULL) return false;
+    if ((v & 0x81FF00FFFFFF0000ULL) != 0x00A40000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -28161,7 +28161,7 @@ static bool decode_spec_135(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_136(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF00F4CC0FFF00ULL) != 0x00A400500000C000ULL) return false;
+    if ((v & 0x81FF00FCCFFFFF00ULL) != 0x00A400500000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -28314,7 +28314,7 @@ static bool decode_spec_136(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_137(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF00F4CC0FFF00ULL) != 0x00A500500800C000ULL) return false;
+    if ((v & 0x81FF00FCCFFFFF00ULL) != 0x00A500500800C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -28467,7 +28467,7 @@ static bool decode_spec_137(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_138(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000B0000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C0000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -28584,7 +28584,7 @@ static bool decode_spec_138(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_139(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000A0000ULL) return false;
+    if ((v & 0x81FF003FFFFFFF00ULL) != 0x009C0000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -28693,7 +28693,7 @@ static bool decode_spec_139(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_140(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A60000030D0000ULL) return false;
+    if ((v & 0x81FF000FEBFF0000ULL) != 0x00A60000030D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -28863,7 +28863,7 @@ static bool decode_spec_140(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_141(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A40000010D0000ULL) return false;
+    if ((v & 0x81FF00FFFFFF0000ULL) != 0x00A40000010D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -28985,7 +28985,7 @@ static bool decode_spec_141(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_142(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A40000000D0000ULL) return false;
+    if ((v & 0x81FF00FFFFCF0000ULL) != 0x00A40000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -29114,7 +29114,7 @@ static bool decode_spec_142(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_143(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009E000000000000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009E000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29231,7 +29231,7 @@ static bool decode_spec_143(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_144(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009E000000010000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x009E000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29324,7 +29324,7 @@ static bool decode_spec_144(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_145(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009E000000020000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x009E000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29417,7 +29417,7 @@ static bool decode_spec_145(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_146(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000010000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29534,7 +29534,7 @@ static bool decode_spec_146(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_147(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000010000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29651,7 +29651,7 @@ static bool decode_spec_147(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_148(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000000000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29768,7 +29768,7 @@ static bool decode_spec_148(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_149(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000E0000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C0000000E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -29885,7 +29885,7 @@ static bool decode_spec_149(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_150(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0099000000020000ULL) return false;
+    if ((v & 0x81FF00FF8CFFFF00ULL) != 0x0099000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30000,7 +30000,7 @@ static bool decode_spec_150(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_151(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0099000000030000ULL) return false;
+    if ((v & 0x81FF00FF8CFFFF00ULL) != 0x0099000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30115,7 +30115,7 @@ static bool decode_spec_151(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_152(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0099000000000000ULL) return false;
+    if ((v & 0x81FF003FCCFFFF00ULL) != 0x0099000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30239,7 +30239,7 @@ static bool decode_spec_152(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_153(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0099000000010000ULL) return false;
+    if ((v & 0x81FF003FCCFFFF00ULL) != 0x0099000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30363,7 +30363,7 @@ static bool decode_spec_153(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_154(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000D0000ULL) return false;
+    if ((v & 0x81FF003E0FFFFF00ULL) != 0x00900000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30487,7 +30487,7 @@ static bool decode_spec_154(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_155(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FFC000301F0000ULL) != 0x0090C000000D0000ULL) return false;
+    if ((v & 0x81FFC03E3FFFFF00ULL) != 0x0090C000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30609,7 +30609,7 @@ static bool decode_spec_155(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_156(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC000301F0000ULL) != 0x0090C000000D0000ULL) return false;
+    if ((v & 0x81FFC03E3FFFFF00ULL) != 0x0090C000000D0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -30737,7 +30737,7 @@ static bool decode_spec_156(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_157(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000F0000ULL) return false;
+    if ((v & 0x81FF003E0FFFFF00ULL) != 0x00900000000F0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30861,7 +30861,7 @@ static bool decode_spec_157(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_158(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000030000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -30978,7 +30978,7 @@ static bool decode_spec_158(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_159(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000030000ULL) return false;
+    if ((v & 0x81FF003FEFFFFF00ULL) != 0x009C000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31095,7 +31095,7 @@ static bool decode_spec_159(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_160(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000020000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31212,7 +31212,7 @@ static bool decode_spec_160(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_161(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C0000000F0000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C0000000F0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31329,7 +31329,7 @@ static bool decode_spec_161(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_162(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000030F0000ULL) != 0x00A40000020E0000ULL) return false;
+    if ((v & 0x81FF00FFBFFF0000ULL) != 0x00A40000020E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -31458,7 +31458,7 @@ static bool decode_spec_162(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_163(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000060000ULL) return false;
+    if ((v & 0x81FF00FFBFFFFF00ULL) != 0x009C000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31558,7 +31558,7 @@ static bool decode_spec_163(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_164(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000040000ULL) return false;
+    if ((v & 0x81FF00FFBFFFFF00ULL) != 0x009C000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31658,7 +31658,7 @@ static bool decode_spec_164(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_165(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x009C000000070000ULL) return false;
+    if ((v & 0x81FF003FCFFFFF00ULL) != 0x009C000000070000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -31775,7 +31775,7 @@ static bool decode_spec_165(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_166(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A80000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A80000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -31916,7 +31916,7 @@ static bool decode_spec_166(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_167(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A00000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A00000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -32057,7 +32057,7 @@ static bool decode_spec_167(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_168(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A90000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A90000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -32196,7 +32196,7 @@ static bool decode_spec_168(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_169(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A10000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A10000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -32335,7 +32335,7 @@ static bool decode_spec_169(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_170(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00AA0000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00AA0000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -32474,7 +32474,7 @@ static bool decode_spec_170(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_171(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A20000000B0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A20000000B0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -32613,7 +32613,7 @@ static bool decode_spec_171(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_172(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000080000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0091000000080000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -32715,7 +32715,7 @@ static bool decode_spec_172(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_173(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000090000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0091000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -32816,7 +32816,7 @@ static bool decode_spec_173(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_174(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00910000000A0000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00910000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -32917,7 +32917,7 @@ static bool decode_spec_174(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_175(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A8000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A8000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33058,7 +33058,7 @@ static bool decode_spec_175(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_176(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01ABC00000000000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01ABC00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33194,7 +33194,7 @@ static bool decode_spec_176(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_177(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC000400F0000ULL) != 0x01ABC00000000000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01ABC00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33329,7 +33329,7 @@ static bool decode_spec_177(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_178(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A0000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A0000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33470,7 +33470,7 @@ static bool decode_spec_178(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_179(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01A3C00000000000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01A3C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33606,7 +33606,7 @@ static bool decode_spec_179(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_180(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC000400F0000ULL) != 0x01A3C00000000000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01A3C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33741,7 +33741,7 @@ static bool decode_spec_180(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_181(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A9000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A9000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -33880,7 +33880,7 @@ static bool decode_spec_181(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_182(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A1000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A1000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -34019,7 +34019,7 @@ static bool decode_spec_182(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_183(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00AA000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00AA000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -34158,7 +34158,7 @@ static bool decode_spec_183(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_184(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A2000000000000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A2000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -34297,7 +34297,7 @@ static bool decode_spec_184(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_185(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00B0000000000000ULL) return false;
+    if ((v & 0x81FF00FFBF000000ULL) != 0x00B0000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -34443,7 +34443,7 @@ static bool decode_spec_185(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_186(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0110000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0110000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -34538,7 +34538,7 @@ static bool decode_spec_186(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_187(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0111000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0111000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -34633,7 +34633,7 @@ static bool decode_spec_187(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_188(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0112000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0112000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -34728,7 +34728,7 @@ static bool decode_spec_188(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_189(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F8000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F8000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -34881,7 +34881,7 @@ static bool decode_spec_189(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_190(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F0000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F0000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35034,7 +35034,7 @@ static bool decode_spec_190(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_191(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F9000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F9000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35185,7 +35185,7 @@ static bool decode_spec_191(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_192(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F1000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F1000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35336,7 +35336,7 @@ static bool decode_spec_192(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_193(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00FA000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00FA000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35487,7 +35487,7 @@ static bool decode_spec_193(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_194(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003FF0000ULL) != 0x00F2000000C00000ULL) return false;
+    if ((v & 0x81FF000803FF0000ULL) != 0x00F2000000C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35638,7 +35638,7 @@ static bool decode_spec_194(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_195(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F8000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F8000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35811,7 +35811,7 @@ static bool decode_spec_195(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_196(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F0000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F0000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -35984,7 +35984,7 @@ static bool decode_spec_196(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_197(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F9000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F9000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -36155,7 +36155,7 @@ static bool decode_spec_197(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_198(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F1000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F1000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -36326,7 +36326,7 @@ static bool decode_spec_198(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_199(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00FA000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00FA000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -36497,7 +36497,7 @@ static bool decode_spec_199(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_200(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F2000001000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F2000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -36668,7 +36668,7 @@ static bool decode_spec_200(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_201(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F8000002000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F8000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -36841,7 +36841,7 @@ static bool decode_spec_201(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_202(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F0000002000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F0000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37013,7 +37013,7 @@ static bool decode_spec_202(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_203(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F8000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F8000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37186,7 +37186,7 @@ static bool decode_spec_203(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_204(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F0000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F0000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37359,7 +37359,7 @@ static bool decode_spec_204(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_205(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F9000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F9000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37530,7 +37530,7 @@ static bool decode_spec_205(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_206(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F1000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F1000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37701,7 +37701,7 @@ static bool decode_spec_206(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_207(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00FA000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00FA000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -37872,7 +37872,7 @@ static bool decode_spec_207(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_208(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00F2000000000000ULL) return false;
+    if ((v & 0x81FF000803000000ULL) != 0x00F2000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -38043,7 +38043,7 @@ static bool decode_spec_208(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_209(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000001000000ULL) != 0x00C2000000000000ULL) return false;
+    if ((v & 0x81FF00FFBF000000ULL) != 0x00C2000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -38189,7 +38189,7 @@ static bool decode_spec_209(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_210(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000001000000ULL) != 0x00C2000000000000ULL) return false;
+    if ((v & 0x81FF00FFB3000000ULL) != 0x00C2000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -38351,7 +38351,7 @@ static bool decode_spec_210(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_211(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000001000000ULL) != 0x00C2000001000000ULL) return false;
+    if ((v & 0x81FF00FFBF000000ULL) != 0x00C2000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -38497,7 +38497,7 @@ static bool decode_spec_211(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_212(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000040000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0098000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -38598,7 +38598,7 @@ static bool decode_spec_212(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_213(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000050000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0098000000050000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -38699,7 +38699,7 @@ static bool decode_spec_213(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_214(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A80000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A80000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -38840,7 +38840,7 @@ static bool decode_spec_214(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_215(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01ABC000000A0000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01ABC000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -38970,7 +38970,7 @@ static bool decode_spec_215(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_216(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A00000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A00000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39111,7 +39111,7 @@ static bool decode_spec_216(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_217(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01A3C000000A0000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01A3C000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39241,7 +39241,7 @@ static bool decode_spec_217(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_218(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A90000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A90000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39380,7 +39380,7 @@ static bool decode_spec_218(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_219(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A10000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A10000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39519,7 +39519,7 @@ static bool decode_spec_219(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_220(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00AA0000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00AA0000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39658,7 +39658,7 @@ static bool decode_spec_220(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_221(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A20000000A0000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A20000000A0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39797,7 +39797,7 @@ static bool decode_spec_221(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_222(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A8000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A8000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -39938,7 +39938,7 @@ static bool decode_spec_222(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_223(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01ABC00000010000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01ABC00000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40074,7 +40074,7 @@ static bool decode_spec_223(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_224(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC000400F0000ULL) != 0x01ABC00000010000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01ABC00000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40209,7 +40209,7 @@ static bool decode_spec_224(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_225(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A0000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A0000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40350,7 +40350,7 @@ static bool decode_spec_225(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_226(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01A3C00000010000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01A3C00000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40486,7 +40486,7 @@ static bool decode_spec_226(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_227(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC000400F0000ULL) != 0x01A3C00000010000ULL) return false;
+    if ((v & 0x81FFC00FC3FF0000ULL) != 0x01A3C00000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40621,7 +40621,7 @@ static bool decode_spec_227(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_228(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A9000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A9000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40760,7 +40760,7 @@ static bool decode_spec_228(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_229(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A1000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A1000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -40899,7 +40899,7 @@ static bool decode_spec_229(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_230(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00AA000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00AA000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -41038,7 +41038,7 @@ static bool decode_spec_230(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_231(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A2000000010000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00A2000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -41177,7 +41177,7 @@ static bool decode_spec_231(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_232(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000003000000ULL) != 0x00B0000001000000ULL) return false;
+    if ((v & 0x81FF00FFBF000000ULL) != 0x00B0000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -41323,7 +41323,7 @@ static bool decode_spec_232(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_233(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x002FC00000000000ULL) return false;
+    if ((v & 0x81FFFE07FFFF0000ULL) != 0x002FC00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_conservative = uint32_t((v >> 35) & 0x1ULL);
@@ -41453,7 +41453,7 @@ static bool decode_spec_233(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_234(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC10000000000ULL) != 0x002FC10000000000ULL) return false;
+    if ((v & 0x81FFFF07FFFF0000ULL) != 0x002FC10000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_conservative = uint32_t((v >> 35) & 0x1ULL);
@@ -41583,7 +41583,7 @@ static bool decode_spec_234(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_235(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x003FC00000000000ULL) return false;
+    if ((v & 0x81FFFF00FF000000ULL) != 0x003FC00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -41743,7 +41743,7 @@ static bool decode_spec_235(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_236(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFFF0E00000000ULL) != 0x0006C00000000000ULL) return false;
+    if ((v & 0x87FFFFFFFFFFFFFFULL) != 0x0006C00000000000ULL) return false;
     uint32_t f_sr_count = uint32_t((v >> 33) & 0x7ULL);
     (void)f_sr_count;
     SrCountT e_sr_count{};
@@ -41807,7 +41807,7 @@ static bool decode_spec_236(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_237(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000060000ULL) return false;
+    if ((v & 0x81FF003E0FFF0000ULL) != 0x00A4000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -41953,7 +41953,7 @@ static bool decode_spec_237(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_238(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A4000000060000ULL) return false;
+    if ((v & 0x81FF003E0FFF0000ULL) != 0x00A4000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -42099,7 +42099,7 @@ static bool decode_spec_238(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_239(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000060000ULL) return false;
+    if ((v & 0x81FF003E0FFF0000ULL) != 0x00A5000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -42245,7 +42245,7 @@ static bool decode_spec_239(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_240(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000060000ULL) return false;
+    if ((v & 0x81FF003E0FFF0000ULL) != 0x00A5000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -42391,7 +42391,7 @@ static bool decode_spec_240(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_241(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06000000000ULL) != 0x0076800000000000ULL) return false;
+    if ((v & 0x81FFC0F008000000ULL) != 0x0076800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -42560,7 +42560,7 @@ static bool decode_spec_241(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_242(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06000000000ULL) != 0x0066800000000000ULL) return false;
+    if ((v & 0x81FFC0F008000000ULL) != 0x0066800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_encoded_attribute_table_index = uint32_t((v >> 16) & 0xFULL);
@@ -42725,7 +42725,7 @@ static bool decode_spec_242(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_243(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800838000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -42886,7 +42886,7 @@ static bool decode_spec_243(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_244(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800818000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800818000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43054,7 +43054,7 @@ static bool decode_spec_244(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_245(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800208000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43222,7 +43222,7 @@ static bool decode_spec_245(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_246(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800208000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43397,7 +43397,7 @@ static bool decode_spec_246(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_247(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800210000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43558,7 +43558,7 @@ static bool decode_spec_247(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_248(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800210000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43726,7 +43726,7 @@ static bool decode_spec_248(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_249(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800218000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -43887,7 +43887,7 @@ static bool decode_spec_249(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_250(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800218000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44055,7 +44055,7 @@ static bool decode_spec_250(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_251(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800420000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44216,7 +44216,7 @@ static bool decode_spec_251(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_252(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800400000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44384,7 +44384,7 @@ static bool decode_spec_252(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_253(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800428000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44545,7 +44545,7 @@ static bool decode_spec_253(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_254(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800408000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800408000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44713,7 +44713,7 @@ static bool decode_spec_254(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_255(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800200000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -44881,7 +44881,7 @@ static bool decode_spec_255(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_256(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800200000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45056,7 +45056,7 @@ static bool decode_spec_256(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_257(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0172800630000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0172800630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45217,7 +45217,7 @@ static bool decode_spec_257(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_258(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0172800610000000ULL) return false;
+    if ((v & 0x81FFC0FE18000000ULL) != 0x0172800610000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45385,7 +45385,7 @@ static bool decode_spec_258(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_259(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800838000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45537,7 +45537,7 @@ static bool decode_spec_259(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_260(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800818000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800818000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45696,7 +45696,7 @@ static bool decode_spec_260(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_261(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800208000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -45855,7 +45855,7 @@ static bool decode_spec_261(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_262(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800208000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46021,7 +46021,7 @@ static bool decode_spec_262(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_263(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800210000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46173,7 +46173,7 @@ static bool decode_spec_263(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_264(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800210000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46332,7 +46332,7 @@ static bool decode_spec_264(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_265(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800218000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46484,7 +46484,7 @@ static bool decode_spec_265(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_266(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800218000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46643,7 +46643,7 @@ static bool decode_spec_266(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_267(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800420000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46795,7 +46795,7 @@ static bool decode_spec_267(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_268(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800400000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -46954,7 +46954,7 @@ static bool decode_spec_268(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_269(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800428000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47106,7 +47106,7 @@ static bool decode_spec_269(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_270(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800408000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800408000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47265,7 +47265,7 @@ static bool decode_spec_270(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_271(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800200000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47424,7 +47424,7 @@ static bool decode_spec_271(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_272(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800200000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47590,7 +47590,7 @@ static bool decode_spec_272(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_273(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0072800630000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0072800630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47742,7 +47742,7 @@ static bool decode_spec_273(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_274(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0072800610000000ULL) return false;
+    if ((v & 0x81FFC00E18000000ULL) != 0x0072800610000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -47901,7 +47901,7 @@ static bool decode_spec_274(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_275(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0070800000000000ULL) return false;
+    if ((v & 0x81FFC01008000000ULL) != 0x0070800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -48056,7 +48056,7 @@ static bool decode_spec_275(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_276(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFC00E00000000ULL) != 0x0044800400000000ULL) return false;
+    if ((v & 0x87FFC0FE3FFFFFF8ULL) != 0x0044800400000000ULL) return false;
     uint32_t f_source = uint32_t((v >> 0) & 0x7ULL);
     (void)f_source;
     LdGclkSourceM e_source{};
@@ -48142,7 +48142,7 @@ static bool decode_spec_276(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_277(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0062800000000000ULL) return false;
+    if ((v & 0x81FFC08038000000ULL) != 0x0062800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -48261,7 +48261,7 @@ static bool decode_spec_277(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_278(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006A80F838000000ULL) return false;
+    if ((v & 0x81FFC0FE38FF0000ULL) != 0x006A80F838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -48411,7 +48411,7 @@ static bool decode_spec_278(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_279(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x006A800008000000ULL) return false;
+    if ((v & 0x81FFC04038FF0000ULL) != 0x006A800008000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -48570,7 +48570,7 @@ static bool decode_spec_279(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_280(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006A808210000000ULL) return false;
+    if ((v & 0x81FFC0FE38FF0000ULL) != 0x006A808210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -48720,7 +48720,7 @@ static bool decode_spec_280(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_281(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x006A800018000000ULL) return false;
+    if ((v & 0x81FFC06038FF0000ULL) != 0x006A800018000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -48879,7 +48879,7 @@ static bool decode_spec_281(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_282(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006A80C420000000ULL) return false;
+    if ((v & 0x81FFC0FE38FF0000ULL) != 0x006A80C420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -49029,7 +49029,7 @@ static bool decode_spec_282(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_283(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006A80F428000000ULL) return false;
+    if ((v & 0x81FFC0FE38FF0000ULL) != 0x006A80F428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -49179,7 +49179,7 @@ static bool decode_spec_283(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_284(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x006A800000000000ULL) return false;
+    if ((v & 0x81FFC00038FF0000ULL) != 0x006A800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -49338,7 +49338,7 @@ static bool decode_spec_284(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_285(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006A80E630000000ULL) return false;
+    if ((v & 0x81FFC0FE38FF0000ULL) != 0x006A80E630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -49488,7 +49488,7 @@ static bool decode_spec_285(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_286(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06000000000ULL) != 0x0076802000000000ULL) return false;
+    if ((v & 0x81FFC0F008000000ULL) != 0x0076802000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -49657,7 +49657,7 @@ static bool decode_spec_286(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_287(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06000000000ULL) != 0x0066802000000000ULL) return false;
+    if ((v & 0x81FFC0F008000000ULL) != 0x0066802000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_encoded_texture_table_index = uint32_t((v >> 16) & 0xFULL);
@@ -49822,7 +49822,7 @@ static bool decode_spec_287(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_288(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0078800000000000ULL) return false;
+    if ((v & 0x81FFC0E008000000ULL) != 0x0078800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -49992,7 +49992,7 @@ static bool decode_spec_288(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_289(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0078800000000000ULL) return false;
+    if ((v & 0x81FFC06008000000ULL) != 0x0078800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -50169,7 +50169,7 @@ static bool decode_spec_289(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_290(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0064800000000000ULL) return false;
+    if ((v & 0x81FFC00008FF0000ULL) != 0x0064800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x7ULL);
@@ -50330,7 +50330,7 @@ static bool decode_spec_290(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_291(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x006D800000000000ULL) return false;
+    if ((v & 0x81FFC0000CFF0000ULL) != 0x006D800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -50497,7 +50497,7 @@ static bool decode_spec_291(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_292(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x006D800000000000ULL) return false;
+    if ((v & 0x81FFC0000CFF0000ULL) != 0x006D800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -50657,7 +50657,7 @@ static bool decode_spec_292(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_293(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x006C800000000000ULL) return false;
+    if ((v & 0x81FFC0000CFF0000ULL) != 0x006C800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -50824,7 +50824,7 @@ static bool decode_spec_293(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_294(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x006C800000000000ULL) return false;
+    if ((v & 0x81FFC0000CFF0000ULL) != 0x006C800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -50984,7 +50984,7 @@ static bool decode_spec_294(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_295(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005F800000000000ULL) return false;
+    if ((v & 0x81FFC0E00CFFFF00ULL) != 0x005F800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x3ULL);
@@ -51108,7 +51108,7 @@ static bool decode_spec_295(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_296(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0040800000000000ULL) return false;
+    if ((v & 0x81FFC0800CF800FFULL) != 0x0040800000000000ULL) return false;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x3ULL);
     (void)f_register_format;
     LdVarBufFlatFormatM e_register_format{};
@@ -51226,7 +51226,7 @@ static bool decode_spec_296(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_297(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005D800000000000ULL) return false;
+    if ((v & 0x81FFC0000C00FF00ULL) != 0x005D800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_offset = uint32_t((v >> 16) & 0xFFULL);
@@ -51378,7 +51378,7 @@ static bool decode_spec_297(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_298(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005D800000000000ULL) return false;
+    if ((v & 0x81FFC0000CF80000ULL) != 0x005D800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -51530,7 +51530,7 @@ static bool decode_spec_298(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_299(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005D800000000000ULL) return false;
+    if ((v & 0x81FFC0000CF80000ULL) != 0x005D800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -51675,7 +51675,7 @@ static bool decode_spec_299(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_300(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005C800000000000ULL) return false;
+    if ((v & 0x81FFC0000C00FF00ULL) != 0x005C800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_offset = uint32_t((v >> 16) & 0xFFULL);
@@ -51827,7 +51827,7 @@ static bool decode_spec_300(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_301(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005C800000000000ULL) return false;
+    if ((v & 0x81FFC0000CF80000ULL) != 0x005C800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -51979,7 +51979,7 @@ static bool decode_spec_301(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_302(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x005C800000000000ULL) return false;
+    if ((v & 0x81FFC0000CF80000ULL) != 0x005C800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 24) & 0x3ULL);
@@ -52124,7 +52124,7 @@ static bool decode_spec_302(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_303(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0055800000000000ULL) return false;
+    if ((v & 0x81FFC0F008FFFF00ULL) != 0x0055800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x7ULL);
@@ -52242,7 +52242,7 @@ static bool decode_spec_303(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_304(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0055800000000000ULL) return false;
+    if ((v & 0x81FFC0E008FFFF00ULL) != 0x0055800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x7ULL);
@@ -52367,7 +52367,7 @@ static bool decode_spec_304(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_305(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0041800000000000ULL) return false;
+    if ((v & 0x87FFC0F008F000FFULL) != 0x0041800000000000ULL) return false;
     uint32_t f_varying_index = uint32_t((v >> 12) & 0xFFULL);
     (void)f_varying_index;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x7ULL);
@@ -52481,7 +52481,7 @@ static bool decode_spec_305(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_306(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0041800000000000ULL) return false;
+    if ((v & 0x87FFC08008F000FFULL) != 0x0041800000000000ULL) return false;
     uint32_t f_varying_index = uint32_t((v >> 12) & 0xFFULL);
     (void)f_varying_index;
     uint32_t f_register_format = uint32_t((v >> 24) & 0x7ULL);
@@ -52611,7 +52611,7 @@ static bool decode_spec_306(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_307(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0054800000000000ULL) return false;
+    if ((v & 0x81FFC00008F00000ULL) != 0x0054800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_varying_index = uint32_t((v >> 12) & 0xFFULL);
@@ -52768,7 +52768,7 @@ static bool decode_spec_307(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_308(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC03007000000ULL) != 0x0056803002000000ULL) return false;
+    if ((v & 0x81FFC0300FFF8F00ULL) != 0x0056803002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_varying_name = uint32_t((v >> 12) & 0x7ULL);
@@ -52914,7 +52914,7 @@ static bool decode_spec_308(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_309(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00007000000ULL) != 0x0056800002000000ULL) return false;
+    if ((v & 0x81FFC0000FFF8F00ULL) != 0x0056800002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_varying_name = uint32_t((v >> 12) & 0x7ULL);
@@ -53066,7 +53066,7 @@ static bool decode_spec_309(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_310(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06E00000000ULL) != 0x0077800600000000ULL) return false;
+    if ((v & 0x81FFC0FE3F000000ULL) != 0x0077800600000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -53220,7 +53220,7 @@ static bool decode_spec_310(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_311(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06E00000000ULL) != 0x0067800600000000ULL) return false;
+    if ((v & 0x81FFC0FE3F000000ULL) != 0x0067800600000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_encoded_attribute_table_index = uint32_t((v >> 16) & 0xFULL);
@@ -53370,7 +53370,7 @@ static bool decode_spec_311(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_312(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E00000000ULL) != 0x006E800400000000ULL) return false;
+    if ((v & 0x81FFC0FE3FFF0000ULL) != 0x006E800400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_message_slot_index = uint32_t((v >> 30) & 0x7ULL);
@@ -53495,7 +53495,7 @@ static bool decode_spec_312(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_313(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E00000000ULL) != 0x005E800400000000ULL) return false;
+    if ((v & 0x81FFC0FE3FF00000ULL) != 0x005E800400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_buffer_index = uint32_t((v >> 12) & 0xFFULL);
@@ -53616,7 +53616,7 @@ static bool decode_spec_313(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_314(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E00000000ULL) != 0x006B800400000000ULL) return false;
+    if ((v & 0x81FFC0FE3FFF0000ULL) != 0x006B800400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_message_slot_index = uint32_t((v >> 30) & 0x7ULL);
@@ -53741,7 +53741,7 @@ static bool decode_spec_314(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_315(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06E00000000ULL) != 0x0077802600000000ULL) return false;
+    if ((v & 0x81FFC0FE3F000000ULL) != 0x0077802600000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -53895,7 +53895,7 @@ static bool decode_spec_315(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_316(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC06E00000000ULL) != 0x0067802600000000ULL) return false;
+    if ((v & 0x81FFC0FE3F000000ULL) != 0x0067802600000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_encoded_texture_table_index = uint32_t((v >> 16) & 0xFULL);
@@ -54045,7 +54045,7 @@ static bool decode_spec_316(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_317(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006080F838000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x006080F838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54181,7 +54181,7 @@ static bool decode_spec_317(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_318(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x0060800008000000ULL) return false;
+    if ((v & 0x81FFC04038000000ULL) != 0x0060800008000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54326,7 +54326,7 @@ static bool decode_spec_318(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_319(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x0060808210000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0060808210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54462,7 +54462,7 @@ static bool decode_spec_319(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_320(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x0060800018000000ULL) return false;
+    if ((v & 0x81FFC06038000000ULL) != 0x0060800018000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54607,7 +54607,7 @@ static bool decode_spec_320(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_321(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006080C420000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x006080C420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54743,7 +54743,7 @@ static bool decode_spec_321(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_322(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006080F428000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x006080F428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -54879,7 +54879,7 @@ static bool decode_spec_322(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_323(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00038000000ULL) != 0x0060800000000000ULL) return false;
+    if ((v & 0x81FFC00038000000ULL) != 0x0060800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -55024,7 +55024,7 @@ static bool decode_spec_323(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_324(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC0FE38000000ULL) != 0x006080E630000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x006080E630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -55160,7 +55160,7 @@ static bool decode_spec_324(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_325(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000060000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0098000000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -55261,7 +55261,7 @@ static bool decode_spec_325(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_326(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0098000000070000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0098000000070000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -55362,7 +55362,7 @@ static bool decode_spec_326(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_327(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -55517,7 +55517,7 @@ static bool decode_spec_327(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_328(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -55672,7 +55672,7 @@ static bool decode_spec_328(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_329(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00301C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -55823,7 +55823,7 @@ static bool decode_spec_329(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_330(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00301C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -55974,7 +55974,7 @@ static bool decode_spec_330(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_331(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56128,7 +56128,7 @@ static bool decode_spec_331(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_332(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56282,7 +56282,7 @@ static bool decode_spec_332(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_333(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56436,7 +56436,7 @@ static bool decode_spec_333(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_334(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000301C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000301C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56590,7 +56590,7 @@ static bool decode_spec_334(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_335(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56767,7 +56767,7 @@ static bool decode_spec_335(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_336(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -56944,7 +56944,7 @@ static bool decode_spec_336(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_337(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00300000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57117,7 +57117,7 @@ static bool decode_spec_337(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_338(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00300000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57290,7 +57290,7 @@ static bool decode_spec_338(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_339(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57466,7 +57466,7 @@ static bool decode_spec_339(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_340(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57642,7 +57642,7 @@ static bool decode_spec_340(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_341(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57818,7 +57818,7 @@ static bool decode_spec_341(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_342(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000300000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000300000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -57994,7 +57994,7 @@ static bool decode_spec_342(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_343(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -58171,7 +58171,7 @@ static bool decode_spec_343(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_344(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -58348,7 +58348,7 @@ static bool decode_spec_344(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_345(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00301000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -58521,7 +58521,7 @@ static bool decode_spec_345(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_346(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00301000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -58694,7 +58694,7 @@ static bool decode_spec_346(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_347(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -58870,7 +58870,7 @@ static bool decode_spec_347(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_348(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59046,7 +59046,7 @@ static bool decode_spec_348(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_349(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59222,7 +59222,7 @@ static bool decode_spec_349(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_350(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000301000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000301000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59398,7 +59398,7 @@ static bool decode_spec_350(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_351(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59575,7 +59575,7 @@ static bool decode_spec_351(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_352(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59752,7 +59752,7 @@ static bool decode_spec_352(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_353(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00302000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -59925,7 +59925,7 @@ static bool decode_spec_353(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_354(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00302000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60098,7 +60098,7 @@ static bool decode_spec_354(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_355(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60274,7 +60274,7 @@ static bool decode_spec_355(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_356(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60450,7 +60450,7 @@ static bool decode_spec_356(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_357(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60626,7 +60626,7 @@ static bool decode_spec_357(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_358(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000302000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000302000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60802,7 +60802,7 @@ static bool decode_spec_358(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_359(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -60957,7 +60957,7 @@ static bool decode_spec_359(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_360(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61112,7 +61112,7 @@ static bool decode_spec_360(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_361(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61267,7 +61267,7 @@ static bool decode_spec_361(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_362(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00101C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61418,7 +61418,7 @@ static bool decode_spec_362(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_363(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00101C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61569,7 +61569,7 @@ static bool decode_spec_363(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_364(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61723,7 +61723,7 @@ static bool decode_spec_364(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_365(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -61877,7 +61877,7 @@ static bool decode_spec_365(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_366(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62031,7 +62031,7 @@ static bool decode_spec_366(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_367(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000101C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000101C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62185,7 +62185,7 @@ static bool decode_spec_367(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_368(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62362,7 +62362,7 @@ static bool decode_spec_368(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_369(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62539,7 +62539,7 @@ static bool decode_spec_369(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_370(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62716,7 +62716,7 @@ static bool decode_spec_370(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_371(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00100000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -62889,7 +62889,7 @@ static bool decode_spec_371(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_372(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00100000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63062,7 +63062,7 @@ static bool decode_spec_372(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_373(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63238,7 +63238,7 @@ static bool decode_spec_373(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_374(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63414,7 +63414,7 @@ static bool decode_spec_374(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_375(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63590,7 +63590,7 @@ static bool decode_spec_375(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_376(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000100000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000100000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63766,7 +63766,7 @@ static bool decode_spec_376(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_377(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -63943,7 +63943,7 @@ static bool decode_spec_377(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_378(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64120,7 +64120,7 @@ static bool decode_spec_378(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_379(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64297,7 +64297,7 @@ static bool decode_spec_379(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_380(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00101000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64470,7 +64470,7 @@ static bool decode_spec_380(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_381(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00101000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64643,7 +64643,7 @@ static bool decode_spec_381(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_382(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64819,7 +64819,7 @@ static bool decode_spec_382(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_383(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -64995,7 +64995,7 @@ static bool decode_spec_383(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_384(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -65171,7 +65171,7 @@ static bool decode_spec_384(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_385(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000101000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000101000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -65347,7 +65347,7 @@ static bool decode_spec_385(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_386(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -65524,7 +65524,7 @@ static bool decode_spec_386(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_387(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -65701,7 +65701,7 @@ static bool decode_spec_387(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_388(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -65878,7 +65878,7 @@ static bool decode_spec_388(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_389(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00102000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66051,7 +66051,7 @@ static bool decode_spec_389(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_390(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00102000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66224,7 +66224,7 @@ static bool decode_spec_390(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_391(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66400,7 +66400,7 @@ static bool decode_spec_391(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_392(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66576,7 +66576,7 @@ static bool decode_spec_392(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_393(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66752,7 +66752,7 @@ static bool decode_spec_393(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_394(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000102000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000102000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -66928,7 +66928,7 @@ static bool decode_spec_394(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_395(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A1000000050000ULL) return false;
+    if ((v & 0x81FF00FFEBFF0000ULL) != 0x00A1000000050000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -67060,7 +67060,7 @@ static bool decode_spec_395(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_396(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00BD000000000000ULL) return false;
+    if ((v & 0x81FF000FFF000000ULL) != 0x00BD000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67217,7 +67217,7 @@ static bool decode_spec_396(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_397(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x07FFC0000C000000ULL) != 0x0104C00008000000ULL) return false;
+    if ((v & 0x87FFC0FFCF000000ULL) != 0x0104C00008000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67365,7 +67365,7 @@ static bool decode_spec_397(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_398(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0102C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFFF000000ULL) != 0x0102C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67498,7 +67498,7 @@ static bool decode_spec_398(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_399(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0103C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFC3000000ULL) != 0x0103C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67649,7 +67649,7 @@ static bool decode_spec_399(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_400(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0100C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFFF000000ULL) != 0x0100C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67782,7 +67782,7 @@ static bool decode_spec_400(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_401(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x07FFC00040000000ULL) != 0x0100C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFF3000000ULL) != 0x0100C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -67937,7 +67937,7 @@ static bool decode_spec_401(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_402(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0101C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFFF000000ULL) != 0x0101C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -68070,7 +68070,7 @@ static bool decode_spec_402(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_403(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0101C00000000000ULL) return false;
+    if ((v & 0x87FFC0FFBF000000ULL) != 0x0101C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -68210,7 +68210,7 @@ static bool decode_spec_403(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_404(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0091000000000000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x0091000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -68303,7 +68303,7 @@ static bool decode_spec_404(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_405(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FF0000000000FFULL) != 0x01100000000000C0ULL) return false;
+    if ((v & 0x87FF0000000000FFULL) != 0x01100000000000C0ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -68378,7 +68378,7 @@ static bool decode_spec_405(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_406(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FF0000000000FFULL) != 0x01110000000000C0ULL) return false;
+    if ((v & 0x87FF0000000000FFULL) != 0x01110000000000C0ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -68453,7 +68453,7 @@ static bool decode_spec_406(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_407(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x07FF0000000000FFULL) != 0x01120000000000C0ULL) return false;
+    if ((v & 0x87FF0000000000FFULL) != 0x01120000000000C0ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -68528,7 +68528,7 @@ static bool decode_spec_407(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_408(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00B8000000000000ULL) return false;
+    if ((v & 0x81FF00FCFF000000ULL) != 0x00B8000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -68668,7 +68668,7 @@ static bool decode_spec_408(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_409(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00B9000000000000ULL) return false;
+    if ((v & 0x81FF00FCC0000000ULL) != 0x00B9000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -68832,7 +68832,7 @@ static bool decode_spec_409(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_410(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x00BA000000000000ULL) return false;
+    if ((v & 0x81FF00FCFF000000ULL) != 0x00BA000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -68973,7 +68973,7 @@ static bool decode_spec_410(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_411(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x07FFC00000000000ULL) != 0x0000C00000000000ULL) return false;
+    if ((v & 0x87FFFFFFFFFFFFFFULL) != 0x0000C00000000000ULL) return false;
     uint32_t f_dest_width = uint32_t((v >> 46) & 0x3ULL);
     (void)f_dest_width;
     DestWidthM e_dest_width{};
@@ -69028,7 +69028,7 @@ static bool decode_spec_411(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_412(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69160,7 +69160,7 @@ static bool decode_spec_412(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_413(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69292,7 +69292,7 @@ static bool decode_spec_413(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_414(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B4000912C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69424,7 +69424,7 @@ static bool decode_spec_414(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_415(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F7FFFFF00ULL) != 0x01B7C00912C0C000ULL) return false;
+    if ((v & 0x81FFC00FFFFFFF00ULL) != 0x01B7C00912C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69552,7 +69552,7 @@ static bool decode_spec_415(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_416(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F7FFFFF00ULL) != 0x01B7C00912C0C000ULL) return false;
+    if ((v & 0x81FFC00FFFFFFF00ULL) != 0x01B7C00912C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69680,7 +69680,7 @@ static bool decode_spec_416(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_417(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B5000902C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B5000902C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69811,7 +69811,7 @@ static bool decode_spec_417(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_418(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B5000902C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B5000902C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -69942,7 +69942,7 @@ static bool decode_spec_418(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_419(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B6000902C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B6000902C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -70073,7 +70073,7 @@ static bool decode_spec_419(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_420(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F7FFFFF00ULL) != 0x00B6000902C0C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00B6000902C0C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -70204,7 +70204,7 @@ static bool decode_spec_420(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_421(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00910000000E0000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x00910000000E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -70297,7 +70297,7 @@ static bool decode_spec_421(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_422(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC000001F0000ULL) != 0x0191C000000E0000ULL) return false;
+    if ((v & 0x81FFC0FFFFFFFF00ULL) != 0x0191C000000E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -70386,7 +70386,7 @@ static bool decode_spec_422(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_423(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -70541,7 +70541,7 @@ static bool decode_spec_423(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_424(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -70696,7 +70696,7 @@ static bool decode_spec_424(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_425(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -70851,7 +70851,7 @@ static bool decode_spec_425(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_426(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011100C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71002,7 +71002,7 @@ static bool decode_spec_426(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_427(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011100C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71153,7 +71153,7 @@ static bool decode_spec_427(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_428(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71307,7 +71307,7 @@ static bool decode_spec_428(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_429(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71461,7 +71461,7 @@ static bool decode_spec_429(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_430(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71615,7 +71615,7 @@ static bool decode_spec_430(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_431(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010100C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010100C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -71769,7 +71769,7 @@ static bool decode_spec_431(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_432(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0119000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x0119000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -71864,7 +71864,7 @@ static bool decode_spec_432(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_433(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00910000000C0000ULL) return false;
+    if ((v & 0x81FF00FFFFFFFF00ULL) != 0x00910000000C0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -71957,7 +71957,7 @@ static bool decode_spec_433(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_434(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72112,7 +72112,7 @@ static bool decode_spec_434(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_435(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72267,7 +72267,7 @@ static bool decode_spec_435(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_436(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00201C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72418,7 +72418,7 @@ static bool decode_spec_436(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_437(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00201C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72569,7 +72569,7 @@ static bool decode_spec_437(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_438(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72723,7 +72723,7 @@ static bool decode_spec_438(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_439(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -72877,7 +72877,7 @@ static bool decode_spec_439(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_440(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73031,7 +73031,7 @@ static bool decode_spec_440(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_441(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000201C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000201C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73185,7 +73185,7 @@ static bool decode_spec_441(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_442(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73362,7 +73362,7 @@ static bool decode_spec_442(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_443(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73539,7 +73539,7 @@ static bool decode_spec_443(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_444(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00200000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73712,7 +73712,7 @@ static bool decode_spec_444(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_445(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00200000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -73885,7 +73885,7 @@ static bool decode_spec_445(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_446(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74061,7 +74061,7 @@ static bool decode_spec_446(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_447(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74237,7 +74237,7 @@ static bool decode_spec_447(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_448(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74413,7 +74413,7 @@ static bool decode_spec_448(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_449(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000200000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74589,7 +74589,7 @@ static bool decode_spec_449(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_450(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74766,7 +74766,7 @@ static bool decode_spec_450(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_451(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -74943,7 +74943,7 @@ static bool decode_spec_451(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_452(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00201000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75116,7 +75116,7 @@ static bool decode_spec_452(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_453(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00201000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75289,7 +75289,7 @@ static bool decode_spec_453(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_454(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75465,7 +75465,7 @@ static bool decode_spec_454(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_455(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75641,7 +75641,7 @@ static bool decode_spec_455(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_456(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75817,7 +75817,7 @@ static bool decode_spec_456(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_457(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000201000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000201000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -75993,7 +75993,7 @@ static bool decode_spec_457(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_458(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -76170,7 +76170,7 @@ static bool decode_spec_458(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_459(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -76347,7 +76347,7 @@ static bool decode_spec_459(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_460(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00202000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -76520,7 +76520,7 @@ static bool decode_spec_460(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_461(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00202000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -76693,7 +76693,7 @@ static bool decode_spec_461(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_462(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -76869,7 +76869,7 @@ static bool decode_spec_462(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_463(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77045,7 +77045,7 @@ static bool decode_spec_463(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_464(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77221,7 +77221,7 @@ static bool decode_spec_464(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_465(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000202000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000202000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77397,7 +77397,7 @@ static bool decode_spec_465(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_466(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77552,7 +77552,7 @@ static bool decode_spec_466(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_467(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77707,7 +77707,7 @@ static bool decode_spec_467(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_468(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B4000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B4000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -77862,7 +77862,7 @@ static bool decode_spec_468(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_469(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00001C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78013,7 +78013,7 @@ static bool decode_spec_469(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_470(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00F03FF0000ULL) != 0x01B7C00001C00000ULL) return false;
+    if ((v & 0x81FFC00F83FF0000ULL) != 0x01B7C00001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78164,7 +78164,7 @@ static bool decode_spec_470(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_471(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78318,7 +78318,7 @@ static bool decode_spec_471(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_472(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B5000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B5000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78472,7 +78472,7 @@ static bool decode_spec_472(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_473(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78626,7 +78626,7 @@ static bool decode_spec_473(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_474(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000F03FF0000ULL) != 0x00B6000001C00000ULL) return false;
+    if ((v & 0x81FF000F83FF0000ULL) != 0x00B6000001C00000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78780,7 +78780,7 @@ static bool decode_spec_474(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_475(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -78957,7 +78957,7 @@ static bool decode_spec_475(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_476(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -79134,7 +79134,7 @@ static bool decode_spec_476(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_477(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -79311,7 +79311,7 @@ static bool decode_spec_477(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_478(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00000000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -79484,7 +79484,7 @@ static bool decode_spec_478(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_479(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00000000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -79657,7 +79657,7 @@ static bool decode_spec_479(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_480(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -79833,7 +79833,7 @@ static bool decode_spec_480(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_481(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80009,7 +80009,7 @@ static bool decode_spec_481(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_482(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80185,7 +80185,7 @@ static bool decode_spec_482(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_483(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000000000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80361,7 +80361,7 @@ static bool decode_spec_483(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_484(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80538,7 +80538,7 @@ static bool decode_spec_484(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_485(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80715,7 +80715,7 @@ static bool decode_spec_485(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_486(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -80892,7 +80892,7 @@ static bool decode_spec_486(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_487(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00001000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81065,7 +81065,7 @@ static bool decode_spec_487(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_488(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00001000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81238,7 +81238,7 @@ static bool decode_spec_488(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_489(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81414,7 +81414,7 @@ static bool decode_spec_489(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_490(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81590,7 +81590,7 @@ static bool decode_spec_490(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_491(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81766,7 +81766,7 @@ static bool decode_spec_491(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_492(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000001000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000001000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -81942,7 +81942,7 @@ static bool decode_spec_492(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_493(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82119,7 +82119,7 @@ static bool decode_spec_493(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_494(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82296,7 +82296,7 @@ static bool decode_spec_494(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_495(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B4000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B4000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82473,7 +82473,7 @@ static bool decode_spec_495(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_496(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00002000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82646,7 +82646,7 @@ static bool decode_spec_496(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_497(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00703000000ULL) != 0x01B7C00002000000ULL) return false;
+    if ((v & 0x81FFC00783000000ULL) != 0x01B7C00002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82819,7 +82819,7 @@ static bool decode_spec_497(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_498(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -82995,7 +82995,7 @@ static bool decode_spec_498(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_499(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B5000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B5000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -83171,7 +83171,7 @@ static bool decode_spec_499(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_500(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -83347,7 +83347,7 @@ static bool decode_spec_500(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_501(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF000703000000ULL) != 0x00B6000002000000ULL) return false;
+    if ((v & 0x81FF000783000000ULL) != 0x00B6000002000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -83523,7 +83523,7 @@ static bool decode_spec_501(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_502(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000050000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000050000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -83624,7 +83624,7 @@ static bool decode_spec_502(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_503(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000040000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -83725,7 +83725,7 @@ static bool decode_spec_503(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_504(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000040000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -83832,7 +83832,7 @@ static bool decode_spec_504(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_505(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00F0001F0000ULL) != 0x0090000000090000ULL) return false;
+    if ((v & 0x81FF00F23FFFFF00ULL) != 0x0090000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -83939,7 +83939,7 @@ static bool decode_spec_505(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_506(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000090000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -84048,7 +84048,7 @@ static bool decode_spec_506(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_507(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000090000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000090000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84163,7 +84163,7 @@ static bool decode_spec_507(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_508(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000010000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000010000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -84264,7 +84264,7 @@ static bool decode_spec_508(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_509(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000000000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -84365,7 +84365,7 @@ static bool decode_spec_509(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_510(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000000000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84472,7 +84472,7 @@ static bool decode_spec_510(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_511(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC040000F0000ULL) != 0x01A3C00000060000ULL) return false;
+    if ((v & 0x81FFC07FC3FF0000ULL) != 0x01A3C00000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84605,7 +84605,7 @@ static bool decode_spec_511(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_512(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC040000F0000ULL) != 0x01A3C04000060000ULL) return false;
+    if ((v & 0x81FFC07FC3FF0000ULL) != 0x01A3C04000060000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84738,7 +84738,7 @@ static bool decode_spec_512(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_513(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01ABC00000070000ULL) return false;
+    if ((v & 0x81FFC0FFC38F0000ULL) != 0x01ABC00000070000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84866,7 +84866,7 @@ static bool decode_spec_513(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_514(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC000000F0000ULL) != 0x01A3C00000070000ULL) return false;
+    if ((v & 0x81FFC0FFC38F0000ULL) != 0x01A3C00000070000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -84994,7 +84994,7 @@ static bool decode_spec_514(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_515(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400838000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85118,7 +85118,7 @@ static bool decode_spec_515(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_516(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400208000000ULL) return false;
+    if ((v & 0x81FFC0EE38000000ULL) != 0x0061400208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85249,7 +85249,7 @@ static bool decode_spec_516(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_517(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400210000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85373,7 +85373,7 @@ static bool decode_spec_517(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_518(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400218000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85497,7 +85497,7 @@ static bool decode_spec_518(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_519(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400420000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85621,7 +85621,7 @@ static bool decode_spec_519(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_520(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400428000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85745,7 +85745,7 @@ static bool decode_spec_520(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_521(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400200000000ULL) return false;
+    if ((v & 0x81FFC0CE38000000ULL) != 0x0061400200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -85876,7 +85876,7 @@ static bool decode_spec_521(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_522(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0061400630000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0061400630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -86000,7 +86000,7 @@ static bool decode_spec_522(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_523(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400838000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86161,7 +86161,7 @@ static bool decode_spec_523(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_524(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400818000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400818000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86322,7 +86322,7 @@ static bool decode_spec_524(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_525(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400208000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86490,7 +86490,7 @@ static bool decode_spec_525(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_526(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400208000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86658,7 +86658,7 @@ static bool decode_spec_526(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_527(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400210000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86819,7 +86819,7 @@ static bool decode_spec_527(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_528(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400210000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -86980,7 +86980,7 @@ static bool decode_spec_528(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_529(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400218000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87141,7 +87141,7 @@ static bool decode_spec_529(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_530(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400218000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87302,7 +87302,7 @@ static bool decode_spec_530(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_531(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400420000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87463,7 +87463,7 @@ static bool decode_spec_531(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_532(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400400000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87624,7 +87624,7 @@ static bool decode_spec_532(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_533(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400428000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87785,7 +87785,7 @@ static bool decode_spec_533(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_534(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400408000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400408000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -87946,7 +87946,7 @@ static bool decode_spec_534(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_535(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400200000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88114,7 +88114,7 @@ static bool decode_spec_535(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_536(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400200000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88282,7 +88282,7 @@ static bool decode_spec_536(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_537(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0173400630000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88443,7 +88443,7 @@ static bool decode_spec_537(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_538(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0173400610000000ULL) return false;
+    if ((v & 0x81FFC0FE38000000ULL) != 0x0173400610000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88604,7 +88604,7 @@ static bool decode_spec_538(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_539(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400838000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400838000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88756,7 +88756,7 @@ static bool decode_spec_539(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_540(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400818000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400818000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -88908,7 +88908,7 @@ static bool decode_spec_540(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_541(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400208000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89067,7 +89067,7 @@ static bool decode_spec_541(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_542(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400208000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400208000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89226,7 +89226,7 @@ static bool decode_spec_542(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_543(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400210000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89378,7 +89378,7 @@ static bool decode_spec_543(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_544(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400210000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400210000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89530,7 +89530,7 @@ static bool decode_spec_544(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_545(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400218000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89682,7 +89682,7 @@ static bool decode_spec_545(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_546(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400218000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400218000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89834,7 +89834,7 @@ static bool decode_spec_546(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_547(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400420000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400420000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -89986,7 +89986,7 @@ static bool decode_spec_547(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_548(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400400000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400400000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90138,7 +90138,7 @@ static bool decode_spec_548(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_549(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400428000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400428000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90290,7 +90290,7 @@ static bool decode_spec_549(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_550(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400408000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400408000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90442,7 +90442,7 @@ static bool decode_spec_550(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_551(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400200000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90601,7 +90601,7 @@ static bool decode_spec_551(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_552(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400200000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90760,7 +90760,7 @@ static bool decode_spec_552(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_553(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 12 || arch > 13) return false;
-    if ((v & 0x01FFC00E38000000ULL) != 0x0073400630000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400630000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -90912,7 +90912,7 @@ static bool decode_spec_553(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_554(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00E18000000ULL) != 0x0073400610000000ULL) return false;
+    if ((v & 0x81FFC00E38000000ULL) != 0x0073400610000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -91064,7 +91064,7 @@ static bool decode_spec_554(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_555(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0071400000000000ULL) return false;
+    if ((v & 0x81FFC01008000000ULL) != 0x0071400000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -91219,7 +91219,7 @@ static bool decode_spec_555(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_556(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0063400000000000ULL) return false;
+    if ((v & 0x81FFC08038000000ULL) != 0x0063400000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_access = uint32_t((v >> 24) & 0x7ULL);
@@ -91338,7 +91338,7 @@ static bool decode_spec_556(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_557(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0079400000000000ULL) return false;
+    if ((v & 0x81FFC0F008000000ULL) != 0x0079400000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -91501,7 +91501,7 @@ static bool decode_spec_557(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_558(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF00007C0FFF00ULL) != 0x00A100000800C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00A100000800C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -91617,7 +91617,7 @@ static bool decode_spec_558(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_559(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00007C0FFF00ULL) != 0x00A200000000C000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x00A200000000C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -91733,7 +91733,7 @@ static bool decode_spec_559(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_560(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FF000000000100ULL) != 0x012F000000000000ULL) return false;
+    if ((v & 0x81FF000000000300ULL) != 0x012F000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -91923,7 +91923,7 @@ static bool decode_spec_560(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_561(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FF000000000100ULL) != 0x012F000000000000ULL) return false;
+    if ((v & 0x81FF000000000300ULL) != 0x012F000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -92113,7 +92113,7 @@ static bool decode_spec_561(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_562(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000100ULL) != 0x012F000000000000ULL) return false;
+    if ((v & 0x81FF000000000100ULL) != 0x012F000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -92309,7 +92309,7 @@ static bool decode_spec_562(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_563(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x0125000000000000ULL) return false;
+    if ((v & 0x81FF80000000F200ULL) != 0x0125000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -92476,7 +92476,7 @@ static bool decode_spec_563(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_564(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0125000000000000ULL) return false;
+    if ((v & 0x81FF80000000F200ULL) != 0x0125000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -92640,7 +92640,7 @@ static bool decode_spec_564(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_565(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x0129000000000000ULL) return false;
+    if ((v & 0x81FF800000000200ULL) != 0x0129000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -92828,7 +92828,7 @@ static bool decode_spec_565(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_566(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0129000000000000ULL) return false;
+    if ((v & 0x81FF800000000000ULL) != 0x0129000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -93020,7 +93020,7 @@ static bool decode_spec_566(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_567(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x012A000000000000ULL) return false;
+    if ((v & 0x81FF800000001E00ULL) != 0x012A000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_lod_bias_disable = uint32_t((v >> 13) & 0x1ULL);
@@ -93199,7 +93199,7 @@ static bool decode_spec_567(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_568(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x012A000000000000ULL) return false;
+    if ((v & 0x81FF800000000E00ULL) != 0x012A000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_force_delta_enable = uint32_t((v >> 12) & 0x1ULL);
@@ -93384,7 +93384,7 @@ static bool decode_spec_568(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_569(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x012A000000000000ULL) return false;
+    if ((v & 0x81FF800000000C00ULL) != 0x012A000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_force_delta_enable = uint32_t((v >> 12) & 0x1ULL);
@@ -93573,7 +93573,7 @@ static bool decode_spec_569(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_570(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x0128000000000000ULL) return false;
+    if ((v & 0x81FF800000000200ULL) != 0x0128000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -93753,7 +93753,7 @@ static bool decode_spec_570(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_571(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FF800000000000ULL) != 0x0128000000000000ULL) return false;
+    if ((v & 0x81FF800000000200ULL) != 0x0128000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -93933,7 +93933,7 @@ static bool decode_spec_571(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_572(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x0128000000000000ULL) return false;
+    if ((v & 0x81FF800000000000ULL) != 0x0128000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -94116,7 +94116,7 @@ static bool decode_spec_572(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_573(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FF80003000C000ULL) != 0x0126000010000000ULL) return false;
+    if ((v & 0x81FF80003000D200ULL) != 0x0126000010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -94296,7 +94296,7 @@ static bool decode_spec_573(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_574(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000150000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000150000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -94397,7 +94397,7 @@ static bool decode_spec_574(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_575(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000140000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000140000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -94498,7 +94498,7 @@ static bool decode_spec_575(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_576(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000140000ULL) return false;
+    if ((v & 0x81FF00FFEFFFFF00ULL) != 0x0090000000140000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -94605,7 +94605,7 @@ static bool decode_spec_576(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_577(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00F0001F0000ULL) != 0x0090000000190000ULL) return false;
+    if ((v & 0x81FF00F23FFFFF00ULL) != 0x0090000000190000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -94712,7 +94712,7 @@ static bool decode_spec_577(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_578(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000190000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000190000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -94821,7 +94821,7 @@ static bool decode_spec_578(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_579(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000190000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000190000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -94936,7 +94936,7 @@ static bool decode_spec_579(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_580(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000110000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000110000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95037,7 +95037,7 @@ static bool decode_spec_580(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_581(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000100000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000100000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95138,7 +95138,7 @@ static bool decode_spec_581(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_582(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000100000ULL) return false;
+    if ((v & 0x81FF00FFCFFFFF00ULL) != 0x0090000000100000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -95245,7 +95245,7 @@ static bool decode_spec_582(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_583(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000000E0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000000E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95369,7 +95369,7 @@ static bool decode_spec_583(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_584(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x00900000001E0000ULL) return false;
+    if ((v & 0x81FF00320FFFFF00ULL) != 0x00900000001E0000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95493,7 +95493,7 @@ static bool decode_spec_584(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_585(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000000F0000ULL) != 0x00A5000000040000ULL) return false;
+    if ((v & 0x81FF00003FFF0000ULL) != 0x00A5000000040000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -95655,7 +95655,7 @@ static bool decode_spec_585(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_586(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000070000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000070000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95763,7 +95763,7 @@ static bool decode_spec_586(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_587(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000030000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000030000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95864,7 +95864,7 @@ static bool decode_spec_587(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_588(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000020000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -95965,7 +95965,7 @@ static bool decode_spec_588(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_589(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000020000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000020000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -96072,7 +96072,7 @@ static bool decode_spec_589(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_590(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000170000ULL) return false;
+    if ((v & 0x81FF00023FFFFF00ULL) != 0x0090000000170000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -96180,7 +96180,7 @@ static bool decode_spec_590(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_591(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000130000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000130000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -96281,7 +96281,7 @@ static bool decode_spec_591(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_592(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000120000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000120000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -96382,7 +96382,7 @@ static bool decode_spec_592(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_593(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0090000000120000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0090000000120000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0xFULL);
@@ -96489,7 +96489,7 @@ static bool decode_spec_593(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_594(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FFC00000000900ULL) != 0x0137800000000000ULL) return false;
+    if ((v & 0x81FFC00000000B00ULL) != 0x0137800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -96711,7 +96711,7 @@ static bool decode_spec_594(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_595(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FFC00000000100ULL) != 0x0137800000000000ULL) return false;
+    if ((v & 0x81FFC00000000300ULL) != 0x0137800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -96933,7 +96933,7 @@ static bool decode_spec_595(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_596(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000000100ULL) != 0x0137800000000000ULL) return false;
+    if ((v & 0x81FFC00000000100ULL) != 0x0137800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -97162,7 +97162,7 @@ static bool decode_spec_596(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_597(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FFC00032002800ULL) != 0x0131800010000000ULL) return false;
+    if ((v & 0x81FFC00032002A00ULL) != 0x0131800010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -97381,7 +97381,7 @@ static bool decode_spec_597(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_598(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FFC00032002000ULL) != 0x0131800010000000ULL) return false;
+    if ((v & 0x81FFC00032002200ULL) != 0x0131800010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -97600,7 +97600,7 @@ static bool decode_spec_598(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_599(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00030002000ULL) != 0x0131800010000000ULL) return false;
+    if ((v & 0x81FFC00032002000ULL) != 0x0131800010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -97823,7 +97823,7 @@ static bool decode_spec_599(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_600(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FFC00002008800ULL) != 0x0132800000000000ULL) return false;
+    if ((v & 0x81FFC00002009E00ULL) != 0x0132800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 11) & 0x1ULL);
@@ -98035,7 +98035,7 @@ static bool decode_spec_600(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_601(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FFC00002009000ULL) != 0x0132800000000000ULL) return false;
+    if ((v & 0x81FFC00002009600ULL) != 0x0132800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 11) & 0x1ULL);
@@ -98253,7 +98253,7 @@ static bool decode_spec_601(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_602(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000009000ULL) != 0x0132800000000000ULL) return false;
+    if ((v & 0x81FFC00002009400ULL) != 0x0132800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_source_format = uint32_t((v >> 11) & 0x1ULL);
@@ -98475,7 +98475,7 @@ static bool decode_spec_602(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_603(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FFC00002000800ULL) != 0x0130800000000000ULL) return false;
+    if ((v & 0x81FFC00002000A00ULL) != 0x0130800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -98688,7 +98688,7 @@ static bool decode_spec_603(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_604(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FFC00002000000ULL) != 0x0130800000000000ULL) return false;
+    if ((v & 0x81FFC00002000200ULL) != 0x0130800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -98901,7 +98901,7 @@ static bool decode_spec_604(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_605(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000000000ULL) != 0x0130800000000000ULL) return false;
+    if ((v & 0x81FFC00002000000ULL) != 0x0130800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -99118,7 +99118,7 @@ static bool decode_spec_605(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_606(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00000000900ULL) != 0x013F800000000000ULL) return false;
+    if ((v & 0x81FFC00000000B00ULL) != 0x013F800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -99339,7 +99339,7 @@ static bool decode_spec_606(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_607(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000000900ULL) != 0x013F800000000000ULL) return false;
+    if ((v & 0x81FFC00000000900ULL) != 0x013F800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -99567,7 +99567,7 @@ static bool decode_spec_607(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_608(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00032002800ULL) != 0x0139800010000000ULL) return false;
+    if ((v & 0x81FFC00032002A00ULL) != 0x0139800010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -99785,7 +99785,7 @@ static bool decode_spec_608(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_609(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00030002800ULL) != 0x0139800010000000ULL) return false;
+    if ((v & 0x81FFC00032002800ULL) != 0x0139800010000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -100007,7 +100007,7 @@ static bool decode_spec_609(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_610(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 9) return false;
-    if ((v & 0x01FFC00002008000ULL) != 0x013A800000000000ULL) return false;
+    if ((v & 0x81FFC00002009E00ULL) != 0x013A800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_lod_bias_disable = uint32_t((v >> 13) & 0x1ULL);
@@ -100212,7 +100212,7 @@ static bool decode_spec_610(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_611(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 10 || arch > 10) return false;
-    if ((v & 0x01FFC00002009000ULL) != 0x013A800000000000ULL) return false;
+    if ((v & 0x81FFC00002009E00ULL) != 0x013A800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_force_delta_enable = uint32_t((v >> 12) & 0x1ULL);
@@ -100423,7 +100423,7 @@ static bool decode_spec_611(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_612(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000009000ULL) != 0x013A800000000000ULL) return false;
+    if ((v & 0x81FFC00002009C00ULL) != 0x013A800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_force_delta_enable = uint32_t((v >> 12) & 0x1ULL);
@@ -100638,7 +100638,7 @@ static bool decode_spec_612(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_613(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FFC00002000800ULL) != 0x0138800000000000ULL) return false;
+    if ((v & 0x81FFC00002000A00ULL) != 0x0138800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -100850,7 +100850,7 @@ static bool decode_spec_613(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_614(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FFC00000000800ULL) != 0x0138800000000000ULL) return false;
+    if ((v & 0x81FFC00002000800ULL) != 0x0138800000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_array_enable = uint32_t((v >> 10) & 0x1ULL);
@@ -101066,7 +101066,7 @@ static bool decode_spec_614(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_615(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FF0000001F0000ULL) != 0x0095000000000000ULL) return false;
+    if ((v & 0x81FF000FFFFFFF00ULL) != 0x0095000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_opcode2 = uint32_t((v >> 16) & 0x1FULL);
@@ -101166,7 +101166,7 @@ static bool decode_spec_615(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_616(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 10) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -101321,7 +101321,7 @@ static bool decode_spec_616(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_617(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -101476,7 +101476,7 @@ static bool decode_spec_617(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_618(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B400011200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B400011200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -101631,7 +101631,7 @@ static bool decode_spec_618(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_619(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011200C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -101782,7 +101782,7 @@ static bool decode_spec_619(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_620(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FFC0073F00FF00ULL) != 0x01B7C0011200C000ULL) return false;
+    if ((v & 0x81FFC007BF00FF00ULL) != 0x01B7C0011200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -101933,7 +101933,7 @@ static bool decode_spec_620(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_621(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -102087,7 +102087,7 @@ static bool decode_spec_621(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_622(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B500010200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B500010200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -102241,7 +102241,7 @@ static bool decode_spec_622(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_623(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 13) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -102395,7 +102395,7 @@ static bool decode_spec_623(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_624(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 14 || arch > 14) return false;
-    if ((v & 0x01FF00073F00FF00ULL) != 0x00B600010200C000ULL) return false;
+    if ((v & 0x81FF0007BF00FF00ULL) != 0x00B600010200C000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -102549,7 +102549,7 @@ static bool decode_spec_624(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_625(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 11 || arch > 14) return false;
-    if ((v & 0x01FF000000000000ULL) != 0x011A000000000000ULL) return false;
+    if ((v & 0x81FF000000000000ULL) != 0x011A000000000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_dest_register_index = uint32_t((v >> 40) & 0x3FULL);
@@ -102644,7 +102644,7 @@ static bool decode_spec_625(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, D
 
 static bool decode_spec_626(uint64_t v, uint8_t arch, uint64_t pc, bool fau32, DecodedValhallInst* out) {
     if (arch < 9 || arch > 14) return false;
-    if ((v & 0x01FFC00FC0000000ULL) != 0x007E800200000000ULL) return false;
+    if ((v & 0x81FFC0FFFC000000ULL) != 0x007E800200000000ULL) return false;
     uint32_t f_src0 = uint32_t((v >> 0) & 0xFFULL);
     (void)f_src0;
     uint32_t f_src2 = uint32_t((v >> 16) & 0xFFULL);
@@ -102823,8 +102823,8 @@ DecodedValhallInst decode_valhall_instruction(
             break;
         case 2:
             if (decode_spec_234(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_81(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_233(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_81(word, arch, pc, fau32, &out)) return out;
             break;
         case 3:
             if (decode_spec_235(word, arch, pc, fau32, &out)) return out;
@@ -102833,71 +102833,76 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_60(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_276(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_305(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_306(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_296(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_306(word, arch, pc, fau32, &out)) return out;
             break;
         case 5:
+            if (decode_spec_295(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_303(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_304(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_308(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_309(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_313(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_295(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_297(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_300(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_298(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_299(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_300(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_301(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_302(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_303(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_304(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_307(word, arch, pc, fau32, &out)) return out;
             break;
         case 6:
             if (decode_spec_52(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_53(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_312(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_314(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_54(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_55(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_278(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_280(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_282(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_283(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_285(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_50(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_51(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_281(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_311(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_316(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_279(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_284(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_291(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_292(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_293(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_294(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_317(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_319(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_321(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_322(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_324(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_50(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_54(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_55(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_515(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_516(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_517(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_518(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_519(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_520(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_521(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_522(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_311(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_316(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_51(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_279(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_281(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_284(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_312(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_314(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_318(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_320(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_323(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_290(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_516(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_521(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_242(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_287(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_320(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_277(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_290(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_291(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_292(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_293(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_294(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_318(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_556(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_323(word, arch, pc, fau32, &out)) return out;
             break;
         case 7:
             if (decode_spec_49(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_626(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_310(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_315(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_62(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_63(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_259(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_261(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_263(word, arch, pc, fau32, &out)) return out;
@@ -102907,14 +102912,22 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_271(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_273(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_539(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_540(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_541(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_542(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_543(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_544(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_545(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_546(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_547(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_548(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_549(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_550(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_551(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_552(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_553(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_626(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_554(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_241(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_260(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_262(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_264(word, arch, pc, fau32, &out)) return out;
@@ -102923,141 +102936,124 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_270(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_272(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_274(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_310(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_315(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_540(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_542(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_544(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_546(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_548(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_550(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_552(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_554(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_62(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_63(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_241(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_286(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_275(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_557(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_288(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_289(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_275(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_555(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_557(word, arch, pc, fau32, &out)) return out;
             break;
         case 9:
-            if (decode_spec_155(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_156(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_505(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_577(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_61(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_68(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_69(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_70(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_84(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_85(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_86(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_87(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_89(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_90(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_91(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_92(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_93(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_94(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_111(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_114(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_115(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_116(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_117(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_118(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_119(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_120(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_121(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_138(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_139(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_143(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_144(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_145(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_146(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_147(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_148(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_149(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_150(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_151(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_152(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_153(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_154(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_157(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_158(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_159(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_160(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_161(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_404(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_421(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_433(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_68(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_70(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_111(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_163(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_164(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_165(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_172(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_173(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_174(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_502(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_503(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_504(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_574(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_575(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_576(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_115(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_139(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_212(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_213(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_325(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_326(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_404(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_421(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_433(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_502(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_503(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_504(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_506(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_507(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_508(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_509(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_510(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_574(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_575(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_576(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_578(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_579(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_580(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_581(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_582(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_583(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_584(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_586(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_69(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_84(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_85(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_116(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_138(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_146(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_147(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_155(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_156(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_158(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_159(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_114(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_117(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_118(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_143(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_148(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_149(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_160(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_161(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_165(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_172(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_173(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_174(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_587(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_588(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_589(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_590(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_591(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_592(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_593(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_615(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_150(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_151(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_505(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_577(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_152(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_153(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_89(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_92(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_154(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_157(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_86(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_87(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_119(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_120(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_121(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_90(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_91(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_93(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_94(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_506(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_507(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_578(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_579(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_583(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_584(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_586(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_590(word, arch, pc, fau32, &out)) return out;
             break;
         case 10:
+            if (decode_spec_112(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_95(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_96(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_136(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_137(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_88(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_112(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_558(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_559(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_88(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_103(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_104(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_140(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_141(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_142(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_162(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_65(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_66(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_97(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_98(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_101(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_113(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_124(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_125(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_127(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_128(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_133(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_135(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_141(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_162(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_142(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_395(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_133(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_113(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_140(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_237(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_238(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_239(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_240(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_166(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_167(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_168(word, arch, pc, fau32, &out)) return out;
@@ -103082,12 +103078,16 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_229(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_230(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_231(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_237(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_238(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_239(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_240(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_395(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_585(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_124(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_125(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_127(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_128(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_97(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_98(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_101(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_65(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_66(word, arch, pc, fau32, &out)) return out;
             break;
         case 11:
             if (decode_spec_412(word, arch, pc, fau32, &out)) return out;
@@ -103125,6 +103125,8 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_19(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_20(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_21(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_185(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_232(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_327(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_328(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_331(word, arch, pc, fau32, &out)) return out;
@@ -103151,10 +103153,16 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_472(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_473(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_474(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_408(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_410(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_396(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_129(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_130(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_131(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_132(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_79(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_80(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_409(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_22(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_23(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_24(word, arch, pc, fau32, &out)) return out;
@@ -103254,22 +103262,14 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_499(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_500(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_501(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_185(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_232(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_79(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_80(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_67(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_122(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_123(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_396(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_408(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_409(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_410(word, arch, pc, fau32, &out)) return out;
             break;
         case 12:
             if (decode_spec_209(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_210(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_211(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_210(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_77(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_78(word, arch, pc, fau32, &out)) return out;
             break;
@@ -103302,13 +103302,13 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_208(word, arch, pc, fau32, &out)) return out;
             break;
         case 16:
-            if (decode_spec_397(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_401(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_398(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_399(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_400(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_402(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_403(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_397(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_401(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_399(word, arch, pc, fau32, &out)) return out;
             break;
         case 17:
             if (decode_spec_2(word, arch, pc, fau32, &out)) return out;
@@ -103332,41 +103332,41 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_56(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_57(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_573(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_560(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_561(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_562(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_563(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_565(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_564(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_567(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_568(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_569(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_560(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_561(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_565(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_570(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_571(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_564(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_562(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_566(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_569(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_572(word, arch, pc, fau32, &out)) return out;
             break;
         case 19:
             if (decode_spec_597(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_608(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_598(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_609(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_599(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_600(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_601(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_608(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_610(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_611(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_594(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_598(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_601(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_609(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_612(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_599(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_602(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_594(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_603(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_606(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_607(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_610(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_612(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_613(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_595(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_596(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_604(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_607(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_614(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_596(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_605(word, arch, pc, fau32, &out)) return out;
             break;
         case 21:
@@ -103392,13 +103392,21 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_255(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_257(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_523(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_524(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_525(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_526(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_527(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_528(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_529(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_530(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_531(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_532(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_533(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_534(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_535(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_536(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_537(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_538(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_244(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_246(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_248(word, arch, pc, fau32, &out)) return out;
@@ -103407,33 +103415,25 @@ DecodedValhallInst decode_valhall_instruction(
             if (decode_spec_254(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_256(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_258(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_524(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_526(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_528(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_530(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_532(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_534(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_536(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_538(word, arch, pc, fau32, &out)) return out;
             break;
         case 25:
             if (decode_spec_422(word, arch, pc, fau32, &out)) return out;
             break;
         case 26:
-            if (decode_spec_177(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_180(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_224(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_227(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_511(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_512(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_176(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_179(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_215(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_217(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_223(word, arch, pc, fau32, &out)) return out;
-            if (decode_spec_226(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_513(word, arch, pc, fau32, &out)) return out;
             if (decode_spec_514(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_177(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_180(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_215(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_217(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_224(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_227(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_176(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_179(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_223(word, arch, pc, fau32, &out)) return out;
+            if (decode_spec_226(word, arch, pc, fau32, &out)) return out;
             break;
         case 27:
             if (decode_spec_415(word, arch, pc, fau32, &out)) return out;

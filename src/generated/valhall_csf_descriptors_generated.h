@@ -5928,7 +5928,7 @@ struct TilerContext {
         out.geometry_buffer = static_cast<uint64_t>((extract_bits(words, 268, 52) << 12));
         out.completed_top = static_cast<uint64_t>(extract_bits(words, 320, 64));
         out.completed_bottom = static_cast<uint64_t>(extract_bits(words, 384, 64));
-        { uint32_t tmp[16] = {0}; tmp[0] = uint32_t(extract_bits(words, 768, 32)); out.private_state = TilerState::unpack(tmp); }
+        { uint32_t tmp[16] = {0}; tmp[0] = uint32_t(extract_bits(words, 768, 32)); tmp[1] = uint32_t(extract_bits(words, 800, 32)); tmp[2] = uint32_t(extract_bits(words, 832, 32)); tmp[3] = uint32_t(extract_bits(words, 864, 32)); tmp[4] = uint32_t(extract_bits(words, 896, 32)); tmp[5] = uint32_t(extract_bits(words, 928, 32)); tmp[6] = uint32_t(extract_bits(words, 960, 32)); tmp[7] = uint32_t(extract_bits(words, 992, 32)); out.private_state = TilerState::unpack(tmp); }
         return out;
     }
     inline void pack(uint32_t* words) const {
@@ -5947,7 +5947,7 @@ struct TilerContext {
         insert_bits(words, 268, 52, ((uint64_t(geometry_buffer)) >> 12));
         insert_bits(words, 320, 64, uint64_t(completed_top));
         insert_bits(words, 384, 64, uint64_t(completed_bottom));
-        { uint32_t tmp[16] = {0}; private_state.pack(tmp); insert_bits(words, 768, 32, tmp[0]); }
+        { uint32_t tmp[16] = {0}; private_state.pack(tmp); insert_bits(words, 768, 32, tmp[0]); insert_bits(words, 800, 32, tmp[1]); insert_bits(words, 832, 32, tmp[2]); insert_bits(words, 864, 32, tmp[3]); insert_bits(words, 896, 32, tmp[4]); insert_bits(words, 928, 32, tmp[5]); insert_bits(words, 960, 32, tmp[6]); insert_bits(words, 992, 32, tmp[7]); }
     }
 };
 
