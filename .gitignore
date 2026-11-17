@@ -67,3 +67,7 @@ Testing/
 .cache/
 docs/
 predownloaded/
+archives/
+.clangd
+.zed/
+archive.zip
