@@ -4,8 +4,8 @@ Build-Time Spec Validator & Code Generator for Two-Pass Valhall-to-SPIR-V Compil
 ==================================================================================
 Inputs:
   - specs/kraid/isa-v9-v14.xml
-  - specs/lowering/valhall_lowering.json (Pass 1)
-  - specs/lowering/valhall_tiles.json    (Pass 2)
+  - specs/lowering/valhall_lowering.json (Pass 1: DirectSsaOp, @LOOKUP, INLINE_OPS, HANDLER)
+  - specs/lowering/valhall_tiles.json    (Pass 2: Canonical & Fusion DP Tiles)
 
 Outputs:
   - src/generated/valhall_tables_generated.h
@@ -23,6 +23,30 @@ import xml.etree.ElementTree as ET
 
 IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 HANDLER_RE = re.compile(r"^HANDLER\(@([A-Za-z_][A-Za-z0-9_]*)\)$")
+LOOKUP_RE = re.compile(r"^@LOOKUP\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^)]+?)\s*\)$")
+
+VALTYPE_MAP = {
+    "void": "ValType::Void",
+    "bool": "ValType::Bool",
+    "u32": "ValType::U32",
+    "s32": "ValType::S32",
+    "f32": "ValType::F32",
+    "u64": "ValType::U64",
+    "s64": "ValType::S64",
+    "v2f32": "ValType::V2F32",
+    "v2u32": "ValType::V2U32",
+    "v2s32": "ValType::V2S32",
+    "v4f32": "ValType::V4F32",
+    "v4u32": "ValType::V4U32",
+    "v4s32": "ValType::V4S32",
+    "v3u32": "ValType::V3U32",
+    "v2bool": "ValType::V2Bool",
+    "tuple_u32x2": "ValType::TupleU32x2",
+    "tuple_val_token": "ValType::TupleValToken",
+    "token": "ValType::Token",
+    "fp_vt": "(is_v2f16 ? ValType::V2F32 : ValType::F32)",
+    "v2i_vt": "(is_signed ? ValType::V2S32 : ValType::V2U32)",
+}
 
 
 def parse_args():
@@ -76,14 +100,19 @@ def match_lowering_rule(ins, rules):
 
 
 def parse_ssa_op_spec(ssa_op_str):
+    if ssa_op_str == "INLINE_OPS":
+        return ("InlineOps", "INLINE_OPS")
     m = HANDLER_RE.match(ssa_op_str)
     if m:
         return ("Handler", m.group(1))
+    lm = LOOKUP_RE.match(ssa_op_str)
+    if lm:
+        return ("DynamicSsaOp", ("LOOKUP", lm.group(1), lm.group(2)))
     if ssa_op_str.startswith("@"):
         fn = ssa_op_str[1:]
         if not IDENT_RE.match(fn):
             raise ValueError(f"Invalid dynamic ssa_op selector '{ssa_op_str}'")
-        return ("DynamicSsaOp", fn)
+        return ("DynamicSsaOp", ("FN", fn))
     if not IDENT_RE.match(ssa_op_str):
         raise ValueError(f"Invalid ssa_op '{ssa_op_str}'")
     return ("DirectSsaOp", ssa_op_str)
@@ -139,7 +168,6 @@ def parse_effects_mask(effects_list):
 
 
 def flatten_pattern(pat, all_nodes, leaf_vars):
-    """Flatten a JSON pattern AST into FusionTileNode entries (pre-order). Returns root index."""
     if isinstance(pat, str):
         if pat not in leaf_vars:
             leaf_vars[pat] = len(leaf_vars)
@@ -205,7 +233,13 @@ def gen_fetch_expr(src_type, idx):
         return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, true)"
     if src_type == "v2u16":
         return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, false)"
-    raise ValueError(f"Unsupported src_type '{src_type}' in direct/dynamic rule")
+    if src_type == "v4i8_by_var":
+        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, is_signed)"
+    if src_type == "v4s8":
+        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, true)"
+    if src_type == "v4u8":
+        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, false)"
+    raise ValueError(f"Unsupported src_type '{src_type}'")
 
 
 def gen_dest_vt_expr(dest_type):
@@ -225,9 +259,11 @@ def gen_dest_vt_expr(dest_type):
         return "ValType::V2S32"
     if dest_type == "v2u16":
         return "ValType::V2U32"
+    if dest_type == "v2i16_by_var":
+        return "(is_signed ? ValType::V2S32 : ValType::V2U32)"
     if dest_type == "none":
         return "ValType::Void"
-    raise ValueError(f"Unsupported dest_type '{dest_type}' in direct/dynamic rule")
+    raise ValueError(f"Unsupported dest_type '{dest_type}'")
 
 
 def gen_store_stmt(dest_type, val_expr):
@@ -247,7 +283,366 @@ def gen_store_stmt(dest_type, val_expr):
         return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, true);"
     if dest_type == "v2u16":
         return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, false);"
+    if dest_type == "v2i16_by_var":
+        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, is_signed);"
+    if dest_type == "none":
+        return ""
     raise ValueError(f"Unsupported dest_type '{dest_type}' for store")
+
+
+def gen_lookup_key_expr(key_expr, lookup_tables, table_name):
+    if table_name not in lookup_tables:
+        raise ValueError(f"Unknown lookup table '{table_name}'")
+    if key_expr.startswith("$modifiers."):
+        mod_name = key_expr[len("$modifiers."):]
+        return f'lookup_{table_name}(get_mod_str(ins, "{mod_name}"))'
+    raise ValueError(f"Unsupported @LOOKUP key expression '{key_expr}'")
+
+
+# ============================================================================
+# Milestone 2: inline_ops DSL Compiler (Python -> C++17)
+# ============================================================================
+
+def split_top_level_args(s):
+    args = []
+    depth = 0
+    cur = []
+    for ch in s:
+        if ch in ("(", "["):
+            depth += 1
+            cur.append(ch)
+        elif ch in (")", "]"):
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            tok = "".join(cur).strip()
+            if tok:
+                args.append(tok)
+            cur = []
+        else:
+            cur.append(ch)
+    tok = "".join(cur).strip()
+    if tok:
+        args.append(tok)
+    return args
+
+
+def compile_cond(cond_str):
+    c = cond_str.strip()
+    neg = False
+    if c.startswith("!"):
+        neg = True
+        c = c[1:].strip()
+    if c == "$has_src1":
+        expr = "(ins.srcs.size() >= 2)"
+    elif c == "$has_src2":
+        expr = "(ins.srcs.size() >= 3)"
+    elif c == "$has_src3":
+        expr = "(ins.srcs.size() >= 4)"
+    elif c == "$has_dest":
+        expr = "ins.has_dest"
+    elif c == "$is_v2f16":
+        expr = "is_v2f16"
+    elif c == "$is_signed":
+        expr = "is_signed"
+    elif c == "$is_64bit":
+        expr = "ins.dest_is_64bit"
+    elif c == "$src0_swz_h1":
+        expr = '(get_src_swz(ins, 0) == "h1")'
+    elif c == "$is_frag_stage":
+        expr = "(ctx.opts.stage == ShaderStage::Fragment)"
+    elif c.startswith("$fields."):
+        fn = c[len("$fields."):]
+        expr = f'(ins.fields.count("{fn}") && ins.fields.at("{fn}") != 0)'
+    else:
+        raise ValueError(f"Unknown inline_ops condition '{cond_str}'")
+    return f"!({expr})" if neg else expr
+
+
+def compile_atom(atom, src_types, declared_vars, lookup_tables):
+    a = atom.strip()
+    if a.startswith("%") and a[1:].isdigit():
+        idx = int(a[1:])
+        if idx >= len(src_types):
+            raise ValueError(f"inline_ops references %{idx}, but src_types only has {len(src_types)} entries")
+        return gen_fetch_expr(src_types[idx], idx)
+    if a.startswith("%"):
+        vname = a[1:]
+        if vname not in declared_vars:
+            raise ValueError(f"inline_ops references undeclared variable '{a}'")
+        return f"v_{vname}"
+    if a == "#raw0":
+        return "fetch_raw_src_u32(ctx.sb, blk, ins, 0)"
+    if a == "#imm_u32":
+        return "ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_unsigned))"
+    if a == "#imm_s32":
+        return "ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_signed))"
+    if a == "#imm_f32":
+        return "ctx.sb.emit_const_f32_bits(blk, static_cast<uint32_t>(ins.imm_unsigned))"
+    if a == "#imm_u64":
+        return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_signed))"
+    if a == "#imm_u64_mask63":
+        return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_unsigned & 63u))"
+    if a == "#token":
+        return "ctx.sb.current_token(blk)"
+    if a == "#fp_zero":
+        return "(is_v2f16 ? make_v2f_const_inline(ctx, blk, 0.0f) : ctx.sb.emit_const_f32_bits(blk, 0u))"
+    if a.startswith("#u32(") and a.endswith(")"):
+        val = a[5:-1].strip()
+        return f"ctx.sb.emit_const_u32(blk, static_cast<uint32_t>({val}))"
+    if a.startswith("#s32(") and a.endswith(")"):
+        val = a[5:-1].strip()
+        return f"ctx.sb.emit_const_s32(blk, static_cast<int32_t>({val}))"
+    if a.startswith("#u64(") and a.endswith(")"):
+        val = a[5:-1].strip()
+        return f"ctx.sb.emit_const_u64(blk, static_cast<uint64_t>({val}))"
+    if a.startswith("#f32(") and a.endswith(")"):
+        val = a[5:-1].strip()
+        if val.startswith("0x") or val.startswith("0X"):
+            return f"ctx.sb.emit_const_f32_bits(blk, static_cast<uint32_t>({val}))"
+        return f"make_f32_const_inline(ctx, blk, static_cast<float>({val}))"
+    if a.startswith("#lookup_u32(") and a.endswith(")"):
+        inner = a[len("#lookup_u32("):-1]
+        parts = split_top_level_args(inner)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid #lookup_u32 syntax: '{a}'")
+        call_expr = gen_lookup_key_expr(parts[1], lookup_tables, parts[0])
+        return f"ctx.sb.emit_const_u32(blk, {call_expr})"
+    raise ValueError(f"Unknown inline_ops atom '{a}'")
+
+
+def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, canonical_ssa_ops):
+    r = rhs.strip()
+    # Trailing flags: [barrier], [side_effect], [aux_bool=...]
+    barrier = "false"
+    side_eff = "false"
+    aux_bool = None
+    while r.endswith("]"):
+        lb = r.rfind("[")
+        if lb < 0:
+            break
+        flag = r[lb+1:-1].strip()
+        r = r[:lb].strip()
+        if flag == "barrier":
+            barrier = "true"
+        elif flag == "side_effect":
+            side_eff = "true"
+        elif flag.startswith("aux_bool="):
+            aux_bool = flag[len("aux_bool="):].strip()
+        else:
+            raise ValueError(f"Unknown inline_ops node flag '[{flag}]'")
+
+    # Simple variable or atom alias
+    if r.startswith("%") or r.startswith("#"):
+        return compile_atom(r, src_types, declared_vars, lookup_tables)
+
+    # Function-like call: op(args...)
+    lp = r.find("(")
+    if lp < 0 or not r.endswith(")"):
+        raise ValueError(f"Invalid inline_ops RHS '{rhs}'")
+
+    # Handle @LOOKUP(table, key)(args...)
+    if r.startswith("@LOOKUP("):
+        # Find matching paren for @LOOKUP(...)
+        depth = 0
+        close_idx = -1
+        for idx, ch in enumerate(r):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    close_idx = idx
+                    break
+        if close_idx < 0 or close_idx + 1 >= len(r) or r[close_idx + 1] != "(":
+            raise ValueError(f"Invalid @LOOKUP call in inline_ops: '{rhs}'")
+        lookup_part = r[:close_idx + 1]
+        args_part = r[close_idx + 2:-1]
+        lm = LOOKUP_RE.match(lookup_part)
+        if not lm:
+            raise ValueError(f"Invalid @LOOKUP syntax: '{lookup_part}'")
+        op_expr = gen_lookup_key_expr(lm.group(2), lookup_tables, lm.group(1))
+        arg_exprs = [compile_atom(a, src_types, declared_vars, lookup_tables) for a in split_top_level_args(args_part)]
+        return f"ctx.emit_op(blk, {op_expr}, {lhs_vt}, {{ {', '.join(arg_exprs)} }}, rule->effects, {barrier}, {side_eff})"
+
+    fn_name = r[:lp].strip()
+    args_str = r[lp+1:-1].strip()
+    arg_tokens = split_top_level_args(args_str)
+
+    if fn_name == "bitcast":
+        if len(arg_tokens) != 1:
+            raise ValueError(f"bitcast() expects 1 arg, got {arg_tokens}")
+        a0 = compile_atom(arg_tokens[0], src_types, declared_vars, lookup_tables)
+        return f"ctx.sb.emit_bitcast(blk, {lhs_vt}, {a0})"
+
+    if fn_name == "extract":
+        if len(arg_tokens) != 2:
+            raise ValueError(f"extract() expects 2 args, got {arg_tokens}")
+        vec = compile_atom(arg_tokens[0], src_types, declared_vars, lookup_tables)
+        idx_tok = arg_tokens[1].strip()
+        if idx_tok == "$src0_swz_h1":
+            idx_expr = '(get_src_swz(ins, 0) == "h1" ? 1u : 0u)'
+        else:
+            idx_expr = f"static_cast<uint32_t>({idx_tok})"
+        return f"([&]() {{ SsaNode ex{{}}; ex.op = tables::SsaOp::VecExtract; ex.type = {lhs_vt}; ex.imm_u32 = {idx_expr}; ex.args = {{ {vec} }}; return ctx.sb.emit(blk, std::move(ex)); }})()"
+
+    if fn_name == "shuffle2":
+        if len(arg_tokens) != 4:
+            raise ValueError(f"shuffle2() expects 4 args, got {arg_tokens}")
+        a0 = compile_atom(arg_tokens[0], src_types, declared_vars, lookup_tables)
+        a1 = compile_atom(arg_tokens[1], src_types, declared_vars, lookup_tables)
+        return (f"([&]() {{ SsaNode sh{{}}; sh.op = tables::SsaOp::VecShuffle; sh.type = {lhs_vt}; "
+                f"sh.args = {{ {a0}, {a1} }}; sh.imm_u32 = {arg_tokens[2]}; sh.imm_u32_2 = {arg_tokens[3]}; "
+                f"return ctx.sb.emit(blk, std::move(sh)); }})()")
+
+    if fn_name == "bfi":
+        if len(arg_tokens) != 4:
+            raise ValueError(f"bfi() expects 4 args, got {arg_tokens}")
+        a0 = compile_atom(arg_tokens[0], src_types, declared_vars, lookup_tables)
+        a1 = compile_atom(arg_tokens[1], src_types, declared_vars, lookup_tables)
+        off = arg_tokens[2]
+        wid = arg_tokens[3]
+        return (f"([&]() {{ SsaNode bfi{{}}; bfi.op = tables::SsaOp::Bfi; bfi.type = ValType::U32; "
+                f"bfi.imm_u32 = {off}; bfi.imm_u32_2 = {wid}; "
+                f"bfi.args = {{ {a0}, {a1}, ctx.sb.emit_const_u32(blk, {off}u), ctx.sb.emit_const_u32(blk, {wid}u) }}; "
+                f"return ctx.sb.emit(blk, std::move(bfi)); }})()")
+
+    # Direct SsaOp call
+    if fn_name not in canonical_ssa_ops and fn_name not in ("Kill", "ControlBarrier"):
+        raise ValueError(f"Unknown SsaOp '{fn_name}' in inline_ops")
+    arg_exprs = [compile_atom(a, src_types, declared_vars, lookup_tables) for a in arg_tokens]
+    if aux_bool is not None:
+        ab_expr = "true" if aux_bool == "true" else ("false" if aux_bool == "false" else compile_cond(aux_bool))
+        return (f"([&]() {{ SsaNode n{{}}; n.op = tables::SsaOp::{fn_name}; n.type = {lhs_vt}; "
+                f"n.args = {{ {', '.join(arg_exprs)} }}; n.effects = rule->effects; "
+                f"n.is_barrier_or_cf = {barrier}; n.is_side_effect = {side_eff}; n.aux_bool = {ab_expr}; "
+                f"return ctx.sb.emit(blk, std::move(n)); }})()")
+    return f"ctx.emit_op(blk, tables::SsaOp::{fn_name}, {lhs_vt}, {{ {', '.join(arg_exprs)} }}, rule->effects, {barrier}, {side_eff})"
+
+
+def tokenize_inline_ops(ops_list):
+    """Split inline_ops list into flat token stream of statements, '{', '}', 'if (...)', 'else'."""
+    raw = " ".join(s.strip() for s in ops_list)
+    tokens = []
+    i = 0
+    n = len(raw)
+    while i < n:
+        if raw[i].isspace():
+            i += 1
+            continue
+        if raw[i] in ("{", "}"):
+            tokens.append(raw[i])
+            i += 1
+            continue
+        if raw.startswith("if", i) and (i + 2 < n and (raw[i+2].isspace() or raw[i+2] == "(")):
+            lp = raw.find("(", i)
+            depth = 0
+            rp = -1
+            for j in range(lp, n):
+                if raw[j] == "(": depth += 1
+                elif raw[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        rp = j
+                        break
+            if rp < 0:
+                raise ValueError(f"Unclosed if(...) in inline_ops: {raw[i:]}")
+            tokens.append(("IF", raw[lp+1:rp].strip()))
+            i = rp + 1
+            continue
+        if raw.startswith("else", i) and (i + 4 == n or raw[i+4].isspace() or raw[i+4] == "{"):
+            tokens.append(("ELSE",))
+            i += 4
+            continue
+        # Read until ';' or '}'
+        semi = raw.find(";", i)
+        rbrace = raw.find("}", i)
+        if semi < 0 and rbrace < 0:
+            stmt = raw[i:].strip()
+            if stmt:
+                tokens.append(("STMT", stmt))
+            break
+        end = semi if (semi >= 0 and (rbrace < 0 or semi < rbrace)) else rbrace
+        stmt = raw[i:end].strip()
+        if stmt:
+            tokens.append(("STMT", stmt))
+        i = end + (1 if raw[end] == ";" else 0)
+    return tokens
+
+
+def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
+    ops_list = rule.get("inline_ops", [])
+    if not ops_list:
+        raise ValueError(f"INLINE_OPS rule {rule['mnemonic']} has empty inline_ops")
+
+    src_types = rule.get("src_types", [])
+    dest_type = rule["dest_type"]
+    tokens = tokenize_inline_ops(ops_list)
+
+    # Pre-scan all declared variables so they can be declared at top scope if assigned in if/else
+    declared_vars = {}
+    for tok in tokens:
+        if isinstance(tok, tuple) and tok[0] == "STMT":
+            stmt = tok[1]
+            if "=" in stmt and stmt.lstrip().startswith("%"):
+                lhs = stmt.split("=", 1)[0].strip()
+                if ":" in lhs:
+                    vname, vtype = [x.strip() for x in lhs.split(":", 1)]
+                    vname = vname[1:]
+                    if vtype not in VALTYPE_MAP:
+                        raise ValueError(f"Unknown type '{vtype}' in inline_ops for {rule['mnemonic']}")
+                    declared_vars[vname] = VALTYPE_MAP[vtype]
+
+    lines = []
+    # Pre-declare all variables at rule scope so if/else reassignments work cleanly
+    for vname, vt_cpp in declared_vars.items():
+        lines.append(f"SsaId v_{vname} = kInvalidSsa; (void)v_{vname};")
+
+    for tok in tokens:
+        if tok == "{":
+            lines.append("{")
+        elif tok == "}":
+            lines.append("}")
+        elif isinstance(tok, tuple) and tok[0] == "IF":
+            lines.append(f"if ({compile_cond(tok[1])})")
+        elif isinstance(tok, tuple) and tok[0] == "ELSE":
+            lines.append("else")
+        elif isinstance(tok, tuple) and tok[0] == "STMT":
+            stmt = tok[1]
+            if stmt == "return":
+                lines.append("return true;")
+            elif stmt.startswith("return "):
+                expr = compile_atom(stmt[len("return "):], src_types, declared_vars, lookup_tables)
+                st = gen_store_stmt(dest_type, expr)
+                lines.append(f"{st} return true;")
+            elif stmt.startswith("set_token(") and stmt.endswith(")"):
+                inner = stmt[len("set_token("):-1]
+                expr = compile_atom(inner, src_types, declared_vars, lookup_tables)
+                lines.append(f"ctx.sb.set_token(blk, {expr});")
+            elif "=" in stmt and stmt.lstrip().startswith("%"):
+                lhs, rhs = stmt.split("=", 1)
+                lhs = lhs.strip()
+                if ":" in lhs:
+                    vname, vtype = [x.strip() for x in lhs.split(":", 1)]
+                    vname = vname[1:]
+                    vt_cpp = VALTYPE_MAP[vtype]
+                else:
+                    vname = lhs[1:].strip()
+                    if vname not in declared_vars:
+                        raise ValueError(f"Reassignment to undeclared '%{vname}' in {rule['mnemonic']}")
+                    vt_cpp = declared_vars[vname]
+                rhs_cpp = compile_inline_rhs(rhs, vt_cpp, src_types, declared_vars, lookup_tables, canonical_ssa_ops)
+                lines.append(f"v_{vname} = {rhs_cpp};")
+            else:
+                # Standalone void op like Kill(#token)[barrier][side_effect]
+                rhs_cpp = compile_inline_rhs(stmt, "ValType::Void", src_types, declared_vars, lookup_tables, canonical_ssa_ops)
+                lines.append(f"(void)({rhs_cpp});")
+
+    if "out" in declared_vars and dest_type != "none":
+        st = gen_store_stmt(dest_type, "v_out")
+        lines.append(st)
+    lines.append("return true;")
+    return " ".join(lines)
 
 
 def main():
@@ -259,6 +654,7 @@ def main():
         tiles_json = json.load(f)
 
     rules = lowering_json["rules"]
+    lookup_tables = lowering_json.get("lookup_tables", {})
     tiles = tiles_json["tiles"]
 
     canonical_ssa_ops = set()
@@ -354,6 +750,7 @@ def main():
         "    DirectSsaOp = 0,",
         "    DynamicSsaOp = 1,",
         "    Handler = 2,",
+        "    InlineOps = 3,",
         "};",
         "",
         "enum class TileEmitKind : uint16_t {",
@@ -561,22 +958,88 @@ def main():
     inc_lines = [
         "// AUTO-GENERATED BY tools/gen_valhall_tables.py -- DO NOT EDIT MANUALLY",
         "// Included inside valhall_pass1.cpp",
+        "inline std::string get_mod_str(const DecodedValhallInst& ins, const char* key) {",
+        "    auto it = ins.modifier_strs.find(key);",
+        '    return (it != ins.modifier_strs.end()) ? it->second : "";',
+        "}",
+        "inline SsaId make_f32_const_inline(Pass1Context& ctx, uint32_t blk, float c) {",
+        "    uint32_t bits = 0; std::memcpy(&bits, &c, sizeof(float));",
+        "    return ctx.sb.emit_const_f32_bits(blk, bits);",
+        "}",
+        "inline SsaId make_v2f_const_inline(Pass1Context& ctx, uint32_t blk, float c) {",
+        "    SsaId s = make_f32_const_inline(ctx, blk, c);",
+        "    return ctx.emit_op(blk, tables::SsaOp::VecConstruct2, ValType::V2F32, { s, s });",
+        "}",
+        "",
+    ]
+
+    # Emit lookup table helper functions
+    for tname, tmap in lookup_tables.items():
+        if tname == "_default":
+            continue
+        default_val = tmap.get("_default")
+        tkind = tmap.get("_kind")
+        entries = [(k, v) for k, v in tmap.items() if k not in ("_default", "_kind")]
+        if not entries:
+            raise ValueError(f"Lookup table '{tname}' is empty")
+        sample_v = entries[0][1]
+        is_u32 = (tkind == "u32") or (tkind is None and (isinstance(sample_v, int) or (isinstance(sample_v, str) and (sample_v.isdigit() or sample_v.startswith("0x")))))
+        if tkind == "string":
+            def_s = default_val if default_val is not None else entries[0][1]
+            inc_lines.append(f"inline const char* lookup_{tname}(const std::string& key) {{")
+            for k, v in entries:
+                inc_lines.append(f'    if (key == "{k}") return "{v}";')
+            inc_lines.append(f'    return "{def_s}";')
+            inc_lines.append("}")
+        elif is_u32:
+            ret_t = "uint32_t"
+            def_cpp = f"static_cast<uint32_t>({default_val if default_val is not None else entries[0][1]})"
+            inc_lines.append(f"inline {ret_t} lookup_{tname}(const std::string& key) {{")
+            for k, v in entries:
+                inc_lines.append(f'    if (key == "{k}") return static_cast<uint32_t>({v});')
+            inc_lines.append(f"    return {def_cpp};")
+            inc_lines.append("}")
+        else:
+            # SsaOp table: validate every entry
+            for k, v in entries:
+                if v not in canonical_ssa_ops:
+                    raise ValueError(f"Lookup table '{tname}' maps '{k}' -> unknown SsaOp '{v}'")
+            def_op = default_val if default_val is not None else entries[0][1]
+            if def_op not in canonical_ssa_ops:
+                raise ValueError(f"Lookup table '{tname}' default '{def_op}' is not a valid SsaOp")
+            inc_lines.append(f"inline tables::SsaOp lookup_{tname}(const std::string& key) {{")
+            for k, v in entries:
+                inc_lines.append(f'    if (key == "{k}") return tables::SsaOp::{v};')
+            inc_lines.append(f"    return tables::SsaOp::{def_op};")
+            inc_lines.append("}")
+
+    inc_lines.extend([
+        "",
         "inline bool lower_rule_generated(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {",
         "    std::string var = variant_to_string(ins.canonical_variant);",
-        "    bool is_v2f16 = (ins.canonical_variant == Variant::V2F16 || ins.variant == Variant::V2F16 || var == \"v2f16\");",
+        '    bool is_v2f16 = (ins.canonical_variant == Variant::V2F16 || ins.variant == Variant::V2F16 || var == "v2f16");',
+        '    bool is_signed = (var.find("s") == 0 || var.find("v2s") == 0 || var.find("v4s") == 0);',
         "    (void)var;",
         "    (void)is_v2f16;",
+        "    (void)is_signed;",
         "    switch (rule->rule_index) {",
-    ]
+    ])
 
     num_direct = 0
     num_dynamic = 0
+    num_inline = 0
     num_handler = 0
     for ridx, r in enumerate(rules):
         kind, val = parsed_rules[ridx]
         if kind == "Handler":
             num_handler += 1
             inc_lines.append(f"        case {ridx}u: {val}(ctx, blk, ins, rule); return true;")
+            continue
+
+        if kind == "InlineOps":
+            num_inline += 1
+            body = compile_inline_ops_rule(r, lookup_tables, canonical_ssa_ops)
+            inc_lines.append(f"        case {ridx}u: {{ {body} }} // {r['mnemonic']} INLINE_OPS")
             continue
 
         dest_t = r["dest_type"]
@@ -602,7 +1065,11 @@ def main():
 
         if kind == "DynamicSsaOp":
             num_dynamic += 1
-            op_line = f"tables::SsaOp op = {val}(ctx, blk, ins, vt, args, rule->effects);"
+            subkind = val[0]
+            if subkind == "LOOKUP":
+                op_line = f"tables::SsaOp op = {gen_lookup_key_expr(val[2], lookup_tables, val[1])};"
+            else:
+                op_line = f"tables::SsaOp op = {val[1]}(ctx, blk, ins, vt, args, rule->effects);"
         else:
             num_direct += 1
             op_line = f"tables::SsaOp op = tables::SsaOp::{val};"
@@ -632,8 +1099,8 @@ def main():
         f.write("\n".join(inc_lines))
 
     print(f"[OK] Validated 100% coverage: {len(insns)} XML instructions -> {len(rules)} lowering rules "
-          f"(direct={num_direct}, dynamic={num_dynamic}, handler={num_handler}), "
-          f"{len(canon_tiles)} canonical tiles + {len(fusion_specs)} fusion tiles ({len(fusion_nodes)} pattern nodes).")
+          f"(direct={num_direct}, dynamic_lookup={num_dynamic}, inline_ops={num_inline}, handler={num_handler}), "
+          f"{len(lookup_tables)} lookup tables, {len(canon_tiles)} canonical tiles + {len(fusion_specs)} fusion tiles.")
 
 
 if __name__ == "__main__":

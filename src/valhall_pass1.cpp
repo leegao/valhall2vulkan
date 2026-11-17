@@ -25,6 +25,7 @@ inline const char* lowering_kind_name(tables::LoweringKind k) {
         case tables::LoweringKind::DirectSsaOp: return "DirectSsaOp";
         case tables::LoweringKind::DynamicSsaOp: return "DynamicSsaOp";
         case tables::LoweringKind::Handler: return "Handler";
+        case tables::LoweringKind::InlineOps: return "InlineOps";
     }
     return "Unknown";
 }

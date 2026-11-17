@@ -276,6 +276,92 @@ int main() {
         std::cout << "[PASS] Milestone 1 lowering dispatch: DirectSsaOp, DynamicSsaOp (@fn), and Handler (HANDLER(@fn)) verified\n";
     }
 
+    // 8. Milestones 1.5 & 2: @LOOKUP tables and INLINE_OPS DSL rules
+    {
+        auto lower_single = [](DecodedValhallInst ins) -> Pass1Result {
+            auto end_i = make_inst(ins.pc + 8, Mnemonic::NOP, Mnemonic::NOP);
+            end_i.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> insts = { ins, end_i };
+            auto cfg = cfg::build_cfg(insts);
+            ValhallTranslateOptions opts{};
+            opts.stage = ShaderStage::Compute;
+            return run_pass1_lowering(cfg, {}, opts);
+        };
+        auto has_op = [](const Pass1Result& p1, SsaOp op) {
+            for (const auto& n : p1.ssa.nodes) {
+                if (n.op == op) return true;
+            }
+            return false;
+        };
+
+        // @LOOKUP(round_mode, $modifiers.round) with XML enum names
+        for (const auto& [rm, expected_op] : std::vector<std::pair<const char*, SsaOp>>{
+                 {"none", SsaOp::RoundEven}, {"round_down", SsaOp::Floor}, {"round_up", SsaOp::Ceil}, {"round_zero", SsaOp::Trunc}}) {
+            auto fr = make_inst(0x00, Mnemonic::FROUND, Mnemonic::FROUND, Variant::F32);
+            fr.has_dest = true; fr.dest_reg = 0; fr.srcs.push_back(reg_src(1));
+            fr.modifier_strs["round"] = rm;
+            assert(has_op(lower_single(fr), expected_op));
+        }
+
+        // INLINE_OPS: HADD (unsigned vs signed)
+        auto hadd_u = make_inst(0x00, Mnemonic::HADD, Mnemonic::HADD, Variant::U32);
+        hadd_u.has_dest = true; hadd_u.dest_reg = 0; hadd_u.srcs = { reg_src(1), reg_src(2) };
+        assert(has_op(lower_single(hadd_u), SsaOp::ShrU));
+
+        auto hadd_s = make_inst(0x00, Mnemonic::HADD, Mnemonic::HADD, Variant::S32);
+        hadd_s.has_dest = true; hadd_s.dest_reg = 0; hadd_s.srcs = { reg_src(1), reg_src(2) };
+        assert(has_op(lower_single(hadd_s), SsaOp::ShrS));
+
+        // INLINE_OPS: MUX & FPCLASS
+        auto mux = make_inst(0x00, Mnemonic::MUX, Mnemonic::MUX, Variant::I32);
+        mux.has_dest = true; mux.dest_reg = 0; mux.srcs = { reg_src(1), reg_src(2), reg_src(3) };
+        auto p1_mux = lower_single(mux);
+        assert(p1_mux.ok && has_op(p1_mux, SsaOp::BitNot) && has_op(p1_mux, SsaOp::BitOr));
+
+        auto fpc = make_inst(0x00, Mnemonic::FPCLASS, Mnemonic::FPCLASS, Variant::F32);
+        fpc.has_dest = true; fpc.dest_reg = 0; fpc.srcs = { reg_src(1) };
+        auto p1_fpc = lower_single(fpc);
+        assert(p1_fpc.ok && has_op(p1_fpc, SsaOp::IsNan) && has_op(p1_fpc, SsaOp::IsInf));
+
+        // INLINE_OPS + @LOOKUP: FCMP.ne (unordered) & FCMP.gtlt (ordered) & ICMP.s32
+        auto fcmp_ne = make_inst(0x00, Mnemonic::FCMP, Mnemonic::FCMP, Variant::F32);
+        fcmp_ne.has_dest = true; fcmp_ne.dest_reg = 0; fcmp_ne.srcs = { reg_src(1), reg_src(2) };
+        fcmp_ne.modifier_strs["cmpf"] = "ne"; fcmp_ne.modifier_strs["result_type"] = "i1";
+        assert(has_op(lower_single(fcmp_ne), SsaOp::FCmpUnordNe));
+
+        auto fcmp_gtlt = make_inst(0x00, Mnemonic::FCMP, Mnemonic::FCMP, Variant::F32);
+        fcmp_gtlt.has_dest = true; fcmp_gtlt.dest_reg = 0; fcmp_gtlt.srcs = { reg_src(1), reg_src(2) };
+        fcmp_gtlt.modifier_strs["cmpf"] = "gtlt";
+        assert(has_op(lower_single(fcmp_gtlt), SsaOp::FCmpOrdNe));
+
+        auto icmp_s = make_inst(0x00, Mnemonic::ICMP, Mnemonic::ICMP, Variant::S32);
+        icmp_s.has_dest = true; icmp_s.dest_reg = 0; icmp_s.srcs = { reg_src(1), reg_src(2) };
+        icmp_s.modifier_strs["cmpf"] = "lt";
+        assert(has_op(lower_single(icmp_s), SsaOp::ICmpSLt));
+
+        // INLINE_OPS: LSHIFT_AND with not_result=1
+        auto lsa = make_inst(0x00, Mnemonic::LSHIFT_AND, Mnemonic::LSHIFT_AND, Variant::I32);
+        lsa.has_dest = true; lsa.dest_reg = 0; lsa.srcs = { reg_src(1), reg_src(2), reg_src(3) };
+        lsa.fields["not_result"] = 1;
+        auto p1_lsa = lower_single(lsa);
+        assert(p1_lsa.ok && has_op(p1_lsa, SsaOp::Shl) && has_op(p1_lsa, SsaOp::BitAnd) && has_op(p1_lsa, SsaOp::BitNot));
+
+        // INLINE_OPS: WMASK & CLPER & CUBEFACE1
+        auto wm = make_inst(0x00, Mnemonic::WMASK, Mnemonic::WMASK);
+        wm.has_dest = true; wm.dest_reg = 0; wm.srcs = { reg_src(1) };
+        assert(has_op(lower_single(wm), SsaOp::SubgroupBallot));
+
+        auto clp = make_inst(0x00, Mnemonic::CLPER, Mnemonic::CLPER);
+        clp.has_dest = true; clp.dest_reg = 0; clp.srcs = { reg_src(1), reg_src(2) };
+        assert(has_op(lower_single(clp), SsaOp::SubgroupShuffle));
+
+        auto cf1 = make_inst(0x00, Mnemonic::CUBEFACE1, Mnemonic::CUBEFACE1);
+        cf1.has_dest = true; cf1.dest_reg = 0; cf1.srcs = { reg_src(1), reg_src(2), reg_src(3) };
+        assert(has_op(lower_single(cf1), SsaOp::FCmpOrdGe));
+
+        std::cout << "[PASS] Milestones 1.5 & 2: @LOOKUP tables and INLINE_OPS DSL rules verified\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }

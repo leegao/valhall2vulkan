@@ -237,6 +237,7 @@ enum class LoweringKind : uint8_t {
     DirectSsaOp = 0,
     DynamicSsaOp = 1,
     Handler = 2,
+    InlineOps = 3,
 };
 
 enum class TileEmitKind : uint16_t {
