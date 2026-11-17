@@ -199,8 +199,8 @@ int main() {
     std::cout << "[PASS] Translated Valhall Pilot Shader (EBIN_44) executed on Lavapipe and populated FAU from v11.xml SRT/Buffer descriptors (u3.w0=" << fau_u3_w0 << ")\n";
 
     // 3b. Apply MBS2 RLOC_10 (pushConstants at FAU + 0x1c) and FCST_40 (0x40501062 at FAU + 0x24)
-    std::memcpy(fau_gpu.bytes() + sample_ns::RLOC_10.offset, push_dims, sample_ns::RLOC_10.size);
-    *reinterpret_cast<uint32_t*>(fau_gpu.bytes() + sample_ns::FCST_40.constant_id) = sample_ns::FCST_40.value;
+    std::memcpy(fau_gpu.bytes() + sample_ns::RLOC_10.reg_offset, push_dims, sample_ns::RLOC_10.size);
+    *reinterpret_cast<uint32_t*>(fau_gpu.bytes() + sample_ns::FCST_40.reg_offset) = sample_ns::FCST_40.value;
 
     // 3c. Upload full EBIN_42 bytecode (instructions + embedded packed_trit_data_0[61] LUT at 0x100) to GPU memory
     //     and build v11.xml ShaderProgram (SPD) descriptor!

@@ -383,11 +383,12 @@ typedef struct cmpbe_chunk_TPSE {
     cmpbe_chunk_TYPE type;                   /* +0x28 */
 } cmpbe_chunk_TPSE;
 
+/* size: 0x08 (8 bytes) */
 typedef struct cmpbe_chunk_RLOC {
-    uint16_t segment;
-    uint16_t offset;
-    uint16_t type;
-    uint16_t size;
+    uint16_t sym_idx;                /* +0x00 (was segment) */
+    uint16_t reg_offset;             /* +0x02 (was offset; used in test_moc_roundtrip_compute.cpp) */
+    uint16_t uni_offset;             /* +0x04 (was type) */
+    uint16_t size;                   /* +0x06 */
 } cmpbe_chunk_RLOC;
 
 /* size: 0x0c (12 bytes) */
@@ -444,119 +445,366 @@ typedef struct cmpbe_chunk_SYMB {
     const struct cmpbe_chunk_SYMD* symd;     /* +0xc0 in r54p3 (was reserved2) */
 } cmpbe_chunk_SYMB;
 
+/* size: 0x08 (8 bytes) */
 typedef struct cmpbe_chunk_FCST {
-    uint16_t size;
-    uint16_t constant_id;
-    uint32_t value;
+    uint16_t size;                   /* +0x00 */
+    uint16_t reg_offset;             /* +0x02 (was constant_id; used in test_moc_roundtrip_compute.cpp) */
+    uint32_t value;                  /* +0x04 */
 } cmpbe_chunk_FCST;
 
+/* size: 0x10 (16 bytes) */
 typedef struct cmpbe_chunk_OBJC {
-    uint32_t size;
-    const uint8_t* byte_code;
+    uint32_t size;                   /* +0x00 */
+    const uint8_t* byte_code;        /* +0x08 (alias: data) */
 } cmpbe_chunk_OBJC;
 
-typedef struct cmpbe_chunk_EBIN {
-    uint16_t id;
-    uint16_t pipeline_stage;
-    cmpbe_chunk_FSHA_prepass_flags prepass_flags;
-    uint32_t uncompressed_code_size;
-    uint16_t register_count;
-    uint16_t local_thread_limit;
-    uint32_t scratch_allocation_bytes;
-    cmpbe_chunk_FSHA_flags fsha_flags;
-    cmpbe_chunk_FSHA_variant variant;
-    const void* unk0;
-    const void* unk1;
-    const void* unk2;
-    const void* unk3;
-    const void* unk4;
-    cmpbe_chunk_OBJC bytecode;
-    const void* unk5;
-    const void* unk6;
-} cmpbe_chunk_EBIN;
+/* size: 0x20 (32 bytes) */
+typedef struct cmpbe_chunk_DBUG {
+    uint32_t nof_rloc;                       /* +0x00 */
+    const struct cmpbe_chunk_RLOC* rloc;     /* +0x08 */
+    uint32_t nof_fcst;                       /* +0x10 */
+    const struct cmpbe_chunk_FCST* fcst;     /* +0x18 */
+} cmpbe_chunk_DBUG;
 
-typedef struct cmpbe_chunk_CMMN {
-    cmpbe_chunk_VELA language;
-    cmpbe_chunk_SSYM ssym_2;
-    cmpbe_chunk_SSYM ssym_3;
-    cmpbe_chunk_SSYM ssym_24;
-    cmpbe_chunk_SSYM ssym_25;
-    cmpbe_chunk_SSYM ssym_26;
-    cmpbe_chunk_SSYM ssym_43;
-    cmpbe_chunk_UBUF ubuf_44;
-    uint16_t compilation_flags;
-    uint32_t constant_count;
-    const struct cmpbe_chunk_FCST* constants;
-    uint32_t binary_count;
-    const struct cmpbe_chunk_EBIN* binaries;
-    const void* common_tail;
-} cmpbe_chunk_CMMN;
+/* size: 0x10 (16 bytes) */
+typedef struct cmpbe_chunk_GREL {
+    uint32_t nof_global_relo;                /* +0x00 */
+    const struct cmpbe_chunk_RELO* relo;     /* +0x08 */
+} cmpbe_chunk_GREL;
 
-typedef struct cmpbe_chunk_KWGS {
-    uint32_t workgroup_x;
-    uint32_t workgroup_y;
-    uint32_t workgroup_z;
-} cmpbe_chunk_KWGS;
-
-typedef struct cmpbe_chunk_KERN {
-    cmpbe_chunk_STRI entry_point_name;
-    uint32_t kernel_flags;
-    const void* reserved1;
-    uint32_t argument_count;
-    cmpbe_chunk_MBS2_reserved_enum reserved_enum;
-    const cmpbe_chunk_KWGS* workgroup_sizes;
-} cmpbe_chunk_KERN;
-
-typedef struct cmpbe_chunk_CCOM {
-    cmpbe_chunk_CMMN common;
-    cmpbe_chunk_KERN kernel;
-    const void* custom_ext0;
-    const void* custom_ext1;
-} cmpbe_chunk_CCOM;
-
-typedef struct cmpbe_chunk_MBS2 {
-    uint32_t version;
-    cmpbe_chunk_VEHW hardware;
-    const void* interface_descriptor;
-    const cmpbe_chunk_CCOM* compilation_command;
-    const void* extension_tree0;
-    const void* extension_tree1;
-    const void* extension_tree2;
-    const void* extension_tree3;
-    const void* extension_tree4;
-    const void* extension_tree5;
-    const void* extension_tree6;
-    const void* extension_tree7;
-    const void* extension_tree8;
-} cmpbe_chunk_MBS2;
-
-
+/* size: 0x20 (32 bytes in r54p3; r44p1 also had return_addr) */
 typedef struct cmpbe_chunk_SPDf {
-    uint32_t count;
-    const uint8_t* locations;
-    const cmpbe_chunk_TPGE_scalar_size* sizes;
-    const cmpbe_chunk_TPGE_scalar_type* types;
+    uint32_t rt_count;                               /* +0x00 (was count) */
+    const uint8_t* rt_index;                         /* +0x08 (was locations) */
+    const cmpbe_chunk_TPGE_scalar_size* size;        /* +0x10 (was sizes) */
+    const cmpbe_chunk_TPGE_scalar_type* type;        /* +0x18 (was types) */
 } cmpbe_chunk_SPDf;
 
+/* size: 0x06 (6 bytes) */
+typedef struct cmpbe_chunk_PDSC {
+    uint16_t varying0;               /* +0x00 */
+    uint16_t varying1;               /* +0x02 */
+    uint8_t primary_shader_wait;     /* +0x04 */
+} cmpbe_chunk_PDSC;
+
+/* size: 0x10 (16 bytes) */
+typedef struct cmpbe_chunk_VLKN {
+    uint16_t used_set_bitmask;       /* +0x00 */
+    uint16_t stack_layers;           /* +0x02 */
+    uint8_t dynamic_outputs;         /* +0x04 */
+    const cmpbe_chunk_VLKN_depth_hint* depth_hint; /* +0x08 (cmpbe_chunk_VDEP*) */
+} cmpbe_chunk_VLKN;
+
+/* size: 0x50 (80 bytes) */
+typedef struct cmpbe_chunk_FNMD {
+    uint32_t nof_tvar;                       /* +0x00 */
+    const cmpbe_chunk_FSHA_variant* tvar;    /* +0x08 */
+    uint8_t is_other_function;               /* +0x10 */
+    uint8_t needs_structured_cfg;            /* +0x11 */
+    uint8_t is_vertex_piece;                 /* +0x12 */
+    uint8_t is_simd_state_caller;            /* +0x13 */
+    uint8_t is_callable_shaders_caller;      /* +0x14 */
+    uint8_t is_discarded_function;           /* +0x15 */
+    cmpbe_chunk_Register_mode reg_mode;      /* +0x18 */
+    uint8_t unk1c;                           /* +0x1c */
+    cmpbe_chunk_STRI pilot_name;             /* +0x20 */
+    cmpbe_chunk_STRI late_codegen;           /* +0x30 */
+    uint32_t attrib_mask;                    /* +0x40 */
+    uint32_t max_register_pressure;          /* +0x44 */
+    uint32_t mrtt;                           /* +0x48 */
+} cmpbe_chunk_FNMD;
+
+/* size: 0x38 (56 bytes) */
+typedef struct cmpbe_chunk_SLOC {
+    uint32_t nof_bins;                       /* +0x00 */
+    const struct cmpbe_chunk_BINS* bins;     /* +0x08 */
+    uint32_t nof_u32_1;                      /* +0x10 */
+    const uint32_t* u32_1;                   /* +0x18 */
+    cmpbe_chunk_SLOC_flags flags;            /* +0x20 */
+    const void* slin;                        /* +0x28 (cmpbe_chunk_SLIN*) */
+    uint64_t reserved;                       /* +0x30 */
+} cmpbe_chunk_SLOC;
+
+/* size: 0x70 (112 bytes) */
+typedef struct cmpbe_chunk_EBIN {
+    uint16_t rt_num;                         /* +0x00 (was id) */
+    uint16_t aux_idx;                        /* +0x02 (was pipeline_stage) */
+    cmpbe_chunk_FSHA_prepass_flags prepass_flags; /* +0x04 */
+    uint32_t data_section_offset;            /* +0x08 (was uncompressed_code_size) */
+    uint16_t nof_reg;                        /* +0x0c (was register_count) */
+    uint16_t nof_rmu;                        /* +0x0e (was local_thread_limit) */
+    uint32_t tls_size;                       /* +0x10 (was scratch_allocation_bytes) */
+    cmpbe_chunk_FSHA_flags flags;            /* +0x14 (was fsha_flags) */
+    cmpbe_chunk_FSHA_variant variant;        /* +0x18 */
+    const cmpbe_chunk_STRI* entrypoint_name; /* +0x20 (was unk0) */
+    const cmpbe_chunk_DBUG* dbug;            /* +0x28 (was unk1) */
+    const cmpbe_chunk_GREL* grel;            /* +0x30 (was unk2) */
+    const cmpbe_chunk_SPDf* spdf;            /* +0x38 (was unk3) */
+    const cmpbe_chunk_PDSC* pdsc;            /* +0x40 (was unk4) */
+#ifdef CMPBE_LAYOUT_R54P3
+    const cmpbe_chunk_VLKN* vlkn;            /* +0x48 (r54p3 DDK) */
+#endif
+    cmpbe_chunk_OBJC bytecode;               /* +0x50 (DDK: objc) */
+    const cmpbe_chunk_FNMD* fnmd;            /* +0x60 (was unk5) */
+    const cmpbe_chunk_SLOC* sloc;            /* +0x68 (was unk6) */
+} cmpbe_chunk_EBIN;
+
+/* ============================================================================
+ * Common & Stage-Specific Chunks
+ * ============================================================================ */
+
+/* size: 0x04 (4 bytes) */
+typedef struct cmpbe_chunk_CXFE {
+    uint16_t buffer;                 /* +0x00 */
+    uint16_t offset;                 /* +0x02 */
+} cmpbe_chunk_CXFE;
+
+/* size: 0x18 (24 bytes; in r54p3 CXFB is 0x8 bytes: stride_0..3) */
+typedef struct cmpbe_chunk_CXFB {
+    uint16_t stride_0;               /* +0x00 */
+    uint16_t stride_1;               /* +0x02 */
+    uint16_t stride_2;               /* +0x04 */
+    uint16_t stride_3;               /* +0x06 */
+} cmpbe_chunk_CXFB;
+
+/* size: 0xa0 (160 bytes) */
+typedef struct cmpbe_chunk_CMMN {
+    cmpbe_chunk_VELA vela;                   /* +0x00 (was language) */
+    cmpbe_chunk_SSYM sinp;                   /* +0x08 (was ssym_2; symb.sinp) */
+    cmpbe_chunk_SSYM sout;                   /* +0x18 (was ssym_3; symb.sout) */
+    cmpbe_chunk_SSYM suni;                   /* +0x28 (was ssym_24; symb.suni) */
+    cmpbe_chunk_SSYM simg;                   /* +0x38 (was ssym_25; symb.simg) */
+    cmpbe_chunk_SSYM ssmp;                   /* +0x48 (was ssym_26; symb.ssmp) */
+    cmpbe_chunk_SSYM s3bo;                   /* +0x58 (was ssym_43; symb.s3bo) */
+    cmpbe_chunk_UBUF ubuf;                   /* +0x68 (was ubuf_44) */
+    uint16_t epilogue_jump_index;            /* +0x78 (was compilation_flags) */
+#ifdef CMPBE_LAYOUT_R54P3
+    uint16_t written_pos_fifo_attrs;         /* +0x7a (r54p3 DDK) */
+#endif
+    uint32_t nof_fcst;                       /* +0x7c (was constant_count) */
+    const struct cmpbe_chunk_FCST* fcst;     /* +0x80 (was constants) */
+    uint32_t nof_ebin;                       /* +0x88 (was binary_count) */
+    const struct cmpbe_chunk_EBIN* ebin;     /* +0x90 (was binaries) */
+    const struct cmpbe_chunk_CXFB* cxfb;     /* +0x98 (was common_tail) */
+} cmpbe_chunk_CMMN;
+
+/* size: 0x0c (12 bytes) */
+typedef struct cmpbe_chunk_KWGS {
+    uint32_t x;                      /* +0x00 (was workgroup_x) */
+    uint32_t y;                      /* +0x04 (was workgroup_y) */
+    uint32_t z;                      /* +0x08 (was workgroup_z) */
+} cmpbe_chunk_KWGS;
+
+/* size: 0x28 (40 bytes) */
+typedef struct cmpbe_chunk_KPAR {
+    cmpbe_chunk_STRI declared_name;          /* +0x00 */
+    cmpbe_chunk_STRI uniform_name;           /* +0x10 */
+    cmpbe_chunk_KPAR_flags flags;            /* +0x20 */
+} cmpbe_chunk_KPAR;
+
+/* size: 0x30 (48 bytes) */
+typedef struct cmpbe_chunk_KERN {
+    cmpbe_chunk_STRI name;                   /* +0x00 (was entry_point_name) */
+    uint32_t nof_kpar;                       /* +0x10 (was kernel_flags) */
+    const struct cmpbe_chunk_KPAR* kpar;     /* +0x18 (was reserved1) */
+    uint32_t workgroup_local_size;           /* +0x20 (was argument_count) */
+#ifndef CMPBE_LAYOUT_R54P3
+    cmpbe_chunk_MBS2_reserved_enum reserved_enum; /* r55p0 malioc */
+#endif
+    const cmpbe_chunk_KWGS* workgroup_size;  /* +0x28 (was workgroup_sizes; custom_ext0/1 were here) */
+} cmpbe_chunk_KERN;
+
+/* size: 0x90 (144 bytes) */
+typedef struct cmpbe_chunk_CBLE {
+    cmpbe_chunk_SSYM suni;                   /* +0x00 */
+    cmpbe_chunk_UBUF ubuf;                   /* +0x10 */
+    cmpbe_chunk_EBIN ebin;                   /* +0x20 */
+} cmpbe_chunk_CBLE;
+
+/* size: 0xd0 (208 bytes) */
+typedef struct cmpbe_chunk_CCOM {
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 (was common) */
+    cmpbe_chunk_KERN kern;                   /* +0xa0 (was kernel) */
+#ifndef CMPBE_LAYOUT_R54P3
+    const void* custom_ext0;                 /* r55p0 malioc */
+    const void* custom_ext1;                 /* r55p0 malioc */
+#endif
+} cmpbe_chunk_CCOM;
+
+/* size: 0x04 (4 bytes) */
 typedef struct cmpbe_chunk_SPAS {
-    uint16_t unk0;
-    uint16_t unk1;
+    uint16_t resource_read_mask;             /* +0x00 (was unk0) */
+    uint16_t resource_write_mask;            /* +0x02 (was unk1) */
 } cmpbe_chunk_SPAS;
 
+/* size: 0x01 (1 byte) */
+typedef struct cmpbe_chunk_VMVW {
+    uint8_t num_views;                       /* +0x00 */
+} cmpbe_chunk_VMVW;
+
+/* size: 0x02 (2 bytes) */
+typedef struct cmpbe_chunk_VRSM {
+    uint16_t potential_vrs_modes_mask;       /* +0x00 */
+} cmpbe_chunk_VRSM;
+
+/* size: 0xb0 (176 bytes) */
 typedef struct cmpbe_chunk_CVER {
-    cmpbe_chunk_CMMN common;
-    const void* unk0;
-    const void* unk1;
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 (was common) */
+    const struct cmpbe_chunk_VMVW* vmvw;     /* +0xa0 (was unk0) */
+    const struct cmpbe_chunk_VRSM* vrsm;     /* +0xa8 (was unk1) */
 } cmpbe_chunk_CVER;
 
+/* size: 0x78 (120 bytes) */
+typedef struct cmpbe_chunk_OUTV {
+    cmpbe_chunk_STRI name;                   /* +0x00 */
+    cmpbe_chunk_TYPE type;                   /* +0x10 */
+    uint16_t location;                       /* +0x70 */
+    uint16_t nb_locations_used;              /* +0x72 */
+} cmpbe_chunk_OUTV;
+
+/* size: 0x10 (16 bytes) */
+typedef struct cmpbe_chunk_FOTV {
+    uint8_t nb_outputs;                      /* +0x00 */
+    const struct cmpbe_chunk_OUTV* outputs;  /* +0x08 */
+} cmpbe_chunk_FOTV;
+
+/* size: 0x01 (1 byte) */
+typedef struct cmpbe_chunk_LCAL {
+    uint8_t local_storage_size;              /* +0x00 */
+} cmpbe_chunk_LCAL;
+
+/* size: 0x04 (4 bytes) */
+typedef struct cmpbe_chunk_BLDM {
+    cmpbe_chunk_BLDM_flags flags;            /* +0x00 */
+} cmpbe_chunk_BLDM;
+
+/* size: 0x28 (40 bytes) */
+typedef struct cmpbe_chunk_ACHN {
+    cmpbe_chunk_STRI sampler_name;           /* +0x00 */
+    cmpbe_chunk_STRI uniform_name;           /* +0x10 */
+    cmpbe_chunk_ACHN_kind kind;              /* +0x20 */
+    uint8_t rt;                              /* +0x24 */
+    uint8_t sampler_component;               /* +0x25 */
+    uint8_t uniform_component;               /* +0x26 */
+} cmpbe_chunk_ACHN;
+
+/* size: 0x10 (16 bytes) */
+typedef struct cmpbe_chunk_AINF {
+    uint32_t count;                          /* +0x00 */
+    const struct cmpbe_chunk_ACHN* achn;     /* +0x08 */
+} cmpbe_chunk_AINF;
+
+/* size: 0xc8 (200 bytes in r54p3) */
 typedef struct cmpbe_chunk_CFRA {
-    cmpbe_chunk_CMMN common;
-    const void* unk0;
-    const void* unk1;
-    const void* unk2;
-    const void* unk3;
-    const cmpbe_chunk_SPAS* spas;
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 (was common) */
+    const struct cmpbe_chunk_FOTV* output_vars; /* +0xa0 (was unk0) */
+    const struct cmpbe_chunk_LCAL* lcal;     /* +0xa8 (was unk1) */
+    const struct cmpbe_chunk_BLDM* bldm;     /* +0xb0 (was unk2) */
+    const struct cmpbe_chunk_AINF* alpha_info; /* +0xb8 (was unk3) */
+    const struct cmpbe_chunk_SPAS* spas;     /* +0xc0 */
 } cmpbe_chunk_CFRA;
+
+/* size: 0x14 (20 bytes) */
+typedef struct cmpbe_chunk_MTES {
+    uint32_t n_vertices;                         /* +0x00 */
+    cmpbe_chunk_MTES_primitive_mode primitive_mode; /* +0x04 */
+    cmpbe_chunk_MTES_vertex_spacing vertex_spacing; /* +0x08 */
+    cmpbe_chunk_MTES_ordering ordering;          /* +0x0c */
+    b8 point_mode;                               /* +0x10 */
+} cmpbe_chunk_MTES;
+
+/* size: 0xb8 (184 bytes) */
+typedef struct cmpbe_chunk_CTSC {
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 */
+    uint32_t workgroup_local_size;           /* +0xa0 */
+    cmpbe_chunk_MTES mtes;                   /* +0xa4 */
+} cmpbe_chunk_CTSC;
+
+/* size: 0xb8 (184 bytes) */
+typedef struct cmpbe_chunk_CTSE {
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 */
+    cmpbe_chunk_MTES mtes;                   /* +0xa0 */
+} cmpbe_chunk_CTSE;
+
+/* size: 0x0c (12 bytes) */
+typedef struct cmpbe_chunk_MGEO {
+    uint16_t n_invocations;                          /* +0x00 */
+    uint16_t max_vertices;                           /* +0x02 */
+    cmpbe_chunk_MGEO_input_primitive_mode input_primitive_mode;   /* +0x04 */
+    cmpbe_chunk_MGEO_output_primitive_mode output_primitive_mode; /* +0x08 */
+} cmpbe_chunk_MGEO;
+
+/* size: 0x18 (24 bytes) */
+typedef struct cmpbe_chunk_GSVC {
+    uint16_t nof_layers;                     /* +0x00 */
+    const uint32_t* index_counts;            /* +0x08 */
+    uint32_t nof_vertices;                   /* +0x10 */
+    uint32_t primitives_generated;           /* +0x14 */
+} cmpbe_chunk_GSVC;
+
+/* size: 0xc0 (192 bytes) */
+typedef struct cmpbe_chunk_CGEO {
+    cmpbe_chunk_CMMN cmmn;                   /* +0x00 */
+    cmpbe_chunk_MGEO mgeo;                   /* +0xa0 */
+    const struct cmpbe_chunk_GSVC* gsvc;     /* +0xb0 */
+    const struct cmpbe_chunk_VRSM* vrsm;     /* +0xb8 */
+} cmpbe_chunk_CGEO;
+
+/* size: 0x10 (16 bytes) */
+typedef struct cmpbe_chunk_SSRC {
+    uint32_t extra;                          /* +0x00 */
+    uint32_t nb_bins;                        /* +0x04 */
+    const struct cmpbe_chunk_BINS* shader_sources; /* +0x08 */
+} cmpbe_chunk_SSRC;
+
+/* size: 0x06 (6 bytes) */
+typedef struct cmpbe_chunk_PLOC {
+    uint16_t reg_offset;                     /* +0x00 */
+    uint16_t size;                           /* +0x02 */
+    uint16_t orig_offset;                    /* +0x04 */
+} cmpbe_chunk_PLOC;
+
+/* size: 0x30 (48 bytes) */
+typedef struct cmpbe_chunk_MOMD {
+    uint8_t prealloc_uni_buffers;                /* +0x00 */
+    uint8_t prealloc_fau;                        /* +0x01 */
+    uint8_t ble_preserve_registers;              /* +0x02 */
+    uint8_t essl_on_spirv;                       /* +0x03 */
+    uint8_t has_callable_blend_shaders;          /* +0x04 */
+    uint8_t atest_wait_on_6_7;                   /* +0x05 */
+    uint8_t gfx_hal;                             /* +0x06 */
+    uint8_t robustness;                          /* +0x07 */
+    uint8_t per_sample_shading;                  /* +0x08 */
+    uint8_t setup_fau_in_pilot;                  /* +0x09 */
+    uint8_t has_simd_call;                       /* +0x0a */
+    uint8_t has_simd_with_static_stack_frame;    /* +0x0b */
+    uint8_t unk_0c[9];                           /* +0x0c..+0x14 (r54p3 YAML keys) */
+    uint32_t max_prealloc_addr;                  /* +0x18 */
+    uint16_t unk_1c;                             /* +0x1c..+0x1d (2x uint8_t in r54p3) */
+    uint32_t nof_ploc;                           /* +0x20 */
+    const struct cmpbe_chunk_PLOC* ploc;         /* +0x28 */
+} cmpbe_chunk_MOMD;
+
+// Top-Level MBS2 Container
+
+/* size: 0x60 (96 bytes; note: original header's extension_tree8 does not exist) */
+typedef struct cmpbe_chunk_MBS2 {
+    uint32_t version;                        /* +0x00 */
+    cmpbe_chunk_VEHW vehw;                   /* +0x04 (was hardware) */
+    const struct cmpbe_chunk_CBLE* cble;     /* +0x10 (was interface_descriptor) */
+    const struct cmpbe_chunk_CCOM* ccom;     /* +0x18 (was compilation_command) */
+    const struct cmpbe_chunk_CFRA* cfra;     /* +0x20 (was extension_tree0) */
+    const struct cmpbe_chunk_CVER* cver;     /* +0x28 (was extension_tree1) */
+    const struct cmpbe_chunk_CTSC* ctsc;     /* +0x30 (was extension_tree2) */
+    const struct cmpbe_chunk_CTSE* ctse;     /* +0x38 (was extension_tree3) */
+    const struct cmpbe_chunk_CGEO* cgeo;     /* +0x40 (was extension_tree4) */
+    const struct cmpbe_chunk_SSRC* ssrc;     /* +0x48 (was extension_tree5) */
+    const struct cmpbe_chunk_BINS* variants; /* +0x50 (was extension_tree6) */
+    const struct cmpbe_chunk_MOMD* momd;     /* +0x58 (was extension_tree7) */
+#ifndef CMPBE_LAYOUT_R54P3
+    const void* extension_tree8;             /* r55p0 malioc */
+#endif
+} cmpbe_chunk_MBS2;
 
 #ifdef __cplusplus
 }

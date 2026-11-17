@@ -49,14 +49,14 @@ int main() {
 
     const cmpbe_chunk_CVER* cver = &vert_ns::CVER_1;
     const cmpbe_chunk_CFRA* cfra = &frag_ns::CFRA_1;
-    assert(cver && cver->common.binary_count == 3);
-    assert(cfra && cfra->common.binary_count == 1);
+    assert(cver && cver->cmmn.nof_ebin == 3);
+    assert(cfra && cfra->cmmn.nof_ebin == 1);
 
     // EBIN[0] = Varying (0x81), EBIN[1] = Position (0x180), EBIN[2] = Pilot (0x0)
-    const auto& var_ebin   = cver->common.binaries[0];
-    const auto& pos_ebin   = cver->common.binaries[1];
-    const auto& pilot_ebin = cver->common.binaries[2];
-    const auto& frag_ebin  = cfra->common.binaries[0];
+    const auto& var_ebin   = cver->cmmn.ebin[0];
+    const auto& pos_ebin   = cver->cmmn.ebin[1];
+    const auto& pilot_ebin = cver->cmmn.ebin[2];
+    const auto& frag_ebin  = cfra->cmmn.ebin[0];
 
     // ------------------------------------------------------------------------
     // Step 1: Set up UBO (4x4 identity MVP matrix) in v11.xml Buffer & SRT,

@@ -62,7 +62,7 @@ int main() {
     // 4. Decode sample_mbs2_shader.h (Main Compute EBIN_42 + Pilot EBIN_44)
     auto sample_main = valhall::decode_valhall_shader(
         sample_ns::EBIN_42.bytecode.byte_code,
-        sample_ns::EBIN_42.uncompressed_code_size,
+        sample_ns::EBIN_42.data_section_offset,
         11, false);
     assert(sample_main.size() == 27);
     for (const auto& ins : sample_main) {
@@ -85,12 +85,12 @@ int main() {
 
     // 5. Decode astc_encoder_mbs2_shader.h (Complex production ASTC compute shader)
     auto* astc_ccom = &astc_ns::CCOM_1;
-    assert(astc_ccom && astc_ccom->common.binary_count >= 1);
+    assert(astc_ccom && astc_ccom->cmmn.nof_ebin >= 1);
     size_t total_astc_insts = 0;
-    for (uint32_t b = 0; b < astc_ccom->common.binary_count; ++b) {
-        const auto& eb = astc_ccom->common.binaries[b];
-        size_t sz = (eb.uncompressed_code_size && eb.uncompressed_code_size < eb.bytecode.size)
-                    ? eb.uncompressed_code_size : eb.bytecode.size;
+    for (uint32_t b = 0; b < astc_ccom->cmmn.nof_ebin; ++b) {
+        const auto& eb = astc_ccom->cmmn.ebin[b];
+        size_t sz = (eb.data_section_offset && eb.data_section_offset < eb.bytecode.size)
+                    ? eb.data_section_offset : eb.bytecode.size;
         auto insts = valhall::decode_valhall_shader(eb.bytecode.byte_code, sz, 11, false);
         for (const auto& ins : insts) {
             if (ins.flow == valhall::FlowControlM::end) {
