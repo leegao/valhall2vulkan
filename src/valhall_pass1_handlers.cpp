@@ -177,59 +177,8 @@ SsaId Pass1Context::eval_branch_cond(uint32_t blk, const DecodedValhallInst& ins
 }
 
 // ============================================================================
-// Remaining Complex Host-Side Handlers (HANDLER(@fn))
+// Remaining Complex Host-Side Handlers (@HANDLER(fn))
 // ============================================================================
-
-void handle_cf_branch(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    ctx.mod.blocks[blk].branch_cond = ctx.eval_branch_cond(blk, ins);
-}
-
-void handle_cf_jump(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
-}
-
-void handle_alu_adr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
-    SsaId pc_base = ctx.emit_load_sideband_u64(blk, 1);
-    int64_t tgt_pc = ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + 8 + ins.imm_signed);
-    SsaId full_addr = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64,
-                                  { pc_base, ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(tgt_pc)) },
-                                  rule->effects);
-    SsaId lo = 0, hi = 0;
-    ctx.emit_split64(blk, full_addr, &lo, &hi);
-    store_dest_u32(ctx.sb, blk, ins, lo);
-}
-
-void handle_fp_rscale(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
-    SsaId s0 = fetch_src_f32(ctx.sb, blk, ins, 0);
-    SsaId s1 = fetch_src_f32(ctx.sb, blk, ins, 1);
-    SsaId val = kInvalidSsa;
-    size_t sc_idx = 2;
-    if (ins.canonical_mnemonic == Mnemonic::FMA_RSCALE && ins.srcs.size() >= 4) {
-        SsaId s2 = fetch_src_f32(ctx.sb, blk, ins, 2);
-        val = ctx.emit_op(blk, SsaOp::Fma, ValType::F32, { s0, s1, s2 }, rule->effects);
-        sc_idx = 3;
-    } else if (ins.mnemonic == Mnemonic::FADD_RSCALE) {
-        val = ctx.emit_op(blk, SsaOp::FAdd, ValType::F32, { s0, s1 });
-    } else {
-        val = ctx.emit_op(blk, SsaOp::FMul, ValType::F32, { s0, s1 });
-    }
-    if (sc_idx < ins.srcs.size()) {
-        SsaId sc = ctx.sb.emit_bitcast(blk, ValType::S32, fetch_src_int32(ctx.sb, blk, ins, sc_idx, true));
-        val = ctx.emit_op(blk, SsaOp::Ldexp, ValType::F32, { val, sc }, rule->effects);
-    }
-    store_dest_f32(ctx.sb, blk, ins, val);
-}
-
-void handle_int_imm(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
-    if (ins.dest_is_64bit) {
-        SsaId s0 = fetch_src_u64(ctx.sb, blk, ins, 0, false);
-        SsaId imm = ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_signed));
-        store_dest_u64(ctx.sb, blk, ins, ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { s0, imm }, rule->effects));
-    } else {
-        SsaId s0 = fetch_src_int32(ctx.sb, blk, ins, 0, false);
-        SsaId imm = ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_signed));
-        store_dest_u32(ctx.sb, blk, ins, ctx.emit_op(blk, SsaOp::IAdd, ValType::U32, { s0, imm }));
-    }
-}
 
 void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     std::string var = variant_to_string(ins.canonical_variant);
@@ -254,52 +203,6 @@ void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
         acc = ctx.emit_op(blk, SsaOp::IAdd, elem_t, { acc, prod });
     }
     store_dest_u32(ctx.sb, blk, ins, acc_s ? ctx.sb.emit_bitcast(blk, ValType::U32, acc) : acc);
-}
-
-void handle_cmp_csel(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    std::string var = variant_to_string(ins.canonical_variant);
-    std::string cmpf = "ne";
-    auto it = ins.modifier_strs.find("cmpf");
-    if (it != ins.modifier_strs.end()) cmpf = it->second;
-    if (var == "v2u16" || var == "v2s16") {
-        bool is_s = (var == "v2s16");
-        ValType elem_t = is_s ? ValType::S32 : ValType::U32;
-        ValType v2t = is_s ? ValType::V2S32 : ValType::V2U32;
-        SsaId a2 = fetch_src_v2i16(ctx.sb, blk, ins, 0, is_s);
-        SsaId c2 = fetch_src_v2i16(ctx.sb, blk, ins, 1, is_s);
-        SsaId t2 = fetch_src_v2i16(ctx.sb, blk, ins, 2, is_s);
-        SsaId f2 = fetch_src_v2i16(ctx.sb, blk, ins, 3, is_s);
-        auto ext = [&](SsaId v, uint32_t idx) {
-            SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = elem_t; ex.imm_u32 = idx; ex.args = { v };
-            SsaId e = ctx.sb.emit(blk, std::move(ex));
-            return is_s ? ctx.sb.emit_bitcast(blk, ValType::U32, e) : e;
-        };
-        SsaId cond0 = ctx.eval_int_cmp(blk, cmpf, ext(a2, 0), ext(c2, 0), is_s);
-        SsaId cond1 = ctx.eval_int_cmp(blk, cmpf, ext(a2, 1), ext(c2, 1), is_s);
-        SsaId cond2 = ctx.emit_op(blk, SsaOp::VecConstruct2, ValType::V2Bool, { cond0, cond1 });
-        SsaId res2 = ctx.emit_op(blk, SsaOp::Select, v2t, { cond2, t2, f2 });
-        store_dest_v2i16(ctx.sb, blk, ins, res2, is_s);
-        return;
-    }
-    bool is_float = (var.find("f") == 0 || var == "v2f16");
-    bool is_s = (var.find("s") == 0);
-    SsaId cond = is_float
-        ? ctx.eval_float_cmp(blk, cmpf, fetch_src_f32(ctx.sb, blk, ins, 0), fetch_src_f32(ctx.sb, blk, ins, 1))
-        : ctx.eval_int_cmp(blk, cmpf, fetch_src_int32(ctx.sb, blk, ins, 0, is_s), fetch_src_int32(ctx.sb, blk, ins, 1, is_s), is_s);
-    SsaId tv = fetch_src_int32(ctx.sb, blk, ins, 2, false);
-    SsaId fv = fetch_src_int32(ctx.sb, blk, ins, 3, false);
-    store_dest_u32(ctx.sb, blk, ins, ctx.emit_op(blk, SsaOp::Select, ValType::U32, { cond, tv, fv }));
-}
-
-void handle_mem_lea(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    uint8_t base_r = ins.sr_write.present ? ins.sr_write.base_reg : 0;
-    uint32_t idx = 0;
-    for (const char* fn : {"attribute_index", "buffer_index", "texture_index", "index"}) {
-        auto it = ins.fields.find(fn);
-        if (it != ins.fields.end()) { idx = it->second; break; }
-    }
-    ctx.sb.set_reg(blk, base_r, ctx.sb.emit_const_u32(blk, idx * 16u));
-    ctx.sb.set_reg(blk, base_r + 1, ctx.sb.emit_const_u32(blk, 0xEEEEEEEEu));
 }
 
 static void handle_mem_load_impl(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,

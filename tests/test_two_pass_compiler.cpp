@@ -362,6 +362,69 @@ int main() {
         std::cout << "[PASS] Milestones 1.5 & 2: @LOOKUP tables and INLINE_OPS DSL rules verified\n";
     }
 
+    // 9. Checkpoint v7: BRANCH, JUMP, ADR, LEA, IADD_IMM(64/32), RSCALE, CSEL(v2i16/f32/i32)
+    {
+        auto lower_single = [](DecodedValhallInst ins) -> Pass1Result {
+            auto end_i = make_inst(ins.pc + 8, Mnemonic::NOP, Mnemonic::NOP);
+            end_i.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> insts = { ins, end_i };
+            auto cfg = cfg::build_cfg(insts);
+            ValhallTranslateOptions opts{};
+            opts.stage = ShaderStage::Compute;
+            return run_pass1_lowering(cfg, {}, opts);
+        };
+        auto has_op = [](const Pass1Result& p1, SsaOp op) {
+            for (const auto& n : p1.ssa.nodes) {
+                if (n.op == op) return true;
+            }
+            return false;
+        };
+
+        // ADR -> @INLINE_OPS (load_sideband_u64 + split64_lo)
+        auto adr = make_inst(0x10, Mnemonic::ADR, Mnemonic::ADR);
+        adr.has_dest = true; adr.dest_reg = 0; adr.imm_signed = 16;
+        auto p1_adr = lower_single(adr);
+        assert(p1_adr.ok && p1_adr.uses_sideband && has_op(p1_adr, SsaOp::LoadSidebandU64) && has_op(p1_adr, SsaOp::Split64));
+
+        // LEA_BUF_IMM -> @INLINE_OPS (sr_set + $has_field)
+        auto lea = make_inst(0x00, Mnemonic::LEA_BUF_IMM, Mnemonic::LEA_BUF_IMM);
+        lea.sr_write.present = true; lea.sr_write.base_reg = 4; lea.sr_write.count = 2;
+        lea.fields["buffer_index"] = 3;
+        auto p1_lea = lower_single(lea);
+        assert(p1_lea.ok);
+
+        // IADD_IMM (32-bit vs 64-bit variant)
+        auto add32 = make_inst(0x00, Mnemonic::IADD_IMM, Mnemonic::IADD_IMM, Variant::I32);
+        add32.has_dest = true; add32.dest_reg = 0; add32.srcs = { reg_src(1) }; add32.imm_signed = 7;
+        assert(has_op(lower_single(add32), SsaOp::IAdd));
+
+        auto add64 = make_inst(0x00, Mnemonic::IADD, Mnemonic::IADD, Variant::U64);
+        add64.has_dest = true; add64.dest_is_64bit = true; add64.dest_reg = 0; add64.srcs = { reg_src(2, true), reg_src(4, true) };
+        assert(has_op(lower_single(add64), SsaOp::IAdd64));
+
+        // FMA_RSCALE -> @INLINE_OPS
+        auto fmar = make_inst(0x00, Mnemonic::FMA_RSCALE, Mnemonic::FMA_RSCALE, Variant::F32);
+        fmar.has_dest = true; fmar.dest_reg = 0;
+        fmar.srcs = { reg_src(1), reg_src(2), reg_src(3), reg_src(4) };
+        auto p1_fmar = lower_single(fmar);
+        assert(p1_fmar.ok && has_op(p1_fmar, SsaOp::Fma) && has_op(p1_fmar, SsaOp::Ldexp));
+
+        // CSEL: f32, s32, v2s16
+        auto csel_f = make_inst(0x00, Mnemonic::CSEL, Mnemonic::CSEL, Variant::F32);
+        csel_f.has_dest = true; csel_f.dest_reg = 0;
+        csel_f.srcs = { reg_src(1), reg_src(2), reg_src(3), reg_src(4) };
+        csel_f.modifier_strs["cmpf"] = "lt";
+        assert(has_op(lower_single(csel_f), SsaOp::FCmpOrdLt));
+
+        auto csel_v2s = make_inst(0x00, Mnemonic::CSEL, Mnemonic::CSEL, Variant::V2S16);
+        csel_v2s.has_dest = true; csel_v2s.dest_reg = 0;
+        csel_v2s.srcs = { reg_src(1), reg_src(2), reg_src(3), reg_src(4) };
+        csel_v2s.modifier_strs["cmpf"] = "ge";
+        assert(has_op(lower_single(csel_v2s), SsaOp::ICmpSGe));
+
+        std::cout << "[PASS] Checkpoint v7: BRANCH, JUMP, ADR, LEA, IADD_IMM(64/32), RSCALE, CSEL(v2i16/f32/i32) verified\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }

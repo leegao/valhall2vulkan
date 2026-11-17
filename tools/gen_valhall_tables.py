@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 
 
 IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-HANDLER_RE = re.compile(r"^HANDLER\(@([A-Za-z_][A-Za-z0-9_]*)\)$")
+HANDLER_RE = re.compile(r"^@HANDLER\(([A-Za-z_][A-Za-z0-9_]*)\)$")
 LOOKUP_RE = re.compile(r"^@LOOKUP\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*([^)]+?)\s*\)$")
 
 VALTYPE_MAP = {
@@ -100,7 +100,7 @@ def match_lowering_rule(ins, rules):
 
 
 def parse_ssa_op_spec(ssa_op_str):
-    if ssa_op_str == "INLINE_OPS":
+    if ssa_op_str == "@INLINE_OPS":
         return ("InlineOps", "INLINE_OPS")
     m = HANDLER_RE.match(ssa_op_str)
     if m:
@@ -233,6 +233,8 @@ def gen_fetch_expr(src_type, idx):
         return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, true)"
     if src_type == "v2u16":
         return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, false)"
+    if src_type == "v2i16_by_var":
+        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, is_signed)"
     if src_type == "v4i8_by_var":
         return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, is_signed)"
     if src_type == "v4s8":
@@ -333,7 +335,9 @@ def compile_cond(cond_str):
     if c.startswith("!"):
         neg = True
         c = c[1:].strip()
-    if c == "$has_src1":
+    if c == "$has_src0":
+        expr = "(!ins.srcs.empty())"
+    elif c == "$has_src1":
         expr = "(ins.srcs.size() >= 2)"
     elif c == "$has_src2":
         expr = "(ins.srcs.size() >= 3)"
@@ -351,6 +355,31 @@ def compile_cond(cond_str):
         expr = '(get_src_swz(ins, 0) == "h1")'
     elif c == "$is_frag_stage":
         expr = "(ctx.opts.stage == ShaderStage::Fragment)"
+    elif c == "$dest_is_64bit":
+        expr = "ins.dest_is_64bit"
+    elif c.startswith("$has_field."):
+        fn = c[len("$has_field."):]
+        expr = f'(ins.fields.count("{fn}") > 0)'
+    elif c.startswith("$mod_eq(") and c.endswith(")"):
+        parts = split_top_level_args(c[len("$mod_eq("):-1])
+        expr = f'(get_mod_str(ins, "{parts[0]}") == "{parts[1]}")'
+    elif c.startswith("$mod_ne(") and c.endswith(")"):
+        parts = split_top_level_args(c[len("$mod_ne("):-1])
+        expr = f'(get_mod_str(ins, "{parts[0]}") != "{parts[1]}")'
+    elif c == "$dest_is_64bit":
+        expr = "ins.dest_is_64bit"
+    elif c.startswith("$has_field."):
+        fn = c[len("$has_field."):]
+        expr = f'(ins.fields.count("{fn}") > 0)'
+    elif c.startswith("$mod_active(") and c.endswith(")"):
+        k = c[len("$mod_active("):-1].strip()
+        expr = f'(!get_mod_str(ins, "{k}").empty() && get_mod_str(ins, "{k}") != "none")'
+    elif c.startswith("$mod_eq(") and c.endswith(")"):
+        parts = split_top_level_args(c[len("$mod_eq("):-1])
+        expr = f'(get_mod_str(ins, "{parts[0]}") == "{parts[1]}")'
+    elif c.startswith("$mod_ne(") and c.endswith(")"):
+        parts = split_top_level_args(c[len("$mod_ne("):-1])
+        expr = f'(get_mod_str(ins, "{parts[0]}") != "{parts[1]}")'
     elif c.startswith("$fields."):
         fn = c[len("$fields."):]
         expr = f'(ins.fields.count("{fn}") && ins.fields.at("{fn}") != 0)'
@@ -385,6 +414,18 @@ def compile_atom(atom, src_types, declared_vars, lookup_tables):
         return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_unsigned & 63u))"
     if a == "#token":
         return "ctx.sb.current_token(blk)"
+    if a == "#branch_target_pc_u64":
+        return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + 8 + ins.imm_signed)))"
+    if a == "#const_bool(true)":
+        return "ctx.sb.emit_const_bool(blk, true)"
+    if a == "#const_bool(false)":
+        return "ctx.sb.emit_const_bool(blk, false)"
+    if a.startswith("#field_u32(") and a.endswith(")"):
+        fn = a[len("#field_u32("):-1].strip()
+        return f'ctx.sb.emit_const_u32(blk, ins.fields.at("{fn}"))'
+    if a.startswith("#field_u32_mul16(") and a.endswith(")"):
+        fn = a[len("#field_u32_mul16("):-1].strip()
+        return f'ctx.sb.emit_const_u32(blk, ins.fields.at("{fn}") * 16u)'
     if a == "#fp_zero":
         return "(is_v2f16 ? make_v2f_const_inline(ctx, blk, 0.0f) : ctx.sb.emit_const_f32_bits(blk, 0u))"
     if a.startswith("#u32(") and a.endswith(")"):
@@ -468,6 +509,17 @@ def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, can
     fn_name = r[:lp].strip()
     args_str = r[lp+1:-1].strip()
     arg_tokens = split_top_level_args(args_str)
+
+    if fn_name == "load_sideband_u64":
+        if len(arg_tokens) != 1:
+            raise ValueError(f"load_sideband_u64() expects 1 arg, got {arg_tokens}")
+        return f"ctx.emit_load_sideband_u64(blk, {arg_tokens[0]}u)"
+
+    if fn_name == "split64_lo":
+        if len(arg_tokens) != 1:
+            raise ValueError(f"split64_lo() expects 1 arg, got {arg_tokens}")
+        a0 = compile_atom(arg_tokens[0], src_types, declared_vars, lookup_tables)
+        return f"([&]() {{ SsaId _lo = 0, _hi = 0; ctx.emit_split64(blk, {a0}, &_lo, &_hi); return _lo; }})()"
 
     if fn_name == "bitcast":
         if len(arg_tokens) != 1:
@@ -615,6 +667,16 @@ def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
                 expr = compile_atom(stmt[len("return "):], src_types, declared_vars, lookup_tables)
                 st = gen_store_stmt(dest_type, expr)
                 lines.append(f"{st} return true;")
+            elif stmt.startswith("sr_set(") and stmt.endswith(")"):
+                parts = split_top_level_args(stmt[len("sr_set("):-1])
+                if len(parts) != 2:
+                    raise ValueError(f"sr_set() expects 2 args, got {parts}")
+                expr = compile_atom(parts[1], src_types, declared_vars, lookup_tables)
+                lines.append(f"ctx.sb.set_reg(blk, static_cast<uint8_t>((ins.sr_write.present ? ins.sr_write.base_reg : 0) + ({parts[0]})), {expr});")
+            elif stmt.startswith("set_branch_cond(") and stmt.endswith(")"):
+                inner = stmt[len("set_branch_cond("):-1]
+                expr = compile_atom(inner, src_types, declared_vars, lookup_tables)
+                lines.append(f"ctx.mod.blocks[blk].branch_cond = {expr};")
             elif stmt.startswith("set_token(") and stmt.endswith(")"):
                 inner = stmt[len("set_token("):-1]
                 expr = compile_atom(inner, src_types, declared_vars, lookup_tables)
