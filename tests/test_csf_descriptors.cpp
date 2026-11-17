@@ -184,6 +184,102 @@ int main() {
         std::cout << "[PASS] TilerContext::private_state 256-bit multi-word nested struct roundtrip\n";
     }
 
-    std::cout << "=== ALL CSF DESCRIPTOR & SIDEBAND TESTS PASSED ===\n";
+    // 7. Test SRT base|count masking (& ~0x3FULL), count > 4 entries, BLEND_DESC (& ~0xFULL), and TILER_FLAGS merge
+    {
+        alignas(64) uint32_t srt_words[8 * Resource::kWordCount] = {0};
+        uint32_t attr_desc[Attribute::kWordCount] = {0};
+        Attribute attr{};
+        attr.type = DescriptorType::Attribute;
+        attr.format = PixelFormat{ RGBComponentOrder::RGBA, false, Format::RGB32F, 0 };
+        attr.table = 2u;
+        attr.buffer_index = 0u;
+        attr.offset = 12;
+        attr.stride = 24u;
+        attr.pack(attr_desc);
+
+        uint32_t buf_desc[Buffer::kWordCount] = {0};
+        Buffer vbuf{};
+        vbuf.type = DescriptorType::Buffer;
+        vbuf.buffer_type = BufferType::Simple;
+        vbuf.size = 192u;
+        vbuf.address = 0x00007F0022334400ULL;
+        vbuf.pack(buf_desc);
+
+        // Place Attribute table in Resource[1] and Buffer table in Resource[4] (beyond legacy 4-entry cap!)
+        Resource r1{};
+        r1.address = reinterpret_cast<uint64_t>(attr_desc);
+        r1.contains_descriptors = true;
+        r1.size = sizeof(attr_desc);
+        r1.pack(srt_words + 1 * Resource::kWordCount);
+
+        Resource r4{};
+        r4.address = reinterpret_cast<uint64_t>(buf_desc);
+        r4.contains_descriptors = true;
+        r4.size = sizeof(buf_desc);
+        r4.pack(srt_words + 4 * Resource::kWordCount);
+
+        alignas(16) uint32_t blend_words[Blend::kWordCount] = {0};
+        Blend bld{};
+        bld.enable = true;
+        bld.internal.mode = BlendMode::Fixed_Function;
+        bld.equation.color_mask = 0xFu;
+        bld.pack(blend_words);
+
+        alignas(64) uint32_t fbd_words[128 / 4 + 64 / 4] = {0};
+        FramebufferParameters fbd{};
+        fbd.width = 256u;
+        fbd.height = 256u;
+        fbd.bound_max_x = 255u;
+        fbd.bound_max_y = 255u;
+        fbd.sample_count = 1u;
+        fbd.render_target_count = 1u;
+        fbd.pack(fbd_words);
+        RenderTarget rtd{};
+        rtd.rgb.write_enable = true;
+        rtd.pack(fbd_words + 128 / 4);
+
+        uint32_t fbp_words[FramebufferPointer::kWordCount] = {0};
+        FramebufferPointer fbp{};
+        fbp.pointer = reinterpret_cast<uint64_t>(fbd_words);
+        fbp.render_target_count = 1u;
+        fbp.zs_crc_extension_present = false;
+        fbp.pack(fbp_words);
+
+        CsfStagingRegisterFile idvs_sr{}, frag_sr{};
+        // Encode SRT_0 = 64B-aligned base | count(8) (mirrors real r54p3 libGLES_mali.so 0x...c1c8)
+        uint64_t srt_base = reinterpret_cast<uint64_t>(srt_words);
+        assert((srt_base & 0x3FULL) == 0);
+        idvs_sr.set64(IDVSSR::SRT_0, srt_base | 8ULL);
+        // Encode BLEND_DESC = 16B-aligned base | count(1) (mirrors 0x...c0c1)
+        uint64_t blend_base = reinterpret_cast<uint64_t>(blend_words);
+        assert((blend_base & 0xFULL) == 0);
+        idvs_sr.set64(IDVSSR::BLEND_DESC, blend_base | 1ULL);
+        // Set TILER_FLAGS in r56 (Triangles) while flags_override is 0
+        PrimitiveFlags pf{};
+        pf.draw_mode = DrawMode::Triangles;
+        pf.index_type = IndexType::UINT16;
+        uint32_t pf_words[2] = {0};
+        pf.pack(pf_words);
+        idvs_sr.set32(IDVSSR::TILER_FLAGS, pf_words[0]);
+        frag_sr.set64(FRAGMENTSR::FBD_POINTER, uint64_t(fbp_words[0]) | (uint64_t(fbp_words[1]) << 32));
+
+        CSRUNIDVS cmd{};
+        cmd.flags_override = 0u;
+        VulkanGraphicsSideband gsb = extract_graphics_sideband(idvs_sr, frag_sr, cmd);
+        assert(gsb.pos_srt_va == srt_base);
+        assert(gsb.pos_srt_count == 8u);
+        assert(gsb.attributes.size() == 1u);
+        assert(gsb.attributes[0].offset == 12);
+        assert(gsb.vertex_buffers.size() == 1u);
+        assert(gsb.vertex_buffers[0].address == 0x00007F0022334400ULL);
+        assert(gsb.blend_va == blend_base);
+        assert(gsb.blend_count == 1u);
+        assert(gsb.blends.size() == 1u && gsb.blends[0].enable == true);
+        assert(gsb.topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        assert(gsb.index_type == VK_INDEX_TYPE_UINT16);
+        std::cout << "[PASS] SRT base|count (& ~0x3FULL), Resource[4], BLEND_DESC (& ~0xFULL), and TILER_FLAGS merge\n";
+    }
+
+    std::cout << "=== ALL CSF DESCRIPTOR & SIDEBAND TESTS PASSED ===" << std::endl;
     return 0;
 }

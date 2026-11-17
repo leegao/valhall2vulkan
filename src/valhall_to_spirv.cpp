@@ -1603,6 +1603,18 @@ struct TranslatorContext {
                 return;
             }
 
+            uint32_t merge_lbl = 0;
+            if (cmn == Mnemonic::LD_PKA) {
+                for (uint8_t w = 0; w < cnt; ++w) {
+                    store_reg_u32(sr + w, b.const_u32(0u));
+                }
+                uint32_t ok_lbl = b.alloc_id();
+                merge_lbl = b.alloc_id();
+                uint32_t is_valid = b.op_UGreaterThanEqual(b.type_bool(), byte_addr, b.const_u64(0x10000ULL));
+                b.op_SelectionMerge(merge_lbl, 0);
+                b.op_BranchConditional(is_valid, ok_lbl, merge_lbl);
+                b.emit_label(ok_lbl);
+            }
             uint32_t p32 = b.type_pointer(StorageClass::PhysicalStorageBuffer, b.type_u32());
             for (uint8_t w = 0; w < cnt; ++w) {
                 uint32_t w_addr = (w == 0)
@@ -1611,6 +1623,10 @@ struct TranslatorContext {
                 uint32_t ptr = b.op_ConvertUToPtr(p32, w_addr);
                 uint32_t val = b.emit_load(b.type_u32(), ptr, 4u);
                 store_reg_u32(sr + w, val);
+            }
+            if (merge_lbl != 0) {
+                b.op_Branch(merge_lbl);
+                b.emit_label(merge_lbl);
             }
             return;
         }

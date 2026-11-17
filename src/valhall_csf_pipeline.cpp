@@ -2,6 +2,7 @@
 #include <cstring>
 #include <algorithm>
 #include <iostream>
+#include <cstdlib>
 
 namespace valhall::pipeline {
 
@@ -156,10 +157,12 @@ VulkanComputeSideband extract_compute_sideband(
     uint64_t raw_tsd = sr.get64(tsd_regs[run_compute_cmd.tsd_select & 3u]);
     uint64_t raw_fau = sr.get64(fau_regs[run_compute_cmd.fau_select & 3u]);
 
-    sb.srt_va = raw_srt & 0x00FFFFFFFFFFFFFFULL;
-    sb.spd_va = raw_spd & 0x00FFFFFFFFFFFFFFULL;
-    sb.tsd_va = raw_tsd & 0x00FFFFFFFFFFFFFFULL;
-    sb.fau_va = raw_fau & 0x00FFFFFFFFFFFFFFULL;
+    sb.srt_va = raw_srt & 0x0000FFFFFFFFFFFFULL & ~0x3FULL;
+    sb.srt_count = static_cast<uint32_t>(raw_srt & 0x3FULL);
+    if (sb.srt_count == 0 && sb.srt_va != 0) sb.srt_count = 4u;
+    sb.spd_va = raw_spd & 0x0000FFFFFFFFFFFFULL;
+    sb.tsd_va = raw_tsd & 0x0000FFFFFFFFFFFFULL;
+    sb.fau_va = raw_fau & 0x0000FFFFFFFFFFFFULL;
     sb.fau_word_count = static_cast<uint32_t>((raw_fau >> 56) & 0xFFu) * 2u;
     if (sb.fau_word_count == 0) sb.fau_word_count = 64u;
 
@@ -184,41 +187,100 @@ VulkanComputeSideband extract_compute_sideband(
     return sb;
 }
 
+static bool csf_verbose_enabled() {
+    static const bool enabled = []() {
+        const char* env = std::getenv("VALHALL_CSF_VERBOSE");
+        return env && env[0] != '\0' && env[0] != '0';
+    }();
+    return enabled;
+}
+
+static void decode_srt_register(uint64_t raw_srt, uint64_t* out_va, uint32_t* out_count) {
+    uint64_t va = raw_srt & 0x0000FFFFFFFFFFFFULL & ~0x3FULL;
+    uint32_t count = static_cast<uint32_t>(raw_srt & 0x3FULL);
+    if (count == 0 && va != 0) count = 4u;
+    if (out_va) *out_va = va;
+    if (out_count) *out_count = count;
+}
+
 static void unpack_srt_descriptors(
     uint64_t srt_va,
+    uint32_t srt_count,
+    const char* label,
     std::vector<csf::Attribute>* out_attrs,
     std::vector<csf::Buffer>* out_bufs,
     std::vector<csf::Texture>* out_texs,
     std::vector<csf::GenericPlane>* out_planes,
     std::vector<csf::Sampler>* out_samplers) {
-    if (srt_va == 0) return;
+    if (srt_va == 0 || srt_count == 0) return;
 
-    // Walk up to 4 Resource entries in the SRT
+    const bool verbose = csf_verbose_enabled();
+    if (verbose) {
+        std::cerr << "[VALHALL_CSF] SRT(" << (label ? label : "?") << ") base=0x"
+                  << std::hex << srt_va << std::dec << " count=" << srt_count << "\n";
+    }
+
     const uint32_t* srt_words = reinterpret_cast<const uint32_t*>(srt_va);
-    for (uint32_t r_idx = 0; r_idx < 4; ++r_idx) {
+    for (uint32_t r_idx = 0; r_idx < srt_count; ++r_idx) {
         csf::Resource res = csf::Resource::unpack(srt_words + r_idx * 4u);
-        if (res.address == 0 || res.size == 0) continue;
+        uint64_t table_va = res.address & 0x0000FFFFFFFFFFFFULL;
+        if (verbose) {
+            std::cerr << "  Resource[" << r_idx << "]: addr=0x" << std::hex << table_va
+                      << " (raw=0x" << res.address << ")" << std::dec
+                      << " contains_descriptors=" << (res.contains_descriptors ? 1 : 0)
+                      << " size=" << res.size << "\n";
+        }
+        if (table_va > 0 && table_va < 0x10000ULL) {
+            std::cerr << "[VALHALL_CSF][WARN] SRT(" << (label ? label : "?") << ") Resource[" << r_idx
+                      << "] has suspicious low address=0x" << std::hex << table_va
+                      << " size=0x" << res.size << std::dec
+                      << " (possible unmasked SRT base+count shift!)\n";
+            continue;
+        }
+        if (table_va == 0 || res.size == 0) continue;
         uint32_t num_descs = static_cast<uint32_t>(res.size / 32u);
-        const uint32_t* table_ptr = reinterpret_cast<const uint32_t*>(res.address);
+        const uint32_t* table_ptr = reinterpret_cast<const uint32_t*>(table_va);
         for (uint32_t i = 0; i < num_descs; ++i) {
             const uint32_t* d_words = table_ptr + i * 8u;
             csf::DescriptorType dtype = static_cast<csf::DescriptorType>(d_words[0] & 0xFu);
             if (dtype == csf::DescriptorType::Attribute && out_attrs) {
-                out_attrs->push_back(csf::Attribute::unpack(d_words));
+                csf::Attribute a = csf::Attribute::unpack(d_words);
+                if (verbose) {
+                    std::cerr << "    [" << i << "] Attribute: table=" << a.table
+                              << " buf_idx=" << a.buffer_index << " offset=" << a.offset
+                              << " stride=" << a.stride << "\n";
+                }
+                out_attrs->push_back(a);
             } else if (dtype == csf::DescriptorType::Buffer && out_bufs) {
-                out_bufs->push_back(csf::Buffer::unpack(d_words));
+                csf::Buffer b = csf::Buffer::unpack(d_words);
+                if (verbose) {
+                    std::cerr << "    [" << i << "] Buffer: type=" << static_cast<uint32_t>(b.buffer_type)
+                              << " addr=0x" << std::hex << b.address << std::dec
+                              << " size=" << b.size << " stride=" << b.stride << "\n";
+                }
+                out_bufs->push_back(b);
             } else if (dtype == csf::DescriptorType::Texture && out_texs) {
                 csf::Texture t = csf::Texture::unpack(d_words);
+                if (verbose) {
+                    std::cerr << "    [" << i << "] Texture: " << t.width << "x" << t.height
+                              << " surfaces=0x" << std::hex << t.surfaces << std::dec << "\n";
+                }
                 out_texs->push_back(t);
                 if (out_planes) {
-                    if (t.surfaces != 0) {
-                        out_planes->push_back(csf::GenericPlane::unpack(reinterpret_cast<const uint32_t*>(t.surfaces)));
+                    uint64_t surf_va = t.surfaces & 0x0000FFFFFFFFFFFFULL;
+                    if (surf_va != 0) {
+                        out_planes->push_back(csf::GenericPlane::unpack(reinterpret_cast<const uint32_t*>(surf_va)));
                     } else {
                         out_planes->push_back(csf::GenericPlane{});
                     }
                 }
             } else if (dtype == csf::DescriptorType::Sampler && out_samplers) {
-                out_samplers->push_back(csf::Sampler::unpack(d_words));
+                csf::Sampler s = csf::Sampler::unpack(d_words);
+                if (verbose) {
+                    std::cerr << "    [" << i << "] Sampler: mag_nearest=" << s.magnify_nearest
+                              << " min_nearest=" << s.minify_nearest << "\n";
+                }
+                out_samplers->push_back(s);
             }
         }
     }
@@ -231,24 +293,27 @@ VulkanGraphicsSideband extract_graphics_sideband(
     VulkanGraphicsSideband sb{};
     sb.cmd = run_idvs_cmd;
 
-    sb.pos_spd_va  = idvs_sr.get64(csf::IDVSSR::SPD_0) & 0x00FFFFFFFFFFFFFFULL;
-    sb.var_spd_va  = idvs_sr.get64(csf::IDVSSR::SPD_1) & 0x00FFFFFFFFFFFFFFULL;
-    sb.frag_spd_va = idvs_sr.get64(csf::IDVSSR::SPD_2) & 0x00FFFFFFFFFFFFFFULL;
+    sb.pos_spd_va  = idvs_sr.get64(csf::IDVSSR::SPD_0) & 0x0000FFFFFFFFFFFFULL;
+    sb.var_spd_va  = idvs_sr.get64(csf::IDVSSR::SPD_1) & 0x0000FFFFFFFFFFFFULL;
+    sb.frag_spd_va = idvs_sr.get64(csf::IDVSSR::SPD_2) & 0x0000FFFFFFFFFFFFULL;
 
-    sb.pos_srt_va  = idvs_sr.get64(csf::IDVSSR::SRT_0) & 0x00FFFFFFFFFFFFFFULL;
-    sb.var_srt_va  = idvs_sr.get64(run_idvs_cmd.varying_srt_select ? csf::IDVSSR::SRT_1 : csf::IDVSSR::SRT_0) & 0x00FFFFFFFFFFFFFFULL;
-    sb.frag_srt_va = idvs_sr.get64(run_idvs_cmd.fragment_srt_select ? csf::IDVSSR::SRT_2 : csf::IDVSSR::SRT_0) & 0x00FFFFFFFFFFFFFFULL;
+    uint64_t raw_pos_srt  = idvs_sr.get64(csf::IDVSSR::SRT_0);
+    uint64_t raw_var_srt  = idvs_sr.get64(run_idvs_cmd.varying_srt_select ? csf::IDVSSR::SRT_1 : csf::IDVSSR::SRT_0);
+    uint64_t raw_frag_srt = idvs_sr.get64(run_idvs_cmd.fragment_srt_select ? csf::IDVSSR::SRT_2 : csf::IDVSSR::SRT_0);
+    decode_srt_register(raw_pos_srt,  &sb.pos_srt_va,  &sb.pos_srt_count);
+    decode_srt_register(raw_var_srt,  &sb.var_srt_va,  &sb.var_srt_count);
+    decode_srt_register(raw_frag_srt, &sb.frag_srt_va, &sb.frag_srt_count);
 
     uint64_t pfau = idvs_sr.get64(csf::IDVSSR::FAU_0);
-    sb.pos_fau_va    = pfau & 0x00FFFFFFFFFFFFFFULL;
+    sb.pos_fau_va    = pfau & 0x0000FFFFFFFFFFFFULL;
     sb.pos_fau_words = static_cast<uint32_t>((pfau >> 56) & 0xFFu) * 2u;
 
     uint64_t vfau = idvs_sr.get64(run_idvs_cmd.varying_fau_select ? csf::IDVSSR::FAU_1 : csf::IDVSSR::FAU_0);
-    sb.var_fau_va    = vfau & 0x00FFFFFFFFFFFFFFULL;
+    sb.var_fau_va    = vfau & 0x0000FFFFFFFFFFFFULL;
     sb.var_fau_words = static_cast<uint32_t>((vfau >> 56) & 0xFFu) * 2u;
 
     uint64_t ffau = idvs_sr.get64(csf::IDVSSR::FAU_2);
-    sb.frag_fau_va    = ffau & 0x00FFFFFFFFFFFFFFULL;
+    sb.frag_fau_va    = ffau & 0x0000FFFFFFFFFFFFULL;
     sb.frag_fau_words = static_cast<uint32_t>((ffau >> 56) & 0xFFu) * 2u;
 
     if (sb.pos_spd_va != 0)  sb.pos_spd  = csf::ShaderProgram::unpack(reinterpret_cast<const uint32_t*>(sb.pos_spd_va));
@@ -301,7 +366,7 @@ VulkanGraphicsSideband extract_graphics_sideband(
     sb.scissor.extent = {width, height};
 
     // Unpack ZSD (IDVS SR r52:53)
-    sb.zsd_va = idvs_sr.get64(csf::IDVSSR::ZSD) & 0x00FFFFFFFFFFFFFFULL;
+    sb.zsd_va = idvs_sr.get64(csf::IDVSSR::ZSD) & 0x0000FFFFFFFFFFFFULL;
     sb.depth_stencil_state = {};
     sb.depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     if (sb.zsd_va != 0) {
@@ -313,8 +378,15 @@ VulkanGraphicsSideband extract_graphics_sideband(
         sb.depth_stencil_state.stencilTestEnable = sb.zsd.stencil_test_enable ? VK_TRUE : VK_FALSE;
     }
 
-    // Unpack Blend array (IDVS SR r50:51)
-    sb.blend_va = idvs_sr.get64(csf::IDVSSR::BLEND_DESC) & 0x00FFFFFFFFFFFFFFULL;
+    // Unpack Blend array (IDVS SR r50:51): bits[47:4] = 16B-aligned VA, bits[3:0] = blend count
+    uint64_t raw_blend = idvs_sr.get64(csf::IDVSSR::BLEND_DESC);
+    sb.blend_va = raw_blend & 0x0000FFFFFFFFFFFFULL & ~0xFULL;
+    sb.blend_count = static_cast<uint32_t>(raw_blend & 0xFULL);
+    if (sb.blend_count == 0 && sb.blend_va != 0) sb.blend_count = sb.rt_count;
+    if (csf_verbose_enabled() && raw_blend != 0) {
+        std::cerr << "[VALHALL_CSF] BLEND_DESC raw=0x" << std::hex << raw_blend
+                  << " va=0x" << sb.blend_va << std::dec << " count=" << sb.blend_count << "\n";
+    }
     sb.blends.resize(sb.rt_count);
     sb.blend_attachments.resize(sb.rt_count);
     for (uint32_t i = 0; i < sb.rt_count; ++i) {
@@ -327,7 +399,7 @@ VulkanGraphicsSideband extract_graphics_sideband(
         att.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         att.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         att.alphaBlendOp = VK_BLEND_OP_ADD;
-        if (sb.blend_va != 0) {
+        if (sb.blend_va != 0 && i < sb.blend_count) {
             const uint32_t* bptr = reinterpret_cast<const uint32_t*>(sb.blend_va + i * 16u);
             sb.blends[i] = csf::Blend::unpack(bptr);
             if (sb.blends[i].equation.color_mask != 0) {
@@ -353,8 +425,9 @@ VulkanGraphicsSideband extract_graphics_sideband(
     sb.cull_mode = cull;
     sb.front_face = sb.dcd0.front_face_ccw ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
 
-    if (run_idvs_cmd.flags_override != 0) {
-        uint32_t prim_w[2] = { run_idvs_cmd.flags_override, 0u };
+    uint32_t merged_tiler_flags = idvs_sr.get32(csf::IDVSSR::TILER_FLAGS) | run_idvs_cmd.flags_override;
+    if (merged_tiler_flags != 0) {
+        uint32_t prim_w[2] = { merged_tiler_flags, 0u };
         auto prim = csf::PrimitiveFlags::unpack(prim_w);
         if (prim.draw_mode != csf::DrawMode::None) {
             sb.topology = translate_mali_draw_mode(prim.draw_mode);
@@ -371,13 +444,13 @@ VulkanGraphicsSideband extract_graphics_sideband(
     if (sb.point_size <= 0.0f) sb.point_size = 1.0f;
 
     // Unpack Vertex SRT (Attributes + Buffers)
-    unpack_srt_descriptors(sb.pos_srt_va, &sb.attributes, &sb.vertex_buffers, nullptr, nullptr, nullptr);
+    unpack_srt_descriptors(sb.pos_srt_va, sb.pos_srt_count, "pos", &sb.attributes, &sb.vertex_buffers, nullptr, nullptr, nullptr);
     if (sb.var_srt_va != 0 && sb.var_srt_va != sb.pos_srt_va) {
-        unpack_srt_descriptors(sb.var_srt_va, &sb.attributes, &sb.vertex_buffers, nullptr, nullptr, nullptr);
+        unpack_srt_descriptors(sb.var_srt_va, sb.var_srt_count, "var", &sb.attributes, &sb.vertex_buffers, nullptr, nullptr, nullptr);
     }
 
     // Unpack Fragment SRT (Textures + Planes + Samplers)
-    unpack_srt_descriptors(sb.frag_srt_va, nullptr, nullptr, &sb.textures, &sb.planes, &sb.samplers);
+    unpack_srt_descriptors(sb.frag_srt_va, sb.frag_srt_count, "frag", nullptr, nullptr, &sb.textures, &sb.planes, &sb.samplers);
 
     return sb;
 }

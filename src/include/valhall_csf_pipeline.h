@@ -72,6 +72,7 @@ struct CsfStagingRegisterFile {
 struct VulkanComputeSideband {
     csf::CSRUNCOMPUTE cmd{};
     uint64_t srt_va = 0;
+    uint32_t srt_count = 0;
     uint64_t spd_va = 0;
     uint64_t tsd_va = 0;
     uint64_t fau_va = 0;
@@ -93,8 +94,11 @@ struct VulkanGraphicsSideband {
     uint64_t frag_spd_va = 0;
 
     uint64_t pos_srt_va = 0;
+    uint32_t pos_srt_count = 0;
     uint64_t var_srt_va = 0;
+    uint32_t var_srt_count = 0;
     uint64_t frag_srt_va = 0;
+    uint32_t frag_srt_count = 0;
 
     uint64_t pos_fau_va = 0;
     uint32_t pos_fau_words = 0;
@@ -119,6 +123,7 @@ struct VulkanGraphicsSideband {
     uint64_t zsd_va = 0;
     csf::DepthStencil zsd{};
     uint64_t blend_va = 0;
+    uint32_t blend_count = 0;
     std::vector<csf::Blend> blends;
 
     // Draw state from IDVS SR
