@@ -439,7 +439,7 @@ VulkanGraphicsSideband extract_graphics_sideband(
     sb.instance_count = std::max(1u, idvs_sr.get32(csf::IDVSSR::INSTANCE_COUNT));
     sb.first_vertex = idvs_sr.get32(csf::IDVSSR::INDEX_OFFSET);
     sb.vertex_offset = static_cast<int32_t>(idvs_sr.get32(csf::IDVSSR::VERTEX_OFFSET));
-    sb.index_buffer_va = idvs_sr.get64(csf::IDVSSR::INDEX_BUFFER) & 0x00FFFFFFFFFFFFFFULL;
+    sb.index_buffer_va = idvs_sr.get64(csf::IDVSSR::INDEX_BUFFER) & 0x0000FFFFFFFFFFFFULL;
     sb.point_size = idvs_sr.reg_f32(static_cast<uint32_t>(csf::IDVSSR::PRIMITIVE_SIZE));
     if (sb.point_size <= 0.0f) sb.point_size = 1.0f;
 

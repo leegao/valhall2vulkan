@@ -389,6 +389,26 @@ uint32_t SpirvBuilder::emit_label(uint32_t label_id) {
     return label_id;
 }
 
+uint32_t SpirvBuilder::emit_phi(uint32_t result_type_id, size_t num_incomings) {
+    uint32_t id = alloc_id();
+    phi_word_offsets_[id] = body_words_.size();
+    std::vector<uint32_t> args(2 + num_incomings * 2, 0u);
+    args[0] = result_type_id;
+    args[1] = id;
+    append_op(body_words_, Op::OpPhi, args);
+    return id;
+}
+
+void SpirvBuilder::patch_phi(uint32_t phi_id, const std::vector<std::pair<uint32_t, uint32_t>>& incomings) {
+    auto it = phi_word_offsets_.find(phi_id);
+    if (it == phi_word_offsets_.end()) return;
+    size_t off = it->second;
+    for (size_t i = 0; i < incomings.size(); ++i) {
+        body_words_[off + 3 + i * 2] = incomings[i].first;
+        body_words_[off + 4 + i * 2] = incomings[i].second;
+    }
+}
+
 uint32_t SpirvBuilder::emit_glsl_ext(GlslStd450 ext_op, uint32_t result_type_id, const std::vector<uint32_t>& operands) {
     uint32_t id = alloc_id();
     std::vector<uint32_t> args = { result_type_id, id, glsl_ext_id_, static_cast<uint32_t>(ext_op) };

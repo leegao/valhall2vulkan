@@ -84,6 +84,8 @@ public:
     void begin_main_function();
     void end_main_function();
     uint32_t emit_label(uint32_t label_id = 0);
+    uint32_t emit_phi(uint32_t result_type_id, size_t num_incomings);
+    void patch_phi(uint32_t phi_id, const std::vector<std::pair<uint32_t, uint32_t>>& incomings);
     uint32_t current_label() const { return current_label_id_; }
 
     // Generic GLSL.std.450 extended-instruction emitter
@@ -122,6 +124,7 @@ private:
     std::vector<uint32_t> types_consts_globals_words_;
     std::vector<uint32_t> local_vars_words_;
     std::vector<uint32_t> body_words_;
+    std::map<uint32_t, size_t> phi_word_offsets_;
 
     // Deduplication maps
     uint32_t void_type_id_ = 0;

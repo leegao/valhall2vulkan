@@ -40,6 +40,7 @@ find_library(VULKAN_LIBRARY
 add_custom_target(codegen
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_spec.py"
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_spirv_builder.py"
+    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_tables.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Regenerating Valhall ISA, CSF descriptor, and SpirvBuilder C++17 sources"
 )
@@ -63,6 +64,11 @@ add_library(valhall2spirv STATIC
     src/generated/valhall_isa_generated.cpp
     src/generated/valhall_csf_descriptors_generated.cpp
     src/generated/valhall_spirv_builder_generated.cpp
+    src/generated/valhall_tables_generated.cpp
+    src/valhall_ssa.cpp
+    src/valhall_operands.cpp
+    src/valhall_pass1.cpp
+    src/valhall_tiler.cpp
     src/valhall_spirv_builder.cpp
     src/valhall_cfg.cpp
     src/valhall_to_spirv.cpp
@@ -82,7 +88,7 @@ target_link_libraries(valhall2spirv PUBLIC
     "${VULKAN_LIBRARY}"
 )
 
-foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder)
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler)
     add_executable(${test_name} "tests/${test_name}.cpp")
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
