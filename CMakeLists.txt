@@ -91,3 +91,17 @@ add_library(moc_hook SHARED
 set_target_properties(moc_hook PROPERTIES OUTPUT_NAME moc_hook)
 target_compile_options(moc_hook PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(moc_hook PRIVATE ${CMAKE_DL_LIBS})
+
+add_executable(test_moc_roundtrip_compute tests/test_moc_roundtrip_compute.cpp)
+target_include_directories(test_moc_roundtrip_compute PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+target_compile_options(test_moc_roundtrip_compute PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_definitions(test_moc_roundtrip_compute PRIVATE
+    TEST_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    MOC_HOOK_PATH="$<TARGET_FILE:moc_hook>"
+)
+target_link_libraries(test_moc_roundtrip_compute PRIVATE valhall2spirv)
+add_dependencies(test_moc_roundtrip_compute moc_hook)
+add_test(NAME test_moc_roundtrip_compute
+    COMMAND test_moc_roundtrip_compute
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
