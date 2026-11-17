@@ -84,3 +84,10 @@ foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors)
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
 endforeach()
+
+add_library(moc_hook SHARED
+    tools/moc_hook/moc_hook.c
+)
+set_target_properties(moc_hook PROPERTIES OUTPUT_NAME moc_hook)
+target_compile_options(moc_hook PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(moc_hook PRIVATE ${CMAKE_DL_LIBS})
