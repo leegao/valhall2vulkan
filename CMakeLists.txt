@@ -74,3 +74,13 @@ target_link_libraries(valhall2spirv PUBLIC
     "${VULKAN_LIBRARY}"
 )
 
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors)
+    add_executable(${test_name} "tests/${test_name}.cpp")
+    target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(${test_name} PRIVATE valhall2spirv)
+    add_test(NAME ${test_name}
+        COMMAND ${test_name}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+endforeach()
