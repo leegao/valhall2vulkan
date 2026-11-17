@@ -72,8 +72,12 @@ int main() {
     for (size_t i = 0; i < spec_count; ++i) {
         const auto* rule = lookup_lowering_rule(static_cast<uint16_t>(i));
         assert(rule != nullptr);
-        const auto* ctile = lookup_canonical_tile(rule->ssa_op);
-        assert(ctile != nullptr);
+        if (rule->kind == LoweringKind::DirectSsaOp) {
+            const auto* ctile = lookup_canonical_tile(rule->ssa_op);
+            assert(ctile != nullptr);
+        } else {
+            assert(rule->handler_name != nullptr && rule->handler_name[0] != '\0');
+        }
     }
     std::cout << "[PASS] 100% XML coverage: " << spec_count << "/627 specs map to LoweringRuleSpec + CanonicalTileSpec\n";
 
@@ -209,6 +213,67 @@ int main() {
         }
         std::cout << "[PASS] Translated and SPIRV-Reflect validated all " << astc_ccom->cmmn.nof_ebin
                   << " EBINs of production astc_encoder_mbs2_shader.h\n";
+    }
+
+    // 7. Milestone 1: DirectSsaOp, DynamicSsaOp (@fn), and Handler (HANDLER(@fn)) dispatch
+    {
+        auto lower_single = [](DecodedValhallInst ins) -> Pass1Result {
+            auto end_i = make_inst(ins.pc + 8, Mnemonic::NOP, Mnemonic::NOP);
+            end_i.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> insts = { ins, end_i };
+            auto cfg = cfg::build_cfg(insts);
+            ValhallTranslateOptions opts{};
+            opts.stage = ShaderStage::Compute;
+            return run_pass1_lowering(cfg, {}, opts);
+        };
+        auto has_op = [](const Pass1Result& p1, SsaOp op) {
+            for (const auto& n : p1.ssa.nodes) {
+                if (n.op == op) return true;
+            }
+            return false;
+        };
+
+        // DirectSsaOp: FABS.f32 & FABS.v2f16
+        auto fabs32 = make_inst(0x00, Mnemonic::FABS, Mnemonic::FABS, Variant::F32);
+        fabs32.has_dest = true; fabs32.dest_reg = 0; fabs32.srcs.push_back(reg_src(1));
+        auto p1_fabs = lower_single(fabs32);
+        assert(p1_fabs.ok && has_op(p1_fabs, SsaOp::FAbs));
+
+        auto fabs16 = make_inst(0x00, Mnemonic::FABS, Mnemonic::FABS, Variant::V2F16);
+        fabs16.has_dest = true; fabs16.dest_reg = 0; fabs16.srcs.push_back(reg_src(1));
+        auto p1_fabs16 = lower_single(fabs16);
+        assert(p1_fabs16.ok && has_op(p1_fabs16, SsaOp::FAbs) && has_op(p1_fabs16, SsaOp::UnpackHalf2x16));
+
+        // DynamicSsaOp (@get_round_mode): FROUND.rte / rtn / rtp / rtz
+        for (const auto& [rm, expected_op] : std::vector<std::pair<const char*, SsaOp>>{
+                 {"rte", SsaOp::RoundEven}, {"rtn", SsaOp::Floor}, {"rtp", SsaOp::Ceil}, {"rtz", SsaOp::Trunc}}) {
+            auto fr = make_inst(0x00, Mnemonic::FROUND, Mnemonic::FROUND, Variant::F32);
+            fr.has_dest = true; fr.dest_reg = 0; fr.srcs.push_back(reg_src(1));
+            fr.modifier_strs["round"] = rm;
+            auto p1_fr = lower_single(fr);
+            assert(p1_fr.ok && has_op(p1_fr, expected_op));
+        }
+
+        // DynamicSsaOp (@get_fp_minmax_op): FMIN / FMAX with nan_suppress vs nan_propagate
+        auto fmin_sup = make_inst(0x00, Mnemonic::FMIN, Mnemonic::FMIN, Variant::F32);
+        fmin_sup.has_dest = true; fmin_sup.dest_reg = 0; fmin_sup.srcs = { reg_src(1), reg_src(2) };
+        fmin_sup.modifier_strs["nan_mode"] = "nan_suppress";
+        assert(has_op(lower_single(fmin_sup), SsaOp::NMin));
+
+        auto fmax_prop = make_inst(0x00, Mnemonic::FMAX, Mnemonic::FMAX, Variant::F32);
+        fmax_prop.has_dest = true; fmax_prop.dest_reg = 0; fmax_prop.srcs = { reg_src(1), reg_src(2) };
+        fmax_prop.modifier_strs["nan_mode"] = "nan_propagate";
+        assert(has_op(lower_single(fmax_prop), SsaOp::FMax));
+
+        // Handler (HANDLER(@handle_int_shadd64)): SHADD
+        auto shadd = make_inst(0x00, Mnemonic::SHADD, Mnemonic::SHADD, Variant::U64);
+        shadd.has_dest = true; shadd.dest_is_64bit = true; shadd.dest_reg = 0;
+        shadd.srcs = { reg_src(2, true), reg_src(4, true) };
+        shadd.imm_unsigned = 3;
+        auto p1_sh = lower_single(shadd);
+        assert(p1_sh.ok && has_op(p1_sh, SsaOp::Shl64) && has_op(p1_sh, SsaOp::IAdd64));
+
+        std::cout << "[PASS] Milestone 1 lowering dispatch: DirectSsaOp, DynamicSsaOp (@fn), and Handler (HANDLER(@fn)) verified\n";
     }
 
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";

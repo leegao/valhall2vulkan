@@ -68,6 +68,7 @@ add_library(valhall2spirv STATIC
     src/valhall_ssa.cpp
     src/valhall_operands.cpp
     src/valhall_pass1.cpp
+    src/valhall_pass1_handlers.cpp
     src/valhall_tiler.cpp
     src/valhall_spirv_builder.cpp
     src/valhall_cfg.cpp

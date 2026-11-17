@@ -10,13 +10,19 @@ Inputs:
 Outputs:
   - src/generated/valhall_tables_generated.h
   - src/generated/valhall_tables_generated.cpp
+  - src/generated/valhall_pass1_lowering_generated.inc
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
+
+
+IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+HANDLER_RE = re.compile(r"^HANDLER\(@([A-Za-z_][A-Za-z0-9_]*)\)$")
 
 
 def parse_args():
@@ -67,6 +73,20 @@ def match_lowering_rule(ins, rules):
         if "*" in vars_list and wildcard_match is None:
             wildcard_match = (idx, r)
     return wildcard_match if wildcard_match is not None else (None, None)
+
+
+def parse_ssa_op_spec(ssa_op_str):
+    m = HANDLER_RE.match(ssa_op_str)
+    if m:
+        return ("Handler", m.group(1))
+    if ssa_op_str.startswith("@"):
+        fn = ssa_op_str[1:]
+        if not IDENT_RE.match(fn):
+            raise ValueError(f"Invalid dynamic ssa_op selector '{ssa_op_str}'")
+        return ("DynamicSsaOp", fn)
+    if not IDENT_RE.match(ssa_op_str):
+        raise ValueError(f"Invalid ssa_op '{ssa_op_str}'")
+    return ("DirectSsaOp", ssa_op_str)
 
 
 def parse_effects_mask(effects_list):
@@ -121,7 +141,6 @@ def parse_effects_mask(effects_list):
 def flatten_pattern(pat, all_nodes, leaf_vars):
     """Flatten a JSON pattern AST into FusionTileNode entries (pre-order). Returns root index."""
     if isinstance(pat, str):
-        # Leaf capture variable like "$a"
         if pat not in leaf_vars:
             leaf_vars[pat] = len(leaf_vars)
         idx = len(all_nodes)
@@ -161,6 +180,76 @@ def flatten_pattern(pat, all_nodes, leaf_vars):
     return idx
 
 
+def gen_fetch_expr(src_type, idx):
+    if src_type == "f32":
+        return f"fetch_src_f32(ctx.sb, blk, ins, {idx})"
+    if src_type == "f32_or_v2f16":
+        return f"(is_v2f16 ? fetch_src_v2f16(ctx.sb, blk, ins, {idx}) : fetch_src_f32(ctx.sb, blk, ins, {idx}))"
+    if src_type == "u32":
+        return f"fetch_src_int32(ctx.sb, blk, ins, {idx}, false)"
+    if src_type == "s32_raw":
+        return f"fetch_src_int32(ctx.sb, blk, ins, {idx}, true)"
+    if src_type == "s32":
+        return f"ctx.sb.emit_bitcast(blk, ValType::S32, fetch_src_int32(ctx.sb, blk, ins, {idx}, true))"
+    if src_type == "i32_by_var":
+        return f"fetch_src_int32(ctx.sb, blk, ins, {idx}, (var.find(\"s\") == 0))"
+    if src_type == "u64":
+        return f"fetch_src_u64(ctx.sb, blk, ins, {idx}, false)"
+    if src_type == "s64":
+        return f"fetch_src_u64(ctx.sb, blk, ins, {idx}, true)"
+    if src_type == "i64_by_var":
+        return f"fetch_src_u64(ctx.sb, blk, ins, {idx}, (var.find(\"s64\") != std::string::npos))"
+    if src_type == "v2f16":
+        return f"fetch_src_v2f16(ctx.sb, blk, ins, {idx})"
+    if src_type == "v2s16":
+        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, true)"
+    if src_type == "v2u16":
+        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, false)"
+    raise ValueError(f"Unsupported src_type '{src_type}' in direct/dynamic rule")
+
+
+def gen_dest_vt_expr(dest_type):
+    if dest_type == "f32":
+        return "ValType::F32"
+    if dest_type == "f32_or_v2f16":
+        return "(is_v2f16 ? ValType::V2F32 : ValType::F32)"
+    if dest_type == "u32":
+        return "ValType::U32"
+    if dest_type == "s32":
+        return "ValType::S32"
+    if dest_type == "u64":
+        return "ValType::U64"
+    if dest_type == "v2f16":
+        return "ValType::V2F32"
+    if dest_type == "v2s16":
+        return "ValType::V2S32"
+    if dest_type == "v2u16":
+        return "ValType::V2U32"
+    if dest_type == "none":
+        return "ValType::Void"
+    raise ValueError(f"Unsupported dest_type '{dest_type}' in direct/dynamic rule")
+
+
+def gen_store_stmt(dest_type, val_expr):
+    if dest_type == "f32":
+        return f"store_dest_f32(ctx.sb, blk, ins, {val_expr});"
+    if dest_type == "f32_or_v2f16":
+        return f"if (is_v2f16) store_dest_v2f16(ctx.sb, blk, ins, {val_expr}); else store_dest_f32(ctx.sb, blk, ins, {val_expr});"
+    if dest_type == "u32":
+        return f"store_dest_u32(ctx.sb, blk, ins, {val_expr});"
+    if dest_type == "s32":
+        return f"store_dest_u32(ctx.sb, blk, ins, ctx.sb.emit_bitcast(blk, ValType::U32, {val_expr}));"
+    if dest_type == "u64":
+        return f"store_dest_u64(ctx.sb, blk, ins, {val_expr});"
+    if dest_type == "v2f16":
+        return f"store_dest_v2f16(ctx.sb, blk, ins, {val_expr});"
+    if dest_type == "v2s16":
+        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, true);"
+    if dest_type == "v2u16":
+        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, false);"
+    raise ValueError(f"Unsupported dest_type '{dest_type}' for store")
+
+
 def main():
     args = parse_args()
     insns = load_xml_instructions(args.xml)
@@ -177,6 +266,11 @@ def main():
         if t["kind"] == "canonical":
             canonical_ssa_ops.add(t["ssa_op"])
 
+    parsed_rules = []
+    for r in rules:
+        kind, val = parse_ssa_op_spec(r["ssa_op"])
+        parsed_rules.append((kind, val))
+
     uncovered = []
     missing_canon_tiles = set()
     spec_to_rule = []
@@ -187,8 +281,9 @@ def main():
             spec_to_rule.append(-1)
         else:
             spec_to_rule.append(ridx)
-            if r["ssa_op"] not in canonical_ssa_ops:
-                missing_canon_tiles.add(r["ssa_op"])
+            kind, val = parsed_rules[ridx]
+            if kind == "DirectSsaOp" and val not in canonical_ssa_ops:
+                missing_canon_tiles.add(val)
 
     if uncovered:
         print(f"[ERROR] {len(uncovered)} XML instructions lack lowering rules in {args.lowering}:", file=sys.stderr)
@@ -201,7 +296,8 @@ def main():
         sys.exit(1)
 
     op_classes = sorted({r["op_class"] for r in rules})
-    ssa_ops = sorted(canonical_ssa_ops | {r["ssa_op"] for r in rules})
+    direct_ssa_ops = {val for kind, val in parsed_rules if kind == "DirectSsaOp"}
+    ssa_ops = sorted(canonical_ssa_ops | direct_ssa_ops)
     emit_kinds = sorted({t["emit"] for t in tiles})
 
     def pascal(s):
@@ -229,6 +325,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     h_path = os.path.join(args.out_dir, "valhall_tables_generated.h")
     cpp_path = os.path.join(args.out_dir, "valhall_tables_generated.cpp")
+    inc_path = os.path.join(args.out_dir, "valhall_pass1_lowering_generated.inc")
 
     h_lines = [
         "// AUTO-GENERATED BY tools/gen_valhall_tables.py -- DO NOT EDIT MANUALLY",
@@ -253,6 +350,12 @@ def main():
     h_lines.extend([
         "};",
         "",
+        "enum class LoweringKind : uint8_t {",
+        "    DirectSsaOp = 0,",
+        "    DynamicSsaOp = 1,",
+        "    Handler = 2,",
+        "};",
+        "",
         "enum class TileEmitKind : uint16_t {",
     ])
     for i, ek in enumerate(emit_kinds):
@@ -269,8 +372,11 @@ def main():
         "",
         "struct LoweringRuleSpec {",
         "    const char* mnemonic;",
+        "    uint16_t rule_index;",
         "    OpClass op_class;",
+        "    LoweringKind kind;",
         "    SsaOp ssa_op;",
+        "    const char* handler_name;",
         "    bool splits_block;",
         "    bool is_barrier_or_cf;",
         "    EffectMask effects;",
@@ -335,10 +441,14 @@ def main():
         "",
         "static const LoweringRuleSpec kLoweringRules[] = {",
     ]
-    for r in rules:
+    for ridx, r in enumerate(rules):
         cb, eb, exb, fl = parse_effects_mask(r.get("effects", []))
+        kind, val = parsed_rules[ridx]
+        ssa_op_enum = val if kind == "DirectSsaOp" else "Nop"
+        hname = r["ssa_op"]
         cpp_lines.append(
-            f'    {{ "{r["mnemonic"]}", OpClass::{pascal(r["op_class"])}, SsaOp::{r["ssa_op"]}, '
+            f'    {{ "{r["mnemonic"]}", {ridx}u, OpClass::{pascal(r["op_class"])}, '
+            f'LoweringKind::{kind}, SsaOp::{ssa_op_enum}, "{hname}", '
             f'{"true" if r.get("splits_block") else "false"}, '
             f'{"true" if r.get("is_barrier_or_cf") else "false"}, '
             f'{{ 0x{cb:x}u, 0x{eb:x}u, 0x{exb:x}u, 0x{fl:x}u }} }},'
@@ -447,12 +557,82 @@ def main():
         "",
     ])
 
+    # Generate valhall_pass1_lowering_generated.inc
+    inc_lines = [
+        "// AUTO-GENERATED BY tools/gen_valhall_tables.py -- DO NOT EDIT MANUALLY",
+        "// Included inside valhall_pass1.cpp",
+        "inline bool lower_rule_generated(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {",
+        "    std::string var = variant_to_string(ins.canonical_variant);",
+        "    bool is_v2f16 = (ins.canonical_variant == Variant::V2F16 || ins.variant == Variant::V2F16 || var == \"v2f16\");",
+        "    (void)var;",
+        "    (void)is_v2f16;",
+        "    switch (rule->rule_index) {",
+    ]
+
+    num_direct = 0
+    num_dynamic = 0
+    num_handler = 0
+    for ridx, r in enumerate(rules):
+        kind, val = parsed_rules[ridx]
+        if kind == "Handler":
+            num_handler += 1
+            inc_lines.append(f"        case {ridx}u: {val}(ctx, blk, ins, rule); return true;")
+            continue
+
+        dest_t = r["dest_type"]
+        src_ts = r.get("src_types", [])
+
+        if kind == "DirectSsaOp" and val == "Nop":
+            num_direct += 1
+            inc_lines.append(f"        case {ridx}u: return true; // {r['mnemonic']} Nop")
+            continue
+
+        if kind == "DirectSsaOp" and val == "Copy":
+            num_direct += 1
+            if len(src_ts) != 1:
+                raise ValueError(f"Copy rule {r['mnemonic']} must have 1 src_type, got {src_ts}")
+            fetch_e = gen_fetch_expr(src_ts[0], 0)
+            store_s = gen_store_stmt(dest_t, fetch_e)
+            inc_lines.append(f"        case {ridx}u: {{ {store_s} return true; }} // {r['mnemonic']} Copy")
+            continue
+
+        vt_expr = gen_dest_vt_expr(dest_t)
+        fetch_exprs = [gen_fetch_expr(st, i) for i, st in enumerate(src_ts)]
+        args_init = ", ".join(fetch_exprs)
+
+        if kind == "DynamicSsaOp":
+            num_dynamic += 1
+            op_line = f"tables::SsaOp op = {val}(ctx, blk, ins, vt, args, rule->effects);"
+        else:
+            num_direct += 1
+            op_line = f"tables::SsaOp op = tables::SsaOp::{val};"
+
+        store_s = gen_store_stmt(dest_t, "out")
+        inc_lines.append(
+            f"        case {ridx}u: {{ "
+            f"ValType vt = {vt_expr}; "
+            f"std::vector<SsaId> args = {{ {args_init} }}; "
+            f"{op_line} "
+            f"SsaId out = ctx.emit_op(blk, op, vt, std::move(args), rule->effects); "
+            f"{store_s} return true; }}"
+        )
+
+    inc_lines.extend([
+        "        default: return false;",
+        "    }",
+        "}",
+        "",
+    ])
+
     with open(h_path, "w", encoding="utf-8") as f:
         f.write("\n".join(h_lines))
     with open(cpp_path, "w", encoding="utf-8") as f:
         f.write("\n".join(cpp_lines))
+    with open(inc_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(inc_lines))
 
-    print(f"[OK] Validated 100% coverage: {len(insns)}/627 XML instructions -> {len(rules)} lowering rules, "
+    print(f"[OK] Validated 100% coverage: {len(insns)} XML instructions -> {len(rules)} lowering rules "
+          f"(direct={num_direct}, dynamic={num_dynamic}, handler={num_handler}), "
           f"{len(canon_tiles)} canonical tiles + {len(fusion_specs)} fusion tiles ({len(fusion_nodes)} pattern nodes).")
 
 

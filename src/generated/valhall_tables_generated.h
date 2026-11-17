@@ -233,6 +233,12 @@ enum class SsaOp : uint16_t {
     VecShuffle = 133,
 };
 
+enum class LoweringKind : uint8_t {
+    DirectSsaOp = 0,
+    DynamicSsaOp = 1,
+    Handler = 2,
+};
+
 enum class TileEmitKind : uint16_t {
     ConstBool = 0,
     ConstF32 = 1,
@@ -372,8 +378,11 @@ struct EffectMask {
 
 struct LoweringRuleSpec {
     const char* mnemonic;
+    uint16_t rule_index;
     OpClass op_class;
+    LoweringKind kind;
     SsaOp ssa_op;
+    const char* handler_name;
     bool splits_block;
     bool is_barrier_or_cf;
     EffectMask effects;
