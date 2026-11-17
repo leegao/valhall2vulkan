@@ -353,6 +353,15 @@ VulkanGraphicsSideband extract_graphics_sideband(
     sb.cull_mode = cull;
     sb.front_face = sb.dcd0.front_face_ccw ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
 
+    if (run_idvs_cmd.flags_override != 0) {
+        uint32_t prim_w[2] = { run_idvs_cmd.flags_override, 0u };
+        auto prim = csf::PrimitiveFlags::unpack(prim_w);
+        if (prim.draw_mode != csf::DrawMode::None) {
+            sb.topology = translate_mali_draw_mode(prim.draw_mode);
+        }
+        bool dummy_idx = false;
+        sb.index_type = translate_mali_index_type(prim.index_type, &dummy_idx);
+    }
     sb.vertex_count = idvs_sr.get32(csf::IDVSSR::INDEX_COUNT);
     sb.instance_count = std::max(1u, idvs_sr.get32(csf::IDVSSR::INSTANCE_COUNT));
     sb.first_vertex = idvs_sr.get32(csf::IDVSSR::INDEX_OFFSET);
@@ -398,6 +407,7 @@ ValhallVulkanEngine::~ValhallVulkanEngine() {
 
 bool ValhallVulkanEngine::init(std::string* out_err) {
     if (device_ != VK_NULL_HANDLE) return true;
+    // On some debian containers, this is /usr/share/vulkan/icd.d/lvp_icd.x86.json
     setenv("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/lvp_icd.json", 0);
 
     VkApplicationInfo app{};
@@ -543,8 +553,13 @@ GpuBuffer ValhallVulkanEngine::alloc_buffer(VkDeviceSize size_bytes, const void*
 
 void ValhallVulkanEngine::free_buffer(GpuBuffer& buf) {
     if (buf.buffer == VK_NULL_HANDLE) return;
+    VkBuffer target = buf.buffer;
     vkDestroyBuffer(device_, buf.buffer, nullptr);
     vkFreeMemory(device_, buf.memory, nullptr);
+    tracked_buffers_.erase(
+        std::remove_if(tracked_buffers_.begin(), tracked_buffers_.end(),
+                       [target](const GpuBuffer& b) { return b.buffer == target; }),
+        tracked_buffers_.end());
     buf.buffer = VK_NULL_HANDLE;
     buf.memory = VK_NULL_HANDLE;
     buf.mapped = nullptr;
@@ -1036,8 +1051,9 @@ bool ValhallVulkanEngine::execute_cs_run_idvs_graphics(
         if (b_idx < gsb.vertex_buffers.size() && gsb.vertex_buffers[b_idx].address != 0) {
             const auto& mb = gsb.vertex_buffers[b_idx];
             uint32_t stride = (ma.stride > 0) ? ma.stride : ((mb.stride > 0) ? mb.stride : elem_stride);
-            vi_bindings.push_back({ i, stride, VK_VERTEX_INPUT_RATE_VERTEX });
-            vi_attrs.push_back({ i, i, fmt, 0u });
+            uint32_t binding_slot = static_cast<uint32_t>(vi_bindings.size());
+            vi_bindings.push_back({ binding_slot, stride, VK_VERTEX_INPUT_RATE_VERTEX });
+            vi_attrs.push_back({ i, binding_slot, fmt, 0u });
             uint32_t off = (ma.offset > 0) ? static_cast<uint32_t>(ma.offset) : 0u;
             uint32_t rem = (mb.size > off) ? (mb.size - off) : 64u;
             GpuBuffer vb = alloc_buffer(std::max(16u, rem),
@@ -1115,6 +1131,12 @@ bool ValhallVulkanEngine::execute_cs_run_idvs_graphics(
 
     VkPipeline gpipe = VK_NULL_HANDLE;
     if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &gpci, nullptr, &gpipe) != VK_SUCCESS) {
+        vkDestroyPipelineLayout(device_, playout, nullptr);
+        vkDestroyDescriptorSetLayout(device_, dsl, nullptr);
+        vkDestroyRenderPass(device_, rpass, nullptr);
+        vkDestroyShaderModule(device_, vert_mod, nullptr);
+        vkDestroyShaderModule(device_, frag_mod, nullptr);
+        for (auto& vb : uploaded_vbufs) free_buffer(vb);
         if (out_err) *out_err = "vkCreateGraphicsPipelines failed";
         return false;
     }
@@ -1236,7 +1258,18 @@ bool ValhallVulkanEngine::execute_cs_run_idvs_graphics(
         vkCmdBindVertexBuffers(cmd, 0, static_cast<uint32_t>(vbs.size()), vbs.data(), offs.data());
     }
 
-    vkCmdDraw(cmd, std::max(3u, gsb.vertex_count), gsb.instance_count, gsb.first_vertex, 0);
+    GpuBuffer idx_buf{};
+    if (gsb.index_buffer_va != 0 && gsb.vertex_count > 0) {
+        size_t idx_stride = (gsb.index_type == VK_INDEX_TYPE_UINT16) ? 2u : 4u;
+        size_t idx_bytes = static_cast<size_t>(gsb.vertex_count) * idx_stride;
+        idx_buf = alloc_buffer(std::max<size_t>(16u, idx_bytes),
+                               reinterpret_cast<const void*>(gsb.index_buffer_va),
+                               idx_bytes);
+        vkCmdBindIndexBuffer(cmd, idx_buf.buffer, 0, gsb.index_type);
+        vkCmdDrawIndexed(cmd, gsb.vertex_count, gsb.instance_count, gsb.first_vertex, gsb.vertex_offset, 0);
+    } else {
+        vkCmdDraw(cmd, std::max(3u, gsb.vertex_count), gsb.instance_count, gsb.first_vertex, 0);
+    }
     vkCmdEndRenderPass(cmd);
 
     VkBufferImageCopy read_bic{};

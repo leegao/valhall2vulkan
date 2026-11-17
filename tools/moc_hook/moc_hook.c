@@ -43,9 +43,13 @@ static int my_compile_multi(
             if (status == 0 && c_code) {
                 const char* out_path = getenv("MOC_DUMP_PATH");
                 if (!out_path) out_path = "dumped_mbs2.h";
-                FILE* fp = fopen(out_path, "w");
+                FILE* fp = fopen(out_path, (i == 0) ? "w" : "a");
                 if (fp) {
-                    fprintf(fp, "#include \"cmpbe_chunks.h\"\n%s", c_code);
+                    if (i == 0) {
+                        fprintf(fp, "#include \"cmpbe_chunks.h\"\n%s", c_code);
+                    } else {
+                        fprintf(fp, "\n%s", c_code);
+                    }
                     fclose(fp);
                 }
             }

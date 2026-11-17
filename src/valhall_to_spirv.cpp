@@ -1,5 +1,7 @@
 #include "valhall_to_spirv.h"
 #include <sstream>
+#include <cstdlib>
+#include <cstdio>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
@@ -27,6 +29,7 @@ struct TranslatorContext {
     std::map<uint32_t, uint32_t> frag_color_outputs_;    // location -> OpVariable Output vec4
     std::map<uint32_t, uint32_t> sampled_image_vars_;    // index -> OpVariable UniformConstant SampledImage
     std::map<uint32_t, uint32_t> sampled_image_types_;   // index -> OpTypeSampledImage
+    std::vector<std::string> unhandled_errors_;
 
     TranslatorContext(ExecutionModel model, const ValhallTranslateOptions& o)
         : b(model, true), opts(o) {}
@@ -81,14 +84,12 @@ struct TranslatorContext {
 
     bool get_src_abs(const DecodedValhallInst& ins, size_t src_idx) {
         if (src_idx < ins.srcs.size() && ins.srcs[src_idx].abs) return true;
-        if (src_idx == 0 && ins.mnemonic == Mnemonic::FABS) return true;
         auto it = ins.fields.find("abs" + std::to_string(src_idx));
         return (it != ins.fields.end() && it->second != 0);
     }
 
     bool get_src_neg(const DecodedValhallInst& ins, size_t src_idx) {
         if (src_idx < ins.srcs.size() && ins.srcs[src_idx].neg) return true;
-        if (src_idx == 0 && ins.mnemonic == Mnemonic::FNEG) return true;
         auto it = ins.fields.find("neg" + std::to_string(src_idx));
         return (it != ins.fields.end() && it->second != 0);
     }
@@ -205,6 +206,109 @@ struct TranslatorContext {
         return fval;
     }
 
+    uint32_t load_src_v2f16(const DecodedValhallInst& ins, size_t src_idx) {
+        uint32_t raw_u32 = load_raw_src_u32(ins, src_idx);
+        uint32_t v2f = b.type_vector(b.type_f32(), 2);
+        uint32_t vec = b.emit_glsl_ext(GlslStd450::UnpackHalf2x16, v2f, { raw_u32 });
+        std::string swz = get_src_swz(ins, src_idx);
+        if (swz == "h00" || swz == "h0") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2f, { vec, vec, 0u, 0u });
+        } else if (swz == "h11" || swz == "h1") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2f, { vec, vec, 1u, 1u });
+        } else if (swz == "h10") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2f, { vec, vec, 1u, 0u });
+        }
+        if (get_src_abs(ins, src_idx)) {
+            vec = b.emit_glsl_ext(GlslStd450::FAbs, v2f, { vec });
+        }
+        if (get_src_neg(ins, src_idx)) {
+            vec = b.emit_typed_inst(Op::OpFNegate, v2f, { vec });
+        }
+        return vec;
+    }
+
+    void write_dest_v2f16(const DecodedValhallInst& ins, uint32_t vec2_f32) {
+        if (!ins.has_dest) return;
+        uint32_t v2f = b.type_vector(b.type_f32(), 2);
+        auto it_clamp = ins.modifier_strs.find("clamp");
+        if (it_clamp != ins.modifier_strs.end()) {
+            const std::string& cl = it_clamp->second;
+            if (cl == "clamp_0_1") {
+                uint32_t z = b.const_composite(v2f, { b.const_f32(0.0f), b.const_f32(0.0f) });
+                uint32_t o = b.const_composite(v2f, { b.const_f32(1.0f), b.const_f32(1.0f) });
+                vec2_f32 = b.emit_glsl_ext(GlslStd450::FClamp, v2f, { vec2_f32, z, o });
+            } else if (cl == "clamp_m1_1") {
+                uint32_t m = b.const_composite(v2f, { b.const_f32(-1.0f), b.const_f32(-1.0f) });
+                uint32_t o = b.const_composite(v2f, { b.const_f32(1.0f), b.const_f32(1.0f) });
+                vec2_f32 = b.emit_glsl_ext(GlslStd450::FClamp, v2f, { vec2_f32, m, o });
+            } else if (cl == "clamp_0_inf") {
+                uint32_t z = b.const_composite(v2f, { b.const_f32(0.0f), b.const_f32(0.0f) });
+                vec2_f32 = b.emit_glsl_ext(GlslStd450::FMax, v2f, { vec2_f32, z });
+            }
+        }
+        uint32_t packed = b.emit_glsl_ext(GlslStd450::PackHalf2x16, b.type_u32(), { vec2_f32 });
+        write_dest_u32(ins, packed);
+    }
+
+    uint32_t load_src_v2i16(const DecodedValhallInst& ins, size_t src_idx, bool is_signed) {
+        uint32_t raw_u32 = load_raw_src_u32(ins, src_idx);
+        uint32_t elem_t = is_signed ? b.type_s32() : b.type_u32();
+        uint32_t v2t = b.type_vector(elem_t, 2);
+        Op ext_op = is_signed ? Op::OpBitFieldSExtract : Op::OpBitFieldUExtract;
+        uint32_t in_val = is_signed ? b.emit_bitcast(b.type_s32(), raw_u32) : raw_u32;
+        uint32_t l0 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(0u), b.const_u32(16u) });
+        uint32_t l1 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(16u), b.const_u32(16u) });
+        uint32_t vec = b.emit_typed_inst(Op::OpCompositeConstruct, v2t, { l0, l1 });
+        std::string swz = get_src_swz(ins, src_idx);
+        if (swz == "h00" || swz == "h0") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2t, { vec, vec, 0u, 0u });
+        } else if (swz == "h11" || swz == "h1") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2t, { vec, vec, 1u, 1u });
+        } else if (swz == "h10") {
+            vec = b.emit_typed_inst(Op::OpVectorShuffle, v2t, { vec, vec, 1u, 0u });
+        }
+        return vec;
+    }
+
+    void write_dest_v2i16(const DecodedValhallInst& ins, uint32_t vec2_i32, bool is_signed) {
+        if (!ins.has_dest) return;
+        uint32_t elem_t = is_signed ? b.type_s32() : b.type_u32();
+        uint32_t e0 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { vec2_i32, 0u });
+        uint32_t e1 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { vec2_i32, 1u });
+        if (is_signed) {
+            e0 = b.emit_bitcast(b.type_u32(), e0);
+            e1 = b.emit_bitcast(b.type_u32(), e1);
+        }
+        uint32_t p0 = b.emit_typed_inst(Op::OpBitFieldInsert, b.type_u32(), { b.const_u32(0u), e0, b.const_u32(0u), b.const_u32(16u) });
+        uint32_t packed = b.emit_typed_inst(Op::OpBitFieldInsert, b.type_u32(), { p0, e1, b.const_u32(16u), b.const_u32(16u) });
+        write_dest_u32(ins, packed);
+    }
+
+    uint32_t load_src_v4i8(const DecodedValhallInst& ins, size_t src_idx, bool is_signed) {
+        uint32_t raw_u32 = load_raw_src_u32(ins, src_idx);
+        uint32_t elem_t = is_signed ? b.type_s32() : b.type_u32();
+        uint32_t v4t = b.type_vector(elem_t, 4);
+        Op ext_op = is_signed ? Op::OpBitFieldSExtract : Op::OpBitFieldUExtract;
+        uint32_t in_val = is_signed ? b.emit_bitcast(b.type_s32(), raw_u32) : raw_u32;
+        uint32_t c0 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(0u),  b.const_u32(8u) });
+        uint32_t c1 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(8u),  b.const_u32(8u) });
+        uint32_t c2 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(16u), b.const_u32(8u) });
+        uint32_t c3 = b.emit_typed_inst(ext_op, elem_t, { in_val, b.const_u32(24u), b.const_u32(8u) });
+        return b.emit_typed_inst(Op::OpCompositeConstruct, v4t, { c0, c1, c2, c3 });
+    }
+
+    void write_dest_v4i8(const DecodedValhallInst& ins, uint32_t vec4_i32, bool is_signed) {
+        if (!ins.has_dest) return;
+        uint32_t elem_t = is_signed ? b.type_s32() : b.type_u32();
+        uint32_t acc = b.const_u32(0u);
+        for (uint32_t i = 0; i < 4; ++i) {
+            uint32_t ei = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { vec4_i32, i });
+            if (is_signed) ei = b.emit_bitcast(b.type_u32(), ei);
+            acc = b.emit_typed_inst(Op::OpBitFieldInsert, b.type_u32(), { acc, ei, b.const_u32(i * 8u), b.const_u32(8u) });
+        }
+        write_dest_u32(ins, acc);
+    }
+
     uint32_t load_src_u64(const DecodedValhallInst& ins, size_t src_idx, bool sign_extend_subword = false) {
         if (src_idx >= ins.srcs.size()) return b.const_u64(0);
         const auto& s = ins.srcs[src_idx];
@@ -243,8 +347,7 @@ struct TranslatorContext {
             }
             return pack_u64(load_fau_u32(base), load_fau_u32(base + 1));
         } else if (s.kind == SourceKind::SmallConstant) {
-            uint64_t c64 = uint64_t(s.imm_bits) | (uint64_t(s.imm_bits) << 32);
-            return b.const_u64(c64);
+            return b.const_u64(uint64_t(s.imm_bits));
         } else if (s.kind == SourceKind::FauSpecial) {
             if (s.symbolic_name == "pc") {
                 uint32_t pc_base = load_sideband_u64(1);
@@ -464,8 +567,18 @@ struct TranslatorContext {
         Mnemonic cmn = ins.canonical_mnemonic;
         std::string var = variant_to_string(ins.canonical_variant);
 
-        // 0. NOP / WAIT / BARRIER / DISCARD
-        if (cmn == Mnemonic::NOP || mn == Mnemonic::NOP) {
+        // 0. NOP / WAIT / BARRIER / DISCARD / Control
+        if (cmn == Mnemonic::NOP || mn == Mnemonic::NOP ||
+            cmn == Mnemonic::BRANCH || mn == Mnemonic::BRANCH ||
+            cmn == Mnemonic::JUMP || mn == Mnemonic::JUMP ||
+            cmn == Mnemonic::JUMP_EX || mn == Mnemonic::JUMP_EX ||
+            cmn == Mnemonic::FLUSH || mn == Mnemonic::FLUSH ||
+            cmn == Mnemonic::DOORBELL || mn == Mnemonic::DOORBELL ||
+            cmn == Mnemonic::EUREKA || mn == Mnemonic::EUREKA) {
+            return;
+        }
+        if (cmn == Mnemonic::KABOOM || mn == Mnemonic::KABOOM) {
+            b.emit_kill();
             return;
         }
         if (cmn == Mnemonic::BARRIER || mn == Mnemonic::BARRIER) {
@@ -482,7 +595,7 @@ struct TranslatorContext {
         // 1. ADR (PC-relative address calculation: rd = (pc + offset) & 0xFFFFFFFF)
         if (mn == Mnemonic::ADR) {
             uint32_t pc_base = load_sideband_u64(1);
-            int64_t tgt_pc = ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + ins.imm_signed);
+            int64_t tgt_pc = ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + 8 + ins.imm_signed);
             uint32_t full_addr = b.emit_typed_inst(Op::OpIAdd, b.type_u64(),
                                                    { pc_base, b.const_u64(static_cast<uint64_t>(tgt_pc)) });
             uint32_t lo = 0, hi = 0;
@@ -503,45 +616,75 @@ struct TranslatorContext {
             return;
         }
 
-        // 3. Floating-Point Arithmetic (FADD, FADD_IMM, FMUL, FMA, FMIN, FMAX, FABS, FNEG, FSAT, FROUND, FFRACT)
-        if (mn == Mnemonic::FABS) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t res = b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { s0 });
-            write_dest_f32(ins, res);
+        // 3. Floating-Point Arithmetic (FADD, FADD_IMM, FMUL, FMA, FMIN, FMAX, FABS, FNEG, FSAT, FROUND, FFRACT, *_RSCALE)
+        bool is_v2f16 = (ins.canonical_variant == Variant::V2F16 || ins.variant == Variant::V2F16 || var == "v2f16");
+        uint32_t v2f_t = is_v2f16 ? b.type_vector(b.type_f32(), 2) : 0u;
+
+        if (mn == Mnemonic::FABS || cmn == Mnemonic::FABS) {
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                write_dest_v2f16(ins, b.emit_glsl_ext(GlslStd450::FAbs, v2f_t, { s0 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { s0 }));
+            }
             return;
         }
-        if (mn == Mnemonic::FNEG) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            write_dest_f32(ins, s0);
+        if (mn == Mnemonic::FNEG || cmn == Mnemonic::FNEG) {
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                write_dest_v2f16(ins, b.emit_typed_inst(Op::OpFNegate, v2f_t, { s0 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                write_dest_f32(ins, b.emit_typed_inst(Op::OpFNegate, b.type_f32(), { s0 }));
+            }
             return;
         }
-        if (false) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t res = b.emit_glsl_ext(GlslStd450::FClamp, b.type_f32(),
-                                           { s0, b.const_f32(0.0f), b.const_f32(1.0f) });
-            write_dest_f32(ins, res);
+        if (mn == Mnemonic::FMUL || cmn == Mnemonic::FMUL ||
+            cmn == Mnemonic::FMUL_RSCALE || cmn == Mnemonic::FMUL_SLICE || cmn == Mnemonic::FMUL_CSLICE) {
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                uint32_t s1 = load_src_v2f16(ins, 1);
+                write_dest_v2f16(ins, b.emit_typed_inst(Op::OpFMul, v2f_t, { s0, s1 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                uint32_t s1 = load_src_f32(ins, 1);
+                uint32_t res = b.emit_typed_inst(Op::OpFMul, b.type_f32(), { s0, s1 });
+                if ((cmn == Mnemonic::FMUL_RSCALE || mn == Mnemonic::FMUL_RSCALE) && ins.srcs.size() >= 3) {
+                    uint32_t sc = load_src_int32(ins, 2, true);
+                    res = b.emit_glsl_ext(GlslStd450::Ldexp, b.type_f32(), { res, b.emit_bitcast(b.type_s32(), sc) });
+                }
+                write_dest_f32(ins, res);
+            }
             return;
         }
-        if (mn == Mnemonic::FMUL) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t s1 = load_src_f32(ins, 1);
-            uint32_t res = b.emit_typed_inst(Op::OpFMul, b.type_f32(), { s0, s1 });
-            write_dest_f32(ins, res);
+        if (cmn == Mnemonic::FMA || mn == Mnemonic::FMA || cmn == Mnemonic::FMA_RSCALE || mn == Mnemonic::FMA_RSCALE) {
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                uint32_t s1 = load_src_v2f16(ins, 1);
+                uint32_t s2 = (ins.srcs.size() >= 3) ? load_src_v2f16(ins, 2)
+                                                    : b.const_composite(v2f_t, { b.const_f32(0.0f), b.const_f32(0.0f) });
+                write_dest_v2f16(ins, b.emit_glsl_ext(GlslStd450::Fma, v2f_t, { s0, s1, s2 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                uint32_t s1 = load_src_f32(ins, 1);
+                uint32_t s2 = (ins.srcs.size() >= 3) ? load_src_f32(ins, 2) : b.const_f32(0.0f);
+                uint32_t res = b.emit_glsl_ext(GlslStd450::Fma, b.type_f32(), { s0, s1, s2 });
+                write_dest_f32(ins, res);
+            }
             return;
         }
-        if (cmn == Mnemonic::FMA || mn == Mnemonic::FMA) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t s1 = load_src_f32(ins, 1);
-            uint32_t s2 = (ins.srcs.size() >= 3) ? load_src_f32(ins, 2) : b.const_f32(0.0f);
-            uint32_t res = b.emit_glsl_ext(GlslStd450::Fma, b.type_f32(), { s0, s1, s2 });
-            write_dest_f32(ins, res);
-            return;
-        }
-        if (cmn == Mnemonic::FADD || mn == Mnemonic::FADD) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t s1 = load_src_f32(ins, 1);
-            uint32_t res = b.emit_typed_inst(Op::OpFAdd, b.type_f32(), { s0, s1 });
-            write_dest_f32(ins, res);
+        if (cmn == Mnemonic::FADD || mn == Mnemonic::FADD ||
+            cmn == Mnemonic::FADD_LSCALE || cmn == Mnemonic::FADD_RSCALE) {
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                uint32_t s1 = load_src_v2f16(ins, 1);
+                write_dest_v2f16(ins, b.emit_typed_inst(Op::OpFAdd, v2f_t, { s0, s1 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                uint32_t s1 = load_src_f32(ins, 1);
+                write_dest_f32(ins, b.emit_typed_inst(Op::OpFAdd, b.type_f32(), { s0, s1 }));
+            }
             return;
         }
         if (cmn == Mnemonic::FADD_IMM || mn == Mnemonic::FADD_IMM) {
@@ -552,17 +695,27 @@ struct TranslatorContext {
             return;
         }
         if (cmn == Mnemonic::FMIN || mn == Mnemonic::FMIN) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t s1 = load_src_f32(ins, 1);
-            uint32_t res = b.emit_glsl_ext(GlslStd450::FMin, b.type_f32(), { s0, s1 });
-            write_dest_f32(ins, res);
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                uint32_t s1 = load_src_v2f16(ins, 1);
+                write_dest_v2f16(ins, b.emit_glsl_ext(GlslStd450::NMin, v2f_t, { s0, s1 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                uint32_t s1 = load_src_f32(ins, 1);
+                write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::NMin, b.type_f32(), { s0, s1 }));
+            }
             return;
         }
         if (cmn == Mnemonic::FMAX || mn == Mnemonic::FMAX) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            uint32_t s1 = load_src_f32(ins, 1);
-            uint32_t res = b.emit_glsl_ext(GlslStd450::FMax, b.type_f32(), { s0, s1 });
-            write_dest_f32(ins, res);
+            if (is_v2f16) {
+                uint32_t s0 = load_src_v2f16(ins, 0);
+                uint32_t s1 = load_src_v2f16(ins, 1);
+                write_dest_v2f16(ins, b.emit_glsl_ext(GlslStd450::NMax, v2f_t, { s0, s1 }));
+            } else {
+                uint32_t s0 = load_src_f32(ins, 0);
+                uint32_t s1 = load_src_f32(ins, 1);
+                write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::NMax, b.type_f32(), { s0, s1 }));
+            }
             return;
         }
         if (cmn == Mnemonic::FROUND || mn == Mnemonic::FROUND) {
@@ -624,6 +777,92 @@ struct TranslatorContext {
             write_dest_f32(ins, res);
             return;
         }
+        if (cmn == Mnemonic::FEXPF || mn == Mnemonic::FEXPF) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::Exp, b.type_f32(), { s0 }));
+            return;
+        }
+        if (cmn == Mnemonic::FLOG || mn == Mnemonic::FLOG) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::Log, b.type_f32(), { s0 }));
+            return;
+        }
+        if (cmn == Mnemonic::FPOW || mn == Mnemonic::FPOW ||
+            cmn == Mnemonic::FPOW_SC_APPLY || cmn == Mnemonic::FPOW_SC_DET) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            uint32_t s1 = (ins.srcs.size() >= 2) ? load_src_f32(ins, 1) : b.const_f32(1.0f);
+            write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::Pow, b.type_f32(), { s0, s1 }));
+            return;
+        }
+        if (cmn == Mnemonic::LDEXP || mn == Mnemonic::LDEXP) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            uint32_t s1 = b.emit_bitcast(b.type_s32(), load_src_int32(ins, 1, true));
+            write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::Ldexp, b.type_f32(), { s0, s1 }));
+            return;
+        }
+        if (cmn == Mnemonic::FREXPE || cmn == Mnemonic::FREXPM || cmn == Mnemonic::ILOGB || cmn == Mnemonic::LOGB) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            uint32_t st_t = b.type_struct({ b.type_f32(), b.type_s32() });
+            uint32_t fr = b.emit_glsl_ext(GlslStd450::Frexp, st_t, { s0 });
+            if (cmn == Mnemonic::FREXPM) {
+                uint32_t m = b.emit_typed_inst(Op::OpCompositeExtract, b.type_f32(), { fr, 0u });
+                write_dest_f32(ins, m);
+            } else {
+                uint32_t e = b.emit_typed_inst(Op::OpCompositeExtract, b.type_s32(), { fr, 1u });
+                if (cmn == Mnemonic::ILOGB || cmn == Mnemonic::LOGB) {
+                    e = b.emit_typed_inst(Op::OpISub, b.type_s32(), { e, b.const_s32(1) });
+                }
+                write_dest_u32(ins, b.emit_bitcast(b.type_u32(), e));
+            }
+            return;
+        }
+        if (cmn == Mnemonic::FSINCOS || cmn == Mnemonic::FSINCOS_OFFSET) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            uint32_t res = b.emit_glsl_ext(GlslStd450::Sin, b.type_f32(), { s0 });
+            write_dest_f32(ins, res);
+            return;
+        }
+        if (cmn == Mnemonic::FATAN_ASSIST || cmn == Mnemonic::FATAN_TABLE) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            write_dest_f32(ins, b.emit_glsl_ext(GlslStd450::Atan, b.type_f32(), { s0 }));
+            return;
+        }
+        if (cmn == Mnemonic::FPCLASS) {
+            uint32_t s0 = load_src_f32(ins, 0);
+            uint32_t is_nan = b.emit_typed_inst(Op::OpIsNan, b.type_bool(), { s0 });
+            uint32_t is_inf = b.emit_typed_inst(Op::OpIsInf, b.type_bool(), { s0 });
+            uint32_t res = b.emit_select(b.type_u32(), is_nan, b.const_u32(1u),
+                                         b.emit_select(b.type_u32(), is_inf, b.const_u32(2u), b.const_u32(0u)));
+            write_dest_u32(ins, res);
+            return;
+        }
+        if (cmn == Mnemonic::CUBEFACE1 || cmn == Mnemonic::CUBEFACE2 ||
+            cmn == Mnemonic::CUBE_SSEL || cmn == Mnemonic::CUBE_TSEL) {
+            uint32_t x = load_src_f32(ins, 0);
+            uint32_t y = (ins.srcs.size() >= 2) ? load_src_f32(ins, 1) : b.const_f32(0.0f);
+            uint32_t z = (ins.srcs.size() >= 3) ? load_src_f32(ins, 2) : b.const_f32(0.0f);
+            uint32_t ax = b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { x });
+            uint32_t ay = b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { y });
+            uint32_t az = b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { z });
+            uint32_t ma = b.emit_glsl_ext(GlslStd450::FMax, b.type_f32(), { ax, b.emit_glsl_ext(GlslStd450::FMax, b.type_f32(), { ay, az }) });
+            if (cmn == Mnemonic::CUBEFACE2) {
+                write_dest_f32(ins, ma);
+            } else if (cmn == Mnemonic::CUBEFACE1) {
+                uint32_t bt = b.type_bool();
+                uint32_t is_x = b.emit_typed_inst(Op::OpLogicalAnd, bt, {
+                    b.emit_typed_inst(Op::OpFOrdGreaterThanEqual, bt, { ax, ay }),
+                    b.emit_typed_inst(Op::OpFOrdGreaterThanEqual, bt, { ax, az }) });
+                uint32_t is_y = b.emit_typed_inst(Op::OpFOrdGreaterThanEqual, bt, { ay, az });
+                uint32_t fx = b.emit_select(b.type_u32(), b.emit_typed_inst(Op::OpFOrdLessThan, bt, { x, b.const_f32(0.0f) }), b.const_u32(1u), b.const_u32(0u));
+                uint32_t fy = b.emit_select(b.type_u32(), b.emit_typed_inst(Op::OpFOrdLessThan, bt, { y, b.const_f32(0.0f) }), b.const_u32(3u), b.const_u32(2u));
+                uint32_t fz = b.emit_select(b.type_u32(), b.emit_typed_inst(Op::OpFOrdLessThan, bt, { z, b.const_f32(0.0f) }), b.const_u32(5u), b.const_u32(4u));
+                uint32_t face = b.emit_select(b.type_u32(), is_x, fx, b.emit_select(b.type_u32(), is_y, fy, fz));
+                write_dest_u32(ins, face);
+            } else {
+                write_dest_f32(ins, (cmn == Mnemonic::CUBE_SSEL) ? x : y);
+            }
+            return;
+        }
 
         // 5. Type Conversions
         if (cmn == Mnemonic::U32_TO_F32 || mn == Mnemonic::U32_TO_F32) {
@@ -652,9 +891,59 @@ struct TranslatorContext {
             write_dest_u32(ins, res);
             return;
         }
-        if (cmn == Mnemonic::F16_TO_F32 || mn == Mnemonic::F16_TO_F32) {
-            uint32_t s0 = load_src_f32(ins, 0);
-            write_dest_f32(ins, s0);
+        if (cmn == Mnemonic::F16_TO_F32 || mn == Mnemonic::F16_TO_F32 ||
+            cmn == Mnemonic::F16_TO_S32 || cmn == Mnemonic::F16_TO_U32) {
+            uint32_t raw = load_raw_src_u32(ins, 0);
+            std::string swz = get_src_swz(ins, 0);
+            uint32_t v2f = b.type_vector(b.type_f32(), 2);
+            uint32_t unpacked = b.emit_glsl_ext(GlslStd450::UnpackHalf2x16, v2f, { raw });
+            uint32_t fval = b.emit_typed_inst(Op::OpCompositeExtract, b.type_f32(), { unpacked, (swz == "h1") ? 1u : 0u });
+            if (get_src_abs(ins, 0)) fval = b.emit_glsl_ext(GlslStd450::FAbs, b.type_f32(), { fval });
+            if (get_src_neg(ins, 0)) fval = b.emit_typed_inst(Op::OpFNegate, b.type_f32(), { fval });
+            if (cmn == Mnemonic::F16_TO_S32) {
+                uint32_t s32 = b.emit_typed_inst(Op::OpConvertFToS, b.type_s32(), { fval });
+                write_dest_u32(ins, b.emit_bitcast(b.type_u32(), s32));
+            } else if (cmn == Mnemonic::F16_TO_U32) {
+                write_dest_u32(ins, b.emit_typed_inst(Op::OpConvertFToU, b.type_u32(), { fval }));
+            } else {
+                write_dest_f32(ins, fval);
+            }
+            return;
+        }
+        if (cmn == Mnemonic::V2F16_TO_V2S16 || cmn == Mnemonic::V2F16_TO_V2U16) {
+            bool is_s = (cmn == Mnemonic::V2F16_TO_V2S16);
+            uint32_t fv = load_src_v2f16(ins, 0);
+            uint32_t vt = b.type_vector(is_s ? b.type_s32() : b.type_u32(), 2);
+            uint32_t res = b.emit_typed_inst(is_s ? Op::OpConvertFToS : Op::OpConvertFToU, vt, { fv });
+            write_dest_v2i16(ins, res, is_s);
+            return;
+        }
+        if (cmn == Mnemonic::V2S16_TO_V2F16 || cmn == Mnemonic::V2U16_TO_V2F16) {
+            bool is_s = (cmn == Mnemonic::V2S16_TO_V2F16);
+            uint32_t iv = load_src_v2i16(ins, 0, is_s);
+            uint32_t v2f = b.type_vector(b.type_f32(), 2);
+            uint32_t fv = b.emit_typed_inst(is_s ? Op::OpConvertSToF : Op::OpConvertUToF, v2f, { iv });
+            write_dest_v2f16(ins, fv);
+            return;
+        }
+        if (cmn == Mnemonic::V2S8_TO_V2F16 || cmn == Mnemonic::V2U8_TO_V2F16) {
+            bool is_s = (cmn == Mnemonic::V2S8_TO_V2F16);
+            uint32_t v4 = load_src_v4i8(ins, 0, is_s);
+            uint32_t elem_t = is_s ? b.type_s32() : b.type_u32();
+            uint32_t v2t = b.type_vector(elem_t, 2);
+            uint32_t iv = b.emit_typed_inst(Op::OpVectorShuffle, v2t, { v4, v4, 0u, 1u });
+            uint32_t v2f = b.type_vector(b.type_f32(), 2);
+            uint32_t fv = b.emit_typed_inst(is_s ? Op::OpConvertSToF : Op::OpConvertUToF, v2f, { iv });
+            write_dest_v2f16(ins, fv);
+            return;
+        }
+        if (cmn == Mnemonic::V2S8_TO_V2S16 || cmn == Mnemonic::V2U8_TO_V2U16) {
+            bool is_s = (cmn == Mnemonic::V2S8_TO_V2S16);
+            uint32_t v4 = load_src_v4i8(ins, 0, is_s);
+            uint32_t elem_t = is_s ? b.type_s32() : b.type_u32();
+            uint32_t v2t = b.type_vector(elem_t, 2);
+            uint32_t iv = b.emit_typed_inst(Op::OpVectorShuffle, v2t, { v4, v4, 0u, 1u });
+            write_dest_v2i16(ins, iv, is_s);
             return;
         }
         if (cmn == Mnemonic::F32_TO_F16 || mn == Mnemonic::F32_TO_F16) {
@@ -758,9 +1047,60 @@ struct TranslatorContext {
             bool is_s = (var.find("s") == 0);
             uint32_t s0 = load_src_int32(ins, 0, is_s);
             uint32_t s1 = load_src_int32(ins, 1, is_s);
-            uint32_t sum = b.emit_typed_inst(Op::OpIAdd, b.type_u32(), { s0, s1 });
-            uint32_t res = b.emit_typed_inst(Op::OpShiftRightLogical, b.type_u32(), { sum, b.const_u32(1u) });
+            if (is_s) {
+                uint32_t a_s = b.emit_bitcast(b.type_s32(), s0);
+                uint32_t b_s = b.emit_bitcast(b.type_s32(), s1);
+                uint32_t band = b.emit_typed_inst(Op::OpBitwiseAnd, b.type_s32(), { a_s, b_s });
+                uint32_t bxor = b.emit_typed_inst(Op::OpBitwiseXor, b.type_s32(), { a_s, b_s });
+                uint32_t half_xor = b.emit_typed_inst(Op::OpShiftRightArithmetic, b.type_s32(), { bxor, b.const_u32(1u) });
+                uint32_t res = b.emit_typed_inst(Op::OpIAdd, b.type_s32(), { band, half_xor });
+                write_dest_u32(ins, b.emit_bitcast(b.type_u32(), res));
+            } else {
+                uint32_t band = b.emit_typed_inst(Op::OpBitwiseAnd, b.type_u32(), { s0, s1 });
+                uint32_t bxor = b.emit_typed_inst(Op::OpBitwiseXor, b.type_u32(), { s0, s1 });
+                uint32_t half_xor = b.emit_typed_inst(Op::OpShiftRightLogical, b.type_u32(), { bxor, b.const_u32(1u) });
+                uint32_t res = b.emit_typed_inst(Op::OpIAdd, b.type_u32(), { band, half_xor });
+                write_dest_u32(ins, res);
+            }
+            return;
+        }
+        if (cmn == Mnemonic::IADDC || cmn == Mnemonic::ISUBB) {
+            uint32_t s0 = load_src_int32(ins, 0, false);
+            uint32_t s1 = load_src_int32(ins, 1, false);
+            uint32_t s2 = (ins.srcs.size() >= 3) ? load_src_int32(ins, 2, false) : b.const_u32(0u);
+            Op op = (cmn == Mnemonic::IADDC) ? Op::OpIAdd : Op::OpISub;
+            uint32_t t0 = b.emit_typed_inst(op, b.type_u32(), { s0, s1 });
+            uint32_t res = b.emit_typed_inst(op, b.type_u32(), { t0, s2 });
             write_dest_u32(ins, res);
+            return;
+        }
+        if (cmn == Mnemonic::IDPADD) {
+            bool is_s = (var.find("s") == 0);
+            uint32_t a4 = load_src_v4i8(ins, 0, is_s);
+            uint32_t b4 = load_src_v4i8(ins, 1, is_s);
+            uint32_t elem_t = is_s ? b.type_s32() : b.type_u32();
+            uint32_t v4t = b.type_vector(elem_t, 4);
+            uint32_t prod = b.emit_typed_inst(Op::OpIMul, v4t, { a4, b4 });
+            uint32_t acc = (ins.srcs.size() >= 3) ? load_src_int32(ins, 2, is_s) : b.const_u32(0u);
+            if (is_s) acc = b.emit_bitcast(b.type_s32(), acc);
+            for (uint32_t i = 0; i < 4; ++i) {
+                uint32_t lane = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { prod, i });
+                acc = b.emit_typed_inst(Op::OpIAdd, elem_t, { acc, lane });
+            }
+            write_dest_u32(ins, is_s ? b.emit_bitcast(b.type_u32(), acc) : acc);
+            return;
+        }
+        if (cmn == Mnemonic::SEG_ADD || cmn == Mnemonic::SEG_SUB) {
+            uint32_t s0 = load_src_u64(ins, 0, false);
+            uint32_t s1 = load_src_u64(ins, 1, true);
+            Op op = (cmn == Mnemonic::SEG_ADD) ? Op::OpIAdd : Op::OpISub;
+            write_dest_u64(ins, b.emit_typed_inst(op, b.type_u64(), { s0, s1 }));
+            return;
+        }
+        if (cmn == Mnemonic::MMUL) {
+            uint32_t s0 = load_src_int32(ins, 0, false);
+            uint32_t s1 = load_src_int32(ins, 1, false);
+            write_dest_u32(ins, b.emit_typed_inst(Op::OpIMul, b.type_u32(), { s0, s1 }));
             return;
         }
         if (cmn == Mnemonic::U16_TO_U32 || mn == Mnemonic::U16_TO_U32 ||
@@ -793,6 +1133,33 @@ struct TranslatorContext {
         }
 
         // 7. Bitwise & Shift Instructions
+        if (cmn == Mnemonic::NOT || mn == Mnemonic::NOT || cmn == Mnemonic::NOT_OLD) {
+            uint32_t s0 = load_src_int32(ins, 0, false);
+            write_dest_u32(ins, b.emit_typed_inst(Op::OpNot, b.type_u32(), { s0 }));
+            return;
+        }
+        if (cmn == Mnemonic::LROT || cmn == Mnemonic::RROT ||
+            cmn == Mnemonic::LROT_AND || cmn == Mnemonic::LROT_OR || cmn == Mnemonic::LROT_XOR ||
+            cmn == Mnemonic::RROT_AND || cmn == Mnemonic::RROT_OR || cmn == Mnemonic::RROT_XOR) {
+            uint32_t s0 = load_src_int32(ins, 0, false);
+            uint32_t sh = b.emit_typed_inst(Op::OpBitwiseAnd, b.type_u32(), { load_src_int32(ins, 1, false), b.const_u32(31u) });
+            uint32_t inv_sh = b.emit_typed_inst(Op::OpISub, b.type_u32(), { b.const_u32(32u), sh });
+            bool is_rrot = (cmn == Mnemonic::RROT || cmn == Mnemonic::RROT_AND || cmn == Mnemonic::RROT_OR || cmn == Mnemonic::RROT_XOR);
+            uint32_t p0 = b.emit_typed_inst(is_rrot ? Op::OpShiftRightLogical : Op::OpShiftLeftLogical, b.type_u32(), { s0, sh });
+            uint32_t p1 = b.emit_typed_inst(is_rrot ? Op::OpShiftLeftLogical : Op::OpShiftRightLogical, b.type_u32(), { s0, inv_sh });
+            uint32_t rot = b.emit_typed_inst(Op::OpBitwiseOr, b.type_u32(), { p0, p1 });
+            uint32_t res = rot;
+            if (ins.srcs.size() >= 3) {
+                uint32_t s2 = load_src_int32(ins, 2, false);
+                Op bop = Op::OpBitwiseOr;
+                if (cmn == Mnemonic::LROT_AND || cmn == Mnemonic::RROT_AND) bop = Op::OpBitwiseAnd;
+                else if (cmn == Mnemonic::LROT_XOR || cmn == Mnemonic::RROT_XOR) bop = Op::OpBitwiseXor;
+                res = b.emit_typed_inst(bop, b.type_u32(), { rot, s2 });
+            }
+            write_dest_u32(ins, res);
+            return;
+        }
+
         if (mn == Mnemonic::AND_IMM || mn == Mnemonic::OR_IMM || mn == Mnemonic::XOR_IMM) {
             uint32_t s0 = load_src_int32(ins, 0, false);
             uint32_t imm = b.const_u32(static_cast<uint32_t>(ins.imm_unsigned));
@@ -914,11 +1281,45 @@ struct TranslatorContext {
             write_dest_u32(ins, mask);
             return;
         }
+        if (cmn == Mnemonic::ICMP_MULTI) {
+            bool is_s = (var.find("s") == 0);
+            uint32_t s0 = load_src_int32(ins, 0, is_s);
+            uint32_t s1 = load_src_int32(ins, 1, is_s);
+            std::string cmpf = "eq";
+            auto it = ins.modifier_strs.find("cmpf");
+            if (it != ins.modifier_strs.end()) cmpf = it->second;
+            uint32_t cond = eval_int_cmp(cmpf, s0, s1, is_s);
+            write_dest_u32(ins, format_cmp_result(ins, cond));
+            return;
+        }
         if (cmn == Mnemonic::CSEL || mn == Mnemonic::CSEL) {
             std::string cmpf = "ne";
             auto it = ins.modifier_strs.find("cmpf");
             if (it != ins.modifier_strs.end()) cmpf = it->second;
-            bool is_float = (var.find("f") == 0);
+            bool is_v2u16 = (var == "v2u16" || var == "v2s16");
+            if (is_v2u16) {
+                bool is_s = (var == "v2s16");
+                uint32_t elem_t = is_s ? b.type_s32() : b.type_u32();
+                uint32_t v2t = b.type_vector(elem_t, 2);
+                uint32_t a2 = load_src_v2i16(ins, 0, is_s);
+                uint32_t c2 = load_src_v2i16(ins, 1, is_s);
+                uint32_t t2 = load_src_v2i16(ins, 2, is_s);
+                uint32_t f2 = load_src_v2i16(ins, 3, is_s);
+                uint32_t a0 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { a2, 0u });
+                uint32_t c0 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { c2, 0u });
+                uint32_t a1 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { a2, 1u });
+                uint32_t c1 = b.emit_typed_inst(Op::OpCompositeExtract, elem_t, { c2, 1u });
+                uint32_t cond0 = eval_int_cmp(cmpf, is_s ? b.emit_bitcast(b.type_u32(), a0) : a0,
+                                              is_s ? b.emit_bitcast(b.type_u32(), c0) : c0, is_s);
+                uint32_t cond1 = eval_int_cmp(cmpf, is_s ? b.emit_bitcast(b.type_u32(), a1) : a1,
+                                              is_s ? b.emit_bitcast(b.type_u32(), c1) : c1, is_s);
+                uint32_t v2b = b.type_vector(b.type_bool(), 2);
+                uint32_t cond2 = b.emit_typed_inst(Op::OpCompositeConstruct, v2b, { cond0, cond1 });
+                uint32_t res2 = b.emit_select(v2t, cond2, t2, f2);
+                write_dest_v2i16(ins, res2, is_s);
+                return;
+            }
+            bool is_float = (var.find("f") == 0 || var == "v2f16");
             bool is_signed = (var.find("s") == 0);
             uint32_t cond = 0;
             if (is_float) {
@@ -949,6 +1350,19 @@ struct TranslatorContext {
         }
 
         // 9. Subgroup / Quad Derivative Ops (CLPER, CLPER_OR,WMASK)
+        if (cmn == Mnemonic::WMASK || mn == Mnemonic::WMASK) {
+            uint32_t s0 = load_src_int32(ins, 0, false);
+            uint32_t cond = b.emit_typed_inst(Op::OpINotEqual, b.type_bool(), { s0, b.const_u32(0u) });
+            uint32_t v4u = b.type_vector(b.type_u32(), 4);
+            uint32_t ballot = b.emit_typed_inst(Op::OpGroupNonUniformBallot, v4u, { b.const_u32(3u), cond });
+            uint32_t mask0 = b.emit_typed_inst(Op::OpCompositeExtract, b.type_u32(), { ballot, 0u });
+            write_dest_u32(ins, mask0);
+            return;
+        }
+        if (cmn == Mnemonic::LD_GCLK || mn == Mnemonic::LD_GCLK) {
+            write_dest_u64(ins, b.const_u64(0ULL));
+            return;
+        }
         if (cmn == Mnemonic::CLPER || cmn == Mnemonic::CLPER_OR || mn == Mnemonic::CLPER) {
             uint32_t s0 = load_src_int32(ins, 0, false);
             uint32_t s1 = load_src_int32(ins, 1, false);
@@ -976,19 +1390,37 @@ struct TranslatorContext {
             }
             return;
         }
+        if (cmn == Mnemonic::LEA_ATTR || cmn == Mnemonic::LEA_ATTR_IMM ||
+            cmn == Mnemonic::LEA_BUF || cmn == Mnemonic::LEA_TEX || cmn == Mnemonic::LEA_TEX_IMM ||
+            cmn == Mnemonic::LEA_PKA) {
+            uint8_t base_r = ins.sr_write.present ? ins.sr_write.base_reg : 0;
+            uint32_t idx = 0;
+            for (const char* fn : {"attribute_index", "buffer_index", "texture_index", "index"}) {
+                auto it = ins.fields.find(fn);
+                if (it != ins.fields.end()) { idx = it->second; break; }
+            }
+            store_reg_u32(base_r, b.const_u32(idx * 16u));
+            store_reg_u32(base_r + 1, b.const_u32(0xEEEEEEEEu));
+            return;
+        }
         if (cmn == Mnemonic::LEA_BUF_IMM || mn == Mnemonic::LEA_BUF_IMM) {
             // Write synthetic 64-bit buffer address for estream/istream or SRT buffer
             uint8_t base_r = ins.sr_write.present ? ins.sr_write.base_reg : 0;
             uint32_t buf_idx = 0;
             auto it_bi = ins.fields.find("buffer_index");
             if (it_bi != ins.fields.end()) buf_idx = it_bi->second;
-            store_reg_u32(base_r, buf_idx * 16u);
-            store_reg_u32(base_r + 1, 0xEEEEEEEEu);
+            store_reg_u32(base_r, b.const_u32(buf_idx * 16u));
+            store_reg_u32(base_r + 1, b.const_u32(0xEEEEEEEEu));
             return;
         }
         if (cmn == Mnemonic::LD_VAR_IMM || mn == Mnemonic::LD_VAR_IMM ||
+            cmn == Mnemonic::LD_VAR || mn == Mnemonic::LD_VAR ||
+            cmn == Mnemonic::LD_VAR_FLAT || mn == Mnemonic::LD_VAR_FLAT ||
             cmn == Mnemonic::LD_VAR_FLAT_IMM || mn == Mnemonic::LD_VAR_FLAT_IMM ||
+            cmn == Mnemonic::LD_VAR_BUF || mn == Mnemonic::LD_VAR_BUF ||
             cmn == Mnemonic::LD_VAR_BUF_IMM || mn == Mnemonic::LD_VAR_BUF_IMM ||
+            cmn == Mnemonic::LD_VAR_BUF_FLAT || mn == Mnemonic::LD_VAR_BUF_FLAT ||
+            cmn == Mnemonic::LD_VAR_BUF_FLAT_IMM || mn == Mnemonic::LD_VAR_BUF_FLAT_IMM ||
             cmn == Mnemonic::LD_VAR_SPECIAL || mn == Mnemonic::LD_VAR_SPECIAL) {
             bool is_flat = (cmn == Mnemonic::LD_VAR_FLAT_IMM || mn == Mnemonic::LD_VAR_FLAT_IMM);
             uint32_t var_loc = 0;
@@ -1010,7 +1442,9 @@ struct TranslatorContext {
         if (cmn == Mnemonic::VAR_TEX_SINGLE || mn == Mnemonic::VAR_TEX_SINGLE ||
             cmn == Mnemonic::VAR_TEX_GATHER || mn == Mnemonic::VAR_TEX_GATHER ||
             cmn == Mnemonic::VAR_TEX_GRADIENT || mn == Mnemonic::VAR_TEX_GRADIENT ||
-            cmn == Mnemonic::VAR_TEX_DUAL || mn == Mnemonic::VAR_TEX_DUAL) {
+            cmn == Mnemonic::VAR_TEX_DUAL || mn == Mnemonic::VAR_TEX_DUAL ||
+            cmn == Mnemonic::VAR_TEX_BUF_SINGLE || cmn == Mnemonic::VAR_TEX_BUF_GATHER ||
+            cmn == Mnemonic::VAR_TEX_BUF_GRADIENT || cmn == Mnemonic::VAR_TEX_BUF_DUAL) {
             // Fused Varying Interpolate (from in_var_0) + Texture Sample (from u_sampler_0)
             uint32_t var_id = get_or_create_frag_varying(0, false);
             uint32_t v4f = b.type_vector(b.type_f32(), 4);
@@ -1042,7 +1476,9 @@ struct TranslatorContext {
         if (cmn == Mnemonic::TEX_SINGLE || mn == Mnemonic::TEX_SINGLE ||
             cmn == Mnemonic::TEX_FETCH  || mn == Mnemonic::TEX_FETCH ||
             cmn == Mnemonic::TEX_GATHER || mn == Mnemonic::TEX_GATHER ||
-            cmn == Mnemonic::TEX_GRADIENT || mn == Mnemonic::TEX_GRADIENT) {
+            cmn == Mnemonic::TEX_GRADIENT || mn == Mnemonic::TEX_GRADIENT ||
+            cmn == Mnemonic::TEX_DUAL || mn == Mnemonic::TEX_WEIGHTS ||
+            cmn == Mnemonic::LD_TEX || mn == Mnemonic::LD_TEX_IMM) {
             uint8_t coord_r = ins.sr_read.present ? ins.sr_read.base_reg : 0;
             uint32_t u = b.emit_bitcast(b.type_f32(), load_reg_u32(coord_r));
             uint32_t v = b.emit_bitcast(b.type_f32(), load_reg_u32(coord_r + 1));
@@ -1077,9 +1513,19 @@ struct TranslatorContext {
 
         // 12. Fragment Output Instructions (ATEST, ZS_EMIT, BLEND)
         if (cmn == Mnemonic::ATEST || mn == Mnemonic::ATEST) {
+            uint32_t cov = (ins.srcs.size() >= 1) ? load_src_int32(ins, 0, false) : b.const_u32(1u);
             if (ins.has_dest) {
-                uint32_t cov = (ins.srcs.size() >= 1) ? load_src_int32(ins, 0, false) : b.const_u32(1u);
                 write_dest_u32(ins, cov);
+            }
+            if (opts.stage == ShaderStage::Fragment && !ins.srcs.empty()) {
+                uint32_t is_zero = b.emit_typed_inst(Op::OpIEqual, b.type_bool(), { cov, b.const_u32(0u) });
+                uint32_t kill_lbl = b.alloc_id();
+                uint32_t cont_lbl = b.alloc_id();
+                b.emit_selection_merge(cont_lbl);
+                b.emit_branch_conditional(is_zero, kill_lbl, cont_lbl);
+                b.emit_label(kill_lbl);
+                b.emit_kill();
+                b.emit_label(cont_lbl);
             }
             return;
         }
@@ -1109,6 +1555,10 @@ struct TranslatorContext {
         }
 
         // 13. Memory Loads (LOAD.*, LD_BUFFER_*)
+        if (cmn == Mnemonic::LD_TILE || cmn == Mnemonic::ST_TILE ||
+            cmn == Mnemonic::LD_MULTI || cmn == Mnemonic::ST_MULTI) {
+            return;
+        }
         if (cmn == Mnemonic::LOAD || mn == Mnemonic::LOAD ||
             cmn == Mnemonic::LD_CHECKED || cmn == Mnemonic::LD_CHECKED_IMM ||
             cmn == Mnemonic::LD_CVT || cmn == Mnemonic::LD_PKA) {
@@ -1155,7 +1605,9 @@ struct TranslatorContext {
         }
 
         // 14. Memory Stores (STORE.* including Vertex istream / estream)
-        if (cmn == Mnemonic::STORE || mn == Mnemonic::STORE) {
+        if (cmn == Mnemonic::STORE || mn == Mnemonic::STORE ||
+            cmn == Mnemonic::ST_CHECKED || cmn == Mnemonic::ST_CHECKED_IMM ||
+            cmn == Mnemonic::ST_CVT) {
             std::string access = "none";
             auto it_acc = ins.modifier_strs.find("access");
             if (it_acc != ins.modifier_strs.end()) access = it_acc->second;
@@ -1274,8 +1726,12 @@ struct TranslatorContext {
                 byte_addr = b.emit_typed_inst(Op::OpIAdd, b.type_u64(),
                                               { base_addr, b.const_u64(static_cast<uint64_t>(ins.imm_signed)) });
             }
-            uint32_t p32 = b.type_pointer(StorageClass::PhysicalStorageBuffer, b.type_u32());
-            uint32_t ptr = b.emit_u_to_ptr(p32, byte_addr);
+            bool is_64 = (var.find("64") != std::string::npos) || ins.dest_is_64bit ||
+                         (ins.sr_write.present && ins.sr_write.count >= 2) ||
+                         (ins.sr_read.present && ins.sr_read.count >= 2 && cmn != Mnemonic::ACMPXCHG);
+            uint32_t val_t = is_64 ? b.type_u64() : b.type_u32();
+            uint32_t p_val = b.type_pointer(StorageClass::PhysicalStorageBuffer, val_t);
+            uint32_t ptr = b.emit_u_to_ptr(p_val, byte_addr);
             uint32_t scope_dev = b.const_u32(1u);
             uint32_t sem_relaxed = b.const_u32(0u);
 
@@ -1313,9 +1769,9 @@ struct TranslatorContext {
                 return;
             }
 
-            // General ATOM / ATOM_RETURN
+            // General ATOM / ATOM_RETURN (32-bit and 64-bit)
             uint8_t sr = ins.sr_read.present ? ins.sr_read.base_reg : 0;
-            uint32_t arg = load_reg_u32(sr);
+            uint32_t arg = is_64 ? pack_u64(load_reg_u32(sr), load_reg_u32(sr + 1)) : load_reg_u32(sr);
             std::string aop = "aadd";
             auto it = ins.modifier_strs.find("atom_opc");
             if (it != ins.modifier_strs.end()) aop = it->second;
@@ -1329,12 +1785,28 @@ struct TranslatorContext {
             else if (aop == "aor") spv_aop = Op::OpAtomicOr;
             else if (aop == "axor") spv_aop = Op::OpAtomicXor;
 
-            uint32_t old_v = b.emit_typed_inst(spv_aop, b.type_u32(),
+            uint32_t old_v = b.emit_typed_inst(spv_aop, val_t,
                                                { ptr, scope_dev, sem_relaxed, arg });
             if (ins.sr_write.present) {
-                store_reg_u32(ins.sr_write.base_reg, old_v);
+                if (is_64) {
+                    uint32_t lo = 0, hi = 0;
+                    unpack_u64(old_v, &lo, &hi);
+                    store_reg_u32(ins.sr_write.base_reg, lo);
+                    store_reg_u32(ins.sr_write.base_reg + 1, hi);
+                } else {
+                    store_reg_u32(ins.sr_write.base_reg, old_v);
+                }
             }
             return;
+        }
+
+        // Unhandled opcode: fail loudly with PC + mnemonic + disassembly!
+        std::ostringstream err_oss;
+        err_oss << "Unhandled Valhall opcode at pc=0x" << std::hex << ins.pc
+                << " (" << ins.disassembly << ")";
+        unhandled_errors_.push_back(err_oss.str());
+        if (std::getenv("VALHALL_LOG")) {
+            std::fprintf(stderr, "[valhall_to_spirv ERROR] %s\n", err_oss.str().c_str());
         }
     }
 
@@ -1606,6 +2078,16 @@ ValhallTranslationResult translate_valhall_to_spirv(
     }
 
     b.end_main_function();
+    if (!ctx.unhandled_errors_.empty()) {
+        res.ok = false;
+        res.error_message = ctx.unhandled_errors_.front();
+        return res;
+    }
+    if (b.has_errors()) {
+        res.ok = false;
+        res.error_message = b.errors().front();
+        return res;
+    }
     res.spirv_words = b.assemble();
     res.ok = true;
     return res;

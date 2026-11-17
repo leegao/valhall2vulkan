@@ -1,4 +1,7 @@
 #include "valhall_isa_generated.h"
+#include "valhall_cfg.h"
+#include "valhall_spirv_builder.h"
+#include "valhall_to_spirv.h"
 #include "cmpbe_chunks.h"
 #include <cassert>
 #include <cstdio>
@@ -103,6 +106,75 @@ int main() {
     }
     std::cout << "[PASS] Decoded " << total_astc_insts
               << " instructions from production astc_encoder_mbs2_shader.h with 0 invalid instructions!\n";
+
+    // 6. Layer 1B CFG regression tests (DISCARD fallthrough, indirect JUMP, diamond if-then-else)
+    {
+        using namespace valhall;
+        // 6a. DISCARD must not have a fallthrough edge
+        std::vector<DecodedValhallInst> d_insts(2);
+        d_insts[0].valid = true; d_insts[0].pc = 0x0; d_insts[0].mnemonic = Mnemonic::DISCARD; d_insts[0].canonical_mnemonic = Mnemonic::DISCARD;
+        d_insts[1].valid = true; d_insts[1].pc = 0x8; d_insts[1].mnemonic = Mnemonic::NOP; d_insts[1].canonical_mnemonic = Mnemonic::NOP; d_insts[1].flow = FlowControlM::end;
+        auto d_cfg = cfg::build_cfg(d_insts);
+        assert(d_cfg.blocks.size() == 2);
+        assert(d_cfg.blocks[0].is_terminated_by_discard);
+        assert(d_cfg.blocks[0].fallthrough_block == -1);
+
+        // 6b. Indirect JUMP (has_branch_offset == false) must not corrupt Block 0 into a loop
+        std::vector<DecodedValhallInst> j_insts(2);
+        j_insts[0].valid = true; j_insts[0].pc = 0x0; j_insts[0].mnemonic = Mnemonic::NOP; j_insts[0].canonical_mnemonic = Mnemonic::NOP;
+        j_insts[1].valid = true; j_insts[1].pc = 0x8; j_insts[1].mnemonic = Mnemonic::JUMP; j_insts[1].canonical_mnemonic = Mnemonic::JUMP; j_insts[1].has_branch_offset = false; j_insts[1].branch_target_pc = 0;
+        auto j_cfg = cfg::build_cfg(j_insts);
+        assert(!j_cfg.blocks[0].is_loop_header);
+        assert(j_cfg.blocks.back().branch_target_block == -1);
+
+        // 6c. Diamond if-then-else: B0 -> (cond? B2 : B1), B1 -> B3, B2 -> B3 => selection_merge_block == 3
+        std::vector<DecodedValhallInst> dia(4);
+        dia[0].valid = true; dia[0].pc = 0x00; dia[0].mnemonic = Mnemonic::BRANCH; dia[0].canonical_mnemonic = Mnemonic::BRANCH;
+        dia[0].has_branch_offset = true; dia[0].branch_target_pc = 0x10; dia[0].srcs.resize(1);
+        dia[1].valid = true; dia[1].pc = 0x08; dia[1].mnemonic = Mnemonic::BRANCH; dia[1].canonical_mnemonic = Mnemonic::BRANCH;
+        dia[1].has_branch_offset = true; dia[1].branch_target_pc = 0x18; dia[1].modifier_strs["condition"] = "always";
+        dia[2].valid = true; dia[2].pc = 0x10; dia[2].mnemonic = Mnemonic::NOP; dia[2].canonical_mnemonic = Mnemonic::NOP;
+        dia[3].valid = true; dia[3].pc = 0x18; dia[3].mnemonic = Mnemonic::NOP; dia[3].canonical_mnemonic = Mnemonic::NOP; dia[3].flow = FlowControlM::end;
+        auto dia_cfg = cfg::build_cfg(dia);
+        assert(dia_cfg.blocks.size() == 4);
+        assert(dia_cfg.blocks[0].selection_merge_block == 3);
+        std::cout << "[PASS] Layer 1B CFG regression tests (DISCARD, indirect JUMP, diamond ipdom merge)\n";
+    }
+
+    // 7. Layer 2 SpirvBuilder lazy capabilities & SSA ID validation diagnostics
+    {
+        using namespace valhall::spirv;
+        SpirvBuilder sb(ExecutionModel::GLCompute, false);
+        sb.begin_main_function();
+        uint32_t v = sb.add_local_var(sb.type_u32(), "x");
+        sb.emit_store(v, sb.const_u32(42u));
+        sb.emit_return();
+        sb.end_main_function();
+        assert(!sb.has_errors());
+        auto words = sb.assemble();
+        // Verify Float16 (9), Int64 (11), Int16 (22), Int8 (39) are NOT emitted for trivial u32 shader
+        bool has_shader = false, has_int64 = false, has_f16 = false;
+        size_t idx = 5;
+        while (idx < words.size()) {
+            uint32_t wc = words[idx] >> 16;
+            uint32_t op = words[idx] & 0xffff;
+            if (op == uint32_t(Op::OpCapability) && wc == 2) {
+                if (words[idx + 1] == uint32_t(Capability::Shader)) has_shader = true;
+                if (words[idx + 1] == uint32_t(Capability::Int64)) has_int64 = true;
+                if (words[idx + 1] == uint32_t(Capability::Float16)) has_f16 = true;
+            }
+            idx += wc;
+        }
+        assert(has_shader && !has_int64 && !has_f16);
+
+        // Verify invalid SSA ID 0 in emit_store is caught immediately
+        SpirvBuilder bad_sb(ExecutionModel::GLCompute, false);
+        bad_sb.begin_main_function();
+        uint32_t bv = bad_sb.add_local_var(bad_sb.type_u32(), "y");
+        bad_sb.emit_store(bv, 0u);
+        assert(bad_sb.has_errors());
+        std::cout << "[PASS] Layer 2 SpirvBuilder lazy capabilities & SSA ID error diagnostics\n";
+    }
 
     std::cout << "=== ALL ISA DECODER TESTS PASSED ===\n";
     return 0;

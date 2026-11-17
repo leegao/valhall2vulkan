@@ -169,6 +169,21 @@ int main() {
         std::cout << "[PASS] Morton 16x16 U-Interleaved retile -> detile exact bijection\n";
     }
 
+    // 6. Test TilerContext::private_state 256-bit (8-word) nested struct roundtrip
+    {
+        TilerContext tc{};
+        tc.hierarchy_mask = 0x1FFu;
+        tc.private_state.word0 = 0x12345678u;
+        tc.private_state.word7 = 0xDEADBEEFu;
+        uint32_t tc_words[TilerContext::kWordCount] = {0};
+        tc.pack(tc_words);
+        TilerContext tc_dec = TilerContext::unpack(tc_words);
+        assert(tc_dec.hierarchy_mask == 0x1FFu);
+        assert(tc_dec.private_state.word0 == 0x12345678u);
+        assert(tc_dec.private_state.word7 == 0xDEADBEEFu);
+        std::cout << "[PASS] TilerContext::private_state 256-bit multi-word nested struct roundtrip\n";
+    }
+
     std::cout << "=== ALL CSF DESCRIPTOR & SIDEBAND TESTS PASSED ===\n";
     return 0;
 }
