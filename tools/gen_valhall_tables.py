@@ -380,6 +380,35 @@ def compile_cond(cond_str):
     elif c.startswith("$mod_ne(") and c.endswith(")"):
         parts = split_top_level_args(c[len("$mod_ne("):-1])
         expr = f'(get_mod_str(ins, "{parts[0]}") != "{parts[1]}")'
+    elif c == "$has_imm_nonzero":
+        expr = "(ins.has_imm && ins.imm_signed != 0)"
+    elif c == "$sr_write_present":
+        expr = "ins.sr_write.present"
+    elif c == "$is_vert_stage":
+        expr = "(ctx.opts.stage == ShaderStage::Vertex)"
+    elif c == "$is_64_atom":
+        expr = '(var.find("64") != std::string::npos || ins.dest_is_64bit || (ins.sr_write.present && ins.sr_write.count >= 2) || (ins.sr_read.present && ins.sr_read.count >= 2 && ins.canonical_mnemonic != Mnemonic::ACMPXCHG))'
+    elif c == "$is_gather":
+        expr = "(ins.canonical_mnemonic == Mnemonic::TEX_GATHER || ins.mnemonic == Mnemonic::TEX_GATHER)"
+    elif c == "$is_flat_var":
+        expr = "(ins.canonical_mnemonic == Mnemonic::LD_VAR_FLAT_IMM || ins.canonical_mnemonic == Mnemonic::LD_VAR_FLAT)"
+    elif c.startswith("$is_zero(") and c.endswith(")"):
+        vn = c[len("$is_zero("):-1].strip().lstrip("%")
+        expr = f"(v_{vn} == 0u)"
+    elif c.startswith("$lt_sr_read(") and c.endswith(")"):
+        vn = c[len("$lt_sr_read("):-1].strip().lstrip("%")
+        expr = f"(v_{vn} < (ins.sr_read.present ? std::max<uint32_t>(1u, ins.sr_read.count) : 1u))"
+    elif c.startswith("$lt_u32(") and c.endswith(")"):
+        parts = split_top_level_args(c[len("$lt_u32("):-1])
+        a0 = parts[0].strip()
+        if a0.startswith("#lookup_u32_raw(") and a0.endswith(")"):
+            lp_args = split_top_level_args(a0[len("#lookup_u32_raw("):-1])
+            a0_cpp = f'lookup_{lp_args[0]}(get_mod_str(ins, "{lp_args[1][len("$modifiers."):]}"))'
+        elif a0.startswith("%"):
+            a0_cpp = f"v_{a0[1:]}"
+        else:
+            a0_cpp = a0
+        expr = f"({a0_cpp} < {parts[1].strip()})"
     elif c.startswith("$fields."):
         fn = c[len("$fields."):]
         expr = f'(ins.fields.count("{fn}") && ins.fields.at("{fn}") != 0)'
@@ -414,6 +443,12 @@ def compile_atom(atom, src_types, declared_vars, lookup_tables):
         return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_unsigned & 63u))"
     if a == "#token":
         return "ctx.sb.current_token(blk)"
+    if a.startswith("#u64_mul4(") and a.endswith(")"):
+        vn = a[len("#u64_mul4("):-1].strip().lstrip("%")
+        return f"ctx.sb.emit_const_u64(blk, uint64_t(v_{vn}) * 4ULL)"
+    if a.startswith("#f32_alpha_or_zero(") and a.endswith(")"):
+        vn = a[len("#f32_alpha_or_zero("):-1].strip().lstrip("%")
+        return f"ctx.sb.emit_const_f32_bits(blk, (v_{vn} == 3u) ? 0x3f800000u : 0u)"
     if a == "#branch_target_pc_u64":
         return "ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + 8 + ins.imm_signed)))"
     if a == "#const_bool(true)":
@@ -452,7 +487,38 @@ def compile_atom(atom, src_types, declared_vars, lookup_tables):
     raise ValueError(f"Unknown inline_ops atom '{a}'")
 
 
-def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, canonical_ssa_ops):
+
+def compile_uint32_arg(tok, declared_vars, lookup_tables):
+    t = tok.strip()
+    if t.startswith("%"):
+        vn = t[1:]
+        if vn not in declared_vars:
+            raise ValueError(f"Undeclared uint32_t var '{t}'")
+        return f"v_{vn}"
+    if t == "$src0_swz_h1":
+        return '(get_src_swz(ins, 0) == "h1" ? 1u : 0u)'
+    if t.startswith("#lookup_u32_raw(") and t.endswith(")"):
+        parts = split_top_level_args(t[len("#lookup_u32_raw("):-1])
+        return gen_lookup_key_expr(parts[1], lookup_tables, parts[0])
+    return f"static_cast<uint32_t>({t})"
+
+def compile_bool_arg(tok):
+    t = tok.strip()
+    if t in ("true", "false"):
+        return t
+    return compile_cond(t)
+
+def compile_loop_bound(bound_str):
+    b = bound_str.strip()
+    if b == "$sr_write_count":
+        return "(ins.sr_write.present ? std::max<uint32_t>(1u, ins.sr_write.count) : 1u)"
+    if b == "$sr_write_count_max4":
+        return "(ins.sr_write.present ? std::min<uint32_t>(4u, std::max<uint32_t>(1u, ins.sr_write.count)) : 4u)"
+    if b == "$sr_read_count":
+        return "(ins.sr_read.present ? std::max<uint32_t>(1u, ins.sr_read.count) : 1u)"
+    return f"static_cast<uint32_t>({b})"
+
+def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions):
     r = rhs.strip()
     # Trailing flags: [barrier], [side_effect], [aux_bool=...]
     barrier = "false"
@@ -510,6 +576,41 @@ def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, can
     args_str = r[lp+1:-1].strip()
     arg_tokens = split_top_level_args(args_str)
 
+    if fn_name.startswith("@"):
+        hname = fn_name[1:]
+        if hname not in host_functions:
+            raise ValueError(f"Unknown host @FN '{fn_name}' (not declared in host_functions)")
+        sig = host_functions[hname]
+        expected_args = sig["args"]
+        cpp_args = ["ctx", "blk", "ins", "rule"]
+        tok_idx = 0
+        for atype in expected_args:
+            if atype == "ValType" and tok_idx < len(arg_tokens) and arg_tokens[tok_idx].strip() in VALTYPE_MAP:
+                cpp_args.append(VALTYPE_MAP[arg_tokens[tok_idx].strip()])
+                tok_idx += 1
+            elif atype == "ValType":
+                cpp_args.append(lhs_vt)
+            else:
+                if tok_idx >= len(arg_tokens):
+                    raise ValueError(f"@{hname} expected {expected_args}, got {arg_tokens}")
+                tok = arg_tokens[tok_idx]
+                tok_idx += 1
+                if atype == "SsaId":
+                    if tok.strip().startswith("@"):
+                        cpp_args.append(compile_inline_rhs(tok, lhs_vt, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions))
+                    else:
+                        cpp_args.append(compile_atom(tok, src_types, declared_vars, lookup_tables))
+                elif atype == "uint32_t":
+                    cpp_args.append(compile_uint32_arg(tok, declared_vars, lookup_tables))
+                elif atype == "bool":
+                    cpp_args.append(compile_bool_arg(tok))
+                else:
+                    raise ValueError(f"Unsupported host_functions arg type '{atype}'")
+        if tok_idx != len(arg_tokens):
+            raise ValueError(f"@{hname} received extra args: {arg_tokens[tok_idx:]}")
+        return f"abi::{hname}({', '.join(cpp_args)})"
+
+
     if fn_name == "load_sideband_u64":
         if len(arg_tokens) != 1:
             raise ValueError(f"load_sideband_u64() expects 1 arg, got {arg_tokens}")
@@ -562,7 +663,7 @@ def compile_inline_rhs(rhs, lhs_vt, src_types, declared_vars, lookup_tables, can
     # Direct SsaOp call
     if fn_name not in canonical_ssa_ops and fn_name not in ("Kill", "ControlBarrier"):
         raise ValueError(f"Unknown SsaOp '{fn_name}' in inline_ops")
-    arg_exprs = [compile_atom(a, src_types, declared_vars, lookup_tables) for a in arg_tokens]
+    arg_exprs = [(compile_inline_rhs(a, lhs_vt, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions) if a.strip().startswith("@") else compile_atom(a, src_types, declared_vars, lookup_tables)) for a in arg_tokens]
     if aux_bool is not None:
         ab_expr = "true" if aux_bool == "true" else ("false" if aux_bool == "false" else compile_cond(aux_bool))
         return (f"([&]() {{ SsaNode n{{}}; n.op = tables::SsaOp::{fn_name}; n.type = {lhs_vt}; "
@@ -602,6 +703,22 @@ def tokenize_inline_ops(ops_list):
             tokens.append(("IF", raw[lp+1:rp].strip()))
             i = rp + 1
             continue
+        if raw.startswith("for", i) and (i + 3 < n and (raw[i+3].isspace() or raw[i+3] == "(")):
+            lp = raw.find("(", i)
+            depth = 0
+            rp = -1
+            for j in range(lp, n):
+                if raw[j] == "(": depth += 1
+                elif raw[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        rp = j
+                        break
+            if rp < 0:
+                raise ValueError(f"Unclosed for(...) in inline_ops: {raw[i:]}")
+            tokens.append(("FOR", raw[lp+1:rp].strip()))
+            i = rp + 1
+            continue
         if raw.startswith("else", i) and (i + 4 == n or raw[i+4].isspace() or raw[i+4] == "{"):
             tokens.append(("ELSE",))
             i += 4
@@ -622,7 +739,7 @@ def tokenize_inline_ops(ops_list):
     return tokens
 
 
-def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
+def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops, host_functions):
     ops_list = rule.get("inline_ops", [])
     if not ops_list:
         raise ValueError(f"INLINE_OPS rule {rule['mnemonic']} has empty inline_ops")
@@ -633,6 +750,11 @@ def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
 
     # Pre-scan all declared variables so they can be declared at top scope if assigned in if/else
     declared_vars = {}
+    for tok in tokens:
+        if isinstance(tok, tuple) and tok[0] == "FOR":
+            lhs_f = tok[1].split(":", 1)[0].strip()
+            if lhs_f.startswith("%"):
+                declared_vars[lhs_f[1:]] = "uint32_t"
     for tok in tokens:
         if isinstance(tok, tuple) and tok[0] == "STMT":
             stmt = tok[1]
@@ -648,13 +770,23 @@ def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
     lines = []
     # Pre-declare all variables at rule scope so if/else reassignments work cleanly
     for vname, vt_cpp in declared_vars.items():
-        lines.append(f"SsaId v_{vname} = kInvalidSsa; (void)v_{vname};")
+        if vt_cpp == "uint32_t":
+            lines.append(f"uint32_t v_{vname} = 0; (void)v_{vname};")
+        else:
+            lines.append(f"SsaId v_{vname} = kInvalidSsa; (void)v_{vname};")
 
     for tok in tokens:
         if tok == "{":
             lines.append("{")
         elif tok == "}":
             lines.append("}")
+        elif isinstance(tok, tuple) and tok[0] == "FOR":
+            parts = tok[1].split(":", 1)
+            vname = parts[0].strip().lstrip("%")
+            rng = parts[1].strip()
+            assert rng.startswith("0 ..")
+            bound = compile_loop_bound(rng[4:].strip())
+            lines.append(f"for (v_{vname} = 0; v_{vname} < {bound}; ++v_{vname})")
         elif isinstance(tok, tuple) and tok[0] == "IF":
             lines.append(f"if ({compile_cond(tok[1])})")
         elif isinstance(tok, tuple) and tok[0] == "ELSE":
@@ -693,11 +825,11 @@ def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops):
                     if vname not in declared_vars:
                         raise ValueError(f"Reassignment to undeclared '%{vname}' in {rule['mnemonic']}")
                     vt_cpp = declared_vars[vname]
-                rhs_cpp = compile_inline_rhs(rhs, vt_cpp, src_types, declared_vars, lookup_tables, canonical_ssa_ops)
+                rhs_cpp = compile_inline_rhs(rhs, vt_cpp, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions)
                 lines.append(f"v_{vname} = {rhs_cpp};")
             else:
                 # Standalone void op like Kill(#token)[barrier][side_effect]
-                rhs_cpp = compile_inline_rhs(stmt, "ValType::Void", src_types, declared_vars, lookup_tables, canonical_ssa_ops)
+                rhs_cpp = compile_inline_rhs(stmt, "ValType::Void", src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions)
                 lines.append(f"(void)({rhs_cpp});")
 
     if "out" in declared_vars and dest_type != "none":
@@ -717,6 +849,7 @@ def main():
 
     rules = lowering_json["rules"]
     lookup_tables = lowering_json.get("lookup_tables", {})
+    host_functions = lowering_json.get("host_functions", {})
     tiles = tiles_json["tiles"]
 
     canonical_ssa_ops = set()
@@ -1100,7 +1233,7 @@ def main():
 
         if kind == "InlineOps":
             num_inline += 1
-            body = compile_inline_ops_rule(r, lookup_tables, canonical_ssa_ops)
+            body = compile_inline_ops_rule(r, lookup_tables, canonical_ssa_ops, host_functions)
             inc_lines.append(f"        case {ridx}u: {{ {body} }} // {r['mnemonic']} INLINE_OPS")
             continue
 
