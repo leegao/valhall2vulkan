@@ -105,3 +105,12 @@ add_test(NAME test_moc_roundtrip_compute
     COMMAND test_moc_roundtrip_compute
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_executable(test_moc_roundtrip_graphics tests/test_moc_roundtrip_graphics.cpp)
+target_include_directories(test_moc_roundtrip_graphics PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+target_compile_options(test_moc_roundtrip_graphics PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(test_moc_roundtrip_graphics PRIVATE valhall2spirv)
+add_test(NAME test_moc_roundtrip_graphics
+    COMMAND test_moc_roundtrip_graphics
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
