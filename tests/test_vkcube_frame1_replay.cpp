@@ -209,6 +209,15 @@ int main() {
     std::cerr << "idvs_sr r0=" << std::hex << idvs_sr.reg64(0) << " pos_srt_buf=" << (uint64_t)pos_srt_buf.mapped << " srt0=" << (uint64_t)srt_buf0.mapped << "\n";
     csf::CSRUNIDVS run_idvs = csf::CSRUNIDVS::unpack_u64(csrun_word);
 
+    // Verify the SRT descriptors are actually unpacked (guards against the +8-byte SRT shift regression).
+    {
+        VulkanGraphicsSideband gsb = extract_graphics_sideband(idvs_sr, frag_sr, run_idvs);
+        assert(!gsb.attributes.empty() && !gsb.vertex_buffers.empty());
+        std::cout << "SRT unpacked: attributes=" << gsb.attributes.size()
+                  << " vertex_buffers=" << gsb.vertex_buffers.size()
+                  << " textures=" << gsb.textures.size() << "\n";
+    }
+
     std::vector<uint32_t> vert_spirv, frag_spirv;
     bool ok = vk.execute_cs_run_idvs_graphics(
         idvs_sr,
