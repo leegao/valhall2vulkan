@@ -122,3 +122,12 @@ add_test(NAME test_moc_roundtrip_graphics
     COMMAND test_moc_roundtrip_graphics
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_executable(test_vkcube_frame1_replay tests/test_vkcube_frame1_replay.cpp)
+target_include_directories(test_vkcube_frame1_replay PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+target_compile_options(test_vkcube_frame1_replay PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(test_vkcube_frame1_replay PRIVATE valhall2spirv)
+add_test(NAME test_vkcube_frame1_replay
+    COMMAND test_vkcube_frame1_replay
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
