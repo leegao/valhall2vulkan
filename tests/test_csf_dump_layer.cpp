@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstring>
 #include <dlfcn.h>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -39,7 +40,10 @@ int main() {
 
     // Verify Vulkan loader discovers VK_LAYER_MALI_csf_dump via VK_LAYER_PATH
     setenv("VK_LAYER_PATH", CSF_DUMP_LAYER_DIR, 1);
-    setenv("VK_ICD_FILENAMES", "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json", 0);
+    const char* default_icd = (access("/usr/share/vulkan/icd.d/lvp_icd.json", R_OK) == 0)
+        ? "/usr/share/vulkan/icd.d/lvp_icd.json"
+        : "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json";
+    setenv("VK_ICD_FILENAMES", default_icd, 0);
     setenv("MALI_CSF_DUMP_ENABLE", "1", 1);
 
     uint32_t layer_count = 0;
