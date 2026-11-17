@@ -148,7 +148,7 @@ int main() {
         sb.begin_main_function();
         uint32_t v = sb.add_local_var(sb.type_u32(), "x");
         sb.emit_store(v, sb.const_u32(42u));
-        sb.emit_return();
+        sb.op_Return();
         sb.end_main_function();
         assert(!sb.has_errors());
         auto words = sb.assemble();
