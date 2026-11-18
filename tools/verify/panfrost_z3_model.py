@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Frozen Panfrost Reference Semantics in Z3 (\Psi_pan)
+Frozen Panfrost Reference Semantics in Z3 (Psi_pan)
 ===================================================
 Exact operational semantics extracted from Mesa Panfrost:
   - kraid/swizzle.rs  (Swizzle, SwizzleByte, SwizzleWord, fold_u32, fold_u64)
@@ -72,6 +72,12 @@ def _is_float_variant(variant: str) -> bool:
 def _infer_src_type_and_signed(mnem: str, variant: str, idx: int) -> Tuple[str, bool]:
     """Infer (src_dtype, signed_widen) matching kraid/swizzle.rs & ops.rs."""
     v = (variant or "").lower()
+    if mnem == "CSEL" and idx >= 2:
+        return ("v2u16" if v.startswith("v2") else "u32", False)
+    if mnem in ("FADD_RSCALE", "FMUL_RSCALE") and idx == 2:
+        return ("s32", True)
+    if mnem == "FMA_RSCALE" and idx == 3:
+        return ("s32", True)
     if v:
         return (v, _is_signed_variant(v))
     # Empty-variant conversion / special instructions in isa-v9-v14.xml
@@ -85,14 +91,18 @@ def _infer_src_type_and_signed(mnem: str, variant: str, idx: int) -> Tuple[str, 
         return ("f32", False)
     if mnem in ("S8_TO_F32", "S8_TO_S32", "V2S8_TO_V2F16", "V2S8_TO_V2S16"):
         return ("s8", True)
-    if mnem in ("S16_TO_F32", "S16_TO_S32", "V2S16_TO_V2F16"):
+    if mnem in ("S16_TO_F32", "S16_TO_S32"):
         return ("s16", True)
+    if mnem == "V2S16_TO_V2F16":
+        return ("v2s16", True)
     if mnem in ("S32_TO_F32",):
         return ("s32", True)
     if mnem in ("U8_TO_F32", "U8_TO_U32", "V2U8_TO_V2F16", "V2U8_TO_V2U16"):
         return ("u8", False)
-    if mnem in ("U16_TO_F32", "U16_TO_U32", "V2U16_TO_V2F16"):
+    if mnem in ("U16_TO_F32", "U16_TO_U32"):
         return ("u16", False)
+    if mnem == "V2U16_TO_V2F16":
+        return ("v2u16", False)
     if mnem in ("U32_TO_F32",):
         return ("u32", False)
     return ("u32", False)
@@ -425,7 +435,7 @@ def apply_swizzle_u64(
     if s == "w10":
         return z3.Concat(w0, w1)
     folded32 = apply_swizzle_u32(w0, s, signed_widen=signed_widen, is_float=False)
-    return z3.SignExt(32, folded32) if signed_widen else z3.ZeroExt(32, folded32)
+    return z3.SignExt(32, folded32)
 
 
 def apply_src_mod_32(
@@ -522,6 +532,12 @@ def write_dst_32(
         mask &= 0x3
     elif dw == "h1":
         val32 = z3.Concat(z3.Extract(15, 0, val32), bv16(0))
+        mask &= 0xC
+    elif dw == "hf0":
+        val32 = z3.ZeroExt(16, f32_bv_to_f16_bv(val32))
+        mask &= 0x3
+    elif dw == "hf1":
+        val32 = z3.Concat(f32_bv_to_f16_bv(val32), bv16(0))
         mask &= 0xC
     elif dw == "b0":
         mask &= 0x1
@@ -699,13 +715,33 @@ def _sem_isub(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any
     return res, st
 
 
+def _sat_mul_lane(bits: int, a: z3.BitVecRef, b: z3.BitVecRef, signed: bool) -> z3.BitVecRef:
+    ext_a = z3.SignExt(bits, a) if signed else z3.ZeroExt(bits, a)
+    ext_b = z3.SignExt(bits, b) if signed else z3.ZeroExt(bits, b)
+    p = ext_a * ext_b
+    if signed:
+        smax = z3.BitVecVal((1 << (bits - 1)) - 1, 2 * bits)
+        smin = z3.BitVecVal(-(1 << (bits - 1)), 2 * bits)
+        clamped = z3.If(p > smax, smax, z3.If(p < smin, smin, p))
+        return z3.Extract(bits - 1, 0, clamped)
+    umax = z3.BitVecVal((1 << bits) - 1, 2 * bits)
+    clamped = z3.If(z3.UGT(p, umax), umax, p)
+    return z3.Extract(bits - 1, 0, clamped)
+
+
 def _sem_imul(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any], st: ValhallZ3State, tr: ModelTrace):
+    sat = bool(mods.get("saturate", False))
+    signed = _is_signed_variant(var)
     if var in ("i64", "u64", "s64"):
         res = srcs[0] * srcs[1]
         tr.stage_b_note = f"64-bit mul.{var}"
         return res, st
-    res = _eval_per_comp_32(var, [srcs[0], srcs[1]], lambda b, xs: xs[0] * xs[1])
-    tr.stage_b_note = f"PerComp mul.{var}"
+
+    def lane_mul(bits: int, xs: List[z3.BitVecRef]) -> z3.BitVecRef:
+        return _sat_mul_lane(bits, xs[0], xs[1], signed) if sat else (xs[0] * xs[1])
+
+    res = _eval_per_comp_32(var, [srcs[0], srcs[1]], lane_mul)
+    tr.stage_b_note = f"PerComp mul.{var} sat={sat}"
     return res, st
 
 
@@ -734,7 +770,8 @@ def _sem_iabs(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any
 
 
 def _sem_hadd(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any], st: ValhallZ3State, tr: ModelTrace):
-    round_up = 1 if bool(mods.get("rhadd", mods.get("round_up", False))) else 0
+    round_mod = str(mods.get("round", "")).lower()
+    round_up = 1 if (bool(mods.get("rhadd", mods.get("round_up", False))) or round_mod in ("round_up", "rhadd", "up")) else 0
     signed = _is_signed_variant(var)
 
     def lane_hadd(bits: int, xs: List[z3.BitVecRef]) -> z3.BitVecRef:
@@ -1198,7 +1235,7 @@ def _sem_icmp_multi(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[st
         "ge": ord_val != bv32(-1),
     }
     cond = cond_map.get(cmp_op, ord_val == bv32(0))
-    t_val = bv32(0xFFFFFFFF) if res_type == "m1" else bv32(1)
+    t_val = bv32(0xFFFFFFFF) if res_type == "m1" else (bv32(0x3F800000) if res_type == "f1" else bv32(1))
     return z3.If(cond, t_val, bv32(0)), st
 
 
@@ -1377,11 +1414,35 @@ def _sem_control_flow(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[
         return None, new_st
     if mnem in ("BRANCH", "JUMP", "JUMP_EX"):
         off = bv64(int(mods.get("offset", 0)))
+        combine = str(mods.get("combine", "none")).lower()
+        not_cond = bool(mods.get("not", False))
+
+        def _branch_cond(c: z3.BitVecRef) -> z3.BoolRef:
+            if combine == "h0":
+                base = (c & bv32(0xFFFF)) != bv32(0)
+            elif combine == "h1":
+                base = z3.Extract(31, 16, c) != bv16(0)
+            elif combine == "and":
+                base = c == bv32(0xFFFFFFFF)
+            elif combine == "lowbits":
+                low = z3.Extract(20, 3, c)
+                base = z3.And(low != z3.BitVecVal(0, 18), low != z3.BitVecVal(0x3FFFF, 18))
+            else:
+                base = c != bv32(0)
+            return z3.Not(base) if not_cond else base
+
         if mnem == "BRANCH":
-            taken = (srcs[0] != bv32(0)) if srcs else z3.BoolVal(True)
+            taken = _branch_cond(srcs[0]) if srcs else z3.BoolVal(True)
             next_pc = z3.If(taken, st.pc + bv64(8) + off, st.pc + bv64(8))
         else:
-            next_pc = (srcs[0] if srcs[0].size() == 64 else z3.ZeroExt(32, srcs[0])) if srcs else (st.pc + bv64(8) + off)
+            if len(srcs) >= 2:
+                taken = _branch_cond(srcs[0])
+                addr = srcs[1] if srcs[1].size() == 64 else z3.ZeroExt(32, srcs[1])
+                next_pc = z3.If(taken, addr, st.pc + bv64(8))
+            elif len(srcs) == 1:
+                next_pc = srcs[0] if srcs[0].size() == 64 else z3.ZeroExt(32, srcs[0])
+            else:
+                next_pc = st.pc + bv64(8) + off
         new_st = dataclasses.replace(st, pc=next_pc)
         tr.side_effects.append("pc updated")
         return None, new_st
@@ -1422,7 +1483,7 @@ def _sem_noop(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# Complete 201-Mnemonic Dispatch Table (\Psi_pan)
+# Complete 201-Mnemonic Dispatch Table (Psi_pan)
 # ---------------------------------------------------------------------------
 PANFROST_SEMANTICS: Dict[str, SemanticFn] = {
     # Integer Arithmetic
@@ -1653,7 +1714,7 @@ def eval_panfrost_instruction(
     state: Optional[ValhallZ3State] = None,
     logger: Optional[VerificationLogger] = None,
 ) -> Tuple[Optional[z3.BitVecRef], ValhallZ3State, ModelTrace]:
-    """Evaluate a Valhall instruction through Stages A -> B -> C of \Psi_pan."""
+    """Evaluate a Valhall instruction through Stages A -> B -> C of Psi_pan."""
     mods = modifiers or {}
     st = state if state is not None else ValhallZ3State.symbolic()
     mnem = mnemonic.upper()
@@ -1667,9 +1728,10 @@ def eval_panfrost_instruction(
     for idx, raw in enumerate(raw_srcs):
         src_dtype, signed_widen = _infer_src_type_and_signed(mnem, variant, idx)
         is_fp = _is_float_variant(src_dtype)
-        is_f16_lane = src_dtype in ("f16", "v2f16")
+        is_16_lane = src_dtype in ("f16", "v2f16", "i16", "s16", "u16", "v2i16", "v2s16", "v2u16")
 
-        swz = str(mods.get(f"swz{idx}", mods.get(f"widen{idx}", mods.get(f"lanes{idx}", mods.get(f"lane{idx}", "")))))
+        mod_idx = 2 if (mnem == "FADD_RSCALE" and idx == 1) else idx
+        swz = str(mods.get(f"swz{mod_idx}", mods.get(f"widen{mod_idx}", mods.get(f"lanes{mod_idx}", mods.get(f"lane{mod_idx}", "")))))
         if idx == 0 and not swz:
             swz = str(mods.get("halfswizzle0", ""))
         if not swz:
@@ -1677,16 +1739,16 @@ def eval_panfrost_instruction(
                 swz = "b02"
             elif idx == 2 and mnem == "MKVEC" and variant.lower() == "v2i8":
                 swz = "b01"
-        abs_f = bool(mods.get(f"abs{idx}", False))
-        neg_f = bool(mods.get(f"neg{idx}", False))
-        not_f = bool(mods.get(f"not{idx}", mods.get("not", False) if idx == 0 else False))
+        abs_f = bool(mods.get(f"abs{mod_idx}", mods.get(f"abs{idx}", False)))
+        neg_f = bool(mods.get(f"neg{mod_idx}", mods.get(f"neg{idx}", False)))
+        not_f = bool(mods.get(f"not{mod_idx}", mods.get("not", False) if idx == 0 else False))
 
         if raw.size() == 64:
             s_val = apply_swizzle_u64(raw, swz, signed_widen=signed_widen)
             m_val = apply_src_mod_64(s_val, not_flag=not_f)
         else:
             s_val = apply_swizzle_u32(
-                raw, swz, signed_widen=signed_widen, is_float=is_fp, is_v2f16=is_f16_lane
+                raw, swz, signed_widen=signed_widen, is_float=is_fp, is_v2f16=is_16_lane
             )
             m_val = apply_src_mod_32(
                 s_val, src_dtype, abs_flag=abs_f, neg_flag=neg_f, not_flag=not_f
@@ -1703,13 +1765,15 @@ def eval_panfrost_instruction(
         if core_res.size() == 64:
             final_res = write_dst_64(core_res, dst_old, int(mods.get("write_mask", 0xFF)))
         else:
+            narrow = str(mods.get("dest_width_narrow", "")).lower()
+            dw = f"hf{narrow[1]}" if narrow in ("h0", "h1") else str(mods.get("dest_width", "w0"))
             final_res = write_dst_32(
                 core_res,
                 dst_old,
-                dest_width=str(mods.get("dest_width", "w0")),
+                dest_width=dw,
                 write_mask=int(mods.get("write_mask", 0xF)),
             )
-        trace.stage_c_note = f"write_dst width={mods.get('dest_width', 'w0')} mask=0x{int(mods.get('write_mask', 0xF if core_res.size()==32 else 0xFF)):x}"
+        trace.stage_c_note = f"write_dst width={mods.get('dest_width_narrow') or mods.get('dest_width', 'w0')} mask=0x{int(mods.get('write_mask', 0xF if core_res.size()==32 else 0xFF)):x}"
     else:
         final_res = core_res
 
@@ -1749,7 +1813,7 @@ def verify_instruction_equivalence(
 
 
 def extract_panfrost_spec_catalog(xml_path: str = "specs/kraid/isa-v9-v14.xml") -> List[Dict[str, Any]]:
-    """Parse isa-v9-v14.xml and bind each of the 627 specs to its \Psi_pan handler."""
+    """Parse isa-v9-v14.xml and bind each of the 627 specs to its Psi_pan handler."""
     root = ET.parse(xml_path).getroot()
     catalog: List[Dict[str, Any]] = []
     for elem in root:
@@ -1758,7 +1822,7 @@ def extract_panfrost_spec_catalog(xml_path: str = "specs/kraid/isa-v9-v14.xml") 
         name = elem.attrib["name"]
         variant = elem.attrib.get("variant", "")
         if name not in PANFROST_SEMANTICS:
-            raise KeyError(f"XML instruction '{name}.{variant}' has no \Psi_pan semantic entry")
+            raise KeyError(f"XML instruction '{name}.{variant}' has no Psi_pan semantic entry")
         catalog.append(
             {
                 "xml_index": len(catalog),

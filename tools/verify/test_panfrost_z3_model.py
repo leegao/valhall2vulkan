@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit & Formal SMT Property Tests for Frozen Panfrost Reference Semantics (\Psi_pan).
+Unit & Formal SMT Property Tests for Frozen Panfrost Reference Semantics (Psi_pan).
 Includes regression tests for all 14 Mesa kraid discrepancies + 3 minor gaps.
 """
 
@@ -278,6 +278,47 @@ class TestPanfrostZ3Model(unittest.TestCase):
 
         rcp_sub, _, _ = eval_panfrost_instruction("FRCP", "f32", [bv32(0x00000001)])  # subnormal flushed to +0.0 -> +Inf
         self.assertEqual(z3.simplify(rcp_sub).as_long(), 0x7F800000)
+
+
+    def test_reg_mesa_kraid_validation_fixes(self):
+        # 1. IMUL.sat (s32, u32, v2s16, v2u16, v4s8, v4u8)
+        imul_s32, _, _ = eval_panfrost_instruction("IMUL", "s32", [bv32(0x10000), bv32(0x10000)], modifiers={"saturate": True})
+        self.assertEqual(z3.simplify(imul_s32).as_long(), 0x7FFFFFFF)
+        imul_s32_neg, _, _ = eval_panfrost_instruction("IMUL", "s32", [bv32(0x10000), bv32(-0x10000)], modifiers={"saturate": True})
+        self.assertEqual(z3.simplify(imul_s32_neg).as_long(), 0x80000000)
+        imul_v2u16, _, _ = eval_panfrost_instruction("IMUL", "v2u16", [bv32(0x01000003), bv32(0x01000004)], modifiers={"saturate": True})
+        self.assertEqual(z3.simplify(imul_v2u16).as_long(), 0xFFFF000C)
+
+        # 2. 16-bit integer h0/h1 replication (Swizzle::widen_hx) & V2S16_TO_V2F16
+        iadd_h1, _, _ = eval_panfrost_instruction("IADD", "v2s16", [bv32(0x00020001), bv32(0xFFF00003)], modifiers={"swz1": "h1"})
+        self.assertEqual(z3.simplify(iadd_h1).as_long(), 0xFFF2FFF1)
+        v2s16_h1, _, _ = eval_panfrost_instruction("V2S16_TO_V2F16", "", [bv32(0x00020001)], modifiers={"swz0": "h1"})
+        self.assertEqual(z3.simplify(v2s16_h1).as_long(), 0x40004000)
+
+        # 3. Swizzle::fold_u64 always sign-extends 32-bit byte swizzles
+        self.assertEqual(z3.simplify(apply_swizzle_u64(bv64(0x0000000080000000), "b0123")).as_long(), 0xFFFFFFFF80000000)
+
+        # 4. HADD XML round="round_up"
+        hadd_up, _, _ = eval_panfrost_instruction("HADD", "u32", [bv32(1), bv32(2)], modifiers={"round": "round_up"})
+        self.assertEqual(z3.simplify(hadd_up).as_long(), 2)
+
+        # 5. ICMP_MULTI .f1 result_type
+        icmp_f1, _, _ = eval_panfrost_instruction("ICMP_MULTI", "s32", [bv32(5), bv32(5), bv32(0)], modifiers={"cmpf": "eq", "result_type": "f1"})
+        self.assertEqual(z3.simplify(icmp_f1).as_long(), 0x3F800000)
+
+        # 6. JUMP operand order (src0=cond, src1=addr) and combine/not
+        st0 = ValhallZ3State.symbolic("jmp")
+        _, st_taken, _ = eval_panfrost_instruction("JUMP", "", [bv32(1), bv64(0x1234)], state=st0)
+        self.assertEqual(z3.simplify(st_taken.pc).as_long(), 0x1234)
+        _, st_not, _ = eval_panfrost_instruction("JUMP", "", [bv32(1), bv64(0x1234)], modifiers={"not": True}, state=st0)
+        self.assertEqual(z3.simplify(st_not.pc == st0.pc + bv64(8)), z3.BoolVal(True))
+
+        # 7. dest_width_narrow="h1" narrows f32 -> f16 into upper half
+        fadd_narrow, _, _ = eval_panfrost_instruction(
+            "FADD", "f32", [bv32(0x3F800000), bv32(0x3F800000)],
+            modifiers={"dest_width_narrow": "h1"}, dst_old=bv32(0x00001234)
+        )
+        self.assertEqual(z3.simplify(fadd_narrow).as_long(), 0x40001234)
 
 
 if __name__ == "__main__":
