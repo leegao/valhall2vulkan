@@ -167,3 +167,8 @@ add_test(NAME test_csf_dump_layer
     COMMAND test_csf_dump_layer
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_test(NAME test_panfrost_z3_model
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_panfrost_z3_model.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
