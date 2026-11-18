@@ -177,3 +177,8 @@ add_test(NAME test_lowering_extractor
     COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_lowering_extractor.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_test(NAME test_all_paths_miter
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_all_paths_miter.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)

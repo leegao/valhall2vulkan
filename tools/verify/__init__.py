@@ -2,6 +2,11 @@
 Formal Verification & Panfrost Reference Semantics Package for valhall2spirv.
 """
 
+from .all_paths_miter import (
+    MiterResult,
+    check_instruction_miter,
+    run_all_627_miter,
+)
 from .cpp_handler_extractor import (
     CppHandlerRegistry,
     CppSymbolicEvaluator,
@@ -32,6 +37,10 @@ from .panfrost_z3_model import (
     write_dst_32,
     write_dst_64,
 )
+from .ssa_z3_eval import (
+    SsaZ3EvalResult,
+    eval_ssa_module_z3,
+)
 
 __all__ = [
     "CppHandlerRegistry",
@@ -40,9 +49,11 @@ __all__ = [
     "LoweringLogger",
     "LoweringSemanticsExtractor",
     "LoweringTrace",
+    "MiterResult",
     "ModelTrace",
     "PANFROST_SEMANTICS",
     "SourceOperandDesc",
+    "SsaZ3EvalResult",
     "SymbolicSsaModule",
     "SymbolicSsaNode",
     "ValhallZ3State",
@@ -53,8 +64,11 @@ __all__ = [
     "apply_src_mod_64",
     "apply_swizzle_u32",
     "apply_swizzle_u64",
+    "check_instruction_miter",
     "eval_panfrost_instruction",
+    "eval_ssa_module_z3",
     "extract_panfrost_spec_catalog",
+    "run_all_627_miter",
     "verify_instruction_equivalence",
     "write_dst_32",
     "write_dst_64",
