@@ -180,6 +180,8 @@ SsaId Pass1Context::eval_branch_cond(uint32_t blk, const DecodedValhallInst& ins
 // Uniform Host ABI Functions (@fn(...) in @INLINE_OPS)
 // ============================================================================
 
+// TODO(v17.x): Verify that [[verifier::z3(...)]] short-circuit semantics on abi:: helpers
+// are equivalent to the actual C++ implementation bodies.
 namespace abi {
 
 static inline bool is_v2f16_helper(const DecodedValhallInst& ins) {
@@ -187,22 +189,22 @@ static inline bool is_v2f16_helper(const DecodedValhallInst& ins) {
     return std::strcmp(variant_to_string(ins.canonical_variant), "v2f16") == 0;
 }
 
-bool has_src0(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 1; }
-bool has_src1(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 2; }
-bool has_src2(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 3; }
-bool has_src3(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 4; }
-bool has_dest(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.has_dest; }
+[[verifier::z3("InstLoweringContext", "len(this.srcs) >= 1")]] bool has_src0(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 1; }
+[[verifier::z3("InstLoweringContext", "len(this.srcs) >= 2")]] bool has_src1(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 2; }
+[[verifier::z3("InstLoweringContext", "len(this.srcs) >= 3")]] bool has_src2(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 3; }
+[[verifier::z3("InstLoweringContext", "len(this.srcs) >= 4")]] bool has_src3(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.srcs.size() >= 4; }
+[[verifier::z3("InstLoweringContext", "this.has_dest")]] bool has_dest(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.has_dest; }
 bool is_v2f16(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return is_v2f16_helper(ins); }
 bool is_signed(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     std::string var = variant_to_string(ins.canonical_variant);
     return (var.find("s") == 0 || var.find("v2s") == 0 || var.find("v4s") == 0);
 }
-bool is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
-bool dest_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
-bool is_frag_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Fragment; }
-bool is_vert_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Vertex; }
-bool has_imm_nonzero(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.has_imm && ins.imm_signed != 0; }
-bool sr_write_present(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.sr_write.present; }
+[[verifier::z3("InstLoweringContext", "this.dest_is_64bit")]] bool is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
+[[verifier::z3("InstLoweringContext", "this.dest_is_64bit")]] bool dest_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
+[[verifier::z3("InstLoweringContext", "this.stage == 'Fragment'")]] bool is_frag_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Fragment; }
+[[verifier::z3("InstLoweringContext", "this.stage == 'Vertex'")]] bool is_vert_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Vertex; }
+[[verifier::z3("InstLoweringContext", "this.has_imm and this.imm_signed != 0")]] bool has_imm_nonzero(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.has_imm && ins.imm_signed != 0; }
+[[verifier::z3("InstLoweringContext", "this.sr_write_present")]] bool sr_write_present(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.sr_write.present; }
 bool is_64_atom(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     std::string var = variant_to_string(ins.canonical_variant);
     return (var.find("64") != std::string::npos) || ins.dest_is_64bit ||
@@ -215,20 +217,20 @@ bool is_gather(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tab
 bool is_flat_var(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.canonical_mnemonic == Mnemonic::LD_VAR_FLAT_IMM || ins.canonical_mnemonic == Mnemonic::LD_VAR_FLAT;
 }
-bool has_not_result(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "this.fields.get('not_result', 0) != 0")]] bool has_not_result(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     auto it = ins.fields.find("not_result"); return it != ins.fields.end() && it->second != 0;
 }
-bool has_not(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "this.fields.get('not', 0) != 0")]] bool has_not(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     auto it = ins.fields.find("not"); return it != ins.fields.end() && it->second != 0;
 }
 
-uint32_t sr_write_count(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "max(1, this.sr_write_count) if this.sr_write_present else 1")]] uint32_t sr_write_count(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.sr_write.present ? std::max<uint32_t>(1u, ins.sr_write.count) : 1u;
 }
-uint32_t sr_write_count_max4(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "min(4, max(1, this.sr_write_count)) if this.sr_write_present else 4")]] uint32_t sr_write_count_max4(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.sr_write.present ? std::min<uint32_t>(4u, std::max<uint32_t>(1u, ins.sr_write.count)) : 4u;
 }
-uint32_t sr_read_count(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "max(1, this.sr_read_count) if this.sr_read_present else 1")]] uint32_t sr_read_count(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.sr_read.present ? std::max<uint32_t>(1u, ins.sr_read.count) : 1u;
 }
 uint32_t src0_swz_h1_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
@@ -239,24 +241,24 @@ SsaId branch_target_pc_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhall
     return ctx.sb.emit_const_u64(blk, tgt);
 }
 
-bool mod_active(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key) {
+[[verifier::z3("InstLoweringContext", "bool(this.modifiers.get(args[0], '')) and this.modifiers.get(args[0], '') != 'none'")]] bool mod_active(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key) {
     auto it = ins.modifier_strs.find(key);
     return it != ins.modifier_strs.end() && !it->second.empty() && it->second != "none";
 }
-bool mod_eq(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key, const char* val) {
+[[verifier::z3("InstLoweringContext", "this.modifiers.get(args[0], '') == args[1]")]] bool mod_eq(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key, const char* val) {
     auto it = ins.modifier_strs.find(key);
     std::string cur = (it != ins.modifier_strs.end()) ? it->second : "";
     return cur == val;
 }
-bool mod_ne(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key, const char* val) {
+[[verifier::z3("InstLoweringContext", "this.modifiers.get(args[0], '') != args[1]")]] bool mod_ne(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* key, const char* val) {
     auto it = ins.modifier_strs.find(key);
     std::string cur = (it != ins.modifier_strs.end()) ? it->second : "";
     return cur != val;
 }
-bool has_field(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* name) {
+[[verifier::z3("InstLoweringContext", "args[0] in this.fields")]] bool has_field(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* name) {
     return ins.fields.count(name) > 0;
 }
-bool field_nz(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* name) {
+[[verifier::z3("InstLoweringContext", "this.fields.get(args[0], 0) != 0")]] bool field_nz(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, const char* name) {
     auto it = ins.fields.find(name);
     return it != ins.fields.end() && it->second != 0;
 }
@@ -265,47 +267,47 @@ SsaId field_u32_mul16(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&
     uint32_t v = (it != ins.fields.end()) ? it->second : 0u;
     return ctx.sb.emit_const_u32(blk, v * 16u);
 }
-bool is_zero(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t v) { return v == 0u; }
-bool lt_u32(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t a, uint32_t b) { return a < b; }
+[[verifier::z3("InstLoweringContext", "args[0] == 0")]] bool is_zero(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t v) { return v == 0u; }
+[[verifier::z3("InstLoweringContext", "args[0] < args[1]")]] bool lt_u32(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t a, uint32_t b) { return a < b; }
 
-SsaId u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t v) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u32(args[0])")]] SsaId u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t v) {
     return ctx.sb.emit_const_u32(blk, v);
 }
-SsaId s32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, int32_t v) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_s32(args[0])")]] SsaId s32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, int32_t v) {
     return ctx.sb.emit_const_s32(blk, v);
 }
-SsaId u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint64_t v) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(args[0])")]] SsaId u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint64_t v) {
     return ctx.sb.emit_const_u64(blk, v);
 }
-SsaId f32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, float v) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_f32(args[0])")]] SsaId f32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, float v) {
     uint32_t bits = 0; std::memcpy(&bits, &v, sizeof(float));
     return ctx.sb.emit_const_f32_bits(blk, bits);
 }
-SsaId f32_bits(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t bits) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_f32_bits(args[0])")]] SsaId f32_bits(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t bits) {
     return ctx.sb.emit_const_f32_bits(blk, bits);
 }
-SsaId const_bool(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, bool v) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_bool(args[0])")]] SsaId const_bool(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, bool v) {
     return ctx.sb.emit_const_bool(blk, v);
 }
-SsaId token(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.current_token()")]] SsaId token(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
     return ctx.sb.current_token(blk);
 }
-SsaId imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u32(ins.imm_unsigned)")]] SsaId imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_unsigned));
 }
-SsaId imm_s32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u32(ins.imm_signed)")]] SsaId imm_s32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_signed));
 }
-SsaId imm_f32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_f32_bits(ins.imm_unsigned)")]] SsaId imm_f32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_f32_bits(blk, static_cast<uint32_t>(ins.imm_unsigned));
 }
-SsaId imm_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(ins.imm_signed)")]] SsaId imm_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_signed));
 }
-SsaId imm_u64_mask63(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(ins.imm_unsigned & 63)")]] SsaId imm_u64_mask63(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u64(blk, static_cast<uint64_t>(ins.imm_unsigned & 63u));
 }
-SsaId u64_mul4(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t w) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(args[0] * 4)")]] SsaId u64_mul4(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t w) {
     return ctx.sb.emit_const_u64(blk, uint64_t(w) * 4ULL);
 }
 SsaId f32_alpha_or_zero(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t c) {
@@ -353,11 +355,11 @@ SsaId bfi(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tabl
     return ctx.sb.emit(blk, std::move(n));
 }
 
-void set_token(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId tok) {
+[[verifier::z3("SymbolicSsaModule", "this.set_token(args[0])")]] void set_token(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId tok) {
     ctx.sb.set_token(blk, tok);
 }
 
-void set_branch_cond(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId cond) {
+[[verifier::z3("SymbolicSsaModule", "this.set_branch_cond(args[0])")]] void set_branch_cond(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId cond) {
     ctx.mod.blocks[blk].branch_cond = cond;
 }
 
@@ -664,94 +666,94 @@ bool src_swz_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, 
     return abi::get_src_swz(ctx, blk, ins, rule, src_idx) == str;
 }
 
-bool dest_mod_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, const char* str) {
+[[verifier::z3("InstLoweringContext", "this.dest_mod == args[0]")]] bool dest_mod_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, const char* str) {
     return abi::get_dest_mod(ctx, blk, ins, rule) == str;
 }
 
-bool src_oob(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] >= len(this.srcs)")]] bool src_oob(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx >= ins.srcs.size();
 }
 
-bool src_is_reg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'Register'")]] bool src_is_reg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::Register;
 }
 
-bool src_is_fau_uniform(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauUniform'")]] bool src_is_fau_uniform(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::FauUniform;
 }
 
-bool src_is_small_const(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'SmallConstant'")]] bool src_is_small_const(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::SmallConstant;
 }
 
-bool src_is_fau_pc(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'pc'")]] bool src_is_fau_pc(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "pc";
 }
 
-bool src_is_fau_lane_id(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'lane_id'")]] bool src_is_fau_lane_id(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "lane_id";
 }
 
-bool src_is_fau_lane_width(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'lane_width'")]] bool src_is_fau_lane_width(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "lane_width";
 }
 
-bool src_word_select(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].word_select")]] bool src_word_select(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].word_select;
 }
 
-bool src_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].is_64bit")]] bool src_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].is_64bit;
 }
 
-uint32_t src_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "this.srcs[args[0]].reg_num")]] uint32_t src_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ins.srcs[src_idx].reg_num;
 }
 
-uint32_t src_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("InstLoweringContext", "this.srcs[args[0]].reg_num & 62")]] uint32_t src_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ins.srcs[src_idx].reg_num & 62u;
 }
 
-uint32_t dest_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "this.dest_reg & 63")]] uint32_t dest_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.dest_reg & 63u;
 }
 
-uint32_t dest_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("InstLoweringContext", "this.dest_reg & 62")]] uint32_t dest_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.dest_reg & 62u;
 }
 
-SsaId src_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("SymbolicSsaModule", "this.current_reg(ins.srcs[args[0]].reg_num)")]] SsaId src_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ctx.sb.current_reg(blk, ins.srcs[src_idx].reg_num);
 }
 
-SsaId src_read_reg_base(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx, uint32_t off) {
+[[verifier::z3("SymbolicSsaModule", "this.current_reg((ins.srcs[args[0]].reg_num & 62) + args[1])")]] SsaId src_read_reg_base(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx, uint32_t off) {
     uint8_t base = ins.srcs[src_idx].reg_num & 62u;
     return ctx.sb.current_reg(blk, static_cast<uint8_t>(base + off));
 }
 
-SsaId src_emit_imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u32(ins.srcs[args[0]].imm_bits)")]] SsaId src_emit_imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ctx.sb.emit_const_u32(blk, ins.srcs[src_idx].imm_bits);
 }
 
-SsaId src_emit_imm_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(ins.srcs[args[0]].imm_bits)")]] SsaId src_emit_imm_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ctx.sb.emit_const_u64(blk, uint64_t(ins.srcs[src_idx].imm_bits));
 }
 
-SsaId ins_pc_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(ins.pc)")]] SsaId ins_pc_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u64(blk, ins.pc);
 }
 
-SsaId dest_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+[[verifier::z3("SymbolicSsaModule", "this.current_reg(ins.dest_reg & 63)")]] SsaId dest_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.current_reg(blk, ins.dest_reg & 63u);
 }
 
-void dest_set_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t d, SsaId val) {
+[[verifier::z3("SymbolicSsaModule", "this.set_reg(args[0], args[1])")]] void dest_set_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t d, SsaId val) {
     ctx.sb.set_reg(blk, static_cast<uint8_t>(d), val);
 }
 

@@ -160,7 +160,11 @@ uint64_t generic_features(const std::vector<uint32_t>& xs, Mode m) {
         json_path = Path(os.environ.get("VALHALL_HOST_HANDLERS_AST_JSON", str(DEFAULT_JSON)))
         data = json.loads(json_path.read_text(encoding="utf-8"))
         vattrs = data.get("verifier_attrs", {})
-        self.assertGreaterEqual(len(vattrs), 11)
+        self.assertGreaterEqual(len(vattrs), 70)
+        self.assertIn("valhall::variant_to_string", vattrs)
+        self.assertIn("valhall::compiler::abi::f32", vattrs)
+        self.assertIn("valhall::compiler::abi::set_branch_cond", vattrs)
+        self.assertIn("valhall::compiler::abi::src_oob", vattrs)
         self.assertIn("valhall::compiler::SsaBuilder::emit_bitcast", vattrs)
         self.assertEqual(
             vattrs["valhall::compiler::SsaBuilder::emit_bitcast"],

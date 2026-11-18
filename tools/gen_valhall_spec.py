@@ -710,7 +710,7 @@ def generate_isa_files(
     for i, var in enumerate(kraid_spec.variants, start=1):
         h_lines.append(f"    {c_ident(var.upper())} = {i},")
     h_lines.append("};")
-    h_lines.append("const char* variant_to_string(Variant v);")
+    h_lines.append("[[verifier::z3(\"InstLoweringContext\", \"this.canonical_variant\")]] const char* variant_to_string(Variant v);")
     h_lines.append("")
 
     # Emit all 219 enums from isa-v9-v14.xml

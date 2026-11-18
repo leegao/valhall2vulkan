@@ -247,7 +247,7 @@ enum class Variant : uint8_t {
     V4S8 = 23,
     V4U8 = 24,
 };
-const char* variant_to_string(Variant v);
+[[verifier::z3("InstLoweringContext", "this.canonical_variant")]] const char* variant_to_string(Variant v);
 
 // ============================================================================
 // All 180 Hardware Enums from isa-v9-v14.xml

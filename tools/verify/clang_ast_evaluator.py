@@ -438,6 +438,13 @@ class SymbolicSsaModule:
     def emit_const_f32_bits(self, bits: int) -> int:
         return self.emit(SymbolicSsaNode(0, "ConstF32", "F32", imm_u32=int(bits) & 0xFFFFFFFF))
 
+    def emit_const_f32(self, v: float) -> int:
+        bits = struct.unpack("<I", struct.pack("<f", float(v)))[0]
+        return self.emit_const_f32_bits(bits)
+
+    def set_branch_cond(self, cond: int) -> None:
+        self.branch_cond = cond
+
     def emit_const_u64(self, v: int) -> int:
         return self.emit(SymbolicSsaNode(0, "ConstU64", "U64", imm_u64=int(v) & 0xFFFFFFFFFFFFFFFF))
 
@@ -630,9 +637,31 @@ class CppSymbolicEvaluator:
         env = self._bind_pass1_params(fn, ssa, ins, args)
         return self._exec_fn(fn, env, ssa, ins)
 
+    # TODO(v17.x): Verify that [[verifier::z3(...)]] short-circuit semantics
+    # are equivalent to the actual C++ implementation bodies.
+    def _eval_verifier_attr(
+        self, qname: str, this_obj: Any, args: List[Any], ssa: SymbolicSsaModule, ins: InstLoweringContext
+    ) -> Any:
+        vattr = self.reg.verifier_attrs[qname]
+        recv = vattr.get("receiver", "")
+        if this_obj is None:
+            if recv == "SymbolicSsaModule":
+                this_obj = ssa
+            elif recv == "InstLoweringContext":
+                this_obj = ins
+        return eval(
+            self.reg.verifier_attr_code[qname],
+            {"__builtins__": {"len": len, "min": min, "max": max, "bool": bool, "int": int}},
+            {"this": this_obj, "args": args, "ssa": ssa, "ins": ins},
+        )
+
     def call_abi_fn(
         self, name: str, ssa: SymbolicSsaModule, ins: InstLoweringContext, args: List[Any]
     ) -> Any:
+        qname = f"valhall::compiler::abi::{name}"
+        if qname in self.reg.verifier_attr_code:
+            eval_args = args[4:] if (len(args) >= 4 and isinstance(args[0], tuple) and args[0][0] == "ctx") else args
+            return self._eval_verifier_attr(qname, None, eval_args, ssa, ins)
         fn = self.reg.abi_funcs[name]
         env = self._bind_pass1_params(fn, ssa, ins, args)
         return self._exec_fn(fn, env, ssa, ins)
@@ -956,18 +985,8 @@ class CppSymbolicEvaluator:
             if not qc and isinstance(obj, tuple) and obj[0] == "sb":
                 qc = self.reg.sb_attr_by_method.get(m, "")
             if qc and qc in self.reg.verifier_attr_code:
-                vattr = self.reg.verifier_attrs[qc]
-                if isinstance(obj, tuple) and obj[0] == "sb":
-                    this_obj: Any = obj[1]
-                elif vattr.get("receiver") == "SymbolicSsaModule":
-                    this_obj = ssa
-                else:
-                    this_obj = obj
-                return eval(
-                    self.reg.verifier_attr_code[qc],
-                    {"__builtins__": {}},
-                    {"this": this_obj, "args": args, "ssa": ssa, "ins": ins},
-                )
+                this_obj: Any = obj[1] if (isinstance(obj, tuple) and obj[0] == "sb") else obj
+                return self._eval_verifier_attr(qc, this_obj, args, ssa, ins)
             if isinstance(obj, tuple) and obj[0] == "ctx":
                 return self._call_ctx_method(m, ssa, ins, args)
             if isinstance(obj, tuple) and obj[0] == "blk" and m == "branch_cond":
@@ -978,13 +997,8 @@ class CppSymbolicEvaluator:
         if qc:
             args = [self._eval_expr(a, env, ssa, ins) for a in expr.args]
             if qc in self.reg.verifier_attr_code:
-                vattr = self.reg.verifier_attrs[qc]
-                this_obj = ssa if vattr.get("receiver") == "SymbolicSsaModule" else None
-                return eval(
-                    self.reg.verifier_attr_code[qc],
-                    {"__builtins__": {}},
-                    {"this": this_obj, "args": args, "ssa": ssa, "ins": ins},
-                )
+                eval_args = args[4:] if (len(args) >= 4 and isinstance(args[0], tuple) and args[0][0] == "ctx") else args
+                return self._eval_verifier_attr(qc, None, eval_args, ssa, ins)
             if qc == "std::move":
                 return args[0]
             if qc in ("std::string", "std::__cxx11::basic_string<char>") or qc.startswith("std::__cxx11::basic_string"):
@@ -997,14 +1011,6 @@ class CppSymbolicEvaluator:
                 return min(args[0], args[1])
             if qc in ("std::strcmp", "strcmp"):
                 return 0 if args[0] == args[1] else 1
-            if qc in ("std::memcpy", "memcpy"):
-                if isinstance(args[0], _PointerOut) and isinstance(args[1], _PointerOut):
-                    fval = float(args[1].env[args[1].name])
-                    bits = struct.unpack("<I", struct.pack("<f", fval))[0]
-                    args[0].set(bits)
-                return None
-            if qc == "valhall::variant_to_string":
-                return ins.canonical_variant
             if qc.startswith("valhall::compiler::abi::"):
                 fn_name = qc.split("::")[-1]
                 return self.call_abi_fn(fn_name, ssa, ins, args)
