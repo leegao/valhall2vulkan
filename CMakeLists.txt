@@ -172,3 +172,8 @@ add_test(NAME test_panfrost_z3_model
     COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_panfrost_z3_model.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_test(NAME test_lowering_extractor
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_lowering_extractor.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)

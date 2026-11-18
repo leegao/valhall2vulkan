@@ -2,6 +2,19 @@
 Formal Verification & Panfrost Reference Semantics Package for valhall2spirv.
 """
 
+from .cpp_handler_extractor import (
+    CppHandlerRegistry,
+    CppSymbolicEvaluator,
+    InstLoweringContext,
+    SourceOperandDesc,
+    SymbolicSsaModule,
+    SymbolicSsaNode,
+)
+from .lowering_semantics_extractor import (
+    LoweringLogger,
+    LoweringSemanticsExtractor,
+    LoweringTrace,
+)
 from .panfrost_z3_model import (
     PANFROST_SEMANTICS,
     ModelTrace,
@@ -21,8 +34,17 @@ from .panfrost_z3_model import (
 )
 
 __all__ = [
-    "PANFROST_SEMANTICS",
+    "CppHandlerRegistry",
+    "CppSymbolicEvaluator",
+    "InstLoweringContext",
+    "LoweringLogger",
+    "LoweringSemanticsExtractor",
+    "LoweringTrace",
     "ModelTrace",
+    "PANFROST_SEMANTICS",
+    "SourceOperandDesc",
+    "SymbolicSsaModule",
+    "SymbolicSsaNode",
     "ValhallZ3State",
     "VerificationLogger",
     "apply_clamp_f32",
