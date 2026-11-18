@@ -85,5 +85,34 @@ class TestAllPathsMiter(unittest.TestCase):
             self.assertIn("COUNTEREXAMPLE", mr.counterexample)
 
 
+
+    def test_side_effect_state_equivalence_checks(self) -> None:
+        # Sound side-effect specs -> UNSAT
+        for mnem, var, mods in [
+            ("BRANCH", "", {}),
+            ("BARRIER", "", {}),
+            ("STORE", "i32", {}),
+        ]:
+            mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)
+            self.assertEqual(
+                mr.status,
+                "UNSAT",
+                msg=f"Expected UNSAT for {mnem}.{var} {mods}, got {mr.status}: {mr.counterexample}",
+            )
+
+        # Known side-effect divergences -> SAT
+        for mnem, var, mods in [
+            ("BRANCH", "", {"combine": "h0"}),
+            ("JUMP", "", {}),
+            ("DISCARD", "", {}),
+        ]:
+            mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)
+            self.assertEqual(
+                mr.status,
+                "SAT",
+                msg=f"Expected SAT for {mnem}.{var} {mods}, got {mr.status}",
+            )
+            self.assertIsNotNone(mr.counterexample)
+
 if __name__ == "__main__":
     unittest.main()

@@ -257,6 +257,7 @@ def eval_ssa_module_z3(
     dst_old: Optional[z3.BitVecRef] = None,
     dest_reg: int = 0,
     state: Optional[ValhallZ3State] = None,
+    branch_offset: int = 0,
 ) -> SsaZ3EvalResult:
     """Directly evaluate every node of a SymbolicSsaModule in Z3."""
     st = dataclasses.replace(state) if state is not None else ValhallZ3State.symbolic()
@@ -546,6 +547,8 @@ def eval_ssa_module_z3(
         reg_writes[r] = _as_bv32(val) if not isinstance(val, z3.BitVecRef) else val
 
     bcond = _as_bool(values[ssa.branch_cond]) if ssa.branch_cond is not None else None
+    if bcond is not None:
+        st.pc = z3.If(bcond, st.pc + bv64(8) + bv64(branch_offset), st.pc + bv64(8))
     return SsaZ3EvalResult(
         values=values,
         reg_writes=reg_writes,

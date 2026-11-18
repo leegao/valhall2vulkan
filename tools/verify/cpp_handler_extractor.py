@@ -1249,8 +1249,9 @@ class CppSymbolicEvaluator:
                 else:
                     cur = getattr(obj, attr, 0)
                     setattr(obj, attr, self._apply_assign_op(cur, op, val))
+            elif isinstance(obj, tuple) and obj[0] == "blk" and target.member == "branch_cond":
+                obj[1].branch_cond = val
             elif isinstance(obj, tuple) and obj[0] == "ctx":
-                # ctx.mod.blocks[blk].branch_cond = cond
                 pass
         elif isinstance(target, CppIndex):
             obj = self._eval_expr(target.obj, env, ssa, ins)

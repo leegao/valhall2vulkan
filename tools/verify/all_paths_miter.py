@@ -24,6 +24,12 @@ import z3
 
 from tools.verify.cpp_handler_extractor import InstLoweringContext, SourceOperandDesc
 from tools.verify.lowering_semantics_extractor import LoweringSemanticsExtractor
+_BRANCH_MNEMS = {"BRANCH", "JUMP", "JUMP_EX"}
+_DISCARD_MNEMS = {"DISCARD"}
+_BARRIER_MNEMS = {"BARRIER"}
+_STORE_MNEMS = {"STORE", "ST_MULTI", "ST_CHECKED", "ST_CHECKED_IMM", "ST_CVT"}
+
+
 from tools.verify.panfrost_z3_model import (
     PANFROST_SEMANTICS,
     ValhallZ3State,
@@ -97,7 +103,8 @@ def check_instruction_miter(
         rbase = src_regs[i]
         st = rule.src_types[i] if i < len(rule.src_types) else "u32"
         is_64_src = st in ("u64", "s64", "i64_by_var") or variant.lower() in ("i64", "u64", "s64")
-        if variant.lower() in ("i64", "u64", "s64") and PANFROST_SEMANTICS[mnemonic].__name__ != "_sem_memory":
+        is_jump_addr = mnemonic in ("JUMP", "JUMP_EX") and ((num_srcs == 1 and i == 0) or (num_srcs >= 2 and i == 1))
+        if (variant.lower() in ("i64", "u64", "s64") or (mnemonic in _STORE_MNEMS and i == 0) or is_jump_addr) and (PANFROST_SEMANTICS[mnemonic].__name__ != "_sem_memory" or (mnemonic in _STORE_MNEMS and i == 0)):
             s_expr = z3.Concat(raw_regs[rbase + 1], raw_regs[rbase])
         else:
             s_expr = raw_regs[rbase]
@@ -108,8 +115,15 @@ def check_instruction_miter(
     dst_old = z3.Concat(raw_regs[dest_reg + 1], raw_regs[dest_reg]) if is_64_dest else raw_regs[dest_reg]
     inputs["dst_old"] = dst_old
 
+    if mnemonic in _STORE_MNEMS and len(pan_srcs) < 2:
+        pan_srcs.append(raw_regs[2])
+        inputs["sr0"] = raw_regs[2]
+
     # 1. Evaluate Psi_pan (Task 1)
     pan_mods = dict(mods)
+    branch_off = int(pan_mods.get("offset", 16 if mnemonic == "BRANCH" else 0))
+    if mnemonic == "BRANCH" and "offset" not in pan_mods:
+        pan_mods["offset"] = branch_off
     pan_mods.update(flds)
     st_pan = ValhallZ3State.symbolic("miter")
     pan_res, st_pan_out, _ = eval_panfrost_instruction(
@@ -128,15 +142,15 @@ def check_instruction_miter(
         modifiers=str_mods,
         fields=flds,
         sr_read_present=True,
-        sr_read_base=0,
-        sr_read_count=4,
+        sr_read_base=2 if mnemonic in _STORE_MNEMS else 0,
+        sr_read_count=1 if mnemonic in _STORE_MNEMS else 4,
         sr_write_present=True,
         sr_write_base=0,
         sr_write_count=4,
     )
     ssa_mod, tr = ext.lower_instruction(ins_ctx, xml_index=xml_index if xml_index >= 0 else None)
     ssa_eval = eval_ssa_module_z3(
-        ssa_mod, raw_srcs=raw_regs, dst_old=dst_old, dest_reg=dest_reg, state=st_pan
+        ssa_mod, raw_srcs=raw_regs, dst_old=dst_old, dest_reg=dest_reg, state=st_pan, branch_offset=branch_off
     )
 
     if is_64_dest and dest_reg in ssa_eval.reg_writes and (dest_reg + 1) in ssa_eval.reg_writes:
@@ -150,16 +164,57 @@ def check_instruction_miter(
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
-    # No-dest / side-effect instructions
+    # No-dest / side-effect instructions: check known side-effect state transitions
     if pan_res is None and cand_res is None:
+        state_checks: List[Tuple[str, z3.ExprRef, z3.ExprRef]] = []
+        if mnemonic in _BRANCH_MNEMS:
+            state_checks.append(("pc", st_pan_out.pc, ssa_eval.final_state.pc))
+        if mnemonic in _DISCARD_MNEMS:
+            state_checks.append(("discarded", st_pan_out.discarded, ssa_eval.final_state.discarded))
+        if mnemonic in _BARRIER_MNEMS:
+            state_checks.append(("barrier_epoch", st_pan_out.barrier_epoch, ssa_eval.final_state.barrier_epoch))
+        if mnemonic in _STORE_MNEMS:
+            state_checks.append(("mem_global", st_pan_out.mem_global, ssa_eval.final_state.mem_global))
+
+        if not state_checks:
+            return MiterResult(
+                xml_index=xml_index,
+                mnemonic=mnemonic,
+                variant=variant,
+                rule_index=tr.rule_index,
+                rule_kind=tr.rule_kind,
+                status="NO_DEST_EQUIV",
+                elapsed_ms=elapsed_ms,
+                warnings=tr.warnings,
+            )
+
+        final_st = "UNSAT"
+        for field_name, pan_st_e, cand_st_e in state_checks:
+            st_res, st_cex = verify_instruction_equivalence(
+                f"{mnemonic}.{field_name}", variant, pan_st_e, cand_st_e, inputs, timeout_ms=timeout_ms
+            )
+            if st_res == "SAT":
+                return MiterResult(
+                    xml_index=xml_index,
+                    mnemonic=mnemonic,
+                    variant=variant,
+                    rule_index=tr.rule_index,
+                    rule_kind=tr.rule_kind,
+                    status="SAT",
+                    elapsed_ms=(time.perf_counter() - t0) * 1000.0,
+                    counterexample=st_cex,
+                    warnings=tr.warnings,
+                )
+            if st_res != "UNSAT":
+                final_st = st_res
         return MiterResult(
             xml_index=xml_index,
             mnemonic=mnemonic,
             variant=variant,
             rule_index=tr.rule_index,
             rule_kind=tr.rule_kind,
-            status="NO_DEST_EQUIV",
-            elapsed_ms=elapsed_ms,
+            status=final_st,
+            elapsed_ms=(time.perf_counter() - t0) * 1000.0,
             warnings=tr.warnings,
         )
 
@@ -242,6 +297,6 @@ if __name__ == "__main__":
     print("  Counts:", summary["counts"])
     sat_items = [r for r in summary["results"] if r.status == "SAT"]
     print(f"  Sample SAT counterexamples ({len(sat_items)} total):")
-    for r in sat_items[:15]:
+    for r in sat_items:
         first_line = (r.counterexample or "").splitlines()[0] if r.counterexample else ""
-        print(f"    [{r.xml_index:3d}] {r.mnemonic}.{r.variant} (rule #{r.rule_index}): {first_line}")
+        print(f"    [{r.xml_index:3d}] {r.mnemonic}.{r.variant} (rule #{r.rule_index}): {r.counterexample}")
