@@ -181,7 +181,7 @@ where:
 ### Inference Rules
 
 1. **Lazy Source Fetch (`%k`)**:
-   $$\frac{v = \text{fetch\_src}_{\text{src\_types}[k]}(\mathcal{M}, b, \iota, k)}{\langle \%k, \sigma \rangle \Downarrow (v, \sigma')}$$
+   $$\frac{v = \text{fetch src}_{\text{src types}[k]}(\mathcal{M}, b, \iota, k)}{\langle \%k, \sigma \rangle \Downarrow (v, \sigma')}$$
 
 2. **Typed Binding & Reassignment**:
    $$\frac{\langle e, \sigma \rangle \Downarrow (v, \sigma')}{\langle \%x : T = e;\, \sigma \rangle \Downarrow \sigma'[\Gamma \mapsto \Gamma[x \mapsto v]]}$$
@@ -193,14 +193,14 @@ where:
    $$\frac{\text{sig}(\text{fn}) = (\text{ret}, [\tau_1, \dots, \tau_m]) \quad \forall i.\, \langle a_i, \sigma_{i-1} \rangle : \tau_i \Downarrow (v_i, \sigma_i) \quad (r, \sigma') = \text{abi::fn}(\sigma_m, b, \iota, \text{rule}, v_1, \dots, v_m)}{\langle @\text{fn}(a_1, \dots, a_m), \sigma_0 \rangle \Downarrow (r, \sigma')}$$
 
 5. **Bounded Loop (`for (%i : 0 .. B) { S }`)**:
-   $$\frac{n = \llbracket B \rrbracket(\iota) \quad \forall k \in [0, n-1].\, \langle S, \sigma_k[\Gamma \mapsto \Gamma[i \mapsto k]] \rangle \Downarrow \sigma_{k+1}}{\langle \text{for } (\%i : 0 .. B)\{S\}, \sigma_0 \rangle \Downarrow \sigma_n}$$
+   $$\frac{n = [\![ B ]\!](\iota) \quad \forall k \in [0, n-1].\, \langle S, \sigma_k[\Gamma \mapsto \Gamma[i \mapsto k]] \rangle \Downarrow \sigma_{k+1}}{\langle \text{for } (\%i : 0 .. B)\{S\}, \sigma_0 \rangle \Downarrow \sigma_n}$$
 
 6. **Conditional (`if (c) { S_1 } else { S_2 }`)**:
-   $$\frac{\llbracket c \rrbracket(\iota, \sigma) = \text{true} \quad \langle S_1, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'} \qquad \frac{\llbracket c \rrbracket(\iota, \sigma) = \text{false} \quad \langle S_2, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'}$$
+   $$\frac{[\![ c ]\!](\iota, \sigma) = \text{true} \quad \langle S_1, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'} \qquad \frac{[\![ c ]\!](\iota, \sigma) = \text{false} \quad \langle S_2, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'}$$
 
 7. **Staging-Register Window (`for_sr_read` vs `for_sr_write`)**:
-   - `$sr_read_count` $= \max(1, \iota.\text{sr\_read.count})$ bounds input staging registers $\mathcal{R}[\iota.\text{sr\_read.base} + k]$ read via `@sr_get(k)` (e.g., `STORE`, `TEX_SINGLE`, `ATOM`, `BLEND`).
-   - `$sr_write_count` $= \max(1, \iota.\text{sr\_write.count})$ (and `$sr_write_count_max4` $= \min(4, \text{count})$) bounds output staging registers $\mathcal{R}[\iota.\text{sr\_write.base} + k]$ written via `@sr_set(k, v)` (e.g., `LOAD`, `LD_ATTR`, `LD_VAR`, `TEX_SINGLE`).
+   - `$sr_read_count` $= \max(1, \iota.\text{sr read.count})$ bounds input staging registers $\mathcal{R}[\iota.\text{sr read.base} + k]$ read via `@sr_get(k)` (e.g., `STORE`, `TEX_SINGLE`, `ATOM`, `BLEND`).
+   - `$sr_write_count` $= \max(1, \iota.\text{srwrite.count})$ (and `$sr_write_count_max4` $= \min(4, \text{count})$) bounds output staging registers $\mathcal{R}[\iota.\text{sr write.base} + k]$ written via `@sr_set(k, v)` (e.g., `LOAD`, `LD_ATTR`, `LD_VAR`, `TEX_SINGLE`).
    - Instructions like `TEX_SINGLE` use **both** windows simultaneously (`sr_read` for `(u, v)` coordinates, `sr_write` for `RGBA` output).
 
 ---
