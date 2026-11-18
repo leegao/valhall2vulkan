@@ -41,7 +41,6 @@ add_custom_target(codegen
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_spec.py"
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_spirv_builder.py"
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_tables.py"
-    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Regenerating Valhall ISA, CSF descriptor, and SpirvBuilder C++17 sources"
 )
@@ -64,14 +63,15 @@ set_source_files_properties(src/generated/valhall_spirv_builder_generated.cpp PR
 set(VALHALL_OPERANDS_GENERATED_CPP "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/valhall_operands_generated.cpp")
 add_custom_command(
     OUTPUT "${VALHALL_OPERANDS_GENERATED_CPP}"
-    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
-        --spec "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_operands.json"
-        --out "${VALHALL_OPERANDS_GENERATED_CPP}"
+    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_tables.py"
+        --lowering "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_lowering.json"
+        --out-dir "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_operands.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_lowering.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_tables.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/valhall_lowering_dsl.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Generating src/generated/valhall_operands_generated.cpp from specs/lowering/valhall_operands.json"
+    COMMENT "Regenerating Valhall lowering tables and operands from specs/lowering/valhall_lowering.json"
     VERBATIM
 )
 

@@ -32,7 +32,12 @@ class TestLoweringExtractor(unittest.TestCase):
         self.assertEqual(len(reg.operands_funcs), 21)
         self.assertIn("fetch_src_int32", reg.operands_funcs)
         self.assertIn("store_dest_f32", reg.operands_funcs)
-        self.assertTrue(set(self.ext.host_functions.keys()).issubset(set(reg.abi_funcs.keys())))
+        abi_keys = {k for k, v in self.ext.host_functions.items() if v.get("kind") != "inline_ops" and v.get("namespace", "abi") == "abi"}
+        op_host_keys = {(v.get("target", "").split("::")[-1] or k) for k, v in self.ext.host_functions.items() if v.get("kind") != "inline_ops" and v.get("namespace") == "operands_host"}
+        inline_helper_keys = {f"_helper_{k}" for k, v in self.ext.host_functions.items() if v.get("kind") == "inline_ops"}
+        self.assertTrue(abi_keys.issubset(set(reg.abi_funcs.keys())))
+        self.assertTrue(op_host_keys.issubset(set(reg.operands_host_funcs.keys())))
+        self.assertTrue(inline_helper_keys.issubset(set(reg.operands_funcs.keys())))
         self.assertIn("handle_int_idpadd", reg.global_handlers)
         self.assertIn("emit_op", reg.ctx_funcs)
 
@@ -128,10 +133,10 @@ class TestLoweringExtractor(unittest.TestCase):
     def test_continuous_cpp_extraction_reflects_source_edits(self) -> None:
         import json
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_ops = os.path.join(tmpdir, "valhall_operands.json")
-            with open(os.path.join(REPO_ROOT, "specs/lowering/valhall_operands.json"), "r", encoding="utf-8") as f:
+            tmp_ops = os.path.join(tmpdir, "valhall_lowering.json")
+            with open(os.path.join(REPO_ROOT, "specs/lowering/valhall_lowering.json"), "r", encoding="utf-8") as f:
                 spec = json.load(f)
-            fetch_i32 = [e for e in spec["entry_abi"] if e["name"] == "fetch_src_int32"][0]
+            fetch_i32 = [e for e in spec["operands"] if e["name"] == "fetch_src_int32"][0]
             fetch_i32["inline_ops"].insert(
                 1,
                 'if (@src_swz_eq(%src_idx, "h1")) { %val = BitNot(%val); }',
@@ -157,7 +162,7 @@ class TestLoweringExtractor(unittest.TestCase):
         import subprocess
         import sys
         res = subprocess.run(
-            [sys.executable, os.path.join(REPO_ROOT, "tools/gen_valhall_operands.py"), "--check", "--verbose"],
+            [sys.executable, os.path.join(REPO_ROOT, "tools/gen_valhall_tables.py"), "--check-operands"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,

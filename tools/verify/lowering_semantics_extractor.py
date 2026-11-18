@@ -144,7 +144,7 @@ class LoweringSemanticsExtractor:
         self.repo_root = repo_root
         self.xml_path = xml_path or os.path.join(repo_root, "specs/kraid/isa-v9-v14.xml")
         self.lowering_path = lowering_path or os.path.join(repo_root, "specs/lowering/valhall_lowering.json")
-        self.operands_path = operands_path or os.path.join(repo_root, "specs/lowering/valhall_operands.json")
+        self.operands_path = operands_path or self.lowering_path
         self.handlers_path = handlers_path or os.path.join(repo_root, "src/valhall_pass1_handlers.cpp")
         self.logger = logger or LoweringLogger()
 
@@ -211,9 +211,21 @@ class LoweringSemanticsExtractor:
         return specs
 
     def _validate_completeness(self) -> None:
-        missing_abi = set(self.host_functions.keys()) - set(self.cpp_registry.abi_funcs.keys())
+        expected_abi = {
+            k for k, v in self.host_functions.items()
+            if v.get("kind") != "inline_ops" and v.get("namespace", "abi") == "abi"
+        }
+        missing_abi = expected_abi - set(self.cpp_registry.abi_funcs.keys())
         if missing_abi:
             raise RuntimeError(f"Missing C++ abi:: functions in {self.handlers_path}: {sorted(missing_abi)}")
+        expected_op_host = {
+            (v.get("target", "").split("::")[-1] or k)
+            for k, v in self.host_functions.items()
+            if v.get("kind") != "inline_ops" and v.get("namespace") == "operands_host"
+        }
+        missing_op_host = expected_op_host - set(self.cpp_registry.operands_host_funcs.keys())
+        if missing_op_host:
+            raise RuntimeError(f"Missing C++ operands_host:: functions in {self.handlers_path}: {sorted(missing_op_host)}")
         for r in self.rules:
             if r.kind == "Handler" and r.target not in self.cpp_registry.global_handlers:
                 raise RuntimeError(f"Missing C++ @HANDLER({r.target}) in {self.handlers_path}")

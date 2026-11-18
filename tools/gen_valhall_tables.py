@@ -28,6 +28,7 @@ from valhall_lowering_dsl import (
     gen_store_stmt,
     gen_lookup_key_expr,
     compile_inline_ops_rule,
+    compile_operands_cpp,
 )
 
 def parse_args():
@@ -36,6 +37,7 @@ def parse_args():
     ap.add_argument("--lowering", default="specs/lowering/valhall_lowering.json")
     ap.add_argument("--tiles", default="specs/lowering/valhall_tiles.json")
     ap.add_argument("--out-dir", default="src/generated")
+    ap.add_argument("--check-operands", action="store_true", help="Verify valhall_operands_generated.cpp matches spec")
     return ap.parse_args()
 
 
@@ -175,6 +177,19 @@ def main():
     insns = load_xml_instructions(args.xml)
     with open(args.lowering, "r", encoding="utf-8") as f:
         lowering_json = json.load(f)
+
+    if args.check_operands:
+        ops_cpp_path = os.path.join(args.out_dir, "valhall_operands_generated.cpp")
+        expected_cpp = compile_operands_cpp(lowering_json)
+        if not os.path.isfile(ops_cpp_path):
+            print(f"ERROR: {ops_cpp_path} does not exist", file=sys.stderr)
+            sys.exit(1)
+        with open(ops_cpp_path, "r", encoding="utf-8") as f:
+            if f.read() != expected_cpp:
+                print(f"ERROR: {ops_cpp_path} is out of date relative to {args.lowering}", file=sys.stderr)
+                sys.exit(1)
+        print(f"[gen_valhall_tables] {ops_cpp_path} is up to date ({len(lowering_json.get('operands', []))} operands)")
+        return
     with open(args.tiles, "r", encoding="utf-8") as f:
         tiles_json = json.load(f)
 
@@ -623,6 +638,10 @@ def main():
         f.write("\n".join(cpp_lines))
     with open(inc_path, "w", encoding="utf-8") as f:
         f.write("\n".join(inc_lines))
+    ops_cpp_path = os.path.join(args.out_dir, "valhall_operands_generated.cpp")
+    if lowering_json.get("operands"):
+        with open(ops_cpp_path, "w", encoding="utf-8") as f:
+            f.write(compile_operands_cpp(lowering_json))
 
     print(f"[OK] Validated 100% coverage: {len(insns)} XML instructions -> {len(rules)} lowering rules "
           f"(direct={num_direct}, dynamic_lookup={num_dynamic}, inline_ops={num_inline}, handler={num_handler}), "

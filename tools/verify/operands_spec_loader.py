@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Loader for specs/lowering/valhall_operands.json (InlineOps DSL) -> CppFunctionDef ASTs
-=======================================================================================
-Parses the InlineOps DSL strings in specs/lowering/valhall_operands.json using
+Loader for specs/lowering/valhall_lowering.json (operands + inline_ops host_functions) -> CppFunctionDef ASTs
+==============================================================================================================
+Parses the InlineOps DSL strings in specs/lowering/valhall_lowering.json["operands"] and
+inline_ops entries in specs/lowering/valhall_lowering.json["host_functions"] using
 tools/dsl_parser.py and lowers them into CppFunctionDef ASTs for CppSymbolicEvaluator.
 """
 
@@ -29,10 +30,12 @@ from dsl_parser import (
     IfStmt,
     Literal,
     ReturnStmt,
+    SrcRef,
     SsaCall,
     VarRef,
     parse_inline_ops,
 )
+from valhall_lowering_dsl import parse_param_list
 
 from tools.verify.cpp_handler_extractor import (
     CppAssign,
@@ -92,28 +95,34 @@ SSA_OP_DEFAULTS = {
 
 
 class _DslToCppAst:
-    def __init__(self, helpers: Dict[str, Dict[str, Any]], entry_names: Set[str]) -> None:
-        self.helpers = helpers
-        self.entry_names = entry_names
+    def __init__(self, host_functions: Dict[str, Dict[str, Any]], operand_names: Set[str]) -> None:
+        self.host_functions = host_functions
+        self.operand_names = operand_names
         self._node_idx = 0
 
     def convert_fn(
         self,
         name: str,
         ret_type: str,
-        params: List[Dict[str, str]],
+        params_list: List[str],
         inline_ops: List[str],
         source_file: str,
+        prepend_ctx: bool = True,
     ) -> CppFunctionDef:
         prog = parse_inline_ops(inline_ops)
-        env_types: Dict[str, str] = {p["name"]: p["type"] for p in params}
-        declared: Set[str] = {p["name"] for p in params}
+        parsed = parse_param_list(params_list)
+        if prepend_ctx:
+            all_params = [("SsaBuilder&", "sb"), ("uint32_t", "blk_id"), ("const DecodedValhallInst&", "ins")] + parsed
+        else:
+            all_params = parsed
+        env_types: Dict[str, str] = {n: t for t, n in all_params}
+        declared: Set[str] = {n for _, n in all_params}
         body = self._stmts(prog.stmts, env_types, declared)
         return CppFunctionDef(
             name=name,
             namespace="",
             ret_type=ret_type,
-            params=[CppParam(p["type"], p["name"]) for p in params],
+            params=[CppParam(t, n) for t, n in all_params],
             body=body,
             source_file=source_file,
             start_line=0,
@@ -158,7 +167,7 @@ class _DslToCppAst:
                     )
                 )
             else:
-                raise ValueError(f"Unsupported DSL stmt in valhall_operands.json: {st!r}")
+                raise ValueError(f"Unsupported DSL stmt in valhall_lowering.json operands: {st!r}")
         return out
 
     def _cond(self, c: Any) -> Any:
@@ -178,6 +187,8 @@ class _DslToCppAst:
         raise ValueError(f"Unsupported cond: {c!r}")
 
     def _arg(self, a: Any) -> Any:
+        if isinstance(a, SrcRef):
+            return CppIdent(f"arg{a.index}")
         if isinstance(a, VarRef):
             return CppIdent(a.name)
         if isinstance(a, Literal):
@@ -202,23 +213,24 @@ class _DslToCppAst:
 
     def _host_call(self, hc: HostCall) -> CppCall:
         args_ast = [self._arg(a) for a in hc.args]
-        if hc.name in self.entry_names:
+        if hc.name in self.operand_names:
             return CppCall(CppIdent(hc.name), [CppIdent("sb"), CppIdent("blk_id"), CppIdent("ins")] + args_ast)
-        if hc.name not in self.helpers:
-            raise ValueError(f"Unknown @helper '{hc.name}' in valhall_operands.json")
-        h = self.helpers[hc.name]
-        if h["kind"] == "inline_ops":
+        if hc.name not in self.host_functions:
+            raise ValueError(f"Unknown @host function '{hc.name}' in valhall_lowering.json")
+        h = self.host_functions[hc.name]
+        if h.get("kind") == "inline_ops":
             return CppCall(CppIdent(f"_helper_{hc.name}"), [CppIdent("sb"), CppIdent("blk_id"), CppIdent("ins")] + args_ast)
+        target = h.get("target") or f"operands_host::{hc.name}"
         call_args: List[Any] = []
         if h.get("takes_sb", False):
             call_args.extend([CppIdent("sb"), CppIdent("blk_id")])
         if h.get("takes_ins", False):
             call_args.append(CppIdent("ins"))
         call_args.extend(args_ast)
-        return CppCall(CppScopedIdent(["operands_host", hc.name]), call_args)
+        return CppCall(CppScopedIdent(target.split("::")), call_args)
 
     def _expr(self, expr: Any, out: List[Any], env_types: Dict[str, str], vt_hint: Optional[str]) -> Any:
-        if isinstance(expr, (VarRef, Literal, BareIdent)):
+        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent)):
             return self._arg(expr)
         if isinstance(expr, HostCall):
             return self._host_call(expr)
@@ -245,41 +257,37 @@ class _DslToCppAst:
 def load_operands_spec_json(spec_path: str) -> Dict[str, CppFunctionDef]:
     with open(spec_path, "r", encoding="utf-8") as f:
         spec = json.load(f)
-    if spec.get("schema_version") != 2:
-        raise ValueError(f"Expected valhall_operands.json schema_version == 2, got {spec.get('schema_version')}")
 
     source_file = os.path.basename(spec_path)
-    helpers: Dict[str, Dict[str, Any]] = spec.get("helpers", {})
-    entry_abi: List[Dict[str, Any]] = spec.get("entry_abi", [])
-    entry_names = {e["name"] for e in entry_abi}
-    conv = _DslToCppAst(helpers, entry_names)
+    host_functions: Dict[str, Dict[str, Any]] = spec.get("host_functions", {})
+    operands: List[Dict[str, Any]] = spec.get("operands", [])
+    operand_names = {e["name"] for e in operands}
+    conv = _DslToCppAst(host_functions, operand_names)
     funcs: Dict[str, CppFunctionDef] = {}
 
-    for hname, hdef in helpers.items():
-        if hdef["kind"] != "inline_ops":
+    for hname, hdef in host_functions.items():
+        if hdef.get("kind") != "inline_ops":
             continue
-        params = [
-            {"type": "SsaBuilder&", "name": "sb"},
-            {"type": "uint32_t", "name": "blk_id"},
-            {"type": "const DecodedValhallInst&", "name": "ins"},
-        ] + hdef.get("args", [])
         funcs[f"_helper_{hname}"] = conv.convert_fn(
             f"_helper_{hname}",
             hdef["ret"],
-            params,
+            hdef.get("args", []),
             hdef["inline_ops"],
             source_file,
+            prepend_ctx=True,
         )
 
-    for entry in entry_abi:
+    for entry in operands:
         if entry["kind"] == "host":
-            p_names = [CppIdent(p["name"]) for p in entry["params"]]
+            parsed = parse_param_list(entry.get("params", []))
+            all_params = [("const DecodedValhallInst&", "ins")] + parsed
+            p_names = [CppIdent(n) for _, n in all_params]
             target_parts = entry["target"].split("::")
             funcs[entry["name"]] = CppFunctionDef(
                 name=entry["name"],
                 namespace="",
                 ret_type=entry["ret"],
-                params=[CppParam(p["type"], p["name"]) for p in entry["params"]],
+                params=[CppParam(t, n) for t, n in all_params],
                 body=[CppReturn(CppCall(CppScopedIdent(target_parts), p_names))],
                 source_file=source_file,
                 start_line=0,
@@ -289,11 +297,12 @@ def load_operands_spec_json(spec_path: str) -> Dict[str, CppFunctionDef]:
             funcs[entry["name"]] = conv.convert_fn(
                 entry["name"],
                 entry["ret"],
-                entry["params"],
+                entry.get("params", []),
                 entry["inline_ops"],
                 source_file,
+                prepend_ctx=True,
             )
         else:
-            raise ValueError(f"Unknown entry_abi kind '{entry['kind']}' for {entry['name']}")
+            raise ValueError(f"Unknown operand kind '{entry['kind']}' for {entry['name']}")
 
     return funcs

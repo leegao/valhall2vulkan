@@ -1,5 +1,5 @@
 // AUTO-GENERATED FILE — DO NOT EDIT.
-// Generated from specs/lowering/valhall_operands.json (InlineOps DSL) by tools/gen_valhall_operands.py
+// Generated from specs/lowering/valhall_lowering.json (operands + inline_ops host_functions) by tools/gen_valhall_tables.py
 
 #include "valhall_operands.h"
 #include "valhall_pass1_handlers.h"

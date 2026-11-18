@@ -397,3 +397,291 @@ def compile_inline_ops_rule(rule, lookup_tables, canonical_ssa_ops, host_functio
         lines.append(st)
     lines.append("return true;")
     return " ".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Unified Parameter Schema ("TYPE" or "TYPE %name") & Operands C++17 Codegen
+# ---------------------------------------------------------------------------
+
+def parse_param_spec(spec_str, index):
+    s = spec_str.strip()
+    m = re.match(r"^(.+?)\s+%([A-Za-z_][A-Za-z0-9_]*)$", s)
+    if m:
+        return (m.group(1).strip(), m.group(2))
+    return (s, f"arg{index}")
+
+
+def parse_param_list(params):
+    return [parse_param_spec(p, i) for i, p in enumerate(params)]
+
+
+_OPERAND_DSL_TYPE_TO_CPP = {
+    "u32": "SsaId",
+    "s32": "SsaId",
+    "f32": "SsaId",
+    "u64": "SsaId",
+    "s64": "SsaId",
+    "v2f32": "SsaId",
+    "v2u32": "SsaId",
+    "v2s32": "SsaId",
+    "v4f32": "SsaId",
+    "v4u32": "SsaId",
+    "v4s32": "SsaId",
+    "uint32_t": "uint32_t",
+    "bool": "bool",
+    "ValType": "ValType",
+}
+
+_OPERAND_SSA_OP_DEFAULTS = {
+    "IAdd64": ("ValType::U64", ["cap:Int64"]),
+    "SConvert32To64": ("ValType::S64", ["cap:Int64"]),
+    "UConvert32To64": ("ValType::U64", ["cap:Int64"]),
+    "BfeS": ("ValType::S32", []),
+    "BfeU": ("ValType::U32", []),
+    "Shl": ("ValType::U32", []),
+    "BitOr": ("ValType::U32", []),
+    "IMul": ("ValType::U32", []),
+    "BitNot": ("ValType::U32", []),
+    "SAbs": ("ValType::S32", ["uses_glsl_std450"]),
+    "SNeg": ("ValType::S32", []),
+    "UnpackHalf2x16": ("ValType::V2F32", ["uses_glsl_std450"]),
+    "PackHalf2x16": ("ValType::U32", ["uses_glsl_std450"]),
+    "FAbs": ("ValType::F32", ["uses_glsl_std450"]),
+    "FNeg": ("ValType::F32", []),
+    "FClamp": ("ValType::F32", ["uses_glsl_std450"]),
+    "FMax": ("ValType::F32", ["uses_glsl_std450"]),
+    "VecConstruct2": ("ValType::V2F32", []),
+    "VecConstruct4": ("ValType::V4U32", []),
+}
+
+_OPERAND_EFFECT_STMTS = {
+    "uses_sideband": "{nv}.effects.flags |= EffectSet::kFlagUsesSideband;",
+    "uses_glsl_std450": "{nv}.effects.flags |= EffectSet::kFlagUsesGlsl450;",
+    "cap:Int64": "{nv}.effects.cap_bits |= EffectSet::kCapInt64;",
+}
+
+
+class _OperandsDslCompiler:
+    def __init__(self, host_functions, operand_names):
+        self.host_functions = host_functions
+        self.operand_names = operand_names
+        self._node_idx = 0
+
+    def next_nv(self):
+        self._node_idx += 1
+        return f"_n{self._node_idx}"
+
+    def compile_fn(self, name, ret, params_list, inline_ops, is_static, fn_effects, prepend_ctx=True):
+        prog = parse_inline_ops(inline_ops)
+        parsed_params = parse_param_list(params_list)
+        if prepend_ctx:
+            all_params = [("SsaBuilder&", "sb"), ("uint32_t", "blk_id"), ("const DecodedValhallInst&", "ins")] + parsed_params
+        else:
+            all_params = parsed_params
+        lines = []
+        prefix = "static " if is_static else ""
+        p_str = ", ".join(f"{t} {n}" for t, n in all_params)
+        lines.append(f"{prefix}{ret} {name}({p_str}) {{")
+        env_types = {n: t for t, n in all_params}
+        declared = {n for _, n in all_params}
+        self._emit_stmts(prog.stmts, 1, lines, env_types, declared, fn_effects)
+        lines.append("}")
+        lines.append("")
+        return lines
+
+    def _emit_if(self, st, indent, lines, env_types, declared, fn_effects, prefix_else=False):
+        pad = "    " * indent
+        cond_cpp = self._emit_cond(st.cond, env_types, declared)
+        if prefix_else:
+            lines.append(f"{pad}}} else if ({cond_cpp}) {{")
+        else:
+            lines.append(f"{pad}if ({cond_cpp}) {{")
+        self._emit_stmts(st.then_body, indent + 1, lines, dict(env_types), set(declared), fn_effects)
+        if st.else_body is not None:
+            if len(st.else_body) == 1 and isinstance(st.else_body[0], IfStmt):
+                self._emit_if(st.else_body[0], indent, lines, env_types, declared, fn_effects, prefix_else=True)
+            else:
+                lines.append(f"{pad}}} else {{")
+                self._emit_stmts(st.else_body, indent + 1, lines, dict(env_types), set(declared), fn_effects)
+                lines.append(f"{pad}}}")
+        else:
+            lines.append(f"{pad}}}")
+
+    def _emit_stmts(self, stmts, indent, lines, env_types, declared, fn_effects):
+        pad = "    " * indent
+        for st in stmts:
+            if isinstance(st, AssignStmt):
+                vt_hint = VALTYPE_MAP.get(st.val_type) if st.val_type else None
+                expr_cpp = self._emit_expr(st.rhs, indent, lines, env_types, declared, fn_effects, vt_hint)
+                vname = st.var
+                if vname in declared:
+                    lines.append(f"{pad}{vname} = {expr_cpp};")
+                else:
+                    cpp_t = _OPERAND_DSL_TYPE_TO_CPP.get(st.val_type or "u32", "SsaId")
+                    if st.val_type:
+                        env_types[vname] = st.val_type
+                    declared.add(vname)
+                    lines.append(f"{pad}{cpp_t} {vname} = {expr_cpp};")
+            elif isinstance(st, ExprStmt):
+                expr_cpp = self._emit_expr(st.expr, indent, lines, env_types, declared, fn_effects, None)
+                lines.append(f"{pad}{expr_cpp};")
+            elif isinstance(st, ReturnStmt):
+                if st.value is None:
+                    lines.append(f"{pad}return;")
+                else:
+                    expr_cpp = self._emit_expr(st.value, indent, lines, env_types, declared, fn_effects, None)
+                    lines.append(f"{pad}return {expr_cpp};")
+            elif isinstance(st, IfStmt):
+                self._emit_if(st, indent, lines, env_types, declared, fn_effects, prefix_else=False)
+            elif isinstance(st, ForStmt):
+                bound_cpp = self._emit_arg(st.bound, env_types, declared)
+                iv = st.var
+                lines.append(f"{pad}for (uint32_t {iv} = 0; {iv} < {bound_cpp}; ++{iv}) {{")
+                inner_env = dict(env_types)
+                inner_decl = set(declared)
+                inner_env[iv] = "uint32_t"
+                inner_decl.add(iv)
+                self._emit_stmts(st.body, indent + 1, lines, inner_env, inner_decl, fn_effects)
+                lines.append(f"{pad}}}")
+            else:
+                raise ValueError(f"Unsupported DSL statement: {st!r}")
+
+    def _emit_cond(self, cond, env_types, declared):
+        from dsl_parser import CondBinOp
+        if isinstance(cond, CondBinOp):
+            return f"({self._emit_cond(cond.left, env_types, declared)} {cond.op} {self._emit_cond(cond.right, env_types, declared)})"
+        if isinstance(cond, Cond):
+            atom = cond.atom
+            if isinstance(atom, VarRef):
+                c = atom.name
+            elif isinstance(atom, HostCall):
+                c = self._emit_host_call(atom, env_types, declared)
+            elif isinstance(atom, DollarCall):
+                c = f"operands_host::{atom.name}(ins)"
+            else:
+                raise ValueError(f"Unsupported cond atom: {atom!r}")
+            return f"!({c})" if cond.negated else c
+        raise ValueError(f"Unsupported cond: {cond!r}")
+
+    def _emit_arg(self, arg, env_types, declared):
+        if isinstance(arg, SrcRef):
+            return f"arg{arg.index}"
+        if isinstance(arg, VarRef):
+            return arg.name
+        if isinstance(arg, Literal):
+            return arg.raw
+        if isinstance(arg, BareIdent):
+            if arg.name in VALTYPE_MAP:
+                return VALTYPE_MAP[arg.name]
+            return arg.name
+        if isinstance(arg, HostCall):
+            return self._emit_host_call(arg, env_types, declared)
+        if isinstance(arg, Cond):
+            return self._emit_cond(arg, env_types, declared)
+        raise ValueError(f"Unsupported DSL arg: {arg!r}")
+
+    def _emit_host_call(self, hc, env_types, declared):
+        args_cpp = [self._emit_arg(a, env_types, declared) for a in hc.args]
+        if hc.name in self.operand_names:
+            return f"{hc.name}({', '.join(['sb', 'blk_id', 'ins'] + args_cpp)})"
+        if hc.name not in self.host_functions:
+            raise ValueError(f"Unknown @host function '{hc.name}' in valhall_lowering.json")
+        h = self.host_functions[hc.name]
+        if h.get("kind") == "inline_ops":
+            return f"_helper_{hc.name}({', '.join(['sb', 'blk_id', 'ins'] + args_cpp)})"
+        target = h.get("target") or f"operands_host::{hc.name}"
+        call_args = []
+        if h.get("takes_sb", False):
+            call_args.extend(["sb", "blk_id"])
+        if h.get("takes_ins", False):
+            call_args.append("ins")
+        call_args.extend(args_cpp)
+        return f"{target}({', '.join(call_args)})"
+
+    def _emit_expr(self, expr, indent, lines, env_types, declared, fn_effects, vt_hint):
+        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent)):
+            return self._emit_arg(expr, env_types, declared)
+        if isinstance(expr, HostCall):
+            return self._emit_host_call(expr, env_types, declared)
+        if isinstance(expr, SsaCall):
+            pad = "    " * indent
+            nv = self.next_nv()
+            arg_exprs = [self._emit_arg(a, env_types, declared) for a in expr.args]
+            default_vt, op_effs = _OPERAND_SSA_OP_DEFAULTS.get(expr.op, ("ValType::U32", []))
+            vt = vt_hint or default_vt
+            if vt_hint is None and expr.op in ("VecConstruct2", "FClamp", "FMax", "FAbs", "FNeg"):
+                if expr.args and isinstance(expr.args[0], VarRef):
+                    at = env_types.get(expr.args[0].name)
+                    if at in VALTYPE_MAP:
+                        vt = VALTYPE_MAP[at]
+            lines.append(f"{pad}SsaNode {nv}{{}};")
+            lines.append(f"{pad}{nv}.op = tables::SsaOp::{expr.op};")
+            lines.append(f"{pad}{nv}.type = {vt};")
+            lines.append(f"{pad}{nv}.args = {{ {', '.join(arg_exprs)} }};")
+            effs = list(dict.fromkeys(list(op_effs) + list(fn_effects)))
+            for ef in effs:
+                if ef in _OPERAND_EFFECT_STMTS:
+                    lines.append(f"{pad}{_OPERAND_EFFECT_STMTS[ef].format(nv=nv)}")
+            return f"sb.emit(blk_id, std::move({nv}))"
+        raise ValueError(f"Unsupported DSL expr: {expr!r}")
+
+
+def compile_operands_cpp(spec):
+    host_functions = spec.get("host_functions", {})
+    operands = spec.get("operands", [])
+    operand_names = {e["name"] for e in operands}
+    comp = _OperandsDslCompiler(host_functions, operand_names)
+
+    lines = [
+        "// AUTO-GENERATED FILE — DO NOT EDIT.",
+        "// Generated from specs/lowering/valhall_lowering.json (operands + inline_ops host_functions) by tools/gen_valhall_tables.py",
+        "",
+        '#include "valhall_operands.h"',
+        '#include "valhall_pass1_handlers.h"',
+        "",
+        "namespace valhall::compiler {",
+        "",
+    ]
+
+    for hname, hdef in host_functions.items():
+        if hdef.get("kind") != "inline_ops":
+            continue
+        lines.extend(
+            comp.compile_fn(
+                f"_helper_{hname}",
+                hdef["ret"],
+                hdef.get("args", []),
+                hdef["inline_ops"],
+                is_static=True,
+                fn_effects=hdef.get("effects", []),
+                prepend_ctx=True,
+            )
+        )
+
+    for entry in operands:
+        if entry["kind"] == "host":
+            parsed = parse_param_list(entry.get("params", []))
+            all_params = [("const DecodedValhallInst&", "ins")] + parsed
+            p_decl = ", ".join(f"{t} {n}" for t, n in all_params)
+            p_call = ", ".join(n for _, n in all_params)
+            lines.append(f"{entry['ret']} {entry['name']}({p_decl}) {{")
+            lines.append(f"    return {entry['target']}({p_call});")
+            lines.append("}")
+            lines.append("")
+        elif entry["kind"] == "inline_ops":
+            lines.extend(
+                comp.compile_fn(
+                    entry["name"],
+                    entry["ret"],
+                    entry.get("params", []),
+                    entry["inline_ops"],
+                    is_static=False,
+                    fn_effects=entry.get("effects", []),
+                    prepend_ctx=True,
+                )
+            )
+        else:
+            raise ValueError(f"Unknown operand kind '{entry['kind']}' for {entry['name']}")
+
+    lines.append("} // namespace valhall::compiler")
+    return "\n".join(lines) + "\n"
