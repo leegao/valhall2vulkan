@@ -308,8 +308,8 @@ def _convert_stmt(node: Dict[str, Any]) -> Any:
     raise ValueError(f"Unsupported Clang AST JSON stmt kind: {kind!r} ({node})")
 
 
-def load_clang_ast_json(ast_json_path: str) -> List[CppFunctionDef]:
-    """Load functions from clang_ast_dumper's JSON output."""
+def load_clang_ast_metadata(ast_json_path: str) -> Tuple[List[CppFunctionDef], Dict[str, Dict[str, str]]]:
+    """Load functions and [[verifier::z3(...)]] attributes from clang_ast_dumper's JSON output."""
     with open(ast_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     if data.get("schema_version") != 1:
@@ -337,7 +337,20 @@ def load_clang_ast_json(ast_json_path: str) -> List[CppFunctionDef]:
                 end_line=int(fn.get("end_line", 0)),
             )
         )
-    return out
+    vattrs: Dict[str, Dict[str, str]] = {}
+    for qname, info in data.get("verifier_attrs", {}).items():
+        if isinstance(info, dict) and "expr" in info:
+            vattrs[qname] = {
+                "receiver": str(info.get("receiver", "")),
+                "expr": str(info["expr"]),
+            }
+    return out, vattrs
+
+
+def load_clang_ast_json(ast_json_path: str) -> List[CppFunctionDef]:
+    """Load functions from clang_ast_dumper's JSON output."""
+    fns, _ = load_clang_ast_metadata(ast_json_path)
+    return fns
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +423,12 @@ class SymbolicSsaModule:
         self.reg_state[reg] = val_id
         self.reg_writes[reg] = val_id
 
+    def current_token(self) -> int:
+        return self.token_out
+
+    def set_token(self, tok: int) -> None:
+        self.token_out = tok
+
     def emit_const_u32(self, v: int) -> int:
         return self.emit(SymbolicSsaNode(0, "ConstU32", "U32", imm_u32=int(v) & 0xFFFFFFFF))
 
@@ -469,6 +488,7 @@ class InstLoweringContext:
     sr_write_base: int = 0
     sr_write_count: int = 0
     stage: str = "Compute"
+    arch: int = 11
     rule_effects: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -539,7 +559,16 @@ class CppHandlerRegistry:
             os.path.basename(operands_path),
         )
 
-        fns = load_clang_ast_json(handlers_ast_path)
+        fns, vattrs = load_clang_ast_metadata(handlers_ast_path)
+        self.verifier_attrs: Dict[str, Dict[str, str]] = vattrs
+        self.verifier_attr_code: Dict[str, Any] = {
+            qname: compile(info["expr"], f"<verifier::z3:{qname}>", "eval")
+            for qname, info in vattrs.items()
+        }
+        self.sb_attr_by_method: Dict[str, str] = {}
+        for qname in vattrs:
+            if "::SsaBuilder::" in qname:
+                self.sb_attr_by_method[qname.split("::")[-1]] = qname
         for fn in fns:
             if fn.namespace == "abi":
                 self.abi_funcs[fn.name] = fn
@@ -548,8 +577,9 @@ class CppHandlerRegistry:
             else:
                 self.global_handlers[fn.name] = fn
         self.log.debug(
-            "Loaded %d C++ AST functions from %s",
+            "Loaded %d C++ AST functions and %d verifier_attrs from %s",
             len(fns),
+            len(self.verifier_attrs),
             os.path.basename(handlers_ast_path),
         )
 
@@ -922,32 +952,22 @@ class CppSymbolicEvaluator:
                     return obj[-1]
             if isinstance(obj, dict) and m == "end":
                 return ("end", obj)
-            if isinstance(obj, tuple) and obj[0] == "sb":
-                sb_ssa: SymbolicSsaModule = obj[1]
-                if m == "current_reg":
-                    return sb_ssa.current_reg(args[1])
-                if m == "set_reg":
-                    sb_ssa.set_reg(args[1], args[2])
-                    return None
-                if m == "current_token":
-                    return sb_ssa.token_out
-                if m == "set_token":
-                    sb_ssa.token_out = args[1]
-                    return None
-                if m == "emit":
-                    return sb_ssa.emit(args[1])
-                if m == "emit_const_u32":
-                    return sb_ssa.emit_const_u32(args[1])
-                if m == "emit_const_s32":
-                    return sb_ssa.emit_const_s32(args[1])
-                if m == "emit_const_f32_bits":
-                    return sb_ssa.emit_const_f32_bits(args[1])
-                if m == "emit_const_u64":
-                    return sb_ssa.emit_const_u64(args[1])
-                if m == "emit_const_bool":
-                    return sb_ssa.emit_const_bool(args[1])
-                if m == "emit_bitcast":
-                    return sb_ssa.emit_bitcast(args[1], args[2])
+            qc = expr.qualified_callee
+            if not qc and isinstance(obj, tuple) and obj[0] == "sb":
+                qc = self.reg.sb_attr_by_method.get(m, "")
+            if qc and qc in self.reg.verifier_attr_code:
+                vattr = self.reg.verifier_attrs[qc]
+                if isinstance(obj, tuple) and obj[0] == "sb":
+                    this_obj: Any = obj[1]
+                elif vattr.get("receiver") == "SymbolicSsaModule":
+                    this_obj = ssa
+                else:
+                    this_obj = obj
+                return eval(
+                    self.reg.verifier_attr_code[qc],
+                    {"__builtins__": {}},
+                    {"this": this_obj, "args": args, "ssa": ssa, "ins": ins},
+                )
             if isinstance(obj, tuple) and obj[0] == "ctx":
                 return self._call_ctx_method(m, ssa, ins, args)
             if isinstance(obj, tuple) and obj[0] == "blk" and m == "branch_cond":
@@ -957,6 +977,14 @@ class CppSymbolicEvaluator:
         qc = expr.qualified_callee
         if qc:
             args = [self._eval_expr(a, env, ssa, ins) for a in expr.args]
+            if qc in self.reg.verifier_attr_code:
+                vattr = self.reg.verifier_attrs[qc]
+                this_obj = ssa if vattr.get("receiver") == "SymbolicSsaModule" else None
+                return eval(
+                    self.reg.verifier_attr_code[qc],
+                    {"__builtins__": {}},
+                    {"this": this_obj, "args": args, "ssa": ssa, "ins": ins},
+                )
             if qc == "std::move":
                 return args[0]
             if qc in ("std::string", "std::__cxx11::basic_string<char>") or qc.startswith("std::__cxx11::basic_string"):

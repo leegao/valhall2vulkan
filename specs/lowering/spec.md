@@ -20,7 +20,15 @@ Here's the complete (ambiguous, so declarative) grammar for the InlineOps DSL us
 <spec>          ::= "{" "schema_version": 4,
                         "host_functions": <host_fn_map>,
                         "lookup_tables": <lookup_map>,
+                        "operands": [ <operand_def> ("," <operand_def>)* ],
                         "rules": [ <rule> ("," <rule>)* ] "}"
+
+<rule>          ::= "{" "mnemonic": <str>, "variants": [ <str>* ],
+                        ("arch_range": "[" <int> "," <int> "]",)?
+                        ("when": <cond>,)?
+                        "op_class": <str>, "ssa_op": <ssa_op_spec>,
+                        "src_types": [ <str>* ], "dest_type": <str>,
+                        ("inline_ops": <inline_ops>,)? ("effects": [ <str>* ])? "}"
 
 <host_fn_map>   ::= "{" ( <ident> ":" "{" ("kind": "inline_ops",)? "ret": <abi_ret>, "args": "[" <abi_arg_list> "]" ("inline_ops": <inline_ops>)? "}" )* "}"
 <abi_ret>       ::= "SsaId" | "uint32_t" | "bool" | "std::string" | "void"
@@ -47,7 +55,8 @@ Here's the complete (ambiguous, so declarative) grammar for the InlineOps DSL us
 <host_call>     ::= "@" <ident> "(" <host_arg_list>? ")"
 <node_flag>     ::= "[barrier]" | "[side_effect]" | "[aux_bool=" <bool_expr> "]"
 
-<cond>          ::= "!"? <cond_prim>
+<cond>          ::= <cond_unary> ( ("&&" | "||") <cond_unary> )*
+<cond_unary>    ::= "!"? <cond_prim>
 <cond_prim>     ::= "$has_src0" | "$has_src1" | "$has_src2" | "$has_src3" | "$has_dest"
                   | "$is_v2f16" | "$is_signed" | "$is_64bit" | "$dest_is_64bit"
                   | "$src0_swz_h1" | "$is_frag_stage" | "$is_vert_stage"
@@ -124,7 +133,11 @@ Here's a machine executable (LL(1) with unambiguous first/follow sets) grammar a
                     | "false"
                     | <cond>
 
-<cond>            ::= "!" <cond_atom>
+<cond>            ::= <cond_unary> <cond_tail>
+<cond_tail>       ::= "&&" <cond_unary> <cond_tail>
+                    | "||" <cond_unary> <cond_tail>
+                    | ε
+<cond_unary>      ::= "!" <cond_atom>
                     | <cond_atom>
 
 <cond_atom>       ::= "$" IDENT
@@ -198,7 +211,10 @@ where:
 6. **Conditional (`if (c) { S_1 } else { S_2 }`)**:
    $$\frac{[\\![ c ]\\!](\iota, \sigma) = \text{true} \quad \langle S_1, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'} \qquad \frac{[\\![ c ]\\!](\iota, \sigma) = \text{false} \quad \langle S_2, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'}$$
 
-7. **Staging-Register Window (`for_sr_read` vs `for_sr_write`)**:
+7. **Rule Dispatch (`arch_range` & `when`)**:
+   - Multiple rule blocks may share the same `(mnemonic, variant)`. Candidates matching `(mnemonic, variant)` (exact variant first, then `"*"`) are filtered by `arch_range` (default `[9, 14]`) and tested in declaration order against `when` ($\[\\!\[ w \]\\!\](\iota, \sigma) = \text{true}$). The first matching rule executes.
+
+8. **Staging-Register Window (`for_sr_read` vs `for_sr_write`)**:
    - `$sr_read_count` $= \max(1, \iota.\text{sr read.count})$ bounds input staging registers $\mathcal{R}[\iota.\text{sr read.base} + k]$ read via `@sr_get(k)` (e.g., `STORE`, `TEX_SINGLE`, `ATOM`, `BLEND`).
    - `$sr_write_count` $= \max(1, \iota.\text{srwrite.count})$ (and `$sr_write_count_max4` $= \min(4, \text{count})$) bounds output staging registers $\mathcal{R}[\iota.\text{sr write.base} + k]$ written via `@sr_set(k, v)` (e.g., `LOAD`, `LD_ATTR`, `LD_VAR`, `TEX_SINGLE`).
    - Instructions like `TEX_SINGLE` use **both** windows simultaneously (`sr_read` for `(u, v)` coordinates, `sr_write` for `RGBA` output).
@@ -259,3 +275,71 @@ All `@fn(...)` host functions (whether implemented in C++ in `src/valhall_pass1_
 | `@store_vert_varying` | `(SsaId, SsaId) -> SsaId` | Emits `StoreVertVarying(imm_signed / 16, vec, tok)` -> `Token` |
 | `@store_frag_color` | `(SsaId, SsaId) -> SsaId` | Emits `StoreFragColor(blend_descriptor_N, col, tok)` -> `Token` |
 | `@kill_cond` | `(SsaId, SsaId) -> void` | Emits conditional `Kill(cond, tok)` |
+| `@has_clamp_0_1` / `@has_clamp_m1_1` / `@has_clamp_0_inf` | `() -> bool` | Clamp modifier predicates (`clamp_0_1`, `clamp_m1_1`, `clamp_0_inf`) |
+| `@apply_f32_clamp` | `(SsaId) -> SsaId` | Applies `FClamp`/`FMax` to scalar `F32` when clamp modifier is active |
+| `@apply_v2f16_clamp` | `(SsaId) -> SsaId` | Applies `FClamp`/`FMax` to `V2F32` when clamp modifier is active |
+| `@has_not` / `@has_not_result` | `() -> bool` | Instruction `.not` / `.not_result` modifier predicates |
+| `@src_oob` | `(uint32_t) -> bool` | True if `src_idx >= ins.srcs.size()` |
+| `@src_is_reg` / `@src_is_small_const` / `@src_is_64bit` | `(uint32_t) -> bool` | Source operand kind and 64-bit width predicates |
+| `@src_is_fau_uniform` / `@src_is_fau_pc` / `@src_is_fau_lane_id` / `@src_is_fau_lane_width` | `(uint32_t) -> bool` | FAU special/uniform source kind predicates |
+| `@src_reg_num` / `@src_reg_base` | `(uint32_t) -> uint32_t` | Source register index / even-aligned 64-bit base register |
+| `@src_read_reg` / `@src_read_reg_base` | `(uint32_t[, uint32_t]) -> SsaId` | Reads source register (or `base + offset`) via `sb.current_reg` |
+| `@src_emit_imm_u32` / `@src_emit_imm_u64` | `(uint32_t) -> SsaId` | Emits `ConstU32`/`ConstU64` from small-constant or FAU source |
+| `@ins_pc_u64` | `() -> SsaId` | Emits `ConstU64(ins.pc)` for FAU PC sources |
+| `@emit_lane_id` / `@emit_lane_width` | `() -> SsaId` | Emits `LoadBuiltinInput(SubgroupLocalInvocationId)` / `ConstU32(16)` |
+| `@get_src_abs` / `@get_src_neg` / `@get_src_not` | `(uint32_t) -> bool` | Source `.abs`, `.neg`, `.not` modifier flags |
+| `@get_src_swz` / `@src_swz_eq` | `(uint32_t[, const char*]) -> std::string / bool` | Returns or compares source swizzle modifier string |
+| `@src_swz_is_b_rep` / `@src_swz_b_rep_off` | `(uint32_t) -> bool / uint32_t` | Byte-replicate swizzle (`b0000`..`b3333`) predicate and bit offset |
+| `@apply_v2_swizzle` | `(SsaId, ValType, uint32_t) -> SsaId` | Applies `.h00`/`.h11`/`.h10` swizzle via `VecShuffle` |
+| `$src0_swz_h1_u32` | `() -> uint32_t` | `1u` if `src[0]` swizzle is `h1`, else `0u` |
+| `@src_word_select` | `(uint32_t) -> bool` | Source `word_select` (`w0`/`w1`) flag |
+| `@dest_reg_num` / `@dest_reg_base` | `() -> uint32_t` | Destination register index / even-aligned 64-bit base register |
+| `@dest_read_reg` / `@dest_set_reg` | `() -> SsaId` / `(uint32_t, SsaId) -> void` | Reads `dest_reg` or writes `sb.set_reg(blk, reg, val)` |
+| `@get_dest_mod` / `@dest_mod_eq` | `() -> std::string` / `(const char*) -> bool` | Returns or compares destination modifier (`b0`..`b3`, `h0`, `h1`) |
+| `@dest_mod_is_byte` / `@dest_mod_byte_off` | `() -> bool / uint32_t` | Destination byte-lane (`b0`..`b3`) predicate and bit offset (`0,8,16,24`) |
+| `@emit_pack_u64` / `@split64_hi` | `(SsaId, SsaId) -> SsaId` / `(SsaId) -> SsaId` | Emits `Pack64(lo, hi)` / extracts high 32-bit `U32` from `Split64` |
+| `@widen_to_u64` | `(SsaId, bool) -> SsaId` | Zero- or sign-extends `U32` to `U64` (`UConvert32To64`/`SConvert32To64`) |
+| `@extract_bits` | `(SsaId, uint32_t, uint32_t, bool) -> SsaId` | Extracts signed/unsigned bitfield (`BfeS`/`BfeU`) |
+| `@extract_lane_u32` | `(SsaId, uint32_t, bool) -> SsaId` | Extracts `S32`/`U32` lane from vector and bitcasts to `U32` |
+| `@add_u32` / `@mul8` | `(uint32_t, uint32_t) -> uint32_t` / `(uint32_t) -> uint32_t` | Host `uint32_t` addition (`a + b`) and byte-to-bit shift (`a * 8`) |
+
+---
+
+## 5. `operands` combinators
+
+The `"operands"` array defines the 15 operand fetch/store combinators used by `DirectSsaOp`, `DynamicSsaOp`, and `@INLINE_OPS` rules (`%0..%3` and destination writeback) and are automatically converted based on the operand type.
+
+### Schema
+
+```json
+{
+  "name": "fetch_src_f32",
+  "params": ["uint32_t %src_idx"],
+  "ret": "SsaId",
+  "inline_ops": [ ... ],
+  "effects": ["uses_glsl_std450"]
+}
+```
+
+- All operand combinators compile into `namespace valhall::compiler::abi` with the same ABI (`Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, ...`)
+- Entries without `"inline_ops"` (`get_src_swz`, `get_dest_mod`) declare external C++ helpers in `src/valhall_pass1_handlers.cpp`.
+
+### Operand Combinator Reference
+
+| Combinator | Signature | Semantics |
+| :--- | :--- | :--- |
+| `get_src_swz` | `(uint32_t %src_idx) -> std::string` | Returns source swizzle modifier string (or `""` if OOB) |
+| `get_dest_mod` | `() -> std::string` | Returns `ins.dest_mod` string |
+| `fetch_raw_src_u32` | `(uint32_t %src_idx) -> SsaId` | Fetches raw 32-bit register/imm/FAU/builtin source without modifiers |
+| `fetch_src_int32` | `(uint32_t %src_idx, bool %is_signed) -> SsaId` | Fetches 32-bit integer source with `h0`/`h1`/`b0..b3`/`b0000..b3333` extraction, sign/zero extension, and `.not` |
+| `fetch_src_f32` | `(uint32_t %src_idx) -> SsaId` | Fetches `F32` source (including `h0`/`h1` `F16 -> F32` convert, `.abs`, `.neg`) |
+| `fetch_src_v2f16` | `(uint32_t %src_idx) -> SsaId` | Unpacks `V2F16 -> V2F32`, applies `apply_v2_swizzle`, `.abs`, `.neg` |
+| `fetch_src_v2i16` | `(uint32_t %src_idx, bool %is_signed) -> SsaId` | Unpacks 2x16-bit integer lanes into `V2S32`/`V2U32` with swizzle |
+| `fetch_src_v4i8` | `(uint32_t %src_idx, bool %is_signed) -> SsaId` | Unpacks 4x8-bit integer lanes into `V4S32`/`V4U32` |
+| `fetch_src_u64` | `(uint32_t %src_idx, bool %sign_extend_subword) -> SsaId` | Fetches 64-bit register pair / imm / FAU PC or widens 32-bit / `w0`/`w1` subword |
+| `store_dest_u32` | `(SsaId %val_u32) -> void` | Writes `U32` or inserts `b0..b3` / `h0` / `h1` subword via `Bfi` |
+| `store_dest_f32` | `(SsaId %val_f32) -> void` | Applies `apply_f32_clamp`, bitcasts to `U32` (or `F32 -> F16` for `h0`/`h1`), writes `dest_reg` |
+| `store_dest_v2f16` | `(SsaId %vec2_f32) -> void` | Applies `apply_v2f16_clamp`, packs `V2F32 -> V2F16`, writes `dest_reg` |
+| `store_dest_v2i16` | `(SsaId %vec2_i32, bool %is_signed) -> void` | Extracts 2x16-bit lanes and packs into `U32` via `Bfi` |
+| `store_dest_v4i8` | `(SsaId %vec4_i32, bool %is_signed) -> void` | Extracts 4x8-bit lanes and packs into `U32` via `Bfi` |
+| `store_dest_u64` | `(SsaId %val_u64) -> void` | Splits 64-bit value via `Split64` and writes `(dest_reg_base, dest_reg_base + 1)` |

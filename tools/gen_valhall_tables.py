@@ -28,6 +28,7 @@ from valhall_lowering_dsl import (
     gen_store_stmt,
     gen_lookup_key_expr,
     compile_inline_ops_rule,
+    compile_when_expr,
     compile_operands_cpp,
 )
 
@@ -67,19 +68,37 @@ def load_xml_instructions(xml_path):
     return insns
 
 
-def match_lowering_rule(ins, rules):
+def parse_arch_range(rule):
+    ar = rule.get("arch_range", [9, 14])
+    if not isinstance(ar, list) or len(ar) != 2:
+        raise ValueError(f"Rule {rule.get('mnemonic')} has invalid arch_range: {ar!r}")
+    lo, hi = int(ar[0]), int(ar[1])
+    if lo < 9 or hi > 14 or lo > hi:
+        raise ValueError(f"Rule {rule.get('mnemonic')} arch_range out of [9, 14]: {ar!r}")
+    mask = 0
+    for a in range(lo, hi + 1):
+        mask |= (1 << a)
+    return lo, hi, mask
+
+
+def match_lowering_rules(ins, rules):
     name = ins["name"]
     var = ins["variant"]
-    wildcard_match = None
+    ins_mask = ins["arch_mask"]
+    exact_matches = []
+    wildcard_matches = []
     for idx, r in enumerate(rules):
         if r["mnemonic"] != name:
             continue
+        _, _, r_mask = parse_arch_range(r)
+        if (r_mask & ins_mask) == 0:
+            continue
         vars_list = r.get("variants", ["*"])
         if var in vars_list:
-            return idx, r
-        if "*" in vars_list and wildcard_match is None:
-            wildcard_match = (idx, r)
-    return wildcard_match if wildcard_match is not None else (None, None)
+            exact_matches.append((idx, r))
+        elif "*" in vars_list:
+            wildcard_matches.append((idx, r))
+    return exact_matches + wildcard_matches
 
 
 def parse_effects_mask(effects_list):
@@ -210,17 +229,21 @@ def main():
 
     uncovered = []
     missing_canon_tiles = set()
-    spec_to_rule = []
+    flat_candidates = []
+    spec_ranges = []
     for ins in insns:
-        ridx, r = match_lowering_rule(ins, rules)
-        if r is None:
+        cands = match_lowering_rules(ins, rules)
+        if not cands:
             uncovered.append((ins["index"], ins["name"], ins["variant"]))
-            spec_to_rule.append(-1)
+            spec_ranges.append((0, 0))
         else:
-            spec_to_rule.append(ridx)
-            kind, val = parsed_rules[ridx]
-            if kind == "DirectSsaOp" and val not in canonical_ssa_ops:
-                missing_canon_tiles.add(val)
+            off = len(flat_candidates)
+            for ridx, _r in cands:
+                flat_candidates.append(ridx)
+                kind, val = parsed_rules[ridx]
+                if kind == "DirectSsaOp" and val not in canonical_ssa_ops:
+                    missing_canon_tiles.add(val)
+            spec_ranges.append((off, len(cands)))
 
     if uncovered:
         print(f"[ERROR] {len(uncovered)} XML instructions lack lowering rules in {args.lowering}:", file=sys.stderr)
@@ -317,6 +340,8 @@ def main():
         "    const char* handler_name;",
         "    bool splits_block;",
         "    bool is_barrier_or_cf;",
+        "    uint32_t arch_mask;",
+        "    bool has_when;",
         "    EffectMask effects;",
         "};",
         "",
@@ -359,6 +384,8 @@ def main():
         f"constexpr size_t kNumFusionTiles = {len(fusion_specs)};",
         "",
         "const LoweringRuleSpec* lookup_lowering_rule(uint16_t spec_index);",
+        "const LoweringRuleSpec* get_lowering_rule(uint16_t rule_index);",
+        "const uint16_t* lookup_lowering_rule_candidates(uint16_t spec_index, size_t* out_count);",
         "const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic);",
         "const CanonicalTileSpec* lookup_canonical_tile(SsaOp op);",
         "const FusionTileSpec* get_fusion_tiles(size_t* out_count);",
@@ -384,20 +411,32 @@ def main():
         kind, val = parsed_rules[ridx]
         ssa_op_enum = val if kind == "DirectSsaOp" else "Nop"
         hname = r["ssa_op"]
+        _, _, r_arch_mask = parse_arch_range(r)
+        has_when = bool(r.get("when"))
         cpp_lines.append(
             f'    {{ "{r["mnemonic"]}", {ridx}u, OpClass::{pascal(r["op_class"])}, '
             f'LoweringKind::{kind}, SsaOp::{ssa_op_enum}, "{hname}", '
             f'{"true" if r.get("splits_block") else "false"}, '
             f'{"true" if r.get("is_barrier_or_cf") else "false"}, '
+            f'0x{r_arch_mask:x}u, {"true" if has_when else "false"}, '
             f'{{ 0x{cb:x}u, 0x{eb:x}u, 0x{exb:x}u, 0x{fl:x}u }} }},'
         )
     cpp_lines.extend([
         "};",
         "",
-        "static const uint16_t kSpecIndexToRuleIndex[] = {",
+        "struct SpecRuleRange { uint32_t offset; uint16_t count; };",
+        "static const uint16_t kSpecRuleCandidates[] = {",
     ])
-    for i in range(0, len(spec_to_rule), 16):
-        chunk = ", ".join(str(x) for x in spec_to_rule[i:i+16])
+    for i in range(0, len(flat_candidates), 16):
+        chunk = ", ".join(str(x) for x in flat_candidates[i:i+16])
+        cpp_lines.append(f"    {chunk},")
+    cpp_lines.extend([
+        "};",
+        "",
+        "static const SpecRuleRange kSpecRuleRanges[] = {",
+    ])
+    for i in range(0, len(spec_ranges), 8):
+        chunk = ", ".join(f"{{ {off}u, {cnt}u }}" for off, cnt in spec_ranges[i:i+8])
         cpp_lines.append(f"    {chunk},")
     cpp_lines.extend([
         "};",
@@ -443,7 +482,21 @@ def main():
         "",
         "const LoweringRuleSpec* lookup_lowering_rule(uint16_t spec_index) {",
         f"    if (spec_index >= {len(insns)}) return nullptr;",
-        "    return &kLoweringRules[kSpecIndexToRuleIndex[spec_index]];",
+        "    const auto& rng = kSpecRuleRanges[spec_index];",
+        "    if (rng.count == 0) return nullptr;",
+        "    return &kLoweringRules[kSpecRuleCandidates[rng.offset]];",
+        "}",
+        "",
+        "const LoweringRuleSpec* get_lowering_rule(uint16_t rule_index) {",
+        f"    if (rule_index >= {len(rules)}) return nullptr;",
+        "    return &kLoweringRules[rule_index];",
+        "}",
+        "",
+        "const uint16_t* lookup_lowering_rule_candidates(uint16_t spec_index, size_t* out_count) {",
+        f"    if (spec_index >= {len(insns)}) {{ if (out_count) *out_count = 0; return nullptr; }}",
+        "    const auto& rng = kSpecRuleRanges[spec_index];",
+        "    if (out_count) *out_count = rng.count;",
+        "    return &kSpecRuleCandidates[rng.offset];",
         "}",
         "",
         "const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic) {",
@@ -554,7 +607,21 @@ def main():
             inc_lines.append(f"    return tables::SsaOp::{def_op};")
             inc_lines.append("}")
 
+    when_cases = []
+    for ridx, r in enumerate(rules):
+        if r.get("when"):
+            wexpr = compile_when_expr(r["when"], lookup_tables, canonical_ssa_ops, host_functions)
+            when_cases.append(f"        case {ridx}u: return ({wexpr}); // {r['mnemonic']}")
+
     inc_lines.extend([
+        "",
+        "inline bool eval_rule_when_generated(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {",
+        "    (void)ctx; (void)blk; (void)ins;",
+        "    switch (rule->rule_index) {",
+    ] + when_cases + [
+        "        default: return true;",
+        "    }",
+        "}",
         "",
         "inline bool lower_rule_generated(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {",
         "    std::string var = variant_to_string(ins.canonical_variant);",

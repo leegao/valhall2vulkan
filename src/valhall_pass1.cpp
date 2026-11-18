@@ -31,9 +31,21 @@ inline const char* lowering_kind_name(tables::LoweringKind k) {
 }
 
 void lower_instruction(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins) {
-    const auto* rule = tables::lookup_lowering_rule(ins.spec_index);
+    size_t cand_count = 0;
+    const uint16_t* cand_indices = tables::lookup_lowering_rule_candidates(ins.spec_index, &cand_count);
+    const tables::LoweringRuleSpec* rule = nullptr;
+    const uint32_t arch_bit = (ctx.opts.arch < 32) ? (1u << ctx.opts.arch) : 0u;
+    for (size_t i = 0; i < cand_count; ++i) {
+        const auto* cand = tables::get_lowering_rule(cand_indices[i]);
+        if (!cand) continue;
+        if ((cand->arch_mask & arch_bit) == 0) continue;
+        if (cand->has_when && !eval_rule_when_generated(ctx, blk, ins, cand)) continue;
+        rule = cand;
+        break;
+    }
     if (!rule) {
-        std::cerr << "[VALHALL_PASS1][ERROR] Missing lowering rule for spec_index=" << ins.spec_index
+        std::cerr << "[VALHALL_PASS1][ERROR] Missing matching lowering rule for spec_index=" << ins.spec_index
+                  << " arch=v" << static_cast<unsigned>(ctx.opts.arch)
                   << " pc=0x" << std::hex << ins.pc << std::dec << "\n";
         ctx.res.error_message = "Missing lowering rule for spec_index=" + std::to_string(ins.spec_index);
         return;

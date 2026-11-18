@@ -95,6 +95,7 @@ target_include_directories(valhall2spirv PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     "${VULKAN_INCLUDE_DIR}"
 )
+target_compile_options(valhall2spirv PUBLIC -Wno-attributes)
 target_compile_options(valhall2spirv PRIVATE -Wall -Wextra -Wno-unused-parameter)
 if(UNIX AND NOT APPLE)
     target_link_options(valhall2spirv INTERFACE -Wl,--gc-sections)
@@ -338,6 +339,7 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
             --
             -std=c++17
             -Xclang -fno-spell-checking
+            -Wno-unknown-attributes
             ${_DUMPER_RESOURCE_ARGS}
             "-I${CMAKE_CURRENT_SOURCE_DIR}/src/include"
             "-I${CMAKE_CURRENT_SOURCE_DIR}/src/generated"

@@ -552,6 +552,14 @@ class LL1Parser:
         return ModifierKey(self.expect("IDENT").val)
 
 
+def parse_cond_str(src: str) -> Union[Cond, CondBinOp]:
+    tokens = tokenize(src)
+    parser = LL1Parser(tokens)
+    cond = parser.parse_cond()
+    parser.expect("EOF")
+    return cond
+
+
 def parse_inline_ops(ops_list: List[str]) -> Program:
     src = " ".join(s.strip() for s in ops_list)
     return LL1Parser(tokenize(src)).parse_program()

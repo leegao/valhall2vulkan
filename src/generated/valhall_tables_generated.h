@@ -386,6 +386,8 @@ struct LoweringRuleSpec {
     const char* handler_name;
     bool splits_block;
     bool is_barrier_or_cf;
+    uint32_t arch_mask;
+    bool has_when;
     EffectMask effects;
 };
 
@@ -423,11 +425,13 @@ struct FusionTileSpec {
 };
 
 constexpr size_t kNumXmlInstructions = 627;
-constexpr size_t kNumLoweringRules = 232;
+constexpr size_t kNumLoweringRules = 240;
 constexpr size_t kNumCanonicalTiles = 134;
 constexpr size_t kNumFusionTiles = 16;
 
 const LoweringRuleSpec* lookup_lowering_rule(uint16_t spec_index);
+const LoweringRuleSpec* get_lowering_rule(uint16_t rule_index);
+const uint16_t* lookup_lowering_rule_candidates(uint16_t spec_index, size_t* out_count);
 const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic);
 const CanonicalTileSpec* lookup_canonical_tile(SsaOp op);
 const FusionTileSpec* get_fusion_tiles(size_t* out_count);

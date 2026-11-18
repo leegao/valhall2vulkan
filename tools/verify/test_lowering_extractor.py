@@ -200,5 +200,57 @@ class TestLoweringExtractor(unittest.TestCase):
             self.assertEqual(self.ext.host_functions[fn].get("kind"), "inline_ops")
             self.assertIn(fn, self.ext.cpp_registry.abi_funcs)
 
+
+    def test_when_and_arch_range_rule_splitting(self) -> None:
+        # Vertex istream -> StoreBuiltinOutput
+        ins_ist = InstLoweringContext(
+            mnemonic="ST_CHECKED",
+            variant="",
+            stage="Vertex",
+            modifiers={"access": "istream", "memory_width": "v4"},
+            srcs=[SourceOperandDesc(reg_num=0)],
+            sr_read_present=True,
+            sr_read_base=8,
+            sr_read_count=4,
+        )
+        _, tr_ist = self.ext.lower_instruction(ins_ist)
+        self.assertIn("StoreBuiltinOutput", tr_ist.emitted_ops)
+
+        # Vertex estream -> StoreVertVarying
+        ins_est = InstLoweringContext(
+            mnemonic="ST_CHECKED",
+            variant="",
+            stage="Vertex",
+            modifiers={"access": "estream", "memory_width": "v4"},
+            srcs=[SourceOperandDesc(reg_num=0)],
+            sr_read_present=True,
+            sr_read_base=8,
+            sr_read_count=4,
+        )
+        _, tr_est = self.ext.lower_instruction(ins_est)
+        self.assertIn("StoreVertVarying", tr_est.emitted_ops)
+
+        # Compute fallback -> PsbStore
+        ins_cmp = InstLoweringContext(
+            mnemonic="ST_CHECKED",
+            variant="",
+            stage="Compute",
+            modifiers={"access": "none", "memory_width": "v4"},
+            srcs=[SourceOperandDesc(reg_num=0)],
+            sr_read_present=True,
+            sr_read_base=8,
+            sr_read_count=2,
+        )
+        _, tr_cmp = self.ext.lower_instruction(ins_cmp)
+        self.assertIn("PsbStore", tr_cmp.emitted_ops)
+
+        # Verify arch_range on all split ST_CHECKED rules
+        st_rules = [r for r in self.ext.rules if r.mnemonic == "ST_CHECKED"]
+        self.assertEqual(len(st_rules), 3)
+        for r in st_rules:
+            self.assertEqual(r.arch_range, (9, 14))
+        self.assertIsNotNone(self.ext.match_rule("ST_CHECKED", "", arch=11))
+        self.assertIsNone(self.ext.match_rule("ST_CHECKED", "", arch=8))
+
 if __name__ == "__main__":
     unittest.main()

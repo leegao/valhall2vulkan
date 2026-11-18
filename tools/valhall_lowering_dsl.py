@@ -15,6 +15,7 @@ from dsl_parser import (
     AssignStmt,
     BareIdent,
     Cond,
+    CondBinOp,
     DollarCall,
     ExprStmt,
     ForStmt,
@@ -28,6 +29,7 @@ from dsl_parser import (
     SrcRef,
     SsaCall,
     VarRef,
+    parse_cond_str,
     parse_inline_ops,
 )
 
@@ -260,7 +262,11 @@ def _compile_typed_arg_ast(node, atype, lhs_vt, src_types, declared_vars, lookup
     raise ValueError(f"Unsupported host_functions arg type '{atype}'")
 
 
-def _compile_cond_ast(cond: Cond, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions):
+def _compile_cond_ast(cond, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions):
+    if isinstance(cond, CondBinOp):
+        l = _compile_cond_ast(cond.left, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions)
+        r = _compile_cond_ast(cond.right, src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions)
+        return f"({l} {cond.op} {r})"
     atom = cond.atom
     if isinstance(atom, DollarCall):
         expr = _compile_host_call_ast(atom.name, [], "ValType::Void", src_types, declared_vars, lookup_tables, canonical_ssa_ops, host_functions, expected_ret="bool")
@@ -693,3 +699,7 @@ def compile_operands_cpp(spec):
     lines.append("")
     lines.append("} // namespace valhall::compiler")
     return "\n".join(lines) + "\n"
+
+def compile_when_expr(when_str: str, lookup_tables, canonical_ssa_ops, host_functions) -> str:
+    cond_ast = parse_cond_str(when_str)
+    return _compile_cond_ast(cond_ast, [], set(), lookup_tables, canonical_ssa_ops, host_functions)

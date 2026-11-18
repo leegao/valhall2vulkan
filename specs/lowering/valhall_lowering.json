@@ -5147,40 +5147,82 @@
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
+        "uses_sideband"
+      ],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, istream)",
+      "inline_ops": [
+        "%r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
+        "%r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
+        "%sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
+        "%sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
+        "%ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
+        "%has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
+        "%wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
+        "%dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
+        "%qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
+        "%xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
+        "%fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
+        "%fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
+        "%pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
+        "@set_token(@store_builtin_pos(%pos, #token));"
+      ]
+    },
+    {
+      "mnemonic": "STORE",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, estream)",
+      "inline_ops": [
+        "%c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
+        "if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
+        "if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
+        "if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
+        "if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
+        "%vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "@set_token(@store_vert_varying(%vec, #token));"
+      ]
+    },
+    {
+      "mnemonic": "STORE",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [
         "cap:PhysicalStorageBufferAddresses",
         "ext:SPV_KHR_physical_storage_buffer",
         "cap:Int64"
       ],
+      "arch_range": [
+        9,
+        14
+      ],
       "inline_ops": [
-        "if ($is_vert_stage) {",
-        "  if (@mod_eq(access, istream)) {",
-        "    %r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
-        "    %r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
-        "    %sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
-        "    %sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
-        "    %ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
-        "    %has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
-        "    %wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
-        "    %dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
-        "    %qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
-        "    %xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
-        "    %fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
-        "    %fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
-        "    %pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
-        "    @set_token(@store_builtin_pos(%pos, #token));",
-        "    return;",
-        "  }",
-        "  if (@mod_eq(access, estream)) {",
-        "    %c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
-        "    if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
-        "    if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
-        "    if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
-        "    if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
-        "    %vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
-        "    @set_token(@store_vert_varying(%vec, #token));",
-        "    return;",
-        "  }",
-        "}",
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",
@@ -5211,40 +5253,82 @@
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
+        "uses_sideband"
+      ],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, istream)",
+      "inline_ops": [
+        "%r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
+        "%r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
+        "%sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
+        "%sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
+        "%ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
+        "%has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
+        "%wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
+        "%dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
+        "%qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
+        "%xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
+        "%fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
+        "%fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
+        "%pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
+        "@set_token(@store_builtin_pos(%pos, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CHECKED",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, estream)",
+      "inline_ops": [
+        "%c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
+        "if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
+        "if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
+        "if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
+        "if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
+        "%vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "@set_token(@store_vert_varying(%vec, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CHECKED",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [
         "cap:PhysicalStorageBufferAddresses",
         "ext:SPV_KHR_physical_storage_buffer",
         "cap:Int64"
       ],
+      "arch_range": [
+        9,
+        14
+      ],
       "inline_ops": [
-        "if ($is_vert_stage) {",
-        "  if (@mod_eq(access, istream)) {",
-        "    %r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
-        "    %r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
-        "    %sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
-        "    %sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
-        "    %ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
-        "    %has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
-        "    %wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
-        "    %dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
-        "    %qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
-        "    %xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
-        "    %fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
-        "    %fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
-        "    %pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
-        "    @set_token(@store_builtin_pos(%pos, #token));",
-        "    return;",
-        "  }",
-        "  if (@mod_eq(access, estream)) {",
-        "    %c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
-        "    if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
-        "    if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
-        "    if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
-        "    if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
-        "    %vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
-        "    @set_token(@store_vert_varying(%vec, #token));",
-        "    return;",
-        "  }",
-        "}",
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",
@@ -5275,40 +5359,82 @@
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
+        "uses_sideband"
+      ],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, istream)",
+      "inline_ops": [
+        "%r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
+        "%r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
+        "%sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
+        "%sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
+        "%ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
+        "%has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
+        "%wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
+        "%dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
+        "%qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
+        "%xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
+        "%fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
+        "%fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
+        "%pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
+        "@set_token(@store_builtin_pos(%pos, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CHECKED_IMM",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, estream)",
+      "inline_ops": [
+        "%c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
+        "if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
+        "if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
+        "if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
+        "if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
+        "%vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "@set_token(@store_vert_varying(%vec, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CHECKED_IMM",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [
         "cap:PhysicalStorageBufferAddresses",
         "ext:SPV_KHR_physical_storage_buffer",
         "cap:Int64"
       ],
+      "arch_range": [
+        9,
+        14
+      ],
       "inline_ops": [
-        "if ($is_vert_stage) {",
-        "  if (@mod_eq(access, istream)) {",
-        "    %r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
-        "    %r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
-        "    %sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
-        "    %sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
-        "    %ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
-        "    %has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
-        "    %wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
-        "    %dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
-        "    %qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
-        "    %xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
-        "    %fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
-        "    %fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
-        "    %pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
-        "    @set_token(@store_builtin_pos(%pos, #token));",
-        "    return;",
-        "  }",
-        "  if (@mod_eq(access, estream)) {",
-        "    %c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
-        "    if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
-        "    if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
-        "    if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
-        "    if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
-        "    %vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
-        "    @set_token(@store_vert_varying(%vec, #token));",
-        "    return;",
-        "  }",
-        "}",
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",
@@ -5354,40 +5480,82 @@
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
+        "uses_sideband"
+      ],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, istream)",
+      "inline_ops": [
+        "%r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
+        "%r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
+        "%sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
+        "%sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
+        "%ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
+        "%has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
+        "%wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
+        "%dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
+        "%qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
+        "%xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
+        "%fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
+        "%fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
+        "%pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
+        "@set_token(@store_builtin_pos(%pos, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CVT",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [],
+      "arch_range": [
+        9,
+        14
+      ],
+      "when": "$is_vert_stage && @mod_eq(access, estream)",
+      "inline_ops": [
+        "%c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
+        "if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
+        "if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
+        "if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
+        "if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
+        "%vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "@set_token(@store_vert_varying(%vec, #token));"
+      ]
+    },
+    {
+      "mnemonic": "ST_CVT",
+      "variants": [
+        "*"
+      ],
+      "op_class": "mem_store",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "none",
+      "src_types": [
+        "u64"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": true,
+      "effects": [
         "cap:PhysicalStorageBufferAddresses",
         "ext:SPV_KHR_physical_storage_buffer",
         "cap:Int64"
       ],
+      "arch_range": [
+        9,
+        14
+      ],
       "inline_ops": [
-        "if ($is_vert_stage) {",
-        "  if (@mod_eq(access, istream)) {",
-        "    %r8 : f32 = @bitcast(@sr_get(0)); %r9 : f32 = @bitcast(@sr_get(1));",
-        "    %r10 : f32 = @bitcast(@sr_get(2)); %r11 : f32 = @bitcast(@sr_get(3));",
-        "    %sx : f32 = @bitcast(@load_fau(0)); %sy : f32 = @bitcast(@load_fau(1));",
-        "    %sz : f32 = @bitcast(@load_fau(2)); %oz : f32 = @bitcast(@load_fau(3));",
-        "    %ox : f32 = @bitcast(@load_fau(4)); %oy : f32 = @bitcast(@load_fau(5));",
-        "    %has_vp : bool = FCmpOrdNe(%sx, #f32(0));",
-        "    %wc : f32 = FDiv(#f32_bits(0x3f800000), %r11);",
-        "    %dx : f32 = FSub(%r8, %ox); %dy : f32 = FSub(%r9, %oy); %dz : f32 = FSub(%r10, %oz);",
-        "    %qx : f32 = FDiv(%dx, %sx); %qy : f32 = FDiv(%dy, %sy); %qz : f32 = FDiv(%dz, %sz);",
-        "    %xc : f32 = FMul(%qx, %wc); %yc : f32 = FMul(%qy, %wc); %zc : f32 = FMul(%qz, %wc);",
-        "    %fx : f32 = Select(%has_vp, %xc, %r8); %fy : f32 = Select(%has_vp, %yc, %r9);",
-        "    %fz : f32 = Select(%has_vp, %zc, %r10); %fw : f32 = Select(%has_vp, %wc, %r11);",
-        "    %pos : v4f32 = VecConstruct4(%fx, %fy, %fz, %fw);",
-        "    @set_token(@store_builtin_pos(%pos, #token));",
-        "    return;",
-        "  }",
-        "  if (@mod_eq(access, estream)) {",
-        "    %c0 : f32 = #f32(0); %c1 : f32 = #f32(0); %c2 : f32 = #f32(0); %c3 : f32 = #f32_bits(0x3f800000);",
-        "    if (@lt_u32(0, $sr_read_count)) { %c0 = @bitcast(@sr_get(0)); }",
-        "    if (@lt_u32(1, $sr_read_count)) { %c1 = @bitcast(@sr_get(1)); }",
-        "    if (@lt_u32(2, $sr_read_count)) { %c2 = @bitcast(@sr_get(2)); }",
-        "    if (@lt_u32(3, $sr_read_count)) { %c3 = @bitcast(@sr_get(3)); }",
-        "    %vec : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
-        "    @set_token(@store_vert_varying(%vec, #token));",
-        "    return;",
-        "  }",
-        "}",
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",

@@ -737,6 +737,89 @@ private:
     clang::ASTContext& ctx_;
     clang::SourceManager& sm_;
     clang::PrintingPolicy policy_;
+public:
+    struct VerifierZ3Attr {
+        std::string receiver;
+        std::string expr;
+    };
+
+    static bool parseCppStringLiteral(const char*& cur, const char* end, std::string& out) {
+        while (cur < end && (*cur == ' ' || *cur == '\t' || *cur == '\n' || *cur == '\r')) ++cur;
+        if (cur >= end || *cur != '"') return false;
+        ++cur;
+        out.clear();
+        while (cur < end) {
+            char c = *cur++;
+            if (c == '"') return true;
+            if (c == '\\' && cur < end) {
+                char esc = *cur++;
+                if (esc == 'n') out.push_back('\n');
+                else if (esc == 't') out.push_back('\t');
+                else if (esc == 'r') out.push_back('\r');
+                else out.push_back(esc);
+            } else {
+                out.push_back(c);
+            }
+        }
+        return false;
+    }
+
+    bool extractVerifierZ3Attr(const clang::FunctionDecl* fd, VerifierZ3Attr& out) const {
+        if (!fd) return false;
+        clang::SourceLocation loc = sm_.getSpellingLoc(fd->getLocation());
+        if (!loc.isValid()) return false;
+        clang::FileID fid = sm_.getFileID(loc);
+        bool invalid = false;
+        llvm::StringRef buf = sm_.getBufferData(fid, &invalid);
+        if (invalid) return false;
+        unsigned endOff = sm_.getFileOffset(loc);
+        if (endOff > buf.size()) return false;
+        unsigned startOff = (endOff > 1024) ? (endOff - 1024) : 0;
+        // Stop at previous declaration/scope boundary (; { } :) outside quotes
+        bool inStr = false;
+        for (unsigned i = endOff; i > startOff; --i) {
+            char c = buf[i - 1];
+            if (c == '"' && (i < 2 || buf[i - 2] != '\\')) inStr = !inStr;
+            if (!inStr && (c == ';' || c == '{' || c == '}')) {
+                startOff = i;
+                break;
+            }
+        }
+        llvm::StringRef window = buf.slice(startOff, endOff);
+        size_t pos = window.find("[[");
+        while (pos != llvm::StringRef::npos) {
+            const char* cur = window.data() + pos + 2;
+            const char* wend = window.data() + window.size();
+            auto skipWs = [&]() {
+                while (cur < wend && (*cur == ' ' || *cur == '\t' || *cur == '\n' || *cur == '\r')) ++cur;
+            };
+            skipWs();
+            llvm::StringRef rest(cur, static_cast<size_t>(wend - cur));
+            if (rest.starts_with("verifier::z3")) {
+                cur += 12;
+                skipWs();
+                if (cur < wend && *cur == '(') {
+                    ++cur;
+                    std::string recv, expr;
+                    if (parseCppStringLiteral(cur, wend, recv)) {
+                        skipWs();
+                        if (cur < wend && *cur == ',') {
+                            ++cur;
+                            if (parseCppStringLiteral(cur, wend, expr)) {
+                                out.receiver = std::move(recv);
+                                out.expr = std::move(expr);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            pos = window.find("[[", pos + 2);
+        }
+        return false;
+    }
+
+private:
     size_t unhandledCount_ = 0;
 public:
     size_t unhandledCount() const { return unhandledCount_; }
@@ -744,8 +827,10 @@ public:
 
 class DumperVisitor : public clang::RecursiveASTVisitor<DumperVisitor> {
 public:
-    DumperVisitor(clang::ASTContext& ctx, llvm::json::Array& functions, size_t& unhandledCount)
-        : ctx_(ctx), sm_(ctx.getSourceManager()), serializer_(ctx), functions_(functions), unhandledCount_(unhandledCount) {}
+    DumperVisitor(clang::ASTContext& ctx, llvm::json::Array& functions,
+                  llvm::json::Object& verifierAttrs, size_t& unhandledCount)
+        : ctx_(ctx), sm_(ctx.getSourceManager()), serializer_(ctx),
+          functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount) {}
 
     bool TraverseDecl(clang::Decl* d) {
         if (!d) return true;
@@ -754,7 +839,15 @@ public:
             llvm::isa<clang::LinkageSpecDecl>(d)) {
             return clang::RecursiveASTVisitor<DumperVisitor>::TraverseDecl(d);
         }
+        if (d->getLocation().isValid() && sm_.isInSystemHeader(d->getLocation())) {
+            return true;
+        }
         if (d->getLocation().isValid() && !sm_.isInMainFile(d->getLocation())) {
+            if (llvm::isa<clang::CXXRecordDecl>(d) ||
+                llvm::isa<clang::FunctionDecl>(d) ||
+                llvm::isa<clang::CXXMethodDecl>(d)) {
+                return clang::RecursiveASTVisitor<DumperVisitor>::TraverseDecl(d);
+            }
             return true;
         }
         return clang::RecursiveASTVisitor<DumperVisitor>::TraverseDecl(d);
@@ -762,6 +855,16 @@ public:
 
     bool TraverseFunctionDecl(clang::FunctionDecl* fd) {
         if (!fd) return true;
+        if (!fd->isImplicit() && !fd->isDependentContext() &&
+            fd->getLocation().isValid() && !sm_.isInSystemHeader(fd->getLocation())) {
+            JsonAstSerializer::VerifierZ3Attr vattr;
+            if (serializer_.extractVerifierZ3Attr(fd, vattr)) {
+                llvm::json::Object ao;
+                ao["receiver"] = vattr.receiver;
+                ao["expr"] = vattr.expr;
+                verifierAttrs_[fd->getQualifiedNameAsString()] = std::move(ao);
+            }
+        }
         if (fd->hasBody() && fd->isThisDeclarationADefinition() &&
             !fd->isImplicit() && !fd->isDependentContext() &&
             sm_.isInMainFile(fd->getLocation())) {
@@ -782,21 +885,24 @@ private:
     clang::SourceManager& sm_;
     JsonAstSerializer serializer_;
     llvm::json::Array& functions_;
+    llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
 };
 
 class DumperConsumer : public clang::ASTConsumer {
 public:
-    DumperConsumer(llvm::json::Array& functions, size_t& unhandledCount, bool verbose)
-        : functions_(functions), unhandledCount_(unhandledCount), verbose_(verbose) {}
+    DumperConsumer(llvm::json::Array& functions, llvm::json::Object& verifierAttrs,
+                   size_t& unhandledCount, bool verbose)
+        : functions_(functions), verifierAttrs_(verifierAttrs),
+          unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     void HandleTranslationUnit(clang::ASTContext& ctx) override {
         auto tStart = std::chrono::steady_clock::now();
         if (verbose_) {
             llvm::errs() << "[clang_ast_dumper] ParseAST finished, traversing main-file AST...\n";
         }
-        DumperVisitor visitor(ctx, functions_, unhandledCount_);
+        DumperVisitor visitor(ctx, functions_, verifierAttrs_, unhandledCount_);
         visitor.TraverseDecl(ctx.getTranslationUnitDecl());
         auto tEnd = std::chrono::steady_clock::now();
         if (verbose_) {
@@ -808,37 +914,40 @@ public:
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
 };
 
 class DumperAction : public clang::ASTFrontendAction {
 public:
-    DumperAction(llvm::json::Array& functions, size_t& unhandledCount, bool verbose)
-        : functions_(functions), unhandledCount_(unhandledCount), verbose_(verbose) {}
+    DumperAction(llvm::json::Array& functions, llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
+        : functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance&,
                                                           llvm::StringRef) override {
-        return std::make_unique<DumperConsumer>(functions_, unhandledCount_, verbose_);
+        return std::make_unique<DumperConsumer>(functions_, verifierAttrs_, unhandledCount_, verbose_);
     }
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
 };
 
 class DumperActionFactory : public clang::tooling::FrontendActionFactory {
 public:
-    DumperActionFactory(llvm::json::Array& functions, size_t& unhandledCount, bool verbose)
-        : functions_(functions), unhandledCount_(unhandledCount), verbose_(verbose) {}
+    DumperActionFactory(llvm::json::Array& functions, llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
+        : functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     std::unique_ptr<clang::FrontendAction> create() override {
-        return std::make_unique<DumperAction>(functions_, unhandledCount_, verbose_);
+        return std::make_unique<DumperAction>(functions_, verifierAttrs_, unhandledCount_, verbose_);
     }
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
 };
@@ -865,8 +974,9 @@ int main(int argc, const char** argv) {
     }
     clang::tooling::ClangTool tool(*compDb, InputFiles);
     llvm::json::Array functions;
+    llvm::json::Object verifierAttrs;
     size_t unhandledCount = 0;
-    DumperActionFactory factory(functions, unhandledCount, isVerbose);
+    DumperActionFactory factory(functions, verifierAttrs, unhandledCount, isVerbose);
     int rc = tool.run(&factory);
 
     llvm::json::Object root;
@@ -879,6 +989,7 @@ int main(int argc, const char** argv) {
     root["source_files"] = std::move(srcArr);
     root["function_count"] = static_cast<int64_t>(functions.size());
     root["unhandled_count"] = static_cast<int64_t>(unhandledCount);
+    root["verifier_attrs"] = std::move(verifierAttrs);
     root["functions"] = std::move(functions);
 
     std::error_code ec;

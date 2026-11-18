@@ -31,6 +31,7 @@ from dsl_parser import (
     AssignStmt,
     BareIdent,
     Cond,
+    CondBinOp,
     DollarCall,
     ExprStmt,
     ForStmt,
@@ -45,6 +46,7 @@ from dsl_parser import (
     SrcRef,
     SsaCall,
     VarRef,
+    parse_cond_str,
     parse_inline_ops,
 )
 from valhall_lowering_dsl import VALTYPE_MAP, parse_ssa_op_spec
@@ -121,6 +123,9 @@ class ParsedLoweringRule:
     src_types: List[str]
     dest_type: str
     effects: Tuple[str, ...]
+    arch_range: Tuple[int, int] = (9, 14)
+    when_cond: Optional[Any] = None
+    when_str: str = ""
     inline_program: Optional[Program] = None
 
 
@@ -161,6 +166,10 @@ class LoweringSemanticsExtractor:
         for idx, r in enumerate(spec_json["rules"]):
             kind, target = parse_ssa_op_spec(r["ssa_op"])
             prog = parse_inline_ops(r["inline_ops"]) if kind == "InlineOps" else None
+            ar_raw = r.get("arch_range", [9, 14])
+            ar = (int(ar_raw[0]), int(ar_raw[1]))
+            w_str = r.get("when", "")
+            w_cond = parse_cond_str(w_str) if w_str else None
             self.rules.append(
                 ParsedLoweringRule(
                     rule_index=idx,
@@ -172,6 +181,9 @@ class LoweringSemanticsExtractor:
                     src_types=r.get("src_types", []),
                     dest_type=r.get("dest_type", "none"),
                     effects=tuple(r.get("effects", [])),
+                    arch_range=ar,
+                    when_cond=w_cond,
+                    when_str=w_str,
                     inline_program=prog,
                 )
             )
@@ -222,16 +234,64 @@ class LoweringSemanticsExtractor:
             if self.match_rule(x["name"], x["variant"]) is None:
                 raise RuntimeError(f"XML spec {x['name']}.{x['variant']} has no lowering rule")
 
-    def match_rule(self, mnemonic: str, variant: str = "") -> Optional[ParsedLoweringRule]:
-        wildcard: Optional[ParsedLoweringRule] = None
+    def _eval_when_cond(self, c: Any, ssa: SymbolicSsaModule, ins: InstLoweringContext) -> bool:
+        if isinstance(c, CondBinOp):
+            l = self._eval_when_cond(c.left, ssa, ins)
+            if c.op == "&&":
+                return l and self._eval_when_cond(c.right, ssa, ins)
+            if c.op == "||":
+                return l or self._eval_when_cond(c.right, ssa, ins)
+            raise ValueError(f"Unsupported CondBinOp {c.op}")
+        atom = c.atom
+        if isinstance(atom, DollarCall):
+            res = bool(self.cpp_eval.call_abi_fn(atom.name, ssa, ins, []))
+        elif isinstance(atom, HostCall):
+            sig = self.host_functions[atom.name]
+            call_args: List[Any] = []
+            for atype_raw, anode in zip(sig["args"], atom.args):
+                atype = atype_raw.split()[0] if " %" in atype_raw else atype_raw
+                if atype == "const char*":
+                    if isinstance(anode, Literal) and anode.kind == "string":
+                        call_args.append(anode.raw[1:-1])
+                    elif isinstance(anode, BareIdent):
+                        call_args.append(anode.name)
+                elif atype == "uint32_t" and isinstance(anode, Literal):
+                    raw = anode.raw.rstrip("uUlL")
+                    call_args.append(int(raw, 16 if raw.startswith("0x") else 10))
+                else:
+                    raise ValueError(f"Unsupported when arg {anode} for {atype}")
+            res = bool(self.cpp_eval.call_abi_fn(atom.name, ssa, ins, call_args))
+        else:
+            raise ValueError(f"Unknown when Cond atom: {atom}")
+        return (not res) if c.negated else res
+
+    def match_rule(
+        self,
+        mnemonic: str,
+        variant: str = "",
+        *,
+        arch: Optional[int] = None,
+        ins: Optional[InstLoweringContext] = None,
+        ssa: Optional[SymbolicSsaModule] = None,
+    ) -> Optional[ParsedLoweringRule]:
+        exact_cands: List[ParsedLoweringRule] = []
+        wild_cands: List[ParsedLoweringRule] = []
         for r in self.rules:
             if r.mnemonic != mnemonic:
                 continue
+            if arch is not None and not (r.arch_range[0] <= arch <= r.arch_range[1]):
+                continue
             if variant in r.variants:
-                return r
-            if "*" in r.variants and wildcard is None:
-                wildcard = r
-        return wildcard
+                exact_cands.append(r)
+            elif "*" in r.variants:
+                wild_cands.append(r)
+        for r in exact_cands + wild_cands:
+            if r.when_cond is not None and ins is not None:
+                eval_ssa = ssa if ssa is not None else SymbolicSsaModule()
+                if not self._eval_when_cond(r.when_cond, eval_ssa, ins):
+                    continue
+            return r
+        return None
 
     # -----------------------------------------------------------------------
     # Helpers mirroring valhall_lowering_dsl.py & gen_valhall_tables.py
@@ -366,12 +426,12 @@ class LoweringSemanticsExtractor:
     def lower_instruction(
         self, ins: InstLoweringContext, xml_index: Optional[int] = None
     ) -> Tuple[SymbolicSsaModule, LoweringTrace]:
-        rule = self.match_rule(ins.mnemonic, ins.variant)
+        ssa = SymbolicSsaModule()
+        rule = self.match_rule(ins.mnemonic, ins.variant, arch=ins.arch, ins=ins, ssa=ssa)
         if rule is None:
-            raise KeyError(f"No lowering rule for {ins.mnemonic}.{ins.variant}")
+            raise KeyError(f"No lowering rule for {ins.mnemonic}.{ins.variant} (arch={ins.arch})")
 
         ins.rule_effects = rule.effects
-        ssa = SymbolicSsaModule()
         tr = LoweringTrace(
             mnemonic=ins.mnemonic,
             variant=ins.variant,
@@ -459,7 +519,10 @@ class LoweringSemanticsExtractor:
                 else:
                     raise ValueError(f"Unknown DSL stmt: {st}")
 
-        def eval_cond(c: Cond) -> bool:
+        def eval_cond(c: Any) -> bool:
+            if isinstance(c, CondBinOp):
+                l = eval_cond(c.left)
+                return (l and eval_cond(c.right)) if c.op == "&&" else (l or eval_cond(c.right))
             atom = c.atom
             if isinstance(atom, DollarCall):
                 res = bool(self.cpp_eval.call_abi_fn(atom.name, ssa, ins, []))

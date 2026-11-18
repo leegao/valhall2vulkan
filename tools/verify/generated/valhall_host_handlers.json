@@ -49479,5 +49479,51 @@
   "source_files": [
     "src/valhall_pass1_handlers.cpp"
   ],
-  "unhandled_count": 0
+  "unhandled_count": 0,
+  "verifier_attrs": {
+    "valhall::compiler::SsaBuilder::current_reg": {
+      "expr": "this.current_reg(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::current_token": {
+      "expr": "this.current_token()",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit": {
+      "expr": "this.emit(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_bitcast": {
+      "expr": "this.emit_bitcast(args[1], args[2])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_const_bool": {
+      "expr": "this.emit_const_bool(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_const_f32_bits": {
+      "expr": "this.emit_const_f32_bits(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_const_s32": {
+      "expr": "this.emit_const_s32(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_const_u32": {
+      "expr": "this.emit_const_u32(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::emit_const_u64": {
+      "expr": "this.emit_const_u64(args[1])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::set_reg": {
+      "expr": "this.set_reg(args[1], args[2])",
+      "receiver": "SymbolicSsaModule"
+    },
+    "valhall::compiler::SsaBuilder::set_token": {
+      "expr": "this.set_token(args[1])",
+      "receiver": "SymbolicSsaModule"
+    }
+  }
 }

@@ -134,18 +134,37 @@ class SsaBuilder {
 public:
     explicit SsaBuilder(ValhallSsaModule& mod) : mod_(mod) {}
 
+    [[verifier::z3("SymbolicSsaModule", "this.current_reg(args[1])")]]
     SsaId current_reg(uint32_t blk_id, uint8_t reg) const;
+
+    [[verifier::z3("SymbolicSsaModule", "this.set_reg(args[1], args[2])")]]
     void set_reg(uint32_t blk_id, uint8_t reg, SsaId val);
 
+    [[verifier::z3("SymbolicSsaModule", "this.current_token()")]]
     SsaId current_token(uint32_t blk_id) const;
+
+    [[verifier::z3("SymbolicSsaModule", "this.set_token(args[1])")]]
     void set_token(uint32_t blk_id, SsaId tok);
 
+    [[verifier::z3("SymbolicSsaModule", "this.emit(args[1])")]]
     SsaId emit(uint32_t blk_id, SsaNode n);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_const_u32(args[1])")]]
     SsaId emit_const_u32(uint32_t blk_id, uint32_t v);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_const_s32(args[1])")]]
     SsaId emit_const_s32(uint32_t blk_id, int32_t v);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_const_f32_bits(args[1])")]]
     SsaId emit_const_f32_bits(uint32_t blk_id, uint32_t bits);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_const_u64(args[1])")]]
     SsaId emit_const_u64(uint32_t blk_id, uint64_t v);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_const_bool(args[1])")]]
     SsaId emit_const_bool(uint32_t blk_id, bool v);
+
+    [[verifier::z3("SymbolicSsaModule", "this.emit_bitcast(args[1], args[2])")]]
     SsaId emit_bitcast(uint32_t blk_id, ValType target_t, SsaId val);
 
     // Finalize Phi nodes across all blocks using iterative dominance-frontier / Braun-style resolution
