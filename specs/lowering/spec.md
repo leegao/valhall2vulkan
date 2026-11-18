@@ -22,9 +22,9 @@ Here's the complete (ambiguous, so declarative) grammar for the InlineOps DSL us
                         "lookup_tables": <lookup_map>,
                         "rules": [ <rule> ("," <rule>)* ] "}"
 
-<host_fn_map>   ::= "{" ( <ident> ":" "{" "ret": <abi_ret>, "args": "[" <abi_arg_list> "]" "}" )* "}"
-<abi_ret>       ::= "SsaId" | "void"
-<abi_arg>       ::= "SsaId" | "ValType" | "uint32_t" | "bool"
+<host_fn_map>   ::= "{" ( <ident> ":" "{" ("kind": "inline_ops",)? "ret": <abi_ret>, "args": "[" <abi_arg_list> "]" ("inline_ops": <inline_ops>)? "}" )* "}"
+<abi_ret>       ::= "SsaId" | "uint32_t" | "bool" | "std::string" | "void"
+<abi_arg>       ::= "SsaId" | "ValType" | "uint32_t" | "bool" | "const char*"
 
 <ssa_op_spec>   ::= <ident>
                   | "@LOOKUP(" <ident> "," <key_expr> ")"
@@ -70,7 +70,7 @@ Here's the complete (ambiguous, so declarative) grammar for the InlineOps DSL us
 
 ### 2.1 LL(1) Unambiguous Grammar (BNF)
 
-Here's a machine executable (LL(1) with unambiguous first/follow sets) grammar as a reference to implement parsers. Please see `dsl_parser.py` for reference.
+Here's a machine executable (LL(1) with unambiguous first/follow sets) grammar as a reference to implement parsers. Please see `dsl_parser.py` for reference (`STRING_LIT` accepts both double-quoted `"..."` and single-quoted `'...'` strings).
 
 ```bnf
 <program>         ::= <stmt_list>
@@ -207,7 +207,7 @@ where:
 
 ## 4. References of free `%variables` / `$metavariables` / `#immediates` and `@functions`
 
-All `@fn(...)` functions share the uniform C++ ABI:
+All `@fn(...)` host functions (whether implemented in C++ in `src/valhall_pass1_handlers.cpp` or as `inline_ops` in `valhall_lowering.json["host_functions"]`) and all `operands` combinators share the uniform Pass1 C++ ABI:
 `RET abi::fn(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, ...)`
 
 | Token | Kind / Signature | Semantics |

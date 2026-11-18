@@ -19,11 +19,8 @@
       "args": []
     },
     "has_dest": {
-      "namespace": "operands_host",
       "ret": "bool",
-      "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "args": []
     },
     "is_v2f16": {
       "ret": "bool",
@@ -42,8 +39,12 @@
       "args": []
     },
     "src0_swz_h1": {
+      "kind": "inline_ops",
       "ret": "bool",
-      "args": []
+      "args": [],
+      "inline_ops": [
+        "return @src_swz_eq(0, 'h1');"
+      ]
     },
     "is_frag_stage": {
       "ret": "bool",
@@ -189,16 +190,29 @@
       ]
     },
     "fp_zero": {
+      "kind": "inline_ops",
       "ret": "SsaId",
-      "args": []
+      "args": [],
+      "inline_ops": [
+        "if ($is_v2f16) {",
+        "  %s : f32 = @f32_bits(0);",
+        "  %v : v2f32 = VecConstruct2(%s, %s);",
+        "  return %v;",
+        "}",
+        "return @f32_bits(0);"
+      ]
     },
     "token": {
       "ret": "SsaId",
       "args": []
     },
     "raw0": {
+      "kind": "inline_ops",
       "ret": "SsaId",
-      "args": []
+      "args": [],
+      "inline_ops": [
+        "return @fetch_raw_src_u32(0);"
+      ]
     },
     "imm_u32": {
       "ret": "SsaId",
@@ -239,9 +253,17 @@
       ]
     },
     "split64_lo": {
+      "kind": "inline_ops",
       "ret": "SsaId",
       "args": [
-        "SsaId"
+        "SsaId %val_u64"
+      ],
+      "inline_ops": [
+        "%tup : tuple_u32x2 = Split64(%val_u64);",
+        "return @tuple_val(u32, %tup);"
+      ],
+      "effects": [
+        "cap:Int64"
       ]
     },
     "load_fau": {
@@ -446,11 +468,11 @@
       ],
       "inline_ops": [
         "if (%is_signed) {",
-        "  %sval : s32 = @op_bitcast(s32, %val);",
-        "  %ext : s32 = BfeS(%sval, @const_u32(%offset), @const_u32(%count));",
-        "  return @op_bitcast(u32, %ext);",
+        "  %sval : s32 = @bitcast(s32, %val);",
+        "  %ext : s32 = BfeS(%sval, @u32(%offset), @u32(%count));",
+        "  return @bitcast(u32, %ext);",
         "}",
-        "return BfeU(%val, @const_u32(%offset), @const_u32(%count));"
+        "return BfeU(%val, @u32(%offset), @u32(%count));"
       ]
     },
     "widen_to_u64": {
@@ -462,9 +484,9 @@
       ],
       "inline_ops": [
         "if (%sext) {",
-        "  %s32 : s32 = @op_bitcast(s32, %w32);",
+        "  %s32 : s32 = @bitcast(s32, %w32);",
         "  %cvt : s64 = SConvert32To64(%s32);",
-        "  return @op_bitcast(u64, %cvt);",
+        "  return @bitcast(u64, %cvt);",
         "}",
         "return UConvert32To64(%w32);"
       ],
@@ -482,11 +504,11 @@
       ],
       "inline_ops": [
         "if (@src_swz_eq(%src_idx, \"h00\") || @src_swz_eq(%src_idx, \"h0\")) {",
-        "  return @op_shuffle2(%vt, %vec, %vec, 0, 0);",
+        "  return @shuffle2(%vt, %vec, %vec, 0, 0);",
         "} else if (@src_swz_eq(%src_idx, \"h11\") || @src_swz_eq(%src_idx, \"h1\")) {",
-        "  return @op_shuffle2(%vt, %vec, %vec, 1, 1);",
+        "  return @shuffle2(%vt, %vec, %vec, 1, 1);",
         "} else if (@src_swz_eq(%src_idx, \"h10\")) {",
-        "  return @op_shuffle2(%vt, %vec, %vec, 1, 0);",
+        "  return @shuffle2(%vt, %vec, %vec, 1, 0);",
         "}",
         "return %vec;"
       ]
@@ -499,11 +521,11 @@
       ],
       "inline_ops": [
         "if (@has_clamp_0_1()) {",
-        "  return FClamp(%val_f32, @const_f32_bits(0), @const_f32_bits(0x3f800000u));",
+        "  return FClamp(%val_f32, @f32_bits(0), @f32_bits(0x3f800000u));",
         "} else if (@has_clamp_m1_1()) {",
-        "  return FClamp(%val_f32, @const_f32_bits(0xbf800000u), @const_f32_bits(0x3f800000u));",
+        "  return FClamp(%val_f32, @f32_bits(0xbf800000u), @f32_bits(0x3f800000u));",
         "} else if (@has_clamp_0_inf()) {",
-        "  return FMax(%val_f32, @const_f32_bits(0));",
+        "  return FMax(%val_f32, @f32_bits(0));",
         "}",
         "return %val_f32;"
       ],
@@ -519,19 +541,19 @@
       ],
       "inline_ops": [
         "if (@has_clamp_0_1()) {",
-        "  %lo : f32 = @const_f32_bits(0);",
-        "  %hi : f32 = @const_f32_bits(0x3f800000u);",
+        "  %lo : f32 = @f32_bits(0);",
+        "  %hi : f32 = @f32_bits(0x3f800000u);",
         "  %vlo : v2f32 = VecConstruct2(%lo, %lo);",
         "  %vhi : v2f32 = VecConstruct2(%hi, %hi);",
         "  return FClamp(%vec2_f32, %vlo, %vhi);",
         "} else if (@has_clamp_m1_1()) {",
-        "  %lo : f32 = @const_f32_bits(0xbf800000u);",
-        "  %hi : f32 = @const_f32_bits(0x3f800000u);",
+        "  %lo : f32 = @f32_bits(0xbf800000u);",
+        "  %hi : f32 = @f32_bits(0x3f800000u);",
         "  %vlo : v2f32 = VecConstruct2(%lo, %lo);",
         "  %vhi : v2f32 = VecConstruct2(%hi, %hi);",
         "  return FClamp(%vec2_f32, %vlo, %vhi);",
         "} else if (@has_clamp_0_inf()) {",
-        "  %z : f32 = @const_f32_bits(0);",
+        "  %z : f32 = @f32_bits(0);",
         "  %vz : v2f32 = VecConstruct2(%z, %z);",
         "  return FMax(%vec2_f32, %vz);",
         "}",
@@ -551,457 +573,283 @@
       ],
       "inline_ops": [
         "if (%is_signed) {",
-        "  %ex : s32 = @op_extract(s32, %vec, %idx);",
-        "  return @op_bitcast(u32, %ex);",
+        "  %ex : s32 = @extract(s32, %vec, %idx);",
+        "  return @bitcast(u32, %ex);",
         "}",
-        "return @op_extract(u32, %vec, %idx);"
+        "return @extract(u32, %vec, %idx);"
       ]
     },
     "get_src_swz": {
-      "namespace": "operands_host",
       "ret": "std::string",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "get_dest_mod": {
-      "namespace": "operands_host",
       "ret": "std::string",
-      "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "args": []
     },
     "get_src_abs": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "get_src_neg": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "get_src_not": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_swz_eq": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t",
+        "uint32_t",
         "const char*"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+      ]
     },
     "src_swz_is_b_rep": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "bool",
       "args": [
-        "size_t"
+        "uint32_t %src_idx"
       ],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "if (@src_swz_eq(%src_idx, 'b0000') || @src_swz_eq(%src_idx, 'b1111') || @src_swz_eq(%src_idx, 'b2222') || @src_swz_eq(%src_idx, 'b3333')) { return true; }",
+        "return false;"
+      ]
     },
     "src_swz_b_rep_off": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "uint32_t",
       "args": [
-        "size_t"
+        "uint32_t %src_idx"
       ],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "if (@src_swz_eq(%src_idx, 'b1111')) { return 8; }",
+        "if (@src_swz_eq(%src_idx, 'b2222')) { return 16; }",
+        "if (@src_swz_eq(%src_idx, 'b3333')) { return 24; }",
+        "return 0;"
+      ]
     },
     "dest_mod_eq": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
         "const char*"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+      ]
     },
     "dest_mod_is_byte": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "bool",
       "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "if (@dest_mod_eq('b0') || @dest_mod_eq('b1') || @dest_mod_eq('b2') || @dest_mod_eq('b3')) { return true; }",
+        "return false;"
+      ]
     },
     "dest_mod_byte_off": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "uint32_t",
       "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "if (@dest_mod_eq('b1')) { return 8; }",
+        "if (@dest_mod_eq('b2')) { return 16; }",
+        "if (@dest_mod_eq('b3')) { return 24; }",
+        "return 0;"
+      ]
     },
     "has_clamp_0_1": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "bool",
       "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "return @mod_eq('clamp', 'clamp_0_1');"
+      ]
     },
     "has_clamp_m1_1": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "bool",
       "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "return @mod_eq('clamp', 'clamp_m1_1');"
+      ]
     },
     "has_clamp_0_inf": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "bool",
       "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "inline_ops": [
+        "return @mod_eq('clamp', 'clamp_0_inf');"
+      ]
     },
     "src_oob": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_reg": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_fau_uniform": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_small_const": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_fau_pc": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_fau_lane_id": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_fau_lane_width": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_word_select": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_is_64bit": {
-      "namespace": "operands_host",
       "ret": "bool",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_reg_num": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_reg_base": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "dest_reg_num": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
-      "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "args": []
     },
     "dest_reg_base": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
-      "args": [],
-      "takes_sb": false,
-      "takes_ins": true
+      "args": []
     },
     "src_read_reg": {
-      "namespace": "operands_host",
       "ret": "SsaId",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_read_reg_base": {
-      "namespace": "operands_host",
       "ret": "SsaId",
       "args": [
-        "size_t",
+        "uint32_t",
         "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": true
+      ]
     },
     "src_emit_imm_u32": {
-      "namespace": "operands_host",
       "ret": "SsaId",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "src_emit_imm_u64": {
-      "namespace": "operands_host",
       "ret": "SsaId",
       "args": [
-        "size_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": true
+        "uint32_t"
+      ]
     },
     "ins_pc_u64": {
-      "namespace": "operands_host",
       "ret": "SsaId",
-      "args": [],
-      "takes_sb": true,
-      "takes_ins": true
+      "args": []
     },
     "dest_read_reg": {
-      "namespace": "operands_host",
       "ret": "SsaId",
-      "args": [],
-      "takes_sb": true,
-      "takes_ins": true
+      "args": []
     },
     "dest_set_reg": {
-      "namespace": "operands_host",
       "ret": "void",
       "args": [
         "uint32_t",
         "SsaId"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "emit_load_fau_u32": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "emit_load_sideband_u64": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
+      ]
     },
     "emit_pack_u64": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "SsaId",
       "args": [
-        "SsaId",
-        "SsaId"
+        "SsaId %lo_u32",
+        "SsaId %hi_u32"
       ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "op_split64_lo": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "SsaId"
+      "inline_ops": [
+        "return Pack64(%lo_u32, %hi_u32);"
       ],
-      "takes_sb": true,
-      "takes_ins": false,
-      "target": "operands_host::split64_lo"
+      "effects": [
+        "cap:Int64"
+      ]
     },
     "split64_hi": {
-      "namespace": "operands_host",
+      "kind": "inline_ops",
       "ret": "SsaId",
       "args": [
-        "SsaId"
+        "SsaId %val_u64"
       ],
-      "takes_sb": true,
-      "takes_ins": false
+      "inline_ops": [
+        "%tup : tuple_u32x2 = Split64(%val_u64);",
+        "return @extract(u32, %tup, 1);"
+      ],
+      "effects": [
+        "cap:Int64"
+      ]
     },
     "emit_lane_id": {
-      "namespace": "operands_host",
       "ret": "SsaId",
-      "args": [],
-      "takes_sb": true,
-      "takes_ins": false
+      "args": []
     },
     "emit_lane_width": {
-      "namespace": "operands_host",
       "ret": "SsaId",
-      "args": [],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "const_u32": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "const_u64": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "uint64_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "const_f32_bits": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false
-    },
-    "op_bitcast": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "ValType",
-        "SsaId"
-      ],
-      "takes_sb": true,
-      "takes_ins": false,
-      "target": "operands_host::bitcast"
-    },
-    "op_extract": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "ValType",
-        "SsaId",
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false,
-      "target": "operands_host::extract"
-    },
-    "op_shuffle2": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "ValType",
-        "SsaId",
-        "SsaId",
-        "uint32_t",
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false,
-      "target": "operands_host::shuffle2"
-    },
-    "op_bfi": {
-      "namespace": "operands_host",
-      "ret": "SsaId",
-      "args": [
-        "SsaId",
-        "SsaId",
-        "uint32_t",
-        "uint32_t"
-      ],
-      "takes_sb": true,
-      "takes_ins": false,
-      "target": "operands_host::bfi"
+      "args": []
     },
     "add_u32": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
       "args": [
         "uint32_t",
         "uint32_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": false
+      ]
     },
     "mul8": {
-      "namespace": "operands_host",
       "ret": "uint32_t",
       "args": [
         "uint32_t"
-      ],
-      "takes_sb": false,
-      "takes_ins": false
+      ]
     }
   },
   "lookup_tables": {
@@ -1111,39 +959,39 @@
       "kind": "host",
       "ret": "std::string",
       "params": [
-        "size_t %src_idx"
+        "uint32_t %src_idx"
       ],
-      "target": "operands_host::get_src_swz"
+      "target": "abi::get_src_swz"
     },
     {
       "name": "get_dest_mod",
       "kind": "host",
       "ret": "std::string",
       "params": [],
-      "target": "operands_host::get_dest_mod"
+      "target": "abi::get_dest_mod"
     },
     {
       "name": "fetch_raw_src_u32",
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx"
+        "uint32_t %src_idx"
       ],
       "inline_ops": [
-        "if (@src_oob(%src_idx)) { return @const_u32(0); }",
+        "if (@src_oob(%src_idx)) { return @u32(0); }",
         "if (@src_is_reg(%src_idx)) { return @src_read_reg(%src_idx); }",
-        "if (@src_is_fau_uniform(%src_idx)) { return @emit_load_fau_u32(@src_reg_num(%src_idx)); }",
+        "if (@src_is_fau_uniform(%src_idx)) { return @load_fau(@src_reg_num(%src_idx)); }",
         "if (@src_is_small_const(%src_idx)) { return @src_emit_imm_u32(%src_idx); }",
         "if (@src_is_fau_pc(%src_idx)) {",
-        "  %pc_base : u64 = @emit_load_sideband_u64(1);",
+        "  %pc_base : u64 = @load_sideband_u64(1);",
         "  %pc_off : u64 = @ins_pc_u64();",
         "  %cur_pc : u64 = IAdd64(%pc_base, %pc_off);",
         "  if (@src_word_select(%src_idx)) { return @split64_hi(%cur_pc); }",
-        "  return @op_split64_lo(%cur_pc);",
+        "  return @split64_lo(%cur_pc);",
         "}",
         "if (@src_is_fau_lane_id(%src_idx)) { return @emit_lane_id(); }",
         "if (@src_is_fau_lane_width(%src_idx)) { return @emit_lane_width(); }",
-        "return @emit_load_fau_u32(@src_reg_num(%src_idx));"
+        "return @load_fau(@src_reg_num(%src_idx));"
       ]
     },
     {
@@ -1151,7 +999,7 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx",
+        "uint32_t %src_idx",
         "bool %is_signed"
       ],
       "inline_ops": [
@@ -1164,26 +1012,26 @@
         "else if (@src_swz_eq(%src_idx, \"h1\")) { %val = @extract_bits(%val, 16, 16, %is_signed); }",
         "else if (@src_swz_eq(%src_idx, \"h00\")) {",
         "  %h : u32 = @extract_bits(%val, 0, 16, %is_signed);",
-        "  %hi : u32 = Shl(%h, @const_u32(16));",
+        "  %hi : u32 = Shl(%h, @u32(16));",
         "  %val = BitOr(%h, %hi);",
         "} else if (@src_swz_eq(%src_idx, \"h11\")) {",
         "  %h : u32 = @extract_bits(%val, 16, 16, %is_signed);",
-        "  %hi : u32 = Shl(%h, @const_u32(16));",
+        "  %hi : u32 = Shl(%h, @u32(16));",
         "  %val = BitOr(%h, %hi);",
         "} else if (@src_swz_is_b_rep(%src_idx)) {",
         "  %boff : uint32_t = @src_swz_b_rep_off(%src_idx);",
-        "  %bk : u32 = BfeU(%val, @const_u32(%boff), @const_u32(8));",
-        "  %val = IMul(%bk, @const_u32(0x01010101u));",
+        "  %bk : u32 = BfeU(%val, @u32(%boff), @u32(8));",
+        "  %val = IMul(%bk, @u32(0x01010101u));",
         "}",
         "if (@get_src_abs(%src_idx)) {",
-        "  %sval : s32 = @op_bitcast(s32, %val);",
+        "  %sval : s32 = @bitcast(s32, %val);",
         "  %ab : s32 = SAbs(%sval);",
-        "  %val = @op_bitcast(u32, %ab);",
+        "  %val = @bitcast(u32, %ab);",
         "}",
         "if (@get_src_neg(%src_idx)) {",
-        "  %sval2 : s32 = @op_bitcast(s32, %val);",
+        "  %sval2 : s32 = @bitcast(s32, %val);",
         "  %ng : s32 = SNeg(%sval2);",
-        "  %val = @op_bitcast(u32, %ng);",
+        "  %val = @bitcast(u32, %ng);",
         "}",
         "if (@get_src_not(%src_idx)) {",
         "  %val = BitNot(%val);",
@@ -1196,17 +1044,17 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx"
+        "uint32_t %src_idx"
       ],
       "inline_ops": [
         "%raw_u32 : u32 = @fetch_raw_src_u32(%src_idx);",
-        "%fval : f32 = @op_bitcast(f32, %raw_u32);",
+        "%fval : f32 = @bitcast(f32, %raw_u32);",
         "if (@src_swz_eq(%src_idx, \"h0\")) {",
         "  %vec : v2f32 = UnpackHalf2x16(%raw_u32);",
-        "  %fval = @op_extract(f32, %vec, 0);",
+        "  %fval = @extract(f32, %vec, 0);",
         "} else if (@src_swz_eq(%src_idx, \"h1\")) {",
         "  %vec : v2f32 = UnpackHalf2x16(%raw_u32);",
-        "  %fval = @op_extract(f32, %vec, 1);",
+        "  %fval = @extract(f32, %vec, 1);",
         "}",
         "if (@get_src_abs(%src_idx)) { %fval = FAbs(%fval); }",
         "if (@get_src_neg(%src_idx)) { %fval = FNeg(%fval); }",
@@ -1218,7 +1066,7 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx"
+        "uint32_t %src_idx"
       ],
       "inline_ops": [
         "%raw_u32 : u32 = @fetch_raw_src_u32(%src_idx);",
@@ -1234,20 +1082,20 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx",
+        "uint32_t %src_idx",
         "bool %is_signed"
       ],
       "inline_ops": [
         "%raw_u32 : u32 = @fetch_raw_src_u32(%src_idx);",
         "if (%is_signed) {",
-        "  %in_s : s32 = @op_bitcast(s32, %raw_u32);",
-        "  %l0 : s32 = BfeS(%in_s, @const_u32(0), @const_u32(16));",
-        "  %l1 : s32 = BfeS(%in_s, @const_u32(16), @const_u32(16));",
+        "  %in_s : s32 = @bitcast(s32, %raw_u32);",
+        "  %l0 : s32 = BfeS(%in_s, @u32(0), @u32(16));",
+        "  %l1 : s32 = BfeS(%in_s, @u32(16), @u32(16));",
         "  %vec : v2s32 = VecConstruct2(%l0, %l1);",
         "  return @apply_v2_swizzle(%vec, v2s32, %src_idx);",
         "}",
-        "%l0 : u32 = BfeU(%raw_u32, @const_u32(0), @const_u32(16));",
-        "%l1 : u32 = BfeU(%raw_u32, @const_u32(16), @const_u32(16));",
+        "%l0 : u32 = BfeU(%raw_u32, @u32(0), @u32(16));",
+        "%l1 : u32 = BfeU(%raw_u32, @u32(16), @u32(16));",
         "%vec : v2u32 = VecConstruct2(%l0, %l1);",
         "return @apply_v2_swizzle(%vec, v2u32, %src_idx);"
       ]
@@ -1257,23 +1105,23 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx",
+        "uint32_t %src_idx",
         "bool %is_signed"
       ],
       "inline_ops": [
         "%raw_u32 : u32 = @fetch_raw_src_u32(%src_idx);",
         "if (%is_signed) {",
-        "  %in_s : s32 = @op_bitcast(s32, %raw_u32);",
-        "  %l0 : s32 = BfeS(%in_s, @const_u32(0), @const_u32(8));",
-        "  %l1 : s32 = BfeS(%in_s, @const_u32(8), @const_u32(8));",
-        "  %l2 : s32 = BfeS(%in_s, @const_u32(16), @const_u32(8));",
-        "  %l3 : s32 = BfeS(%in_s, @const_u32(24), @const_u32(8));",
+        "  %in_s : s32 = @bitcast(s32, %raw_u32);",
+        "  %l0 : s32 = BfeS(%in_s, @u32(0), @u32(8));",
+        "  %l1 : s32 = BfeS(%in_s, @u32(8), @u32(8));",
+        "  %l2 : s32 = BfeS(%in_s, @u32(16), @u32(8));",
+        "  %l3 : s32 = BfeS(%in_s, @u32(24), @u32(8));",
         "  return VecConstruct4(%l0, %l1, %l2, %l3);",
         "}",
-        "%l0 : u32 = BfeU(%raw_u32, @const_u32(0), @const_u32(8));",
-        "%l1 : u32 = BfeU(%raw_u32, @const_u32(8), @const_u32(8));",
-        "%l2 : u32 = BfeU(%raw_u32, @const_u32(16), @const_u32(8));",
-        "%l3 : u32 = BfeU(%raw_u32, @const_u32(24), @const_u32(8));",
+        "%l0 : u32 = BfeU(%raw_u32, @u32(0), @u32(8));",
+        "%l1 : u32 = BfeU(%raw_u32, @u32(8), @u32(8));",
+        "%l2 : u32 = BfeU(%raw_u32, @u32(16), @u32(8));",
+        "%l3 : u32 = BfeU(%raw_u32, @u32(24), @u32(8));",
         "return VecConstruct4(%l0, %l1, %l2, %l3);"
       ]
     },
@@ -1282,11 +1130,11 @@
       "kind": "inline_ops",
       "ret": "SsaId",
       "params": [
-        "size_t %src_idx",
+        "uint32_t %src_idx",
         "bool %sign_extend_subword"
       ],
       "inline_ops": [
-        "if (@src_oob(%src_idx)) { return @const_u64(0); }",
+        "if (@src_oob(%src_idx)) { return @u64(0); }",
         "if (@src_is_reg(%src_idx)) {",
         "  if (@src_swz_eq(%src_idx, \"w0\")) { return @widen_to_u64(@src_read_reg_base(%src_idx, 0), %sign_extend_subword); }",
         "  if (@src_swz_eq(%src_idx, \"w1\")) { return @widen_to_u64(@src_read_reg_base(%src_idx, 1), %sign_extend_subword); }",
@@ -1294,18 +1142,18 @@
         "  return @emit_pack_u64(@src_read_reg_base(%src_idx, 0), @src_read_reg_base(%src_idx, 1));",
         "} else if (@src_is_fau_uniform(%src_idx)) {",
         "  %base : uint32_t = @src_reg_base(%src_idx);",
-        "  if (@src_swz_eq(%src_idx, \"w0\")) { return @widen_to_u64(@emit_load_fau_u32(%base), %sign_extend_subword); }",
-        "  if (@src_swz_eq(%src_idx, \"w1\")) { return @widen_to_u64(@emit_load_fau_u32(@add_u32(%base, 1)), %sign_extend_subword); }",
-        "  if (!@src_is_64bit(%src_idx)) { return @widen_to_u64(@emit_load_fau_u32(@src_reg_num(%src_idx)), %sign_extend_subword); }",
-        "  return @emit_pack_u64(@emit_load_fau_u32(%base), @emit_load_fau_u32(@add_u32(%base, 1)));",
+        "  if (@src_swz_eq(%src_idx, \"w0\")) { return @widen_to_u64(@load_fau(%base), %sign_extend_subword); }",
+        "  if (@src_swz_eq(%src_idx, \"w1\")) { return @widen_to_u64(@load_fau(@add_u32(%base, 1)), %sign_extend_subword); }",
+        "  if (!@src_is_64bit(%src_idx)) { return @widen_to_u64(@load_fau(@src_reg_num(%src_idx)), %sign_extend_subword); }",
+        "  return @emit_pack_u64(@load_fau(%base), @load_fau(@add_u32(%base, 1)));",
         "} else if (@src_is_small_const(%src_idx)) {",
         "  return @src_emit_imm_u64(%src_idx);",
         "} else if (@src_is_fau_pc(%src_idx)) {",
-        "  %pc_base : u64 = @emit_load_sideband_u64(1);",
+        "  %pc_base : u64 = @load_sideband_u64(1);",
         "  return IAdd64(%pc_base, @ins_pc_u64());",
         "} else {",
         "  %base : uint32_t = @src_reg_base(%src_idx);",
-        "  return @emit_pack_u64(@emit_load_fau_u32(%base), @emit_load_fau_u32(@add_u32(%base, 1)));",
+        "  return @emit_pack_u64(@load_fau(%base), @load_fau(@add_u32(%base, 1)));",
         "}"
       ]
     },
@@ -1320,14 +1168,14 @@
         "if (!@has_dest()) { return; }",
         "%d : uint32_t = @dest_reg_num();",
         "if (@dest_mod_eq(\"h0\")) {",
-        "  %bfi_id : u32 = @op_bfi(@dest_read_reg(), %val_u32, 0, 16);",
+        "  %bfi_id : u32 = @bfi(@dest_read_reg(), %val_u32, 0, 16);",
         "  @dest_set_reg(%d, %bfi_id);",
         "} else if (@dest_mod_eq(\"h1\")) {",
-        "  %bfi_id : u32 = @op_bfi(@dest_read_reg(), %val_u32, 16, 16);",
+        "  %bfi_id : u32 = @bfi(@dest_read_reg(), %val_u32, 16, 16);",
         "  @dest_set_reg(%d, %bfi_id);",
         "} else if (@dest_mod_is_byte()) {",
         "  %off : uint32_t = @dest_mod_byte_off();",
-        "  %bfi_id : u32 = @op_bfi(@dest_read_reg(), %val_u32, %off, 8);",
+        "  %bfi_id : u32 = @bfi(@dest_read_reg(), %val_u32, %off, 8);",
         "  @dest_set_reg(%d, %bfi_id);",
         "} else {",
         "  @dest_set_reg(%d, %val_u32);",
@@ -1349,15 +1197,15 @@
         "  %packed : u32 = PackHalf2x16(%v2);",
         "  %d : uint32_t = @dest_reg_num();",
         "  if (@dest_mod_eq(\"h1\")) {",
-        "    %bfi_id : u32 = @op_bfi(@dest_read_reg(), %packed, 16, 16);",
+        "    %bfi_id : u32 = @bfi(@dest_read_reg(), %packed, 16, 16);",
         "    @dest_set_reg(%d, %bfi_id);",
         "  } else {",
-        "    %bfi_id : u32 = @op_bfi(@dest_read_reg(), %packed, 0, 16);",
+        "    %bfi_id : u32 = @bfi(@dest_read_reg(), %packed, 0, 16);",
         "    @dest_set_reg(%d, %bfi_id);",
         "  }",
         "  return;",
         "}",
-        "%bits : u32 = @op_bitcast(u32, %val_f32);",
+        "%bits : u32 = @bitcast(u32, %val_f32);",
         "@dest_set_reg(@dest_reg_num(), %bits);"
       ]
     },
@@ -1387,8 +1235,8 @@
         "if (!@has_dest()) { return; }",
         "%e0 : u32 = @extract_lane_u32(%vec2_i32, 0, %is_signed);",
         "%e1 : u32 = @extract_lane_u32(%vec2_i32, 1, %is_signed);",
-        "%p0 : u32 = @op_bfi(@const_u32(0), %e0, 0, 16);",
-        "%p1 : u32 = @op_bfi(%p0, %e1, 16, 16);",
+        "%p0 : u32 = @bfi(@u32(0), %e0, 0, 16);",
+        "%p1 : u32 = @bfi(%p0, %e1, 16, 16);",
         "@store_dest_u32(%p1);"
       ]
     },
@@ -1402,10 +1250,10 @@
       ],
       "inline_ops": [
         "if (!@has_dest()) { return; }",
-        "%acc : u32 = @const_u32(0);",
+        "%acc : u32 = @u32(0);",
         "for (%i : 0 .. 4) {",
         "  %ei : u32 = @extract_lane_u32(%vec4_i32, %i, %is_signed);",
-        "  %acc = @op_bfi(%acc, %ei, @mul8(%i), 8);",
+        "  %acc = @bfi(%acc, %ei, @mul8(%i), 8);",
         "}",
         "@store_dest_u32(%acc);"
       ]
@@ -1419,7 +1267,7 @@
       ],
       "inline_ops": [
         "if (!@has_dest()) { return; }",
-        "%lo : u32 = @op_split64_lo(%val_u64);",
+        "%lo : u32 = @split64_lo(%val_u64);",
         "%hi : u32 = @split64_hi(%val_u64);",
         "%d : uint32_t = @dest_reg_base();",
         "@dest_set_reg(%d, %lo);",

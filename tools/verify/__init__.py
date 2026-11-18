@@ -7,7 +7,7 @@ from .all_paths_miter import (
     check_instruction_miter,
     run_all_627_miter,
 )
-from .cpp_handler_extractor import (
+from .clang_ast_evaluator import (
     CppHandlerRegistry,
     CppSymbolicEvaluator,
     InstLoweringContext,

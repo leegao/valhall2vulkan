@@ -29,15 +29,11 @@ class TestLoweringExtractor(unittest.TestCase):
 
     def test_cpp_handler_and_operand_completeness(self) -> None:
         reg = self.ext.cpp_registry
-        self.assertEqual(len(reg.operands_funcs), 21)
+        self.assertEqual(len(reg.operands_funcs), 15)
         self.assertIn("fetch_src_int32", reg.operands_funcs)
         self.assertIn("store_dest_f32", reg.operands_funcs)
-        abi_keys = {k for k, v in self.ext.host_functions.items() if v.get("kind") != "inline_ops" and v.get("namespace", "abi") == "abi"}
-        op_host_keys = {(v.get("target", "").split("::")[-1] or k) for k, v in self.ext.host_functions.items() if v.get("kind") != "inline_ops" and v.get("namespace") == "operands_host"}
-        inline_helper_keys = {f"_helper_{k}" for k, v in self.ext.host_functions.items() if v.get("kind") == "inline_ops"}
+        abi_keys = set(self.ext.host_functions.keys())
         self.assertTrue(abi_keys.issubset(set(reg.abi_funcs.keys())))
-        self.assertTrue(op_host_keys.issubset(set(reg.operands_host_funcs.keys())))
-        self.assertTrue(inline_helper_keys.issubset(set(reg.operands_funcs.keys())))
         self.assertIn("handle_int_idpadd", reg.global_handlers)
         self.assertIn("emit_op", reg.ctx_funcs)
 
@@ -183,6 +179,26 @@ class TestLoweringExtractor(unittest.TestCase):
         self.assertIn("WARN: Arity mismatch", summary)
         self.assertIn("Emitted SsaOps", summary)
 
+
+
+    def test_single_quote_strings_and_unified_abi(self) -> None:
+        from tools.dsl_parser import Literal, parse_inline_ops
+        prog = parse_inline_ops(["if (@src_swz_eq(0, 'h1')) { return @u32(1); }"])
+        self.assertEqual(len(prog.stmts), 1)
+        # Verify unified ABI: no operands_host, all host_functions in abi_funcs
+        for k, v in self.ext.host_functions.items():
+            self.assertNotIn("namespace", v)
+            self.assertNotIn("takes_sb", v)
+            self.assertNotIn("takes_ins", v)
+            self.assertIn(k, self.ext.cpp_registry.abi_funcs)
+        # Verify migrated inline_ops host functions work in symbolic evaluation
+        for fn in (
+            "src0_swz_h1", "raw0", "fp_zero", "split64_lo", "split64_hi",
+            "emit_pack_u64", "has_clamp_0_1", "has_clamp_m1_1", "has_clamp_0_inf",
+            "src_swz_is_b_rep", "src_swz_b_rep_off", "dest_mod_is_byte", "dest_mod_byte_off",
+        ):
+            self.assertEqual(self.ext.host_functions[fn].get("kind"), "inline_ops")
+            self.assertIn(fn, self.ext.cpp_registry.abi_funcs)
 
 if __name__ == "__main__":
     unittest.main()

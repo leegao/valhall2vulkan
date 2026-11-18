@@ -80,37 +80,37 @@ def parse_ssa_op_spec(ssa_op_str):
 
 def gen_fetch_expr(src_type, idx):
     if src_type == "f32":
-        return f"fetch_src_f32(ctx.sb, blk, ins, {idx})"
+        return f"fetch_src_f32(ctx, blk, ins, rule, {idx})"
     if src_type == "f32_or_v2f16":
-        return f"(is_v2f16 ? fetch_src_v2f16(ctx.sb, blk, ins, {idx}) : fetch_src_f32(ctx.sb, blk, ins, {idx}))"
+        return f"(is_v2f16 ? fetch_src_v2f16(ctx, blk, ins, rule, {idx}) : fetch_src_f32(ctx, blk, ins, rule, {idx}))"
     if src_type == "u32":
-        return f"fetch_src_int32(ctx.sb, blk, ins, {idx}, false)"
+        return f"fetch_src_int32(ctx, blk, ins, rule, {idx}, false)"
     if src_type == "s32_raw":
-        return f"fetch_src_int32(ctx.sb, blk, ins, {idx}, true)"
+        return f"fetch_src_int32(ctx, blk, ins, rule, {idx}, true)"
     if src_type == "s32":
-        return f"ctx.sb.emit_bitcast(blk, ValType::S32, fetch_src_int32(ctx.sb, blk, ins, {idx}, true))"
+        return f"ctx.sb.emit_bitcast(blk, ValType::S32, fetch_src_int32(ctx, blk, ins, rule, {idx}, true))"
     if src_type == "i32_by_var":
-        return f'fetch_src_int32(ctx.sb, blk, ins, {idx}, (var.find("s") == 0))'
+        return f'fetch_src_int32(ctx, blk, ins, rule, {idx}, (var.find("s") == 0))'
     if src_type == "u64":
-        return f"fetch_src_u64(ctx.sb, blk, ins, {idx}, false)"
+        return f"fetch_src_u64(ctx, blk, ins, rule, {idx}, false)"
     if src_type == "s64":
-        return f"fetch_src_u64(ctx.sb, blk, ins, {idx}, true)"
+        return f"fetch_src_u64(ctx, blk, ins, rule, {idx}, true)"
     if src_type == "i64_by_var":
-        return f'fetch_src_u64(ctx.sb, blk, ins, {idx}, (var.find("s64") != std::string::npos))'
+        return f'fetch_src_u64(ctx, blk, ins, rule, {idx}, (var.find("s64") != std::string::npos))'
     if src_type == "v2f16":
-        return f"fetch_src_v2f16(ctx.sb, blk, ins, {idx})"
+        return f"fetch_src_v2f16(ctx, blk, ins, rule, {idx})"
     if src_type == "v2s16":
-        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, true)"
+        return f"fetch_src_v2i16(ctx, blk, ins, rule, {idx}, true)"
     if src_type == "v2u16":
-        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, false)"
+        return f"fetch_src_v2i16(ctx, blk, ins, rule, {idx}, false)"
     if src_type == "v2i16_by_var":
-        return f"fetch_src_v2i16(ctx.sb, blk, ins, {idx}, is_signed)"
+        return f"fetch_src_v2i16(ctx, blk, ins, rule, {idx}, is_signed)"
     if src_type == "v4i8_by_var":
-        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, is_signed)"
+        return f"fetch_src_v4i8(ctx, blk, ins, rule, {idx}, is_signed)"
     if src_type == "v4s8":
-        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, true)"
+        return f"fetch_src_v4i8(ctx, blk, ins, rule, {idx}, true)"
     if src_type == "v4u8":
-        return f"fetch_src_v4i8(ctx.sb, blk, ins, {idx}, false)"
+        return f"fetch_src_v4i8(ctx, blk, ins, rule, {idx}, false)"
     raise ValueError(f"Unsupported src_type '{src_type}'")
 
 
@@ -134,23 +134,23 @@ def gen_dest_vt_expr(dest_type):
 
 def gen_store_stmt(dest_type, val_expr):
     if dest_type == "f32":
-        return f"store_dest_f32(ctx.sb, blk, ins, {val_expr});"
+        return f"store_dest_f32(ctx, blk, ins, rule, {val_expr});"
     if dest_type == "f32_or_v2f16":
-        return f"if (is_v2f16) store_dest_v2f16(ctx.sb, blk, ins, {val_expr}); else store_dest_f32(ctx.sb, blk, ins, {val_expr});"
+        return f"if (is_v2f16) store_dest_v2f16(ctx, blk, ins, rule, {val_expr}); else store_dest_f32(ctx, blk, ins, rule, {val_expr});"
     if dest_type == "u32":
-        return f"store_dest_u32(ctx.sb, blk, ins, {val_expr});"
+        return f"store_dest_u32(ctx, blk, ins, rule, {val_expr});"
     if dest_type == "s32":
-        return f"store_dest_u32(ctx.sb, blk, ins, ctx.sb.emit_bitcast(blk, ValType::U32, {val_expr}));"
+        return f"store_dest_u32(ctx, blk, ins, rule, ctx.sb.emit_bitcast(blk, ValType::U32, {val_expr}));"
     if dest_type == "u64":
-        return f"store_dest_u64(ctx.sb, blk, ins, {val_expr});"
+        return f"store_dest_u64(ctx, blk, ins, rule, {val_expr});"
     if dest_type == "v2f16":
-        return f"store_dest_v2f16(ctx.sb, blk, ins, {val_expr});"
+        return f"store_dest_v2f16(ctx, blk, ins, rule, {val_expr});"
     if dest_type == "v2s16":
-        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, true);"
+        return f"store_dest_v2i16(ctx, blk, ins, rule, {val_expr}, true);"
     if dest_type == "v2u16":
-        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, false);"
+        return f"store_dest_v2i16(ctx, blk, ins, rule, {val_expr}, false);"
     if dest_type == "v2i16_by_var":
-        return f"store_dest_v2i16(ctx.sb, blk, ins, {val_expr}, is_signed);"
+        return f"store_dest_v2i16(ctx, blk, ins, rule, {val_expr}, is_signed);"
     if dest_type == "none":
         return ""
     raise ValueError(f"Unsupported dest_type '{dest_type}' for store")
@@ -194,7 +194,8 @@ def _compile_host_call_ast(fn_name, arg_nodes, lhs_vt, src_types, declared_vars,
     expected_args = sig["args"]
     cpp_args = ["ctx", "blk", "ins", "rule"]
     tok_idx = 0
-    for atype in expected_args:
+    for atype_raw in expected_args:
+        atype = parse_param_spec(atype_raw, 0)[0]
         if atype == "ValType" and tok_idx < len(arg_nodes) and isinstance(arg_nodes[tok_idx], BareIdent) and arg_nodes[tok_idx].name in VALTYPE_MAP:
             cpp_args.append(VALTYPE_MAP[arg_nodes[tok_idx].name])
             tok_idx += 1
@@ -252,7 +253,7 @@ def _compile_typed_arg_ast(node, atype, lhs_vt, src_types, declared_vars, lookup
         raise ValueError(f"Invalid bool argument AST node: {node}")
     if atype == "const char*":
         if isinstance(node, Literal) and node.kind == "string":
-            return node.raw
+            return f'"{node.raw[1:-1]}"'
         if isinstance(node, BareIdent):
             return f'"{node.name}"'
         raise ValueError(f"Invalid const char* argument AST node: {node}")
@@ -475,7 +476,12 @@ class _OperandsDslCompiler:
         prog = parse_inline_ops(inline_ops)
         parsed_params = parse_param_list(params_list)
         if prepend_ctx:
-            all_params = [("SsaBuilder&", "sb"), ("uint32_t", "blk_id"), ("const DecodedValhallInst&", "ins")] + parsed_params
+            all_params = [
+                ("Pass1Context&", "ctx"),
+                ("uint32_t", "blk"),
+                ("const DecodedValhallInst&", "ins"),
+                ("const tables::LoweringRuleSpec*", "rule"),
+            ] + parsed_params
         else:
             all_params = parsed_params
         lines = []
@@ -557,7 +563,7 @@ class _OperandsDslCompiler:
             elif isinstance(atom, HostCall):
                 c = self._emit_host_call(atom, env_types, declared)
             elif isinstance(atom, DollarCall):
-                c = f"operands_host::{atom.name}(ins)"
+                c = f"abi::{atom.name}(ctx, blk, ins, rule)"
             else:
                 raise ValueError(f"Unsupported cond atom: {atom!r}")
             return f"!({c})" if cond.negated else c
@@ -569,6 +575,8 @@ class _OperandsDslCompiler:
         if isinstance(arg, VarRef):
             return arg.name
         if isinstance(arg, Literal):
+            if arg.kind == "string":
+                return f'"{arg.raw[1:-1]}"'
             return arg.raw
         if isinstance(arg, BareIdent):
             if arg.name in VALTYPE_MAP:
@@ -576,6 +584,8 @@ class _OperandsDslCompiler:
             return arg.name
         if isinstance(arg, HostCall):
             return self._emit_host_call(arg, env_types, declared)
+        if isinstance(arg, DollarCall):
+            return f"abi::{arg.name}(ctx, blk, ins, rule)"
         if isinstance(arg, Cond):
             return self._emit_cond(arg, env_types, declared)
         raise ValueError(f"Unsupported DSL arg: {arg!r}")
@@ -583,23 +593,13 @@ class _OperandsDslCompiler:
     def _emit_host_call(self, hc, env_types, declared):
         args_cpp = [self._emit_arg(a, env_types, declared) for a in hc.args]
         if hc.name in self.operand_names:
-            return f"{hc.name}({', '.join(['sb', 'blk_id', 'ins'] + args_cpp)})"
+            return f"{hc.name}({', '.join(['ctx', 'blk', 'ins', 'rule'] + args_cpp)})"
         if hc.name not in self.host_functions:
             raise ValueError(f"Unknown @host function '{hc.name}' in valhall_lowering.json")
-        h = self.host_functions[hc.name]
-        if h.get("kind") == "inline_ops":
-            return f"_helper_{hc.name}({', '.join(['sb', 'blk_id', 'ins'] + args_cpp)})"
-        target = h.get("target") or f"operands_host::{hc.name}"
-        call_args = []
-        if h.get("takes_sb", False):
-            call_args.extend(["sb", "blk_id"])
-        if h.get("takes_ins", False):
-            call_args.append("ins")
-        call_args.extend(args_cpp)
-        return f"{target}({', '.join(call_args)})"
+        return f"abi::{hc.name}({', '.join(['ctx', 'blk', 'ins', 'rule'] + args_cpp)})"
 
     def _emit_expr(self, expr, indent, lines, env_types, declared, fn_effects, vt_hint):
-        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent)):
+        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent, DollarCall)):
             return self._emit_arg(expr, env_types, declared)
         if isinstance(expr, HostCall):
             return self._emit_host_call(expr, env_types, declared)
@@ -622,7 +622,7 @@ class _OperandsDslCompiler:
             for ef in effs:
                 if ef in _OPERAND_EFFECT_STMTS:
                     lines.append(f"{pad}{_OPERAND_EFFECT_STMTS[ef].format(nv=nv)}")
-            return f"sb.emit(blk_id, std::move({nv}))"
+            return f"ctx.sb.emit(blk, std::move({nv}))"
         raise ValueError(f"Unsupported DSL expr: {expr!r}")
 
 
@@ -643,25 +643,15 @@ def compile_operands_cpp(spec):
         "",
     ]
 
-    for hname, hdef in host_functions.items():
-        if hdef.get("kind") != "inline_ops":
-            continue
-        lines.extend(
-            comp.compile_fn(
-                f"_helper_{hname}",
-                hdef["ret"],
-                hdef.get("args", []),
-                hdef["inline_ops"],
-                is_static=True,
-                fn_effects=hdef.get("effects", []),
-                prepend_ctx=True,
-            )
-        )
-
     for entry in operands:
         if entry["kind"] == "host":
             parsed = parse_param_list(entry.get("params", []))
-            all_params = [("const DecodedValhallInst&", "ins")] + parsed
+            all_params = [
+                ("Pass1Context&", "ctx"),
+                ("uint32_t", "blk"),
+                ("const DecodedValhallInst&", "ins"),
+                ("const tables::LoweringRuleSpec*", "rule"),
+            ] + parsed
             p_decl = ", ".join(f"{t} {n}" for t, n in all_params)
             p_call = ", ".join(n for _, n in all_params)
             lines.append(f"{entry['ret']} {entry['name']}({p_decl}) {{")
@@ -681,7 +671,25 @@ def compile_operands_cpp(spec):
                 )
             )
         else:
-            raise ValueError(f"Unknown operand kind '{entry['kind']}' for {entry['name']}")
+            raise ValueError(f"Unknown operand kind {entry.get('kind')!r} for {entry.get('name')!r}")
 
+    lines.append("namespace abi {")
+    lines.append("")
+    for hname, hdef in host_functions.items():
+        if hdef.get("kind") != "inline_ops":
+            continue
+        lines.extend(
+            comp.compile_fn(
+                hname,
+                hdef["ret"],
+                hdef.get("args", []),
+                hdef["inline_ops"],
+                is_static=False,
+                fn_effects=hdef.get("effects", []),
+                prepend_ctx=True,
+            )
+        )
+    lines.append("} // namespace abi")
+    lines.append("")
     lines.append("} // namespace valhall::compiler")
     return "\n".join(lines) + "\n"

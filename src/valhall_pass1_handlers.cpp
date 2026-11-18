@@ -154,14 +154,14 @@ SsaId Pass1Context::format_cmp_result(uint32_t blk, const DecodedValhallInst& in
 
 SsaId Pass1Context::eval_branch_cond(uint32_t blk, const DecodedValhallInst& ins) {
     if (ins.srcs.empty()) return sb.emit_const_bool(blk, true);
-    SsaId s0 = fetch_src_int32(sb, blk, ins, 0, false);
+    SsaId s0 = fetch_src_int32(*this, blk, ins, nullptr, 0, false);
     SsaId cond = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { s0, sb.emit_const_u32(blk, 0u) });
 
     std::string comb = "none";
     auto it_c = ins.modifier_strs.find("combine");
     if (it_c != ins.modifier_strs.end()) comb = it_c->second;
     if (ins.srcs.size() >= 2 && comb != "none") {
-        SsaId s1 = fetch_src_int32(sb, blk, ins, 1, false);
+        SsaId s1 = fetch_src_int32(*this, blk, ins, nullptr, 1, false);
         if (comb == "eq") {
             cond = emit_op(blk, SsaOp::ICmpEq, ValType::Bool, { s0, s1 });
         } else {
@@ -199,7 +199,6 @@ bool is_signed(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tab
 }
 bool is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
 bool dest_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.dest_is_64bit; }
-bool src0_swz_h1(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return get_src_swz(ins, 0) == "h1"; }
 bool is_frag_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Fragment; }
 bool is_vert_stage(Pass1Context& ctx, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*) { return ctx.opts.stage == ShaderStage::Vertex; }
 bool has_imm_nonzero(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) { return ins.has_imm && ins.imm_signed != 0; }
@@ -232,8 +231,8 @@ uint32_t sr_write_count_max4(Pass1Context&, uint32_t, const DecodedValhallInst& 
 uint32_t sr_read_count(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.sr_read.present ? std::max<uint32_t>(1u, ins.sr_read.count) : 1u;
 }
-uint32_t src0_swz_h1_u32(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    return (get_src_swz(ins, 0) == "h1") ? 1u : 0u;
+uint32_t src0_swz_h1_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
+    return (abi::get_src_swz(ctx, blk, ins, rule, 0) == "h1") ? 1u : 0u;
 }
 SsaId branch_target_pc_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     uint64_t tgt = static_cast<uint64_t>(ins.has_branch_offset ? ins.branch_target_pc : (int64_t(ins.pc) + 8 + ins.imm_signed));
@@ -288,16 +287,8 @@ SsaId f32_bits(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const
 SsaId const_bool(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, bool v) {
     return ctx.sb.emit_const_bool(blk, v);
 }
-SsaId fp_zero(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    if (!is_v2f16_helper(ins)) return ctx.sb.emit_const_f32_bits(blk, 0u);
-    SsaId s = ctx.sb.emit_const_f32_bits(blk, 0u);
-    return ctx.emit_op(blk, SsaOp::VecConstruct2, ValType::V2F32, { s, s });
-}
 SsaId token(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
     return ctx.sb.current_token(blk);
-}
-SsaId raw0(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    return fetch_raw_src_u32(ctx.sb, blk, ins, 0);
 }
 SsaId imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ctx.sb.emit_const_u32(blk, static_cast<uint32_t>(ins.imm_unsigned));
@@ -323,12 +314,6 @@ SsaId f32_alpha_or_zero(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
 
 SsaId load_sideband_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t member_idx) {
     return ctx.emit_load_sideband_u64(blk, member_idx);
-}
-
-SsaId split64_lo(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId val_u64) {
-    SsaId lo = 0, hi = 0;
-    ctx.emit_split64(blk, val_u64, &lo, &hi);
-    return lo;
 }
 
 SsaId load_fau(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t word_idx) {
@@ -604,20 +589,20 @@ void kill_cond(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const
 // Remaining Complex Host-Side Handler (@HANDLER(fn))
 // ============================================================================
 
-void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
     std::string var = variant_to_string(ins.canonical_variant);
     bool s0_signed = (var.find("s") == 0);
     bool s1_signed = s0_signed;
     if (ins.fields.count("unsigned0") && ins.fields.at("unsigned0") != 0) s0_signed = false;
     if (ins.fields.count("unsigned1") && ins.fields.at("unsigned1") != 0) s1_signed = false;
-    SsaId a4 = fetch_src_v4i8(ctx.sb, blk, ins, 0, s0_signed);
-    SsaId b4 = fetch_src_v4i8(ctx.sb, blk, ins, 1, s1_signed);
+    SsaId a4 = fetch_src_v4i8(ctx, blk, ins, rule, 0, s0_signed);
+    SsaId b4 = fetch_src_v4i8(ctx, blk, ins, rule, 1, s1_signed);
     if (s0_signed != s1_signed) {
         if (!s0_signed) a4 = ctx.sb.emit_bitcast(blk, ValType::V4S32, a4);
         if (!s1_signed) b4 = ctx.sb.emit_bitcast(blk, ValType::V4S32, b4);
     }
     bool acc_s = (s0_signed || s1_signed);
-    SsaId acc = (ins.srcs.size() >= 3) ? fetch_src_int32(ctx.sb, blk, ins, 2, acc_s) : ctx.sb.emit_const_u32(blk, 0u);
+    SsaId acc = (ins.srcs.size() >= 3) ? fetch_src_int32(ctx, blk, ins, rule, 2, acc_s) : ctx.sb.emit_const_u32(blk, 0u);
     if (acc_s) acc = ctx.sb.emit_bitcast(blk, ValType::S32, acc);
     ValType elem_t = acc_s ? ValType::S32 : ValType::U32;
     for (uint32_t i = 0; i < 4; ++i) {
@@ -626,13 +611,13 @@ void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
         SsaId prod = ctx.emit_op(blk, SsaOp::IMul, elem_t, { ctx.sb.emit(blk, std::move(ea)), ctx.sb.emit(blk, std::move(eb)) });
         acc = ctx.emit_op(blk, SsaOp::IAdd, elem_t, { acc, prod });
     }
-    store_dest_u32(ctx.sb, blk, ins, acc_s ? ctx.sb.emit_bitcast(blk, ValType::U32, acc) : acc);
+    store_dest_u32(ctx, blk, ins, rule, acc_s ? ctx.sb.emit_bitcast(blk, ValType::U32, acc) : acc);
 }
 
 
-namespace operands_host {
+namespace abi {
 
-std::string get_src_swz(const DecodedValhallInst& ins, size_t src_idx) {
+std::string get_src_swz(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if (src_idx < ins.srcs.size() && !ins.srcs[src_idx].swizzle_mod.empty()) {
         return ins.srcs[src_idx].swizzle_mod;
     }
@@ -646,7 +631,7 @@ std::string get_src_swz(const DecodedValhallInst& ins, size_t src_idx) {
     return "";
 }
 
-std::string get_dest_mod(const DecodedValhallInst& ins) {
+std::string get_dest_mod(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     if (!ins.dest_mod.empty()) return ins.dest_mod;
     for (const char* k : {"dest_width", "dest_width_narrow"}) {
         auto it = ins.modifier_strs.find(k);
@@ -657,295 +642,147 @@ std::string get_dest_mod(const DecodedValhallInst& ins) {
     return "";
 }
 
-bool get_src_abs(const DecodedValhallInst& ins, size_t src_idx) {
+bool get_src_abs(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].abs) return true;
     auto it = ins.fields.find("abs" + std::to_string(src_idx));
     return (it != ins.fields.end() && it->second != 0);
 }
 
-bool get_src_neg(const DecodedValhallInst& ins, size_t src_idx) {
+bool get_src_neg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].neg) return true;
     auto it = ins.fields.find("neg" + std::to_string(src_idx));
     return (it != ins.fields.end() && it->second != 0);
 }
 
-bool get_src_not(const DecodedValhallInst& ins, size_t src_idx) {
+bool get_src_not(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].not_mod) return true;
     auto it = ins.fields.find("not" + std::to_string(src_idx));
     return (it != ins.fields.end() && it->second != 0);
 }
 
-bool src_swz_eq(const DecodedValhallInst& ins, size_t src_idx, const char* s) {
-    return get_src_swz(ins, src_idx) == s;
+bool src_swz_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, uint32_t src_idx, const char* str) {
+    return abi::get_src_swz(ctx, blk, ins, rule, src_idx) == str;
 }
 
-bool src_swz_is_b_rep(const DecodedValhallInst& ins, size_t src_idx) {
-    std::string swz = get_src_swz(ins, src_idx);
-    return swz == "b0000" || swz == "b1111" || swz == "b2222" || swz == "b3333";
+bool dest_mod_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, const char* str) {
+    return abi::get_dest_mod(ctx, blk, ins, rule) == str;
 }
 
-uint32_t src_swz_b_rep_off(const DecodedValhallInst& ins, size_t src_idx) {
-    std::string swz = get_src_swz(ins, src_idx);
-    if (swz == "b1111") return 8u;
-    if (swz == "b2222") return 16u;
-    if (swz == "b3333") return 24u;
-    return 0u;
-}
-
-bool dest_mod_eq(const DecodedValhallInst& ins, const char* s) {
-    return get_dest_mod(ins) == s;
-}
-
-bool dest_mod_is_byte(const DecodedValhallInst& ins) {
-    std::string dm = get_dest_mod(ins);
-    return dm == "b0" || dm == "b1" || dm == "b2" || dm == "b3";
-}
-
-uint32_t dest_mod_byte_off(const DecodedValhallInst& ins) {
-    std::string dm = get_dest_mod(ins);
-    if (dm == "b1") return 8u;
-    if (dm == "b2") return 16u;
-    if (dm == "b3") return 24u;
-    return 0u;
-}
-
-bool has_clamp_0_1(const DecodedValhallInst& ins) {
-    auto it = ins.modifier_strs.find("clamp");
-    return it != ins.modifier_strs.end() && it->second == "clamp_0_1";
-}
-
-bool has_clamp_m1_1(const DecodedValhallInst& ins) {
-    auto it = ins.modifier_strs.find("clamp");
-    return it != ins.modifier_strs.end() && it->second == "clamp_m1_1";
-}
-
-bool has_clamp_0_inf(const DecodedValhallInst& ins) {
-    auto it = ins.modifier_strs.find("clamp");
-    return it != ins.modifier_strs.end() && it->second == "clamp_0_inf";
-}
-
-bool src_oob(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_oob(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx >= ins.srcs.size();
 }
 
-bool src_is_reg(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_reg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::Register;
 }
 
-bool src_is_fau_uniform(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_fau_uniform(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::FauUniform;
 }
 
-bool src_is_small_const(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_small_const(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::SmallConstant;
 }
 
-bool src_is_fau_pc(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_fau_pc(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "pc";
 }
 
-bool src_is_fau_lane_id(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_fau_lane_id(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "lane_id";
 }
 
-bool src_is_fau_lane_width(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_fau_lane_width(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
            ins.srcs[src_idx].symbolic_name == "lane_width";
 }
 
-bool src_word_select(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_word_select(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].word_select;
 }
 
-bool src_is_64bit(const DecodedValhallInst& ins, size_t src_idx) {
+bool src_is_64bit(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() && ins.srcs[src_idx].is_64bit;
 }
 
-uint32_t src_reg_num(const DecodedValhallInst& ins, size_t src_idx) {
+uint32_t src_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ins.srcs[src_idx].reg_num;
 }
 
-uint32_t src_reg_base(const DecodedValhallInst& ins, size_t src_idx) {
+uint32_t src_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return ins.srcs[src_idx].reg_num & 62u;
 }
 
-bool has_dest(const DecodedValhallInst& ins) {
-    return ins.has_dest;
-}
-
-uint32_t dest_reg_num(const DecodedValhallInst& ins) {
+uint32_t dest_reg_num(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.dest_reg & 63u;
 }
 
-uint32_t dest_reg_base(const DecodedValhallInst& ins) {
+uint32_t dest_reg_base(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
     return ins.dest_reg & 62u;
 }
 
-SsaId src_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
-    return sb.current_reg(blk_id, ins.srcs[src_idx].reg_num);
+SsaId src_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    return ctx.sb.current_reg(blk, ins.srcs[src_idx].reg_num);
 }
 
-SsaId src_read_reg_base(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx, uint32_t off) {
+SsaId src_read_reg_base(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx, uint32_t off) {
     uint8_t base = ins.srcs[src_idx].reg_num & 62u;
-    return sb.current_reg(blk_id, static_cast<uint8_t>(base + off));
+    return ctx.sb.current_reg(blk, static_cast<uint8_t>(base + off));
 }
 
-SsaId src_emit_imm_u32(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
-    return sb.emit_const_u32(blk_id, ins.srcs[src_idx].imm_bits);
+SsaId src_emit_imm_u32(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    return ctx.sb.emit_const_u32(blk, ins.srcs[src_idx].imm_bits);
 }
 
-SsaId src_emit_imm_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
-    return sb.emit_const_u64(blk_id, uint64_t(ins.srcs[src_idx].imm_bits));
+SsaId src_emit_imm_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    return ctx.sb.emit_const_u64(blk, uint64_t(ins.srcs[src_idx].imm_bits));
 }
 
-SsaId ins_pc_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins) {
-    return sb.emit_const_u64(blk_id, ins.pc);
+SsaId ins_pc_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+    return ctx.sb.emit_const_u64(blk, ins.pc);
 }
 
-SsaId dest_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins) {
-    return sb.current_reg(blk_id, ins.dest_reg & 63u);
+SsaId dest_read_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+    return ctx.sb.current_reg(blk, ins.dest_reg & 63u);
 }
 
-void dest_set_reg(SsaBuilder& sb, uint32_t blk_id, uint32_t d, SsaId val) {
-    sb.set_reg(blk_id, static_cast<uint8_t>(d), val);
+void dest_set_reg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t d, SsaId val) {
+    ctx.sb.set_reg(blk, static_cast<uint8_t>(d), val);
 }
 
-SsaId emit_load_fau_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t word_idx) {
-    SsaNode n{};
-    n.op = tables::SsaOp::LoadFau;
-    n.type = ValType::U32;
-    n.imm_u32 = word_idx & 63u;
-    n.effects.flags |= EffectSet::kFlagUsesSideband;
-    return sb.emit(blk_id, std::move(n));
-}
-
-SsaId emit_load_sideband_u64(SsaBuilder& sb, uint32_t blk_id, uint32_t member_idx) {
-    SsaNode n{};
-    n.op = tables::SsaOp::LoadSidebandU64;
-    n.type = ValType::U64;
-    n.imm_u32 = member_idx;
-    n.effects.flags |= EffectSet::kFlagUsesSideband;
-    n.effects.cap_bits |= EffectSet::kCapInt64;
-    return sb.emit(blk_id, std::move(n));
-}
-
-SsaId emit_pack_u64(SsaBuilder& sb, uint32_t blk_id, SsaId lo_u32, SsaId hi_u32) {
-    SsaNode n{};
-    n.op = tables::SsaOp::Pack64;
-    n.type = ValType::U64;
-    n.args = { lo_u32, hi_u32 };
-    n.effects.cap_bits |= EffectSet::kCapInt64;
-    return sb.emit(blk_id, std::move(n));
-}
-
-SsaId split64_lo(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64) {
-    SsaNode sp{};
-    sp.op = tables::SsaOp::Split64;
-    sp.type = ValType::TupleU32x2;
-    sp.args = { val_u64 };
-    sp.effects.cap_bits |= EffectSet::kCapInt64;
-    SsaId tup = sb.emit(blk_id, std::move(sp));
-    SsaNode ex{};
-    ex.op = tables::SsaOp::TupleExtract;
-    ex.type = ValType::U32;
-    ex.imm_u32 = 0;
-    ex.args = { tup };
-    return sb.emit(blk_id, std::move(ex));
-}
-
-SsaId split64_hi(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64) {
-    SsaNode sp{};
-    sp.op = tables::SsaOp::Split64;
-    sp.type = ValType::TupleU32x2;
-    sp.args = { val_u64 };
-    sp.effects.cap_bits |= EffectSet::kCapInt64;
-    SsaId tup = sb.emit(blk_id, std::move(sp));
-    SsaNode ex{};
-    ex.op = tables::SsaOp::TupleExtract;
-    ex.type = ValType::U32;
-    ex.imm_u32 = 1;
-    ex.args = { tup };
-    return sb.emit(blk_id, std::move(ex));
-}
-
-SsaId emit_lane_id(SsaBuilder& sb, uint32_t blk_id) {
+SsaId emit_lane_id(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
     SsaNode bi{};
     bi.op = tables::SsaOp::LoadBuiltinInput;
     bi.type = ValType::U32;
     bi.imm_u32 = static_cast<uint32_t>(spirv::BuiltIn::SubgroupLocalInvocationId);
     bi.aux_bool = true;
     bi.aux_str = "gl_SubgroupInvocationID";
-    return sb.emit(blk_id, std::move(bi));
+    return ctx.sb.emit(blk, std::move(bi));
 }
 
-SsaId emit_lane_width(SsaBuilder& sb, uint32_t blk_id) {
+SsaId emit_lane_width(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*) {
     SsaNode sb32{};
     sb32.op = tables::SsaOp::LoadSidebandU32;
     sb32.type = ValType::U32;
     sb32.imm_u32 = 5;
     sb32.imm_u32_2 = 3;
     sb32.effects.flags |= EffectSet::kFlagUsesSideband;
-    return sb.emit(blk_id, std::move(sb32));
+    return ctx.sb.emit(blk, std::move(sb32));
 }
 
-SsaId const_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t v) {
-    return sb.emit_const_u32(blk_id, v);
-}
-
-SsaId const_u64(SsaBuilder& sb, uint32_t blk_id, uint64_t v) {
-    return sb.emit_const_u64(blk_id, v);
-}
-
-SsaId const_f32_bits(SsaBuilder& sb, uint32_t blk_id, uint32_t bits) {
-    return sb.emit_const_f32_bits(blk_id, bits);
-}
-
-SsaId bitcast(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId val) {
-    return sb.emit_bitcast(blk_id, vt, val);
-}
-
-SsaId extract(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId vec, uint32_t idx) {
-    SsaNode ex{};
-    ex.op = tables::SsaOp::VecExtract;
-    ex.type = vt;
-    ex.imm_u32 = idx;
-    ex.args = { vec };
-    return sb.emit(blk_id, std::move(ex));
-}
-
-SsaId shuffle2(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId a, SsaId b, uint32_t i0, uint32_t i1) {
-    SsaNode sh{};
-    sh.op = tables::SsaOp::VecShuffle;
-    sh.type = vt;
-    sh.imm_u32 = i0;
-    sh.imm_u32_2 = i1;
-    sh.args = { a, b };
-    return sb.emit(blk_id, std::move(sh));
-}
-
-SsaId bfi(SsaBuilder& sb, uint32_t blk_id, SsaId a, SsaId b, uint32_t off, uint32_t w) {
-    SsaNode n{};
-    n.op = tables::SsaOp::Bfi;
-    n.type = ValType::U32;
-    n.imm_u32 = off;
-    n.imm_u32_2 = w;
-    n.args = { a, b, sb.emit_const_u32(blk_id, off), sb.emit_const_u32(blk_id, w) };
-    return sb.emit(blk_id, std::move(n));
-}
-
-uint32_t add_u32(uint32_t a, uint32_t b) {
+uint32_t add_u32(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t a, uint32_t b) {
     return a + b;
 }
 
-uint32_t mul8(uint32_t a) {
+uint32_t mul8(Pass1Context&, uint32_t, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t a) {
     return a * 8u;
 }
 
-} // namespace operands_host
+} // namespace abi
 
 } // namespace valhall::compiler

@@ -23,7 +23,7 @@ TOKEN_SPEC = [
     ("VAR_REF",    r"%[A-Za-z_][A-Za-z0-9_]*"),
     ("FLOAT_LIT",  r"-?[0-9]+\.[0-9]+f?"),
     ("INT_LIT",    r"(?:0x[0-9a-fA-F]+|-?[0-9]+)(?:ULL|ull|u|U)?"),
-    ("STRING_LIT", r'"[^"]*"'),
+    ("STRING_LIT", r"\"[^\"]*\"|'[^']*'"),
     ("IDENT",      r"[A-Za-z_][A-Za-z0-9_]*"),
     ("LBRACE",     r"\{"),
     ("RBRACE",     r"\}"),

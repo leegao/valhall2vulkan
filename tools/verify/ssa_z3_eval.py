@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import z3
 
-from tools.verify.cpp_handler_extractor import SymbolicSsaModule, SymbolicSsaNode
+from tools.verify.clang_ast_evaluator import SymbolicSsaModule, SymbolicSsaNode
 from tools.verify.panfrost_z3_model import (
     BV8,
     BV32,

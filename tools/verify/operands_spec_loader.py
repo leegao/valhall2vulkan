@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 _TOOLS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _TOOLS_DIR not in sys.path:
@@ -37,7 +37,7 @@ from dsl_parser import (
 )
 from valhall_lowering_dsl import parse_param_list
 
-from tools.verify.cpp_handler_extractor import (
+from tools.verify.clang_ast_evaluator import (
     CppAssign,
     CppBinary,
     CppCall,
@@ -93,6 +93,14 @@ SSA_OP_DEFAULTS = {
     "VecConstruct4": "V4U32",
 }
 
+PASS1_CTX_PARAMS = [
+    ("Pass1Context&", "ctx"),
+    ("uint32_t", "blk"),
+    ("const DecodedValhallInst&", "ins"),
+    ("const tables::LoweringRuleSpec*", "rule"),
+]
+PASS1_CTX_ARGS = [CppIdent("ctx"), CppIdent("blk"), CppIdent("ins"), CppIdent("rule")]
+
 
 class _DslToCppAst:
     def __init__(self, host_functions: Dict[str, Dict[str, Any]], operand_names: Set[str]) -> None:
@@ -107,20 +115,18 @@ class _DslToCppAst:
         params_list: List[str],
         inline_ops: List[str],
         source_file: str,
+        namespace: str = "",
         prepend_ctx: bool = True,
     ) -> CppFunctionDef:
         prog = parse_inline_ops(inline_ops)
         parsed = parse_param_list(params_list)
-        if prepend_ctx:
-            all_params = [("SsaBuilder&", "sb"), ("uint32_t", "blk_id"), ("const DecodedValhallInst&", "ins")] + parsed
-        else:
-            all_params = parsed
+        all_params = PASS1_CTX_PARAMS + parsed if prepend_ctx else parsed
         env_types: Dict[str, str] = {n: t for t, n in all_params}
         declared: Set[str] = {n for _, n in all_params}
         body = self._stmts(prog.stmts, env_types, declared)
         return CppFunctionDef(
             name=name,
-            namespace="",
+            namespace=namespace,
             ret_type=ret_type,
             params=[CppParam(t, n) for t, n in all_params],
             body=body,
@@ -180,7 +186,7 @@ class _DslToCppAst:
             elif isinstance(atom, HostCall):
                 inner = self._host_call(atom)
             elif isinstance(atom, DollarCall):
-                inner = CppCall(CppScopedIdent(["operands_host", atom.name]), [CppIdent("ins")])
+                inner = CppCall(CppScopedIdent(["abi", atom.name]), list(PASS1_CTX_ARGS))
             else:
                 raise ValueError(f"Unsupported cond atom: {atom!r}")
             return CppUnary("!", inner, postfix=False) if c.negated else inner
@@ -207,6 +213,8 @@ class _DslToCppAst:
             return CppIdent(a.name)
         if isinstance(a, HostCall):
             return self._host_call(a)
+        if isinstance(a, DollarCall):
+            return CppCall(CppScopedIdent(["abi", a.name]), list(PASS1_CTX_ARGS))
         if isinstance(a, Cond):
             return self._cond(a)
         raise ValueError(f"Unsupported DSL arg: {a!r}")
@@ -214,23 +222,13 @@ class _DslToCppAst:
     def _host_call(self, hc: HostCall) -> CppCall:
         args_ast = [self._arg(a) for a in hc.args]
         if hc.name in self.operand_names:
-            return CppCall(CppIdent(hc.name), [CppIdent("sb"), CppIdent("blk_id"), CppIdent("ins")] + args_ast)
+            return CppCall(CppIdent(hc.name), list(PASS1_CTX_ARGS) + args_ast)
         if hc.name not in self.host_functions:
             raise ValueError(f"Unknown @host function '{hc.name}' in valhall_lowering.json")
-        h = self.host_functions[hc.name]
-        if h.get("kind") == "inline_ops":
-            return CppCall(CppIdent(f"_helper_{hc.name}"), [CppIdent("sb"), CppIdent("blk_id"), CppIdent("ins")] + args_ast)
-        target = h.get("target") or f"operands_host::{hc.name}"
-        call_args: List[Any] = []
-        if h.get("takes_sb", False):
-            call_args.extend([CppIdent("sb"), CppIdent("blk_id")])
-        if h.get("takes_ins", False):
-            call_args.append(CppIdent("ins"))
-        call_args.extend(args_ast)
-        return CppCall(CppScopedIdent(target.split("::")), call_args)
+        return CppCall(CppScopedIdent(["abi", hc.name]), list(PASS1_CTX_ARGS) + args_ast)
 
     def _expr(self, expr: Any, out: List[Any], env_types: Dict[str, str], vt_hint: Optional[str]) -> Any:
-        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent)):
+        if isinstance(expr, (SrcRef, VarRef, Literal, BareIdent, DollarCall)):
             return self._arg(expr)
         if isinstance(expr, HostCall):
             return self._host_call(expr)
@@ -248,13 +246,13 @@ class _DslToCppAst:
             out.append(CppAssign(CppMember(CppIdent(nv), "type"), "=", CppScopedIdent(["ValType", vt])))
             out.append(CppAssign(CppMember(CppIdent(nv), "args"), "=", CppInitList([self._arg(a) for a in expr.args])))
             return CppCall(
-                CppMember(CppIdent("sb"), "emit"),
-                [CppIdent("blk_id"), CppCall(CppScopedIdent(["std", "move"]), [CppIdent(nv)])],
+                CppMember(CppMember(CppIdent("ctx"), "sb"), "emit"),
+                [CppIdent("blk"), CppCall(CppScopedIdent(["std", "move"]), [CppIdent(nv)])],
             )
         raise ValueError(f"Unsupported DSL expr: {expr!r}")
 
 
-def load_operands_spec_json(spec_path: str) -> Dict[str, CppFunctionDef]:
+def load_operands_spec_json(spec_path: str) -> Tuple[Dict[str, CppFunctionDef], Dict[str, CppFunctionDef]]:
     with open(spec_path, "r", encoding="utf-8") as f:
         spec = json.load(f)
 
@@ -263,27 +261,29 @@ def load_operands_spec_json(spec_path: str) -> Dict[str, CppFunctionDef]:
     operands: List[Dict[str, Any]] = spec.get("operands", [])
     operand_names = {e["name"] for e in operands}
     conv = _DslToCppAst(host_functions, operand_names)
-    funcs: Dict[str, CppFunctionDef] = {}
+    operands_funcs: Dict[str, CppFunctionDef] = {}
+    inline_abi_funcs: Dict[str, CppFunctionDef] = {}
 
     for hname, hdef in host_functions.items():
         if hdef.get("kind") != "inline_ops":
             continue
-        funcs[f"_helper_{hname}"] = conv.convert_fn(
-            f"_helper_{hname}",
+        inline_abi_funcs[hname] = conv.convert_fn(
+            hname,
             hdef["ret"],
             hdef.get("args", []),
             hdef["inline_ops"],
             source_file,
+            namespace="abi",
             prepend_ctx=True,
         )
 
     for entry in operands:
         if entry["kind"] == "host":
             parsed = parse_param_list(entry.get("params", []))
-            all_params = [("const DecodedValhallInst&", "ins")] + parsed
+            all_params = PASS1_CTX_PARAMS + parsed
             p_names = [CppIdent(n) for _, n in all_params]
             target_parts = entry["target"].split("::")
-            funcs[entry["name"]] = CppFunctionDef(
+            operands_funcs[entry["name"]] = CppFunctionDef(
                 name=entry["name"],
                 namespace="",
                 ret_type=entry["ret"],
@@ -294,15 +294,16 @@ def load_operands_spec_json(spec_path: str) -> Dict[str, CppFunctionDef]:
                 end_line=0,
             )
         elif entry["kind"] == "inline_ops":
-            funcs[entry["name"]] = conv.convert_fn(
+            operands_funcs[entry["name"]] = conv.convert_fn(
                 entry["name"],
                 entry["ret"],
                 entry.get("params", []),
                 entry["inline_ops"],
                 source_file,
+                namespace="",
                 prepend_ctx=True,
             )
         else:
             raise ValueError(f"Unknown operand kind '{entry['kind']}' for {entry['name']}")
 
-    return funcs
+    return operands_funcs, inline_abi_funcs
