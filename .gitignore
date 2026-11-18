@@ -73,3 +73,4 @@ archives/
 archive.zip
 __pycache__/
 *.pyc
+llvm-21
