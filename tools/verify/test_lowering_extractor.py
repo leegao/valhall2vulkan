@@ -29,7 +29,7 @@ class TestLoweringExtractor(unittest.TestCase):
 
     def test_cpp_handler_and_operand_completeness(self) -> None:
         reg = self.ext.cpp_registry
-        self.assertEqual(len(reg.operands_funcs), 22)
+        self.assertEqual(len(reg.operands_funcs), 21)
         self.assertIn("fetch_src_int32", reg.operands_funcs)
         self.assertIn("store_dest_f32", reg.operands_funcs)
         self.assertTrue(set(self.ext.host_functions.keys()).issubset(set(reg.abi_funcs.keys())))
@@ -126,30 +126,43 @@ class TestLoweringExtractor(unittest.TestCase):
         self.assertIn(5, ssa.reg_writes)
 
     def test_continuous_cpp_extraction_reflects_source_edits(self) -> None:
+        import json
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_ops = os.path.join(tmpdir, "valhall_operands.cpp")
-            shutil.copy2(os.path.join(REPO_ROOT, "src/valhall_operands.cpp"), tmp_ops)
-            with open(tmp_ops, "r", encoding="utf-8") as f:
-                src = f.read()
-            patched = src.replace('{"widen", "swz", "lanes"}', '{"widen", "swz", "lanes", "lane"}', 1)
-            self.assertNotEqual(src, patched)
+            tmp_ops = os.path.join(tmpdir, "valhall_operands.json")
+            with open(os.path.join(REPO_ROOT, "specs/lowering/valhall_operands.json"), "r", encoding="utf-8") as f:
+                spec = json.load(f)
+            fetch_i32 = [e for e in spec["entry_abi"] if e["name"] == "fetch_src_int32"][0]
+            fetch_i32["inline_ops"].insert(
+                1,
+                'if (@src_swz_eq(%src_idx, "h1")) { %val = BitNot(%val); }',
+            )
             with open(tmp_ops, "w", encoding="utf-8") as f:
-                f.write(patched)
+                json.dump(spec, f)
 
             ins = InstLoweringContext(
                 mnemonic="S16_TO_S32",
                 variant="",
-                srcs=[SourceOperandDesc(reg_num=0)],
-                modifiers={"lane0": "h1"},
+                srcs=[SourceOperandDesc(reg_num=0, swizzle_mod="h1")],
                 has_dest=True,
                 dest_reg=1,
             )
             _, tr_orig = self.ext.lower_instruction(ins)
-            self.assertNotIn("BfeS", tr_orig.emitted_ops)
+            self.assertNotIn("BitNot", tr_orig.emitted_ops)
 
             ext_patched = LoweringSemanticsExtractor(repo_root=REPO_ROOT, operands_path=tmp_ops)
             _, tr_patched = ext_patched.lower_instruction(ins)
-            self.assertIn("BfeS", tr_patched.emitted_ops)
+            self.assertIn("BitNot", tr_patched.emitted_ops)
+
+    def test_operands_spec_codegen_sync(self) -> None:
+        import subprocess
+        import sys
+        res = subprocess.run(
+            [sys.executable, os.path.join(REPO_ROOT, "tools/gen_valhall_operands.py"), "--check", "--verbose"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0, msg=res.stdout + res.stderr)
 
     def test_lowering_trace_logging_summary(self) -> None:
         ins = InstLoweringContext(

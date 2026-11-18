@@ -41,6 +41,7 @@ add_custom_target(codegen
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_spec.py"
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_spirv_builder.py"
     COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_tables.py"
+    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     COMMENT "Regenerating Valhall ISA, CSF descriptor, and SpirvBuilder C++17 sources"
 )
@@ -60,13 +61,27 @@ set_source_files_properties(src/generated/valhall_spirv_builder_generated.cpp PR
     COMPILE_OPTIONS "-ffunction-sections;-fdata-sections;-Wall;-Wextra;-Wno-unused-parameter"
 )
 
+set(VALHALL_OPERANDS_GENERATED_CPP "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/valhall_operands_generated.cpp")
+add_custom_command(
+    OUTPUT "${VALHALL_OPERANDS_GENERATED_CPP}"
+    COMMAND "${VALHALL_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
+        --spec "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_operands.json"
+        --out "${VALHALL_OPERANDS_GENERATED_CPP}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/specs/lowering/valhall_operands.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_valhall_operands.py"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Generating src/generated/valhall_operands_generated.cpp from specs/lowering/valhall_operands.json"
+    VERBATIM
+)
+
 add_library(valhall2spirv STATIC
     src/generated/valhall_isa_generated.cpp
     src/generated/valhall_csf_descriptors_generated.cpp
     src/generated/valhall_spirv_builder_generated.cpp
     src/generated/valhall_tables_generated.cpp
     src/valhall_ssa.cpp
-    src/valhall_operands.cpp
+    src/generated/valhall_operands_generated.cpp
     src/valhall_pass1.cpp
     src/valhall_pass1_handlers.cpp
     src/valhall_tiler.cpp
@@ -212,7 +227,7 @@ endif()
 if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
     set(_DUMPER_SRCS tools/verify/clang_ast_dumper/clang_ast_dumper.cpp)
     if(_VALHALL_USE_BUNDLED_LLVM21)
-        list(APPEND _DUMPER_SRCS tools/verify/glibc_compat.c)
+        list(APPEND _DUMPER_SRCS tools/verify/clang_ast_dumper/glibc_compat.c)
     endif()
 
     add_executable(clang_ast_dumper ${_DUMPER_SRCS})

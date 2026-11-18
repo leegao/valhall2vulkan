@@ -390,7 +390,7 @@ class CppParser:
                 else:
                     ns_name = ""
                 if self.match("LBRACE"):
-                    sub_ns = ns_name if ns_name == "abi" else ns
+                    sub_ns = ns_name if ns_name in ("abi", "operands_host") else ns
                     self._parse_namespace_body(funcs, sub_ns)
                     self.expect("RBRACE")
                 else:
@@ -1044,10 +1044,23 @@ class CppHandlerRegistry:
         self.log = logger or logging.getLogger("cpp_extractor")
         self.operands_funcs: Dict[str, CppFunctionDef] = {}
         self.abi_funcs: Dict[str, CppFunctionDef] = {}
+        self.operands_host_funcs: Dict[str, CppFunctionDef] = {}
         self.ctx_funcs: Dict[str, CppFunctionDef] = {}
         self.global_handlers: Dict[str, CppFunctionDef] = {}
 
-        for path, is_handlers in ((operands_path, False), (handlers_path, True)):
+        if operands_path.endswith(".json"):
+            from tools.verify.operands_spec_loader import load_operands_spec_json
+            self.operands_funcs = load_operands_spec_json(operands_path)
+            self.log.debug(
+                "Loaded %d operand functions from JSON spec %s",
+                len(self.operands_funcs),
+                os.path.basename(operands_path),
+            )
+            paths_to_parse = ((handlers_path, True),)
+        else:
+            paths_to_parse = ((operands_path, False), (handlers_path, True))
+
+        for path, is_handlers in paths_to_parse:
             with open(path, "r", encoding="utf-8") as f:
                 src = f.read()
             toks = tokenize_cpp(src)
@@ -1057,6 +1070,8 @@ class CppHandlerRegistry:
                     self.operands_funcs[fn.name] = fn
                 elif fn.namespace == "abi":
                     self.abi_funcs[fn.name] = fn
+                elif fn.namespace == "operands_host":
+                    self.operands_host_funcs[fn.name] = fn
                 elif fn.namespace == "Pass1Context":
                     self.ctx_funcs[fn.name] = fn
                 else:
@@ -1543,6 +1558,14 @@ class CppSymbolicEvaluator:
             # ABI helper call
             if fn_name in self.reg.abi_funcs:
                 return self.call_abi_fn(fn_name, ssa, ins, args)
+
+        if isinstance(expr.callee, CppScopedIdent) and len(expr.callee.parts) == 2 and expr.callee.parts[0] == "operands_host":
+            fn_name = expr.callee.parts[1]
+            fn = self.reg.operands_host_funcs[fn_name]
+            env: Dict[str, Any] = {}
+            for p, a in zip(fn.params, args):
+                env[p.name] = a
+            return self._exec_fn(fn, env, ssa, ins)
 
         # Handle static_cast<T>(x) parsed as CppCall(CppIdent("static_cast"), ...)
         raise ValueError(f"Unsupported C++ call: {expr.callee}")

@@ -629,4 +629,323 @@ void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
     store_dest_u32(ctx.sb, blk, ins, acc_s ? ctx.sb.emit_bitcast(blk, ValType::U32, acc) : acc);
 }
 
+
+namespace operands_host {
+
+std::string get_src_swz(const DecodedValhallInst& ins, size_t src_idx) {
+    if (src_idx < ins.srcs.size() && !ins.srcs[src_idx].swizzle_mod.empty()) {
+        return ins.srcs[src_idx].swizzle_mod;
+    }
+    std::string idx_str = std::to_string(src_idx);
+    for (const char* prefix : {"widen", "swz", "lanes"}) {
+        auto it = ins.modifier_strs.find(std::string(prefix) + idx_str);
+        if (it != ins.modifier_strs.end() && it->second != "none") {
+            return it->second;
+        }
+    }
+    return "";
+}
+
+std::string get_dest_mod(const DecodedValhallInst& ins) {
+    if (!ins.dest_mod.empty()) return ins.dest_mod;
+    for (const char* k : {"dest_width", "dest_width_narrow"}) {
+        auto it = ins.modifier_strs.find(k);
+        if (it != ins.modifier_strs.end() && it->second != "none") {
+            return it->second;
+        }
+    }
+    return "";
+}
+
+bool get_src_abs(const DecodedValhallInst& ins, size_t src_idx) {
+    if (src_idx < ins.srcs.size() && ins.srcs[src_idx].abs) return true;
+    auto it = ins.fields.find("abs" + std::to_string(src_idx));
+    return (it != ins.fields.end() && it->second != 0);
+}
+
+bool get_src_neg(const DecodedValhallInst& ins, size_t src_idx) {
+    if (src_idx < ins.srcs.size() && ins.srcs[src_idx].neg) return true;
+    auto it = ins.fields.find("neg" + std::to_string(src_idx));
+    return (it != ins.fields.end() && it->second != 0);
+}
+
+bool get_src_not(const DecodedValhallInst& ins, size_t src_idx) {
+    if (src_idx < ins.srcs.size() && ins.srcs[src_idx].not_mod) return true;
+    auto it = ins.fields.find("not" + std::to_string(src_idx));
+    return (it != ins.fields.end() && it->second != 0);
+}
+
+bool src_swz_eq(const DecodedValhallInst& ins, size_t src_idx, const char* s) {
+    return get_src_swz(ins, src_idx) == s;
+}
+
+bool src_swz_is_b_rep(const DecodedValhallInst& ins, size_t src_idx) {
+    std::string swz = get_src_swz(ins, src_idx);
+    return swz == "b0000" || swz == "b1111" || swz == "b2222" || swz == "b3333";
+}
+
+uint32_t src_swz_b_rep_off(const DecodedValhallInst& ins, size_t src_idx) {
+    std::string swz = get_src_swz(ins, src_idx);
+    if (swz == "b1111") return 8u;
+    if (swz == "b2222") return 16u;
+    if (swz == "b3333") return 24u;
+    return 0u;
+}
+
+bool dest_mod_eq(const DecodedValhallInst& ins, const char* s) {
+    return get_dest_mod(ins) == s;
+}
+
+bool dest_mod_is_byte(const DecodedValhallInst& ins) {
+    std::string dm = get_dest_mod(ins);
+    return dm == "b0" || dm == "b1" || dm == "b2" || dm == "b3";
+}
+
+uint32_t dest_mod_byte_off(const DecodedValhallInst& ins) {
+    std::string dm = get_dest_mod(ins);
+    if (dm == "b1") return 8u;
+    if (dm == "b2") return 16u;
+    if (dm == "b3") return 24u;
+    return 0u;
+}
+
+bool has_clamp_0_1(const DecodedValhallInst& ins) {
+    auto it = ins.modifier_strs.find("clamp");
+    return it != ins.modifier_strs.end() && it->second == "clamp_0_1";
+}
+
+bool has_clamp_m1_1(const DecodedValhallInst& ins) {
+    auto it = ins.modifier_strs.find("clamp");
+    return it != ins.modifier_strs.end() && it->second == "clamp_m1_1";
+}
+
+bool has_clamp_0_inf(const DecodedValhallInst& ins) {
+    auto it = ins.modifier_strs.find("clamp");
+    return it != ins.modifier_strs.end() && it->second == "clamp_0_inf";
+}
+
+bool src_oob(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx >= ins.srcs.size();
+}
+
+bool src_is_reg(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::Register;
+}
+
+bool src_is_fau_uniform(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::FauUniform;
+}
+
+bool src_is_small_const(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() && ins.srcs[src_idx].kind == SourceKind::SmallConstant;
+}
+
+bool src_is_fau_pc(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() &&
+           ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
+           ins.srcs[src_idx].symbolic_name == "pc";
+}
+
+bool src_is_fau_lane_id(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() &&
+           ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
+           ins.srcs[src_idx].symbolic_name == "lane_id";
+}
+
+bool src_is_fau_lane_width(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() &&
+           ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
+           ins.srcs[src_idx].symbolic_name == "lane_width";
+}
+
+bool src_word_select(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() && ins.srcs[src_idx].word_select;
+}
+
+bool src_is_64bit(const DecodedValhallInst& ins, size_t src_idx) {
+    return src_idx < ins.srcs.size() && ins.srcs[src_idx].is_64bit;
+}
+
+uint32_t src_reg_num(const DecodedValhallInst& ins, size_t src_idx) {
+    return ins.srcs[src_idx].reg_num;
+}
+
+uint32_t src_reg_base(const DecodedValhallInst& ins, size_t src_idx) {
+    return ins.srcs[src_idx].reg_num & 62u;
+}
+
+bool has_dest(const DecodedValhallInst& ins) {
+    return ins.has_dest;
+}
+
+uint32_t dest_reg_num(const DecodedValhallInst& ins) {
+    return ins.dest_reg & 63u;
+}
+
+uint32_t dest_reg_base(const DecodedValhallInst& ins) {
+    return ins.dest_reg & 62u;
+}
+
+SsaId src_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
+    return sb.current_reg(blk_id, ins.srcs[src_idx].reg_num);
+}
+
+SsaId src_read_reg_base(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx, uint32_t off) {
+    uint8_t base = ins.srcs[src_idx].reg_num & 62u;
+    return sb.current_reg(blk_id, static_cast<uint8_t>(base + off));
+}
+
+SsaId src_emit_imm_u32(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
+    return sb.emit_const_u32(blk_id, ins.srcs[src_idx].imm_bits);
+}
+
+SsaId src_emit_imm_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx) {
+    return sb.emit_const_u64(blk_id, uint64_t(ins.srcs[src_idx].imm_bits));
+}
+
+SsaId ins_pc_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins) {
+    return sb.emit_const_u64(blk_id, ins.pc);
+}
+
+SsaId dest_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins) {
+    return sb.current_reg(blk_id, ins.dest_reg & 63u);
+}
+
+void dest_set_reg(SsaBuilder& sb, uint32_t blk_id, uint32_t d, SsaId val) {
+    sb.set_reg(blk_id, static_cast<uint8_t>(d), val);
+}
+
+SsaId emit_load_fau_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t word_idx) {
+    SsaNode n{};
+    n.op = tables::SsaOp::LoadFau;
+    n.type = ValType::U32;
+    n.imm_u32 = word_idx & 63u;
+    n.effects.flags |= EffectSet::kFlagUsesSideband;
+    return sb.emit(blk_id, std::move(n));
+}
+
+SsaId emit_load_sideband_u64(SsaBuilder& sb, uint32_t blk_id, uint32_t member_idx) {
+    SsaNode n{};
+    n.op = tables::SsaOp::LoadSidebandU64;
+    n.type = ValType::U64;
+    n.imm_u32 = member_idx;
+    n.effects.flags |= EffectSet::kFlagUsesSideband;
+    n.effects.cap_bits |= EffectSet::kCapInt64;
+    return sb.emit(blk_id, std::move(n));
+}
+
+SsaId emit_pack_u64(SsaBuilder& sb, uint32_t blk_id, SsaId lo_u32, SsaId hi_u32) {
+    SsaNode n{};
+    n.op = tables::SsaOp::Pack64;
+    n.type = ValType::U64;
+    n.args = { lo_u32, hi_u32 };
+    n.effects.cap_bits |= EffectSet::kCapInt64;
+    return sb.emit(blk_id, std::move(n));
+}
+
+SsaId split64_lo(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64) {
+    SsaNode sp{};
+    sp.op = tables::SsaOp::Split64;
+    sp.type = ValType::TupleU32x2;
+    sp.args = { val_u64 };
+    sp.effects.cap_bits |= EffectSet::kCapInt64;
+    SsaId tup = sb.emit(blk_id, std::move(sp));
+    SsaNode ex{};
+    ex.op = tables::SsaOp::TupleExtract;
+    ex.type = ValType::U32;
+    ex.imm_u32 = 0;
+    ex.args = { tup };
+    return sb.emit(blk_id, std::move(ex));
+}
+
+SsaId split64_hi(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64) {
+    SsaNode sp{};
+    sp.op = tables::SsaOp::Split64;
+    sp.type = ValType::TupleU32x2;
+    sp.args = { val_u64 };
+    sp.effects.cap_bits |= EffectSet::kCapInt64;
+    SsaId tup = sb.emit(blk_id, std::move(sp));
+    SsaNode ex{};
+    ex.op = tables::SsaOp::TupleExtract;
+    ex.type = ValType::U32;
+    ex.imm_u32 = 1;
+    ex.args = { tup };
+    return sb.emit(blk_id, std::move(ex));
+}
+
+SsaId emit_lane_id(SsaBuilder& sb, uint32_t blk_id) {
+    SsaNode bi{};
+    bi.op = tables::SsaOp::LoadBuiltinInput;
+    bi.type = ValType::U32;
+    bi.imm_u32 = static_cast<uint32_t>(spirv::BuiltIn::SubgroupLocalInvocationId);
+    bi.aux_bool = true;
+    bi.aux_str = "gl_SubgroupInvocationID";
+    return sb.emit(blk_id, std::move(bi));
+}
+
+SsaId emit_lane_width(SsaBuilder& sb, uint32_t blk_id) {
+    SsaNode sb32{};
+    sb32.op = tables::SsaOp::LoadSidebandU32;
+    sb32.type = ValType::U32;
+    sb32.imm_u32 = 5;
+    sb32.imm_u32_2 = 3;
+    sb32.effects.flags |= EffectSet::kFlagUsesSideband;
+    return sb.emit(blk_id, std::move(sb32));
+}
+
+SsaId const_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t v) {
+    return sb.emit_const_u32(blk_id, v);
+}
+
+SsaId const_u64(SsaBuilder& sb, uint32_t blk_id, uint64_t v) {
+    return sb.emit_const_u64(blk_id, v);
+}
+
+SsaId const_f32_bits(SsaBuilder& sb, uint32_t blk_id, uint32_t bits) {
+    return sb.emit_const_f32_bits(blk_id, bits);
+}
+
+SsaId bitcast(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId val) {
+    return sb.emit_bitcast(blk_id, vt, val);
+}
+
+SsaId extract(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId vec, uint32_t idx) {
+    SsaNode ex{};
+    ex.op = tables::SsaOp::VecExtract;
+    ex.type = vt;
+    ex.imm_u32 = idx;
+    ex.args = { vec };
+    return sb.emit(blk_id, std::move(ex));
+}
+
+SsaId shuffle2(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId a, SsaId b, uint32_t i0, uint32_t i1) {
+    SsaNode sh{};
+    sh.op = tables::SsaOp::VecShuffle;
+    sh.type = vt;
+    sh.imm_u32 = i0;
+    sh.imm_u32_2 = i1;
+    sh.args = { a, b };
+    return sb.emit(blk_id, std::move(sh));
+}
+
+SsaId bfi(SsaBuilder& sb, uint32_t blk_id, SsaId a, SsaId b, uint32_t off, uint32_t w) {
+    SsaNode n{};
+    n.op = tables::SsaOp::Bfi;
+    n.type = ValType::U32;
+    n.imm_u32 = off;
+    n.imm_u32_2 = w;
+    n.args = { a, b, sb.emit_const_u32(blk_id, off), sb.emit_const_u32(blk_id, w) };
+    return sb.emit(blk_id, std::move(n));
+}
+
+uint32_t add_u32(uint32_t a, uint32_t b) {
+    return a + b;
+}
+
+uint32_t mul8(uint32_t a) {
+    return a * 8u;
+}
+
+} // namespace operands_host
+
 } // namespace valhall::compiler

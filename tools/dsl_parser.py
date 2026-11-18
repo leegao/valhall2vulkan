@@ -17,6 +17,8 @@ KEYWORDS = {"if", "else", "for", "return", "true", "false"}
 TOKEN_SPEC = [
     ("WS",         r"\s+"),
     ("DOTDOT",     r"\.\."),
+    ("ANDAND",     r"&&"),
+    ("OROR",       r"\|\|"),
     ("SRC_REF",    r"%[0-9]+"),
     ("VAR_REF",    r"%[A-Za-z_][A-Za-z0-9_]*"),
     ("FLOAT_LIT",  r"-?[0-9]+\.[0-9]+f?"),
@@ -145,7 +147,14 @@ class BareIdent:
 @dataclass
 class Cond:
     negated: bool
-    atom: Union[DollarCall, HostCall]
+    atom: Union[DollarCall, HostCall, VarRef]
+
+
+@dataclass
+class CondBinOp:
+    op: str  # "&&" or "||"
+    left: Union["Cond", "CondBinOp"]
+    right: Union["Cond", "CondBinOp"]
 
 
 Expr = Union[SrcRef, VarRef, DollarCall, HashExpr, LookupCall, HostCall, SsaCall]
@@ -166,7 +175,7 @@ class ExprStmt:
 
 @dataclass
 class IfStmt:
-    cond: Cond
+    cond: Union[Cond, CondBinOp]
     then_body: List["Stmt"]
     else_body: Optional[List["Stmt"]] = None
 
@@ -307,6 +316,8 @@ class LL1Parser:
     def parse_else_opt(self) -> Optional[List[Stmt]]:
         if self.peek().kind == "ELSE":
             self.advance()
+            if self.peek().kind == "IF":
+                return [self.parse_stmt()]
             self.expect("LBRACE")
             body = self.parse_stmt_list()
             self.expect("RBRACE")
@@ -314,9 +325,9 @@ class LL1Parser:
         return None
 
     # <expr_opt> ::= <expr> | ε
-    def parse_expr_opt(self) -> Optional[Expr]:
-        if self.peek().kind in ("SRC_REF", "VAR_REF", "DOLLAR", "HASH", "AT", "IDENT"):
-            return self.parse_expr()
+    def parse_expr_opt(self) -> Optional[Arg]:
+        if self.peek().kind in ("SRC_REF", "VAR_REF", "DOLLAR", "HASH", "AT", "IDENT", "INT_LIT", "FLOAT_LIT", "STRING_LIT", "TRUE", "FALSE"):
+            return self.parse_arg()
         return None
 
     # <expr> ::= SRC_REF | VAR_REF | "$" IDENT | "#" <hash_tail>
@@ -421,16 +432,24 @@ class LL1Parser:
             return False
         return self.parse_cond()
 
-    # <cond> ::= "!" <cond_atom> | <cond_atom>
-    def parse_cond(self) -> Cond:
+    def parse_cond_unary(self) -> Cond:
         neg = False
         if self.peek().kind == "BANG":
             self.advance()
             neg = True
         return Cond(neg, self.parse_cond_atom())
 
-    # <cond_atom> ::= "$" IDENT | "@" IDENT "(" <arg_list_opt> ")"
-    def parse_cond_atom(self) -> Union[DollarCall, HostCall]:
+    # <cond> ::= <cond_unary> ( ("&&" | "||") <cond_unary> )*
+    def parse_cond(self) -> Union[Cond, CondBinOp]:
+        left: Union[Cond, CondBinOp] = self.parse_cond_unary()
+        while self.peek().kind in ("ANDAND", "OROR"):
+            op = self.advance().val
+            right = self.parse_cond_unary()
+            left = CondBinOp(op, left, right)
+        return left
+
+    # <cond_atom> ::= "$" IDENT | "@" IDENT "(" <arg_list_opt> ")" | VAR_REF
+    def parse_cond_atom(self) -> Union[DollarCall, HostCall, VarRef]:
         tok = self.peek()
         if tok.kind == "DOLLAR":
             self.advance()
@@ -442,7 +461,9 @@ class LL1Parser:
             args = self.parse_arg_list_opt()
             self.expect("RPAREN")
             return HostCall(fn, args)
-        raise DslSyntaxError(f"Expected '$' or '@' in condition, got {tok.kind}({tok.val!r}) at {tok.pos}")
+        if tok.kind == "VAR_REF":
+            return VarRef(self.advance().val[1:])
+        raise DslSyntaxError(f"Expected '$', '@', or '%' in condition, got {tok.kind}({tok.val!r}) at {tok.pos}")
 
     # <arg_list_opt> ::= <arg> <arg_list_tail> | ε
     def parse_arg_list_opt(self) -> List[Arg]:

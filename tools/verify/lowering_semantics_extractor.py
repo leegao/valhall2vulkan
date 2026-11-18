@@ -144,7 +144,7 @@ class LoweringSemanticsExtractor:
         self.repo_root = repo_root
         self.xml_path = xml_path or os.path.join(repo_root, "specs/kraid/isa-v9-v14.xml")
         self.lowering_path = lowering_path or os.path.join(repo_root, "specs/lowering/valhall_lowering.json")
-        self.operands_path = operands_path or os.path.join(repo_root, "src/valhall_operands.cpp")
+        self.operands_path = operands_path or os.path.join(repo_root, "specs/lowering/valhall_operands.json")
         self.handlers_path = handlers_path or os.path.join(repo_root, "src/valhall_pass1_handlers.cpp")
         self.logger = logger or LoweringLogger()
 

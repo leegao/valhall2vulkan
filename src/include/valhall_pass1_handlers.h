@@ -129,4 +129,69 @@ void kill_cond(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, c
 // Remaining host-side handler (@HANDLER(fn) in valhall_lowering.json)
 void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule);
 
+
+// Operand-lowering host ABI helpers (@host functions for specs/lowering/valhall_operands.json)
+namespace operands_host {
+
+std::string get_src_swz(const DecodedValhallInst& ins, size_t src_idx);
+std::string get_dest_mod(const DecodedValhallInst& ins);
+bool get_src_abs(const DecodedValhallInst& ins, size_t src_idx);
+bool get_src_neg(const DecodedValhallInst& ins, size_t src_idx);
+bool get_src_not(const DecodedValhallInst& ins, size_t src_idx);
+
+bool src_swz_eq(const DecodedValhallInst& ins, size_t src_idx, const char* s);
+bool src_swz_is_b_rep(const DecodedValhallInst& ins, size_t src_idx);
+uint32_t src_swz_b_rep_off(const DecodedValhallInst& ins, size_t src_idx);
+bool dest_mod_eq(const DecodedValhallInst& ins, const char* s);
+bool dest_mod_is_byte(const DecodedValhallInst& ins);
+uint32_t dest_mod_byte_off(const DecodedValhallInst& ins);
+
+bool has_clamp_0_1(const DecodedValhallInst& ins);
+bool has_clamp_m1_1(const DecodedValhallInst& ins);
+bool has_clamp_0_inf(const DecodedValhallInst& ins);
+
+bool src_oob(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_reg(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_fau_uniform(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_small_const(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_fau_pc(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_fau_lane_id(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_fau_lane_width(const DecodedValhallInst& ins, size_t src_idx);
+bool src_word_select(const DecodedValhallInst& ins, size_t src_idx);
+bool src_is_64bit(const DecodedValhallInst& ins, size_t src_idx);
+uint32_t src_reg_num(const DecodedValhallInst& ins, size_t src_idx);
+uint32_t src_reg_base(const DecodedValhallInst& ins, size_t src_idx);
+
+bool has_dest(const DecodedValhallInst& ins);
+uint32_t dest_reg_num(const DecodedValhallInst& ins);
+uint32_t dest_reg_base(const DecodedValhallInst& ins);
+
+SsaId src_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx);
+SsaId src_read_reg_base(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx, uint32_t off);
+SsaId src_emit_imm_u32(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx);
+SsaId src_emit_imm_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins, size_t src_idx);
+SsaId ins_pc_u64(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins);
+SsaId dest_read_reg(SsaBuilder& sb, uint32_t blk_id, const DecodedValhallInst& ins);
+void dest_set_reg(SsaBuilder& sb, uint32_t blk_id, uint32_t d, SsaId val);
+
+SsaId emit_load_fau_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t word_idx);
+SsaId emit_load_sideband_u64(SsaBuilder& sb, uint32_t blk_id, uint32_t member_idx);
+SsaId emit_pack_u64(SsaBuilder& sb, uint32_t blk_id, SsaId lo_u32, SsaId hi_u32);
+SsaId split64_lo(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64);
+SsaId split64_hi(SsaBuilder& sb, uint32_t blk_id, SsaId val_u64);
+SsaId emit_lane_id(SsaBuilder& sb, uint32_t blk_id);
+SsaId emit_lane_width(SsaBuilder& sb, uint32_t blk_id);
+
+SsaId const_u32(SsaBuilder& sb, uint32_t blk_id, uint32_t v);
+SsaId const_u64(SsaBuilder& sb, uint32_t blk_id, uint64_t v);
+SsaId const_f32_bits(SsaBuilder& sb, uint32_t blk_id, uint32_t bits);
+SsaId bitcast(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId val);
+SsaId extract(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId vec, uint32_t idx);
+SsaId shuffle2(SsaBuilder& sb, uint32_t blk_id, ValType vt, SsaId a, SsaId b, uint32_t i0, uint32_t i1);
+SsaId bfi(SsaBuilder& sb, uint32_t blk_id, SsaId a, SsaId b, uint32_t off, uint32_t w);
+uint32_t add_u32(uint32_t a, uint32_t b);
+uint32_t mul8(uint32_t a);
+
+} // namespace operands_host
+
 } // namespace valhall::compiler
