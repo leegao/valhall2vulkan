@@ -177,7 +177,7 @@ class LoweringSemanticsExtractor:
             )
 
         # 3. Continuously extract C++ operand & host handler ASTs
-        self.cpp_registry = CppHandlerRegistry(self.operands_path, self.handlers_path)
+        self.cpp_registry = CppHandlerRegistry(self.operands_path, self.handlers_path, repo_root=self.repo_root)
         self.cpp_eval = CppSymbolicEvaluator(self.cpp_registry)
         self._validate_completeness()
 
