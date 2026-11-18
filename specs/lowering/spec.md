@@ -193,10 +193,10 @@ where:
    $$\frac{\text{sig}(\text{fn}) = (\text{ret}, [\tau_1, \dots, \tau_m]) \quad \forall i.\, \langle a_i, \sigma_{i-1} \rangle : \tau_i \Downarrow (v_i, \sigma_i) \quad (r, \sigma') = \text{abi::fn}(\sigma_m, b, \iota, \text{rule}, v_1, \dots, v_m)}{\langle @\text{fn}(a_1, \dots, a_m), \sigma_0 \rangle \Downarrow (r, \sigma')}$$
 
 5. **Bounded Loop (`for (%i : 0 .. B) { S }`)**:
-   $$\frac{n = [\![ B ]\!](\iota) \quad \forall k \in [0, n-1].\, \langle S, \sigma_k[\Gamma \mapsto \Gamma[i \mapsto k]] \rangle \Downarrow \sigma_{k+1}}{\langle \text{for } (\\%i : 0 .. B)\{S\}, \sigma_0 \rangle \Downarrow \sigma_n}$$
+   $$\frac{n = [\\![ B ]\\!](\iota) \quad \forall k \in [0, n-1].\, \langle S, \sigma_k[\Gamma \mapsto \Gamma[i \mapsto k]] \rangle \Downarrow \sigma_{k+1}}{\langle \text{for } (\\%i : 0 .. B)\{S\}, \sigma_0 \rangle \Downarrow \sigma_n}$$
 
 6. **Conditional (`if (c) { S_1 } else { S_2 }`)**:
-   $$\frac{[\![ c ]\!](\iota, \sigma) = \text{true} \quad \langle S_1, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'} \qquad \frac{[\![ c ]\!](\iota, \sigma) = \text{false} \quad \langle S_2, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'}$$
+   $$\frac{[\\![ c ]\\!](\iota, \sigma) = \text{true} \quad \langle S_1, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'} \qquad \frac{[\\![ c ]\\!](\iota, \sigma) = \text{false} \quad \langle S_2, \sigma \rangle \Downarrow \sigma'}{\langle \text{if }(c)\{S_1\}\text{ else }\{S_2\}, \sigma \rangle \Downarrow \sigma'}$$
 
 7. **Staging-Register Window (`for_sr_read` vs `for_sr_write`)**:
    - `$sr_read_count` $= \max(1, \iota.\text{sr read.count})$ bounds input staging registers $\mathcal{R}[\iota.\text{sr read.base} + k]$ read via `@sr_get(k)` (e.g., `STORE`, `TEX_SINGLE`, `ATOM`, `BLEND`).
