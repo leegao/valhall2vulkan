@@ -62,6 +62,8 @@ if(PDFLATEX_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/csf_abi_map.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/operands_doc.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/mined_examples.py"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating tools/reference/generated/valhall-isa-reference.tex..."
         VERBATIM
@@ -81,6 +83,8 @@ if(PDFLATEX_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/csf_abi_map.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/operands_doc.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/mined_examples.py"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating Valhall valhall-isa-reference.pdf (${PDFLATEX_EXECUTABLE}))"
         VERBATIM

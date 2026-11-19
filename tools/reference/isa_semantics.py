@@ -34,7 +34,7 @@ CAT_ORDER = [
 ISA_SEMANTICS = {
     'BITREV': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Reverses all 32 bits of `src0`: for every bit position $k \\in \\{0, \\dots, 31\\}$, sets `dest[k] = src0[31 - k]`.',
+        "behavior": 'Reverses the bit order of the 32-bit unsigned integer `src0` and writes the result to `dest`: for every bit index $k \\in \\{0, \\dots, 31\\}$, sets `dest[k] = src0[31 - k]`.',
         "notes": 'Exact bit-for-bit reversal (`hw_tests.rs:1265-1272`). (`kraid/ops.rs:331-355`, `encode_v9.rs:811-828`, `nir.rs:1255-1261`, `hw_tests.rs:1265-1272`)',
     },
     'CLZ': {
@@ -59,7 +59,7 @@ ISA_SEMANTICS = {
     },
     'IADDC': {
         "category": 'Integer Arithmetic',
-        "behavior": '32-bit unsigned add with carry-in: `sum64 = zext64(src0) + zext64(src1) + (src2 & 1)`; if `return_carry == c`, `dst = (sum64 >> 32) & 1`, else `dst = sum64[31:0]`.',
+        "behavior": 'Computes 32-bit unsigned addition with 1-bit carry-in: `sum64 = uint64(src0) + uint64(src1) + uint64(src2 & 1)`. By default writes the low 32-bit sum `sum64[31:0]` to `dest`; when `.c` (`return_carry`) is set, writes the 1-bit carry-out `(sum64 >> 32) & 1` to `dest` instead.',
         "notes": 'Unsigned 32-bit only; carry-in uses LSB of `src2`. Used on Bifrost/Valhall as FMA-unit `IADD` when `src2=0` (`bi_schedule.c:537`). (`isa-v9-v14.xml`, `bifrost/bifrost/ISA.xml:1474`, `bi_schedule.c:537-544`)',
     },
     'IADD_IMM': {
@@ -94,22 +94,22 @@ ISA_SEMANTICS = {
     },
     'POPCOUNT': {
         "category": 'Integer Arithmetic',
-        "behavior": '32-bit population count: `dst = count_ones(src0)` (`0..=32`).',
+        "behavior": 'Counts the total number of `1` bits in the 32-bit word `src0` and writes the exact unsigned count (in the range $0 \\dots 32$) to `dest`.',
         "notes": 'Exact 32-bit popcount (`hw_tests.rs:2138-2145`). (`kraid/ops.rs:3738-3762`, `encode_v9.rs:2897-2914`, `nir.rs:1248-1254`, `hw_tests.rs:2138-2145`)',
     },
     'SEG_ADD': {
         "category": 'Integer Arithmetic',
-        "behavior": '64-bit segment address addition: `dst = (preserve_null && src0 == 0) ? 0 : (src0 + widen64(src1))` (or subtract if `.neg`).',
+        "behavior": 'Computes 64-bit segment pointer addition: widens `src1` to 64 bits and adds it to the 64-bit base pointer `src0` (`dest = src0 + widen64(src1)`), wrapping modulo $2^{64}$. When `.preserve_null` is set and `src0 == 0`, returns `0` so null pointers remain null.',
         "notes": 'Used for WLS/TLS segment pointer arithmetic; `preserve_null` keeps null pointer `0` as `0`. (`bifrost/valhall/ISA.xml:2666-2684`, `bifrost/compiler.h:720-722`, `isa-v9-v14.xml`)',
     },
     'SEG_SUB': {
         "category": 'Integer Arithmetic',
-        "behavior": '64-bit segment address subtraction (`.neg` form of `SEG_ADD`): `dst = (preserve_null && src0 == 0) ? 0 : (src0 - widen64(src1))`.',
+        "behavior": 'Computes 64-bit segment pointer subtraction: widens `src1` to 64 bits and subtracts it from the 64-bit base pointer `src0` (`dest = src0 - widen64(src1)`), wrapping modulo $2^{64}$. When `.preserve_null` is set and `src0 == 0`, returns `0` so null pointers remain null.',
         "notes": 'Same null-preservation rule as `SEG_ADD`. (`bifrost/valhall/ISA.xml:2666-2684`, `isa-v9-v14.xml`)',
     },
     'SHADD': {
         "category": 'Integer Arithmetic',
-        "behavior": '64-bit shift-extend-and-add (`SHADDX` in `bifrost/valhall/ISA.xml:2686`): `dst = src0 + (widen64(src1) << shift)` where `shift` is 3-bit immediate `0..7`.',
+        "behavior": 'Computes 64-bit shift-and-add address arithmetic (`s64` or `u64`): widens `src1` to 64 bits, shifts it left by the 3-bit immediate `#shift` ($0 \\dots 7$), and adds it to the 64-bit base `src0` (`dest = src0 + (widen64(src1) << #shift)`), wrapping modulo $2^{64}$.',
         "notes": 'Only `s64` and `u64` variants. Wraps modulo `2^64`. (`bifrost/valhall/ISA.xml:2686-2707`, `bifrost/bir.c:80,128-130`, `isa-v9-v14.xml`)',
     },
     'AND': {
@@ -119,77 +119,77 @@ ISA_SEMANTICS = {
     },
     'AND_IMM': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": '`dst = src0 & imm1w` (32-bit inline immediate; no `not_result` or swizzle).',
+        "behavior": 'Computes a 32-bit bitwise AND between `src0` and the inline 32-bit immediate `#imm1w` (`dest = src0 & #imm1w`) on Valhall v11+. Does not support source swizzles or `.not_result`; supports `dest_width` halfword write masking.',
         "notes": 'No `not_result` or `src0` swizzle supported (`encode_v9.rs:3043`). (`kraid/encode_v9.rs:2919-2926, 3036-3054`)',
     },
     'ARSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = (int_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = (int_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = (int_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = (int_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = rotate_left(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = rotate_left(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = rotate_left(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = rotate_left(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = (val << (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = (val << (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = (val << (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = (val << (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'NOT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": '`dst = ~widen(src0)` (alias of `OR` with `src2 = 0` and `not_result = not`).',
+        "behavior": 'Computes the bitwise complement of `src0` (`dest = ~widen(src0)`) across all lanes. Encoded as an alias of `OR` with `src2 = 0` and `.not_result` enabled.',
         "notes": 'Bitwise NOT across all bits of destination width. (`kraid/nir.rs:1160-1171`, `encode_v9.rs:3060-3066`)',
     },
     'NOT_OLD': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Legacy v9-v13 unary bitwise NOT: `dst = ~src0` (`i32`/`i64`).',
+        "behavior": 'Legacy v9--v13 unary bitwise complement on `i32` or `i64`: inverts every bit of `src0` and writes `dest = ~src0`. Superseded by shift-logic `NOT` on newer architectures.',
         "notes": 'Superseded by shift-logic `NOT` (`bifrost/valhall/ISA.xml:137`). (`bifrost/valhall/ISA.xml:137-138`, `isa-v9-v14.xml`)',
     },
     'OR': {
@@ -199,47 +199,47 @@ ISA_SEMANTICS = {
     },
     'OR_IMM': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": '`dst = src0 | imm1w` (32-bit inline immediate).',
+        "behavior": 'Computes a 32-bit bitwise OR between `src0` and the inline 32-bit immediate `#imm1w` (`dest = src0 | #imm1w`) on Valhall v11+. Does not support source swizzles or `.not_result`; supports `dest_width` halfword write masking.',
         "notes": 'No `not_result` or `src0` swizzle supported. (`kraid/encode_v9.rs:2919-2926, 3036-3054`)',
     },
     'RROT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = rotate_right(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = rotate_right(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = rotate_right(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = rotate_right(val, amt & (W - 1))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = (uint_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = (uint_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = (uint_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = (uint_W(val) >> (amt & (W - 1)))` where `val = src0[i]` and the 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then combines with `src2[i]` via bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'XOR': {
@@ -249,12 +249,12 @@ ISA_SEMANTICS = {
     },
     'XOR_IMM': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": '`dst = src0 ^ imm1w` (32-bit inline immediate).',
+        "behavior": 'Computes a 32-bit bitwise XOR between `src0` and the inline 32-bit immediate `#imm1w` (`dest = src0 ^ #imm1w`) on Valhall v11+. Does not support source swizzles or `.not_result`; supports `dest_width` halfword write masking.',
         "notes": 'No `not_result` or `src0` swizzle supported. (`kraid/encode_v9.rs:2919-2926, 3036-3054`)',
     },
     'FABS': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Alias of `FADD(abs(src0), -0.0)`: clears sign bit of `src0`, applies `round`/`clamp`/`dest_width_narrow`.',
+        "behavior": 'Computes the floating-point absolute value of `src0` by clearing its IEEE-754 sign bit (`dest = |src0|`), then applies optional `round`, `clamp`, and `dest_width_narrow` modifiers. Encoded as an alias of `FADD(abs(src0), -0.0)`.',
         "notes": 'Lowered in `kraid/nir.rs:766-775` as `OpFAdd(-0.0, src0.fabs())`. Because it is an FADD alias, adding `-0.0` canonicalizes sNaN->qNaN and applies FTZ if global FTZ is enabled. (`kraid/nir.rs:766-775`, `isa-v9-v14.xml`)',
     },
     'FADD': {
@@ -269,17 +269,17 @@ ISA_SEMANTICS = {
     },
     'FEXP': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": '`FEXP.f32(expx, expf)`: computes `2^(expx / 2^24)` where `src0` is signed 8.24 fixed-point and `src1` is original float for NaN propagation (`ops.rs:1610-1620`, `builder.rs:353-384`). `FEXP.f16(src1)` (v12+): computes `2^(src1)` directly (src0 unused). | `f32`: `widen1`, `abs1`, `neg1`, `dest_width`. `f16` (v12+): `lane1` (default `h0`), `abs1`, `neg1`, `dest_width_replicate`. | `FEXP.f32` flushes subnormal output (`hw_tests.rs:2339`); Vulkan precision `3 + 2*',
+        "behavior": 'Computes base-2 exponential $2^x$. For `FEXP.f32`, `src0` supplies a signed Q8.24 fixed-point exponent (`int(round(x * 2^24))`) and `src1` supplies the original FP32 `x` for overflow/underflow/NaN propagation; subnormal outputs flush to zero. For `FEXP.f16` (v12+), computes $2^{\\text{src1}}$ directly from the FP16 lane in `src1` (`src0` is unused) and supports `dest_width_replicate`.',
         "notes": '` ULP (`hw_tests.rs:2297`). (`kraid/ops.rs:1589-1635`, `encode_v9.rs:1361-1400`, `builder.rs:353-384`, `hw_tests.rs:2295-2345`)',
     },
     'FEXPF': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Direct floating-point `2^src0` (`f32`, v14+): computes `exp2(src0)` without 8.24 fixed-point pre-scaling.',
+        "behavior": 'Directly computes the single-precision base-2 exponential `dest = exp2(src0)` on Valhall v14+ without requiring Q8.24 fixed-point pre-scaling in software. Handles standard IEEE-754 overflow to `+Inf`, underflow to `+0.0`, and NaN propagation.',
         "notes": 'Replaces the 3-instruction `FMA_RSCALE` + `F32_TO_S32` + `FEXP.f32` sequence on v14+. (`isa-v9-v14.xml`)',
     },
     'FLOG': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": '`FLOG.f16` (v12+) / `FLOG.f32` (v14+): direct `log2(src0)`.',
+        "behavior": 'Directly computes the base-2 logarithm `dest = log2(src0)` (`f16` on v12+, `f32` on v14+) in a single SFU instruction. Returns `-Inf` for `±0.0`, `NaN` for negative inputs, and `+Inf` for `+Inf`.',
         "notes": 'Negative -> NaN, `0` -> `-Inf`, `+Inf` -> `+Inf`. (`kraid/ops.rs:1640-1656`, `encode_v9.rs:1402-1419`, `nir.rs:931-942`, `isa-v9-v14.xml`)',
     },
     'FLUSH': {
@@ -309,22 +309,22 @@ ISA_SEMANTICS = {
     },
     'FNEG': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Alias of `FADD(-src0, -0.0)`: flips sign bit of `src0`, applies `round`/`clamp`/`dest_width_narrow`.',
+        "behavior": 'Negates floating-point `src0` by flipping its IEEE-754 sign bit (`dest = -src0`), then applies optional `round`, `clamp`, and `dest_width_narrow` modifiers. Encoded as an alias of `FADD(-src0, -0.0)`.',
         "notes": 'Lowered in `kraid/nir.rs:776-784` as `OpFAdd(-0.0, src0.fneg())`. (`kraid/nir.rs:776-784`, `isa-v9-v14.xml`)',
     },
     'FPCLASS': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Floating-point classification (`f32` or `f16`): returns bitmask classifying `src0` (NaN, Inf, zero, subnormal, normal, sign).',
+        "behavior": 'Classifies each floating-point element of `src0` (`f32` or `f16`) into an IEEE-754 class bitmask written to `dest`, distinguishing sign, zero, subnormal, normal, infinity, and quiet/signaling NaN.',
         "notes": 'SFU table unit instruction; also used in Bifrost/Valhall transcendental special-case detection. (`bifrost/valhall/ISA.xml:2286-2297`, `bifrost/bi_lower_swizzle.c:182`)',
     },
     'FPOW': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": '`FPOW.f16` (v12+): computes `src0 ** src1` in FP16.',
+        "behavior": 'Computes the FP16 power function `dest = pow(src0, src1)` directly on Valhall v12+ for scalar half-precision inputs selected by `lane0`/`lane1`, writing to `dest` per `dest_width_replicate`.',
         "notes": 'Arch v12-v14 only; `f32` pow is lowered via `flog2_32` + `fexp_32_to` (`kraid/nir.rs:943-954`). (`isa-v9-v14.xml`, `kraid/nir.rs:943-954`)',
     },
     'FRCP': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Reciprocal `1.0 / x` (`f32` or `f16`): on `f32`, flushes subnormals on input AND output; on `f16`, does NOT flush subnormals (`kraid/ops.rs:1971-1974`).',
+        "behavior": 'Computes the floating-point reciprocal `dest = 1.0 / src0` (`f32` or `f16`) on the SFU with `< 1 ULP` accuracy. On `f32`, subnormal inputs and subnormal outputs are flushed to signed zero (`±0.0`); on `f16`, subnormals are preserved.',
         "notes": 'Hardware precision is `< 1 ULP` (`hw_tests.rs:1697`). No `round` or `clamp` modifier. (`kraid/ops.rs:1952-1976`, `encode_v9.rs:1581-1598`, `hw_tests.rs:1688-1700`)',
     },
     'FROUND': {
@@ -334,7 +334,7 @@ ISA_SEMANTICS = {
     },
     'FRSQ': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Reciprocal square root `1.0 / sqrt(x)` (`f32` or `f16`): on `f32`, flushes subnormal input (`ops.rs:2101`).',
+        "behavior": 'Computes the floating-point reciprocal square root `dest = 1.0 / sqrt(src0)` (`f32` or `f16`) on the SFU with `<= 1 ULP` accuracy. Returns `+Inf` for `+0.0`, `-Inf` for `-0.0`, and `NaN` for negative inputs; on `f32`, subnormal inputs are flushed to zero.',
         "notes": 'Hardware precision is `1 ULP` (`hw_tests.rs:1742`). Negative non-zero -> NaN, `+0.0` -> `+Inf`, `-0.0` -> `-Inf`. (`kraid/ops.rs:2082-2103`, `encode_v9.rs:1671-1688`, `hw_tests.rs:1733-1745`)',
     },
     'FSINCOS': {
@@ -344,7 +344,7 @@ ISA_SEMANTICS = {
     },
     'FSQRT': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Single-precision square root (v14+): `dst = sqrt_f32(src0)`.',
+        "behavior": 'Computes the single-precision IEEE-754 square root `dest = sqrt(src0)` directly on Valhall v14+. Preserves `-0.0 -> -0.0`, returns `+Inf` for `+Inf`, and produces `NaN` for strictly negative inputs.',
         "notes": 'IEEE-754 `sqrt`: negative non-zero -> NaN, `-0.0` -> `-0.0`, `+Inf` -> `+Inf`. (`isa-v9-v14.xml`)',
     },
     'LDEXP': {
@@ -354,37 +354,37 @@ ISA_SEMANTICS = {
     },
     'FADD_LSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": '`dst = clamp(round_rm(src0 + reduce(src1)))` where `reduce(x)` leaves non-normal `x` unchanged, else forces exponent to 0 (`m in [1.0, 2.0)`) and halves `m` if `|m| >= 1.5` so `|reduce(x)| in [0.75, 1.5)`.',
+        "behavior": 'Reduces normal FP32 `src1` into the logarithm mantissa interval $[0.75, 1.5)$ (forcing exponent to 0 so $m \\in [1.0, 2.0)$, then halving $m$ if $|m| \\ge 1.5$; non-normals pass unchanged) and computes `dest = clamp(round_rm(src0 + reduce_log(src1)))`. Paired with `src0 = -1.0` to compute $m - 1$ for `log2`.',
         "notes": 'Used in `flog2_32_to` with `src0 = -1.0` (`builder.rs:410-415`). Verified in `hw_tests.rs:1522-1550`. (`kraid/ops.rs:1308-1354`, `encode_v9.rs:1317-1339`, `builder.rs:409-415`, `hw_tests.rs:1522-1550`)',
     },
     'FADD_RSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Alias of `FMA_RSCALE` (`src1=1.0`): `dst = clamp(round_rm((src0 + src2) * 2^clamp(src3, -512, 512)))` in exact FP64, single-rounded to FP32. Second addend is `src2`; scale is `src3`.',
+        "behavior": 'Computes `dest = clamp(round_rm((src0 + src2) * 2^clamp(src3, -512, 512)))` in exact FP64 with a single rounding to FP32 (encoded as `FMA_RSCALE` with `src1 = 1.0`). Note that the second addend is `src2` and the signed integer exponent scale is `src3`.',
         "notes": '`libGLES_mali.so` `ModInfo` allows `.special=n_add` only on `FADD_RSCALE` (`0x2e28e80`).',
     },
     'FATAN_ASSIST': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'First-stage `atan2(y, x)` SFU helper (`f32`): outputs packed `(i16, f16)` octant/table assist value (`bifrost/valhall/ISA.xml:2490-2498`).',
+        "behavior": 'First-stage SFU helper for `atan2(y, x)` (`src0 = y`, `src1 = x`): determines the octant and ratio exponent and packs them into `dest` as `(i16 octant/exp, f16 seed)` for subsequent polynomial evaluation and `FATAN_TABLE`.',
         "notes": 'Paired with `FATAN_TABLE.f32`. (`bifrost/valhall/ISA.xml:2490-2498`, `isa-v9-v14.xml`)',
     },
     'FATAN_TABLE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Second-stage `atan2` SFU table lookup (`f32`): returns 32-bit float table value (`ISA.xml:2498`).',
+        "behavior": 'Second-stage SFU lookup table for `atan2`: indexes the 8-entry octant offset table using the low 3 bits of `src0` and writes the FP32 offset constant (`0`, `±pi/2`, or `±pi`) to `dest`.',
         "notes": 'Paired with `FATAN_ASSIST.f32`. (`bifrost/valhall/ISA.xml:2498`, `isa-v9-v14.xml`)',
     },
     'FCOS_TABLE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Exact `Foldable` (`kraid/ops.rs:1570-1584`): if `is_nan(x)` -> `x`; if `is_inf(x)` -> `NaN`; if `(sign, exp) != (0, 127+19)` -> `-0.0`; else `idx = bits & 0x3F`, `16 -> +0.0`, `48 -> -0.0`, else `cos(idx * pi / 32.0) as f32`.',
+        "behavior": '64-entry cosine lookup table for trigonometric range reduction: if `src0` is NaN returns `src0`; if `src0` is Inf returns `NaN`; if `(sign, exp) != (0, 146)` returns `-0.0`; otherwise indexes `idx = bits(src0) & 0x3F` and writes `cos(idx * pi / 32)` to `dest` (with exact `+0.0` at `idx = 16` and `-0.0` at `idx = 48`).',
         "notes": 'Exact hardware match verified in `hw_tests.rs:1553-1567` (with `offset=false`). (`kraid/ops.rs:1526-1584`, `encode_v9.rs:1341-1359`, `nir.rs:1996-2003`, `hw_tests.rs:1553-1567`)',
     },
     'FEXP_TABLE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": '4-bit exponential lookup table (`u4`): returns `2^(idx/16)` table entry with optional `adj` (`none`/`low`).',
+        "behavior": '16-entry exponential lookup table indexed by the low 4 bits (`u4`) of `src0`: writes `2^(idx / 16)` in FP32 to `dest` by default, or the low-order correction table entry when `.low` (`adj`) is set.',
         "notes": 'Legacy SFU table helper (`bifrost/valhall/ISA.xml:2346`, `compiler.h:684`). (`bifrost/valhall/ISA.xml:2346`, `bifrost/compiler.h:684`, `isa-v9-v14.xml`)',
     },
     'FLOGD': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Logarithm divided-difference helper (`f32`): computes `log2(m) / (m - 1)` where `m` is `src0` reduced to `[0.75, 1.5)` (`kraid/ops.rs:1658-1677`).',
+        "behavior": 'Logarithm divided-difference helper (`f32`): reduces `src0` to its mantissa $m \\in [0.75, 1.5)$ and writes `dest = log2(m) / (m - 1)` (with the removable singularity at $m = 1$ evaluating to $1 / \\ln 2$). Multiplied by $(m - 1)$ from `FADD_LSCALE` and added to `FREXPE.log` to compute `log2(x)` without cancellation near 1.',
         "notes": 'Paired with `FREXPE.log` + `FADD_LSCALE(-1.0, x)` + `FMA` to compute `log2(x)` to <= 3 ULP (`builder.rs:387-418`, `hw_tests.rs:2348-2393`). (`kraid/ops.rs:1658-1677`, `encode_v9.rs:1421-1438`, `builder.rs:404-417`, `hw_tests.rs:2348-2393`)',
     },
     'FLOG_TABLE': {
@@ -394,17 +394,17 @@ ISA_SEMANTICS = {
     },
     'FMA_RSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": '`dst = clamp(round_rm((src0 * src1 + src2) * 2^clamp(src3, -512, 512)))` computed in exact FP64 with single rounding to FP32. `.special=n`: `0 * anything -> ±0` (adds `±0 + src2`); `.special=left`: `0 * Inf / Inf * 0 -> src0`; `.special=n_add`: special Inf-addend suppression.',
+        "behavior": 'Computes `dest = clamp(round_rm((src0 * src1 + src2) * 2^clamp(src3, -512, 512)))` in exact FP64 with a single rounding to FP32, preventing intermediate overflow or underflow during transcendental range reduction. The `.special` modifier controls zero-times-infinity handling: `.n` forces `0 * anything -> ±0`; `.left` returns `src0` on `0 * Inf`; `.n_add` suppresses `(+Inf) + (-Inf)` NaNs.',
         "notes": 'Only RNE (`none`) and RTZ (`round_zero`) rounding. Verified in `libGLES_mali.so` `_mali_fma_po2_scale_sf32` (`0x2e28c20`) and `kraid/ops.rs:1828-1857`.',
     },
     'FMUL_CSLICE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Complex/cosine range-reduction slice multiply helper: takes `src0` (with `lane0`/`abs0`/`neg0`) and `src1`.',
+        "behavior": 'Extended-precision cosine range-reduction slice multiply helper (`f32`): multiplies `src0` (supporting `lane0`, `.abs`, `.neg`) against the Payne-Hanek slice constant selected by `src1` and writes the partial product to `dest`.',
         "notes": 'SFU helper opcode; not emitted by kraid. (`isa-v9-v14.xml`)',
     },
     'FMUL_RSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Alias of `FMA_RSCALE` (`src2=-0.0`): `dst = clamp(round_rm((src0 * src1) * 2^clamp(src3, -512, 512)))` in exact FP64, single-rounded to FP32. `.special=n`: `0 * anything -> ±0`; `.special=left`: `0 * Inf / Inf * 0 -> src0` unscaled.',
+        "behavior": 'Computes `dest = clamp(round_rm((src0 * src1) * 2^clamp(src3, -512, 512)))` in exact FP64 with a single rounding to FP32 (encoded as `FMA_RSCALE` with `src2 = -0.0`). The `.special` modifier selects `.n` (`0 * anything -> ±0`) or `.left` (`0 * Inf -> src0` unscaled).',
         "notes": '`libGLES_mali.so` `ModInfo` allows `n`/`left` only (forbids `n_add`; `_mali_mul_left_po2_scale_sf32` `0x2e29550`).',
     },
     'FMUL_SLICE': {
@@ -414,32 +414,32 @@ ISA_SEMANTICS = {
     },
     'FPOW_SC_APPLY': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Power special-case applicator: applies special-case override detected by `FPOW_SC_DET` to computed power result.',
+        "behavior": 'Power special-case applicator (`f32`): inspects the special-case tag word in `src1` (produced by `FPOW_SC_DET`); if a special-case override is flagged, writes the decoded IEEE-754 override value to `dest`, otherwise passes `src0` through unchanged.',
         "notes": 'Paired with `FPOW_SC_DET`. (`bifrost/bifrost/ISA.xml:4634`, `isa-v9-v14.xml`)',
     },
     'FPOW_SC_DET': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Power special-case detector (`f32`): detects edge cases (0, +-1, Inf, NaN, negative base) for `pow` vs `powr` (`func` modifier).',
+        "behavior": 'Power special-case detector (`f32`): inspects base `src0` and exponent `src1` for edge cases (`0`, `±1`, `±Inf`, `NaN`, and negative bases) according to `func` (`.pow` vs `.powr`) and writes a packed override tag to `dest` for `FPOW_SC_APPLY`.',
         "notes": 'Paired with `FPOW_SC_APPLY` (`bifrost/compiler.h:686`). (`bifrost/compiler.h:686`, `bifrost/bifrost/ISA.xml:4689`, `isa-v9-v14.xml`)',
     },
     'FRCBRT_APPROX_A': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Reciprocal cube-root (`x^(-1/3)`) approximation helper A (`f32`).',
+        "behavior": 'Stage-A reciprocal cube-root (`x^(-1/3)`) SFU helper (`f32`): computes the initial low-precision seed approximation of `src0^(-1/3)` in `dest` for the multi-stage cube-root sequence.',
         "notes": 'SFU table seed instruction (`bifrost/ISA.xml:4700`). (`bifrost/bifrost/ISA.xml:4700`, `isa-v9-v14.xml`)',
     },
     'FRCBRT_APPROX_B': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Reciprocal cube-root approximation helper B (`f32`).',
+        "behavior": 'Stage-B reciprocal cube-root (`x^(-1/3)`) SFU helper (`f32`): applies the second-stage polynomial refinement to the intermediate value `src0` and writes the refined estimate to `dest`.',
         "notes": 'SFU table seed instruction (`bifrost/ISA.xml:4722`). (`bifrost/bifrost/ISA.xml:4722`, `isa-v9-v14.xml`)',
     },
     'FRCBRT_APPROX_C': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Reciprocal cube-root approximation helper C (`f32`).',
+        "behavior": 'Stage-C reciprocal cube-root (`x^(-1/3)`) SFU helper (`f32`): applies the final refinement step to `src0` and writes the resulting `x^(-1/3)` approximation to `dest`.',
         "notes": 'SFU table seed instruction (`bifrost/ISA.xml:4726`). (`bifrost/bifrost/ISA.xml:4726`, `isa-v9-v14.xml`)',
     },
     'FRCP_APPROX': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Low-precision reciprocal seed (`f32`): initial Newton-Raphson estimate for `1.0 / src0`.',
+        "behavior": 'Low-precision reciprocal seed (`f32`): computes an initial ~12-bit approximation of `1.0 / src0` in `dest`, intended as the starting estimate for Newton-Raphson refinement.',
         "notes": 'SFU table seed instruction. (`bifrost/valhall/ISA.xml`, `isa-v9-v14.xml`)',
     },
     'FREXPE': {
@@ -454,17 +454,17 @@ ISA_SEMANTICS = {
     },
     'FRSQ_APPROX': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Low-precision reciprocal sqrt seed (`f32`): initial Newton-Raphson estimate for `1.0 / sqrt(src0)`.',
+        "behavior": 'Low-precision reciprocal square-root seed (`f32`): computes an initial ~12-bit approximation of `1.0 / sqrt(src0)` in `dest`, intended as the starting estimate for Newton-Raphson refinement.',
         "notes": 'SFU table seed instruction. (`bifrost/valhall/ISA.xml`, `isa-v9-v14.xml`)',
     },
     'FSINCOS_OFFSET': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": '6-bit trig offset lookup table (`u6`): returns range-reduction angle offset with optional `scale` (`none`/`scale`).',
+        "behavior": 'Trigonometric angle-offset lookup table (`u6`): indexes the 8-entry quadrant offset table using the low bits of `src0` and writes the FP32 offset to `dest` (scaled by $2^{24}$ when `.scale` is set).',
         "notes": 'SFU table helper (`bifrost/valhall/ISA.xml:2340`, `compiler.h:691`). (`bifrost/valhall/ISA.xml:2340`, `bifrost/compiler.h:691`, `isa-v9-v14.xml`)',
     },
     'FSIN_TABLE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Exact `Foldable` (`kraid/ops.rs:2133-2147`): if `is_nan(x)` -> `x`; if `is_inf(x)` -> `NaN`; if `(sign, exp) != (0, 127+19)` -> `-0.0`; else `idx = bits & 0x3F`, `0 -> -0.0`, `32 -> +0.0`, else `sin(idx * pi / 32.0) as f32`.',
+        "behavior": '64-entry sine lookup table for trigonometric range reduction: if `src0` is NaN returns `src0`; if `src0` is Inf returns `NaN`; if `(sign, exp) != (0, 146)` returns `-0.0`; otherwise indexes `idx = bits(src0) & 0x3F` and writes `sin(idx * pi / 32)` to `dest` (with exact `-0.0` at `idx = 0` and `+0.0` at `idx = 32`).',
         "notes": 'Exact hardware match verified in `hw_tests.rs:1748-1762` (with `offset=false`). (`kraid/ops.rs:2107-2147`, `encode_v9.rs:1690-1708`, `nir.rs:1988-1995`, `hw_tests.rs:1748-1762`)',
     },
     'ILOGB': {
@@ -479,13 +479,13 @@ ISA_SEMANTICS = {
     },
     'CUBEFACE1': {
         "category": 'Cubemap Helpers',
-        "behavior": 'Exact `Foldable` (`OpCubeFaceMax`, `kraid/ops.rs:972-994`): `m = max(|x|, |y|, |z|)`; if any NaN -> `NaN`; else if `is_inf(m)` -> `1.0`; else if `m < f32::MIN_POSITIVE` (zero/subnormal) -> `2.0`; else `m`.',
+        "behavior": 'Computes the cubemap major-axis magnitude from 3D direction `(x=src0, y=src1, z=src2)`: `m = max(|x|, |y|, |z|)`. Writes `NaN` if any input is NaN, `1.0` if `m` is infinite, `2.0` if `m` is zero or subnormal (preventing divide-by-zero), and `m` otherwise to `dest`.',
         "notes": 'Verified in `hw_tests.rs:1443-1450` (`Ulp(1)`). (`kraid/ops.rs:948-994`, `encode_v9.rs:1074-1094`, `nir.rs:1958-1971`, `hw_tests.rs:1443-1450`)',
     },
     'CUBEFACE2': {
         "category": 'Cubemap Helpers',
-        "behavior": 'Exact `Foldable` (`OpCubeFaceIdx`, `kraid/ops.rs:922-944`): `face = is_nan ? 4 : (|z|==m ? 4+(z<0) : |y|==m ? 2+(y<0) : 0+(x<0))`; `is_inf = m.is_inf() && !is_nan`; `dst = (face << 29) | (is_inf << 16)`. | `dest_width`. 3x `f32` inputs `(x, y, z)`. | Tie-breaking priority: `|z| >= |y| >=',
-        "notes": '`. Exact match verified in `hw_tests.rs:1433-1440`. (`kraid/ops.rs:898-944`, `encode_v9.rs:1052-1072`, `nir.rs:1958-1971`, `hw_tests.rs:1433-1440`)',
+        "behavior": 'Determines the dominant cubemap face index (`0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z`) from 3D direction `(x=src0, y=src1, z=src2)` with tie-breaking priority $|z| \\ge |y| \\ge |x|$ (NaN defaults to face `4`). Packs the 3-bit face index into bits `[31:29]` and sets bit `16` if any finite/infinite component is `±Inf` (and no component is NaN): `dest = (face << 29) | (is_inf << 16)`.',
+        "notes": 'Tie-breaking priority: `|z| >= |y| >= |x|`. Exact match verified in `hw_tests.rs:1433-1440`. (`kraid/ops.rs:898-944`, `encode_v9.rs:1052-1072`, `nir.rs:1958-1971`, `hw_tests.rs:1433-1440`)',
     },
     'CUBE_SSEL': {
         "category": 'Cubemap Helpers',
@@ -544,7 +544,7 @@ ISA_SEMANTICS = {
     },
     'F16_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = f32::from(F16(src0.lane0))` (exact widening conversion; no clamp/round).',
+        "behavior": 'Widens the FP16 halfword selected by `lane0` (`.h0` or `.h1`) of `src0` losslessly to IEEE-754 single-precision FP32 and writes the result to `dest` (exact conversion with no rounding or clamping).',
         "notes": 'Exact IEEE-754 f16->f32 widening (`hw_tests.rs:1453-1459`). (`kraid/ops.rs:1064-1088`, `encode_v9.rs:1150-1166`, `hw_tests.rs:1453-1459`)',
     },
     'F16_TO_S32': {
@@ -554,72 +554,72 @@ ISA_SEMANTICS = {
     },
     'F16_TO_U32': {
         "category": 'Conversions',
-        "behavior": 'Saturating f16->u32 (arch <= v10): `x = round_rm(f16(src0.lane0))`; NaN or `<= 0` -> `0`, `+Inf -> UINT32_MAX`, else `x as u32`.',
+        "behavior": 'Converts the FP16 halfword selected by `lane0` of `src0` to a saturating unsigned 32-bit integer in `dest` (arch <= v10): rounds per `round`, returning `0` for `NaN` or `<= 0.0`, `UINT32_MAX` for `+Inf`, and `uint32(x)` otherwise.',
         "notes": 'Arch v9-v10 only (`kraid/ops.rs:1196`, `nir.rs:727`). (`kraid/ops.rs:1196-1221`, `encode_v9.rs:1168-1198`, `nir.rs:726-734`)',
     },
     'F32_TO_F16': {
         "category": 'Conversions',
-        "behavior": 'Single-source v11-v14 alias of `FADD.f32(src0, -0.0)` with `dest_width_narrow`: `dst[half] = round_rm(clamp(src0)) as f16` (`h0`, `h1`, or replicated `h01`).',
+        "behavior": 'Narrows FP32 `src0` to IEEE-754 FP16 after applying optional `clamp` and `round` modifiers, and writes the 16-bit result into `dest.h0`, `dest.h1` (preserving the other halfword), or replicated into both halves (`dest.h01`) per `dest_width_narrow` (v11--v14 alias of `FADD.f32(src0, -0.0)`).',
         "notes": 'Arch v11-v14 only (v9-v10 uses `V2F32_TO_V2F16` or `FADD.f32.hf0/hf1`). Single source (`src1` fixed to `-0.0`). (`kraid/builder.rs:50-65`, `nir.rs:642-663`, `isa-v9-v14.xml`)',
     },
     'F32_TO_S32': {
         "category": 'Conversions',
-        "behavior": 'Saturating f32->s32: `x = round_rm(src0)`; NaN->0, `<= INT32_MIN` -> `INT32_MIN`, `>= INT32_MAX` -> `INT32_MAX`, else `x as i32`.',
+        "behavior": 'Converts FP32 `src0` to a saturating signed 32-bit integer in `dest`: rounds per `round` (default RNE; `.round_zero` for truncation), returning `0` on `NaN`, `INT32_MIN` for values `<= -2^31`, `INT32_MAX` for values `>= 2^31 - 1`, and `int32(x)` otherwise.',
         "notes": 'Matches Rust `f32 as i32` saturation (`ops.rs:1249-1262`, `hw_tests.rs:1462-1483`). (`kraid/ops.rs:1226-1262`, `encode_v9.rs:1212-1246`, `hw_tests.rs:1462-1483`)',
     },
     'F32_TO_U32': {
         "category": 'Conversions',
-        "behavior": 'Saturating f32->u32: `x = round_rm(src0)`; NaN or `<= 0.0` -> `0`, `>= UINT32_MAX` -> `UINT32_MAX`, else `x as u32`.',
+        "behavior": 'Converts FP32 `src0` to a saturating unsigned 32-bit integer in `dest`: rounds per `round` (default RNE; `.round_zero` for truncation), returning `0` on `NaN` or values `<= 0.0`, `UINT32_MAX` for values `>= 2^32 - 1`, and `uint32(x)` otherwise.',
         "notes": 'Matches Rust `f32 as u32` saturation (`ops.rs:1249-1262`, `hw_tests.rs:1462-1483`). (`kraid/ops.rs:1226-1262`, `encode_v9.rs:1212-1246`, `hw_tests.rs:1462-1483`)',
     },
     'S16_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = (src0.lane0 as i16) as f32` (exact; arch <= v10).',
+        "behavior": 'Converts the signed 16-bit integer selected by `lane0` (`.h0` or `.h1`) of `src0` exactly to IEEE-754 FP32 and writes the result to `dest` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/nir.rs:740`); on v11+ use `S32_TO_F32` with `widen0=h0`. (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1992-1995`, `nir.rs:738-749`)',
     },
     'S16_TO_S32': {
         "category": 'Conversions',
-        "behavior": '`dst = sext32(src0.lane0 as i16)`.',
+        "behavior": 'Extracts the signed 16-bit halfword selected by `lane0` (`.h0` or `.h1`) of `src0`, sign-extends it to 32 bits, and writes the result to `dest`.',
         "notes": 'Exact sign extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'S32_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = round_rm(widen_s32(src0) as f32)` (no clamp modifier).',
+        "behavior": 'Converts signed 32-bit integer `src0` (with optional Stage A widening) to IEEE-754 FP32 in `dest`, applying the selected `round` mode (default RNE; no clamp modifier).',
         "notes": 'Supports all 5 rounding modes (`round_extended_m`). (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1960-2010`, `nir.rs:738-749`)',
     },
     'S8_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = (src0.lane0 as i8) as f32` (exact; arch <= v10).',
+        "behavior": 'Converts the signed 8-bit byte selected by `lane0` (`.b0`..`.b3`) of `src0` exactly to IEEE-754 FP32 and writes the result to `dest` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/nir.rs:740`). (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1984-1987`, `nir.rs:738-749`)',
     },
     'S8_TO_S32': {
         "category": 'Conversions',
-        "behavior": '`dst = sext32(src0.lane0 as i8)`.',
+        "behavior": 'Extracts the signed 8-bit byte selected by `lane0` (`.b0`..`.b3`) of `src0`, sign-extends it to 32 bits, and writes the result to `dest`.',
         "notes": 'Exact sign extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'U16_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = (src0.lane0 as u16) as f32` (exact; arch <= v10).',
+        "behavior": 'Converts the unsigned 16-bit integer selected by `lane0` (`.h0` or `.h1`) of `src0` exactly to IEEE-754 FP32 and writes the result to `dest` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/nir.rs:692`); on v11+ use `U32_TO_F32` with `widen0=h0`. (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1996-1999`, `nir.rs:690-701`)',
     },
     'U16_TO_U32': {
         "category": 'Conversions',
-        "behavior": '`dst = zext32(src0.lane0 as u16)`.',
+        "behavior": 'Extracts the unsigned 16-bit halfword selected by `lane0` (`.h0` or `.h1`) of `src0`, zero-extends it to 32 bits, and writes the result to `dest`.',
         "notes": 'Exact zero extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'U32_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = round_rm(widen_u32(src0) as f32)` (no clamp modifier).',
+        "behavior": 'Converts unsigned 32-bit integer `src0` (with optional Stage A widening) to IEEE-754 FP32 in `dest`, applying the selected `round` mode (default RNE; no clamp modifier).',
         "notes": 'Supports all 5 rounding modes (`round_extended_m`). (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1960-2010`, `nir.rs:690-701`)',
     },
     'U8_TO_F32': {
         "category": 'Conversions',
-        "behavior": '`dst = (src0.lane0 as u8) as f32` (exact; arch <= v10).',
+        "behavior": 'Converts the unsigned 8-bit byte selected by `lane0` (`.b0`..`.b3`) of `src0` exactly to IEEE-754 FP32 and writes the result to `dest` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/nir.rs:692`). (`kraid/ops.rs:2575-2600`, `encode_v9.rs:1988-1991`, `nir.rs:690-701`)',
     },
     'U8_TO_U32': {
         "category": 'Conversions',
-        "behavior": '`dst = zext32(src0.lane0 as u8)`.',
+        "behavior": 'Extracts the unsigned 8-bit byte selected by `lane0` (`.b0`..`.b3`) of `src0`, zero-extends it to 32 bits, and writes the result to `dest`.',
         "notes": 'Exact zero extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'V2F16_TO_V2S16': {
@@ -634,7 +634,7 @@ ISA_SEMANTICS = {
     },
     'V2F32_TO_V2F16': {
         "category": 'Conversions',
-        "behavior": 'Two-source v9-v10 conversion: `dst.h0 = round_rm(clamp(src0)) as f16`, `dst.h1 = round_rm(clamp(src1)) as f16`.',
+        "behavior": 'Two-source FP32-to-FP16 packing conversion (v9--v10): clamps and rounds `src0` to FP16 into `dest.h0` and clamps and rounds `src1` to FP16 into `dest.h1` in a single instruction.',
         "notes": 'Arch v9-v10 only (`kraid/nir.rs:653, 676`). Clamp is applied BEFORE f32->f16 rounding (`ops.rs:4629-4638`). (`kraid/ops.rs:4597-4645`, `encode_v9.rs:3462-3482`, `nir.rs:652-689`)',
     },
     'V2S16_TO_V2F16': {
@@ -649,7 +649,7 @@ ISA_SEMANTICS = {
     },
     'V2S8_TO_V2S16': {
         "category": 'Conversions',
-        "behavior": '`dst.h0 = sext16(src0.b[x])`, `dst.h1 = sext16(src0.b[y])`.',
+        "behavior": 'Selects two signed 8-bit bytes from `src0` via `swz0` (default `b02`: bytes 0 and 2), sign-extends each to 16 bits, and writes the packed `v2s16` pair to `dest`.',
         "notes": 'Exact per-lane sign extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'V2U16_TO_V2F16': {
@@ -664,12 +664,12 @@ ISA_SEMANTICS = {
     },
     'V2U8_TO_V2U16': {
         "category": 'Conversions',
-        "behavior": '`dst.h0 = zext16(src0.b[x])`, `dst.h1 = zext16(src0.b[y])`.',
+        "behavior": 'Selects two unsigned 8-bit bytes from `src0` via `swz0` (default `b02`: bytes 0 and 2), zero-extends each to 16 bits, and writes the packed `v2u16` pair to `dest` (respecting `dest_width`).',
         "notes": 'Exact per-lane zero extension. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'ADR': {
         "category": 'Move, Pack & Swizzle',
-        "behavior": '`dst = (pc_32 + 8 + imm1w) as u32` (32-bit PC-relative shader address).',
+        "behavior": 'Computes a 32-bit PC-relative shader code address by adding the signed inline offset `#imm1w` to the address of the following instruction (`PC + 8`) and writes `(PC + 8 + #imm1w) & 0xFFFFFFFF` to `dest`.',
         "notes": 'Destination is **32-bit** (`#[dst_type(I32)]` in `kraid/ops.rs:127`); `imm1w` is byte offset from `PC + 8` (`encode_v9.rs:162-164`). (`kraid/ops.rs:126-141`, `encode_v9.rs:162-164, 582-593`)',
     },
     'MKVEC': {
@@ -679,17 +679,17 @@ ISA_SEMANTICS = {
     },
     'MOV': {
         "category": 'Move, Pack & Swizzle',
-        "behavior": '`dst = src0` (32-bit register-to-register move).',
+        "behavior": 'Copies the 32-bit value `src0` (GPR, FAU uniform, or inline constant) into `dest`, optionally masking the write to `.h0` or `.h1` via `dest_width`.',
         "notes": 'No swizzle or source modifiers (`encode_v9.rs:2821-2856`). (`kraid/ops.rs:3555-3569`, `encode_v9.rs:2821-2856`)',
     },
     'MOV_IMM': {
         "category": 'Move, Pack & Swizzle',
-        "behavior": '`dst = imm1w` (32-bit inline immediate; `i32`/`v2i16`/`v4i8`).',
+        "behavior": 'Loads the inline 32-bit immediate `#imm1w` into `dest` (interpreted as `i32`, `v2i16`, or `v4i8`), optionally masking the write to `.h0` or `.h1` via `dest_width`.',
         "notes": 'Alias of `IADD_IMM` with `src0 = 0`. (`kraid/encode_v9.rs:2842-2847`, `isa-v9-v14.xml`)',
     },
     'SWZ': {
         "category": 'Move, Pack & Swizzle',
-        "behavior": 'Alias of `IADD` with `src1 = 0`: `dst = swz(src0)` (`v2i16` or `v4i8` arch <= v10).',
+        "behavior": 'Permutes packed 16-bit (`v2i16`) or 8-bit (`v4i8`, arch <= v10) lanes of `src0` according to `lanes0` and writes the swizzled vector to `dest`. Encoded as an alias of `IADD` with `src1 = 0`.',
         "notes": 'In kraid, `OpSwz` is a virtual op lowered via copy/`IADD`/`ShiftLop`/`ARShift`/`MKVEC` (`lower_mkvec_swz.rs`). (`kraid/ops.rs:4159-4204`, `lower_mkvec_swz.rs:137-499`, `hw_tests.rs:2239-2289`)',
     },
     'CLPER': {
@@ -704,12 +704,12 @@ ISA_SEMANTICS = {
     },
     'WMASK': {
         "category": 'Subgroup & Cross-Lane',
-        "behavior": 'Subgroup ballot: returns bitmask of active lanes within `subgroup` (`subgroup2/4/8/16`) for which `src0 != 0` (`bifrost/valhall/ISA.xml:172`, `kraid/nir.rs:1885-1893`).',
+        "behavior": 'Computes a subgroup ballot bitmask over active lanes within the hardware subgroup (`subgroup2`, `subgroup4`, `subgroup8`, or `subgroup16`): bit $k$ of `dest` is `1` if lane $k$ is active and its `src0 != 0`, and `0` otherwise.',
         "notes": 'Cross-lane subgroup operation; NOT an identity move! Implements `nir_intrinsic_ballot`. (`kraid/ops.rs:5087-5103`, `encode_v9.rs:3831-3848`, `nir.rs:1885-1893`, `bifrost/valhall/ISA.xml:2172-2188`)',
     },
     'BARRIER': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Workgroup execution & memory barrier (compute/kernel shaders); increments barrier epoch / synchronizes all warps in workgroup.',
+        "behavior": 'Synchronizes execution and workgroup-shared (WLS) memory visibility across all warps in the current compute workgroup; advances the hardware barrier epoch before any warp proceeds past the barrier.',
         "notes": 'Implements `nir_intrinsic_barrier` with `SCOPE_WORKGROUP` (`kraid/nir.rs:1898-1904`). (`kraid/ops.rs:317-327`, `encode_v9.rs:738-746`, `nir.rs:1894-1906`, `bifrost/valhall/ISA.xml:13`)',
     },
     'BRANCH': {
@@ -724,17 +724,17 @@ ISA_SEMANTICS = {
     },
     'DOORBELL': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Job-management hardware doorbell message (system/firmware use; `bifrost/ISA.xml:3851`).',
+        "behavior": 'Issues a privileged hardware CSF doorbell message to the command-stream firmware/job manager (system/firmware use only; no user-shader register operands).',
         "notes": 'Not emitted by graphics/compute compilers; system message side effect. (`bifrost/bifrost/ISA.xml:3851`, `isa-v9-v14.xml`)',
     },
     'EUREKA': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Job-management event notification message (`bifrost/ISA.xml:3855`).',
+        "behavior": 'Signals a privileged hardware job-management event notification to the CSF firmware (system/firmware use only; no user-shader register operands).',
         "notes": 'System/job-management message. (`bifrost/bifrost/ISA.xml:3855`, `isa-v9-v14.xml`)',
     },
     'JUMP': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Conditional indirect jump: `taken = not ? !combine(src0) : combine(src0)`; if `taken`, jumps to absolute 32-bit address `src1` (jumping to `0` terminates shader execution, `lower_blend_call.rs:32`), else `pc + 8`.',
+        "behavior": 'Conditional indirect control transfer: evaluates `taken = not ? !combine(src0) : combine(src0)`. If `taken`, jumps to the shader address in `src1` (absolute or PC-relative per `address_mode`; jumping to address `0` terminates shader execution); otherwise falls through to `PC + 8`.',
         "notes": '`src1` is 32-bit address (`OpJump.address: S32`, `ops.rs:2609`). Used for blend shader calls (`lower_blend_call.rs:51-57`). (`kraid/ops.rs:2605-2630`, `encode_v9.rs:2015-2045`, `lower_blend_call.rs:31-58`)',
     },
     'JUMP_EX': {
@@ -744,12 +744,12 @@ ISA_SEMANTICS = {
     },
     'KABOOM': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Job-management trap/abort message (`bifrost/ISA.xml:6225`).',
+        "behavior": 'Triggers an immediate hardware shader fault/trap message to the CSF job manager; used as an unreachable-code or fatal-assertion sentinel.',
         "notes": 'Triggers hardware fault/abort; not a benign no-op. (`bifrost/bifrost/ISA.xml:6225`, `isa-v9-v14.xml`)',
     },
     'NOP': {
         "category": 'Control Flow, Barriers & System',
-        "behavior": 'Architectural no-op; carries flow control (`.wait`, `.reconverge`, `.end`).',
+        "behavior": 'Architectural no-operation that performs no arithmetic or memory access, used to carry `flow` control actions such as scoreboard waits (`.wait`, `.wait0126`), `.reconverge`, or warp termination (`.end`).',
         "notes": 'No register or memory side effects. (`kraid/ops.rs:3651-3661`, `encode_v9.rs:2887-2895`, `bifrost/valhall/ISA.xml:135`)',
     },
     'LD_CHECKED': {
@@ -759,7 +759,7 @@ ISA_SEMANTICS = {
     },
     'LD_CHECKED_IMM': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Bounds-checked load with immediate offset (`offset_lo`/`offset_hi`) against bound `src2` (v12+).',
+        "behavior": 'Bounds-checked memory load (v12+) at 64-bit base address `src0` plus immediate unsigned byte offset `#offset` (`offset_lo` + `offset_hi`): if `#offset + access_bytes <= src2`, loads into `@sw`; otherwise returns `0` (or leaves `@sw` unchanged when `.oob_ignore` is set on v14).',
         "notes": 'Robust buffer access with immediate offset. (`isa-v9-v14.xml`)',
     },
     'LD_CVT': {
@@ -769,7 +769,7 @@ ISA_SEMANTICS = {
     },
     'LD_GCLK': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Reads 64-bit global hardware clock (`cycle_counter` or `system_timestamp`) into 2 staging registers.',
+        "behavior": 'Reads the 64-bit hardware GPU clock (`cycle_counter` for per-core shader cycles or `system_timestamp` for the cross-core global timestamp) asynchronously into the 2-register staging pair `@sw[0:1]`.',
         "notes": 'Non-deterministic architectural clock read. (`kraid/ops.rs:2767-2797`, `bifrost/valhall/ISA.xml:72`)',
     },
     'LD_MULTI': {
@@ -779,7 +779,7 @@ ISA_SEMANTICS = {
     },
     'LD_PKA': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Loads `i8`..`i128` from buffer descriptor or buffer contents indexed by `handle` (`src1`) at `offset` (`src0`) (`ISA.xml:74`).',
+        "behavior": 'Loads `i8` through `i128` bytes from the buffer descriptor identified by handle `src1` at byte offset `src0` into staging register range `@sw`, with hardware descriptor resolution and bounds checking.',
         "notes": 'If `handle[31:25] == 0x7F`, loads descriptor; if `0`, loads buffer data. (`kraid/ops.rs:2802-2828`, `bifrost/valhall/ISA.xml:74-81`)',
     },
     'LEA_ATTR': {
@@ -789,22 +789,22 @@ ISA_SEMANTICS = {
     },
     'LEA_ATTR_IMM': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Computes effective address + conversion descriptor (3 staging regs) for vertex attribute at immediate `(table, index)`.',
+        "behavior": 'Resolves the Attribute descriptor at immediate `(table=#attribute_table_index, index=#attribute_index)` for `(vertex=src0, instance=src1)` and writes 3 staging registers to `@sw`: `@sw[0:1]` holds the 64-bit attribute GPU VA and `@sw[2]` holds the 32-bit format conversion descriptor for `LD_CVT`/`ST_CVT`.',
         "notes": 'Returns 3 staging registers (`ISA.xml:105`). (`bifrost/valhall/ISA.xml:105`, `isa-v9-v14.xml`)',
     },
     'LEA_BUF': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Computes 64-bit effective address of buffer descriptor at dynamic handle + offset.',
+        "behavior": 'Resolves the Buffer descriptor identified by dynamic handle `src1`, adds byte offset (or vertex index) `src0`, and writes the resulting 64-bit GPU virtual address into the 2-register staging pair `@sw[0:1]`.',
         "notes": 'Returns 64-bit address in 2 staging registers. (`kraid/ops.rs:3161-3185`, `bifrost/valhall/ISA.xml:107`)',
     },
     'LEA_BUF_IMM': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Computes 64-bit effective address of buffer at immediate `(table, index)` + offset.',
+        "behavior": 'Resolves the Buffer descriptor at immediate `(table=#buffer_table_index, index=#buffer_index)`, adds byte offset (or vertex index) `src0`, and writes the resulting 64-bit GPU virtual address into `@sw[0:1]`.',
         "notes": 'Immediate-handle form of `LEA_BUF`. (`bifrost/valhall/ISA.xml:109`, `isa-v9-v14.xml`)',
     },
     'LEA_PKA': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Computes 64-bit effective address of simple/PKA buffer + offset.',
+        "behavior": 'Resolves the simple/PKA buffer descriptor identified by handle `src1`, adds byte offset `src0`, and writes the resulting 64-bit GPU virtual address into the 2-register staging pair `@sw[0:1]`.',
         "notes": 'Address-generation companion to `LD_PKA`. (`kraid/ops.rs:3187-3211`, `bifrost/valhall/ISA.xml:111`)',
     },
     'LEA_TEX': {
@@ -814,7 +814,7 @@ ISA_SEMANTICS = {
     },
     'LEA_TEX_IMM': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Computes effective address + conversion descriptor (3 staging regs) for image texel at immediate `(table, index)`.',
+        "behavior": 'Resolves the Image/Texture descriptor at immediate `(table=#texture_table_index, index=#texture_index)` for coordinates `(xy=src0, z=src1)` and writes 3 staging registers to `@sw`: `@sw[0:1]` holds the 64-bit texel GPU VA and `@sw[2]` holds the 32-bit format conversion descriptor for `LD_CVT`/`ST_CVT`.',
         "notes": 'Immediate-handle form of `LEA_TEX` (`ISA.xml:115`). (`bifrost/valhall/ISA.xml:115`, `isa-v9-v14.xml`)',
     },
     'LOAD': {
@@ -834,7 +834,7 @@ ISA_SEMANTICS = {
     },
     'ST_CHECKED_IMM': {
         "category": 'Memory Load / Store & LEA',
-        "behavior": 'Bounds-checked store with immediate offset (`offset_lo`/`offset_hi`) against bound `src2` (v12+); OOB stores are dropped.',
+        "behavior": 'Bounds-checked memory store (v12+) at 64-bit base address `src0` plus immediate unsigned byte offset `#offset` (`offset_lo` + `offset_hi`): if `#offset + access_bytes <= src2`, writes `@sr` to memory; out-of-bounds stores are silently dropped.',
         "notes": 'Robust buffer access store with immediate offset. (`isa-v9-v14.xml`)',
     },
     'ST_CVT': {
@@ -864,7 +864,7 @@ ISA_SEMANTICS = {
     },
     'ATOM1_RETURN': {
         "category": 'Atomics',
-        "behavior": 'Unary atomic RMW (`i32`/`i64`) at `src0 + offset` with op `atom1_opc`; returns pre-modification value in `sr_dst`.',
+        "behavior": 'Executes a unary atomic read-modify-write (`i32` or `i64`, selected by `atom1_opc`: `ainc`, `adec`, `asmax1`, `aumax1`, `aor1`) at GPU VA `src0 + #offset` and returns the pre-modification memory value in `@sw`.',
         "notes": 'Returns old value in `sr_dst`. (`kraid/ops.rs:281-313`, `encode_v9.rs:725-735`)',
     },
     'ATOM_RETURN': {
@@ -874,12 +874,12 @@ ISA_SEMANTICS = {
     },
     'AXCHG': {
         "category": 'Atomics',
-        "behavior": 'Atomic exchange (`i32`/`i64`) at `src0 + offset`: swaps `*addr` with `sr_src` and returns old `*addr` in `sr_dst`.',
+        "behavior": 'Atomically swaps the 32-bit or 64-bit memory location at GPU VA `src0 + #offset` with the replacement value in `@sr` and returns the previous memory value in `@sw`.',
         "notes": 'Encoded from `OpAtom { atom_op: AtomOp::Xchg }` (`encode_v9.rs:679-688`). (`kraid/ops.rs:186, 242-276`, `encode_v9.rs:679-688`)',
     },
     'ATEST': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Alpha-to-coverage test: updates coverage mask `sr_dst` (pinned `r60`) from `(coverage=src0 [r60], alpha=src1 [f32], datum=src2)`.',
+        "behavior": 'Performs hardware alpha-to-coverage and early-Z coverage update in fragment shaders: evaluates `(coverage=src0 [r60], alpha=src1 [f32], datum=src2 [atest_datum])` and writes the updated MSAA sample coverage mask to `@sw` (pinned `r60`). Does not implicitly discard helper lanes.',
         "notes": 'Does NOT implicitly discard; must precede `ZS_EMIT`/`BLEND` (`ISA.xml:2`). (`kraid/ops.rs:145-173`, `encode_v9.rs:595-618`, `bifrost/valhall/ISA.xml:2`)',
     },
     'BLEND': {
@@ -894,7 +894,7 @@ ISA_SEMANTICS = {
     },
     'LD_ATTR_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Loads `vecsize` components from attribute descriptor at immediate `(table, index)` for `(vertex_id, instance_id)`.',
+        "behavior": 'Fetches `vecsize` vertex-attribute components for `(vertex=src0, instance=src1)` from the Attribute descriptor at immediate `(table=#attribute_table_index, index=#attribute_index)`, converts them to `register_format`, and writes them into `@sw`.',
         "notes": 'Immediate-handle form of `LD_ATTR` (`ISA.xml:68`). (`bifrost/valhall/ISA.xml:68`, `isa-v9-v14.xml`)',
     },
     'LD_TEX': {
@@ -904,7 +904,7 @@ ISA_SEMANTICS = {
     },
     'LD_TEX_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Loads `vecsize` components from image/texture descriptor at immediate `(table, index)`.',
+        "behavior": 'Reads `vecsize` texel components at integer coordinates `(xy=src0, z=src1)` from the Image/Texture descriptor at immediate `(table=#texture_table_index, index=#texture_index)`, converts them to `register_format`, and writes them into `@sw`.',
         "notes": 'Immediate-handle form of `LD_TEX` (`ISA.xml:85`). (`bifrost/valhall/ISA.xml:85`, `isa-v9-v14.xml`)',
     },
     'LD_TILE': {
@@ -929,37 +929,37 @@ ISA_SEMANTICS = {
     },
     'LD_VAR_BUF_FLAT_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Immediate-offset form of `LD_VAR_BUF_FLAT`.',
+        "behavior": 'Fetches an uninterpolated (flat) provoking-vertex varying from the descriptor-less varying buffer at immediate byte offset `#offset` into `@sw` without interpolation or format conversion.',
         "notes": 'Descriptor-less flat varying fetch (`ISA.xml:93`). (`bifrost/valhall/ISA.xml:93`, `isa-v9-v14.xml`)',
     },
     'LD_VAR_BUF_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Immediate-offset form of `LD_VAR_BUF`.',
+        "behavior": 'Interpolates a fragment varying from the descriptor-less varying buffer at immediate byte offset `#offset` using pixel/sample coordinate `src0`, converting from `source_format` to `register_format` into `@sw` and updating the barycentric cache per `update_mode`.',
         "notes": 'Descriptor-less varying interpolation. (`isa-v9-v14.xml`)',
     },
     'LD_VAR_FLAT': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Fetches uninterpolated (flat) varying via descriptor at dynamic handle (`src0`) without format conversion.',
+        "behavior": 'Fetches an uninterpolated (flat) varying from the varying descriptor identified by dynamic handle `src0` for the selected triangle `vertex` (`vertex0`/`vertex1`/`vertex2`) into `@sw` without format conversion.',
         "notes": 'Software varying buffer flat fetch (`ops.rs:3073-3100`). (`kraid/ops.rs:3073-3100`, `bifrost/valhall/ISA.xml:95`)',
     },
     'LD_VAR_FLAT_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Immediate-handle form of `LD_VAR_FLAT`.',
+        "behavior": 'Fetches an uninterpolated (flat) varying from the varying descriptor at immediate `(table=#varying_table_index, index=#varying_index)` for the selected triangle `vertex` into `@sw` without format conversion.',
         "notes": 'Software varying buffer flat fetch (`ISA.xml:97`). (`bifrost/valhall/ISA.xml:97`, `isa-v9-v14.xml`)',
     },
     'LD_VAR_IMM': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Immediate-handle form of `LD_VAR`.',
+        "behavior": 'Interpolates `vecsize` varying components from the varying descriptor at immediate `(table=#varying_table_index, index=#varying_index)` at pixel/sample coordinate `src0`, converting to `register_format` into `@sw` and caching/reusing barycentrics per `update_mode`.',
         "notes": 'Software varying buffer interpolation (`ISA.xml:99`). (`bifrost/valhall/ISA.xml:99`, `isa-v9-v14.xml`)',
     },
     'LD_VAR_SPECIAL': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Loads fixed-function special varying (`point` coord, `bary` coords, `frag_w`, or `frag_z`) at `sample_position`.',
+        "behavior": 'Reads a fixed-function rasterizer varying selected by `varying_name` (`point` for `gl_PointCoord`, `bary` for barycentric coordinates, `frag_w` for `gl_FragCoord.w`, or `frag_z` for `gl_FragCoord.z`) at `sample_position` (`src0`) into `@sw`.',
         "notes": '`frag_z` does not support `explicit` sample position (`ops.rs:3111`). (`kraid/ops.rs:3104-3150`, `isa-v9-v14.xml`)',
     },
     'ST_TILE': {
         "category": 'Attributes, Varyings & Fragment',
-        "behavior": 'Stores `sr_src` pixel color to tilebuffer at `(pixel=src0, coverage=src1, conversion=src2)` with format conversion.',
+        "behavior": 'Encodes `vecsize` color components from `@sr` using `register_format` and the tilebuffer conversion descriptor in `src2`, and stores the result into on-chip tile color SRAM at pixel `src0` masked by sample coverage `src1`.',
         "notes": 'Used internally in blend shaders (`ISA.xml:144`). (`kraid/ops.rs:4118-4146`, `encode_v9.rs:3142-3165`, `bifrost/valhall/ISA.xml:144`)',
     },
     'ZS_EMIT': {
@@ -974,17 +974,17 @@ ISA_SEMANTICS = {
     },
     'TEX_FETCH': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Unfiltered integer-coordinate texel fetch (`texelFetch`) with optional array layer and texel offset.',
+        "behavior": 'Performs an unfiltered integer-coordinate texel fetch (`texelFetch`) from texture descriptor `src0` using integer coordinates `(x, [y], [z/layer], [lod/sample])` in `@sr`, writing `write_mask` channels into `@sw`.',
         "notes": 'No sampler filtering (`ISA.xml:148`). (`kraid/ops.rs:4393-4435`, `bifrost/valhall/ISA.xml:148`)',
     },
     'TEX_GATHER': {
         "category": 'Texture & Varying-Texture',
-        "behavior": '2x2 footprint texture gather returning 4 values of `gather_component` (`r`/`g`/`b`/`a`) with optional shadow compare.',
+        "behavior": 'Samples the 2x2 bilinear footprint around floating-point UV coordinates in `@sr` from texture descriptor `src0` and returns the 4 values of the selected `gather_component` (`r`/`g`/`b`/`a`, or shadow compare results when `.compare` is set) into `@sw`.',
         "notes": '2D/Cube only (`ISA.xml:150`). (`kraid/ops.rs:4437-4482`, `bifrost/valhall/ISA.xml:150`)',
     },
     'TEX_GRADIENT': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Texture sample with explicit `dPdx`/`dPdy` gradients in `sr_src` (or computes implicit LOD/derivatives).',
+        "behavior": 'Samples texture descriptor `src0` using explicit `(dPdx, dPdy)` screen-space gradients packed in `@sr` (`textureGrad`), or—when `.disable_lod_clamp` / `.derivative` is set—returns the hardware-computed 8.8 fixed-point mipmap LOD (`textureQueryLod`) or derivatives into `@sw`.',
         "notes": 'Supports explicit gradient sampling (`ISA.xml:152`). (`kraid/ops.rs:4504-4549`, `bifrost/valhall/ISA.xml:152`)',
     },
     'TEX_SINGLE': {
@@ -999,42 +999,42 @@ ISA_SEMANTICS = {
     },
     'VAR_TEX_BUF_DUAL': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused varying-buffer interpolation (`src2`) + `TEX_DUAL` (`src0`).',
+        "behavior": 'Fuses descriptor-less varying-buffer UV interpolation (at byte offset `src2`) with a dual texture sample (`TEX_DUAL` via handle `src0`), writing both 4-component sample results into `@sw` in a single message.',
         "notes": 'Fragment-only (`encode_v9.rs:3535-3585`). (`kraid/ops.rs:4649-4708`, `encode_v9.rs:3535-3585`, `bifrost/valhall/ISA.xml:155`)',
     },
     'VAR_TEX_BUF_GATHER': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused varying-buffer interpolation (`src2`) + `TEX_GATHER` (`src0`).',
+        "behavior": 'Fuses descriptor-less varying-buffer UV interpolation (at byte offset `src2`) with a 2x2 texture gather (`TEX_GATHER` via handle `src0`), writing the 4 gathered component values into `@sw` in a single message.',
         "notes": 'Fragment-only; 2D (`encode_v9.rs:3587-3618`). (`kraid/ops.rs:4710-4762`, `encode_v9.rs:3587-3618`, `bifrost/valhall/ISA.xml:157`)',
     },
     'VAR_TEX_BUF_GRADIENT': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused varying-buffer interpolation (`src2`) + `TEX_GRADIENT` (`src0`).',
+        "behavior": 'Fuses descriptor-less varying-buffer UV interpolation (at byte offset `src2`) with a texture gradient/LOD operation (`TEX_GRADIENT` via handle `src0`), writing the result into `@sw` in a single message.',
         "notes": 'Fragment-only (`encode_v9.rs:3620-3650`). (`kraid/ops.rs:4764-4817`, `encode_v9.rs:3620-3650`, `bifrost/valhall/ISA.xml:159`)',
     },
     'VAR_TEX_BUF_SINGLE': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused descriptor-less varying buffer interpolation (`src2` offset, `source_format` f32/f16 on v10+) + `TEX_SINGLE` (`src0`).',
+        "behavior": 'Fuses descriptor-less varying-buffer UV interpolation (at byte offset `src2`, `source_format` f32/f16 on v10+) with a filtered texture sample (`TEX_SINGLE` via handle `src0`), writing the sampled texel into `@sw` in a single message.',
         "notes": 'Fragment-only (`encode_v9.rs:3519-3533, 3652-3683`). (`kraid/ops.rs:4819-4870`, `encode_v9.rs:3652-3683`, `bifrost/valhall/ISA.xml:161`)',
     },
     'VAR_TEX_DUAL': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused descriptor-varying interpolation (`src2`) + `TEX_DUAL` (`src0`).',
+        "behavior": 'Fuses descriptor-based varying UV interpolation (via varying handle `src2`) with a dual texture sample (`TEX_DUAL` via texture handle `src0`), writing both sample results into `@sw` in a single message.',
         "notes": 'Fragment-only; FP32 varyings (`ISA.xml:163`). (`kraid/ops.rs:4872-4929`, `encode_v9.rs:3685-3734`, `bifrost/valhall/ISA.xml:163`)',
     },
     'VAR_TEX_GATHER': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused descriptor-varying interpolation (`src2`) + `TEX_GATHER` (`src0`).',
+        "behavior": 'Fuses descriptor-based varying UV interpolation (via varying handle `src2`) with a 2x2 texture gather (`TEX_GATHER` via texture handle `src0`), writing the 4 gathered component values into `@sw` in a single message.',
         "notes": 'Fragment-only; 2D (`encode_v9.rs:3749`). (`kraid/ops.rs:4931-4981`, `encode_v9.rs:3736-3766`, `bifrost/valhall/ISA.xml:165`)',
     },
     'VAR_TEX_GRADIENT': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused descriptor-varying interpolation (`src2`) + `TEX_GRADIENT` (`src0`).',
+        "behavior": 'Fuses descriptor-based varying UV interpolation (via varying handle `src2`) with a texture gradient/LOD operation (`TEX_GRADIENT` via texture handle `src0`), writing the result into `@sw` in a single message.',
         "notes": 'Fragment-only; FP32 varyings (`ISA.xml:167`). (`kraid/ops.rs:4983-5034`, `encode_v9.rs:3768-3797`, `bifrost/valhall/ISA.xml:167`)',
     },
     'VAR_TEX_SINGLE': {
         "category": 'Texture & Varying-Texture',
-        "behavior": 'Fused descriptor-varying interpolation (`src2`) + `TEX_SINGLE` (`src0`).',
+        "behavior": 'Fuses descriptor-based varying UV interpolation (via varying handle `src2`) with a filtered texture sample (`TEX_SINGLE` via texture handle `src0`), writing the sampled texel into `@sw` in a single message.',
         "notes": 'Fragment-only; FP32 varyings (`ISA.xml:169`). (`kraid/ops.rs:5036-5083`, `encode_v9.rs:3799-3829`, `bifrost/valhall/ISA.xml:169`)',
     },
 }

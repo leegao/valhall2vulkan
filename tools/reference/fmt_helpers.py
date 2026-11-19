@@ -110,10 +110,11 @@ def fmt_colored_syntax(ins_el) -> str:
         elif ch.tag == "dest":
             dm = "".join(r"\imod{\{." + tex_esc(m.attrib["name"]) + r"\}}" for m in ch.findall("modifier"))
             ops_tex.append(r"\dst{dest}" + dm)
-        elif ch.tag == "sr":
+        elif ch.tag in ("sr", "staging"):
             nm = ch.attrib.get("name", "sr")
+            direction = ch.attrib.get("direction", "")
             sm = "".join(r"\imod{\{." + tex_esc(m.attrib["name"]) + r"\}}" for m in ch.findall("modifier"))
-            if "write" in nm or nm in ("sw", "sr_dst"):
+            if direction == "output" or "write" in nm or nm in ("sw", "sr_dst"):
                 ops_tex.append(r"\dst{@" + tex_esc(nm) + "}" + sm)
             else:
                 ops_tex.append(r"\src{@" + tex_esc(nm) + "}" + sm)

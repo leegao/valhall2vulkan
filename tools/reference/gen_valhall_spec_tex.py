@@ -16,6 +16,8 @@ from pathlib import Path
 
 from . import csf_abi_map
 from . import isa_semantics
+from . import mined_examples
+from . import operands_doc
 from . import v3_enrichments as v3e
 from .fmt_helpers import (
     fmt_colored_syntax,
@@ -56,14 +58,16 @@ INSTRUCTION_ENTRY_TEMPLATE = r'''\subsection*{%%%%%~~~$MNEM_TEX~~~%%%%%}
 %%%%%~~~$BEHAVIOR~~~%%%%%
 %%%%%~~~$NOTES~~~%%%%%
 \codebox{%%%%%~~~$SYNTAX_BODY~~~%%%%%}
-\textbf{Closest SPIR-V Op:} \texttt{%%%%%~~~$SPIRV_OP~~~%%%%%}
-\par\textbf{Equivalent GLSL (Operational Semantics \& Flag Variants):}
-\codebox{%%%%%~~~$EQUIV_GLSL~~~%%%%%}
+%%%%%~~~$OPERANDS_LIST~~~%%%%%
+\par\textbf{Closest SPIR-V Op:} \texttt{%%%%%~~~$SPIRV_OP~~~%%%%%}
+\par\textbf{Pseudo-GLSL (Operational Semantics):}
+\codebox{%%%%%~~~$PSEUDO_GLSL~~~%%%%%}
 \textbf{Execution Context:}
 \begin{tightitemize}\footnotesize
 %%%%%~~~$EXEC_CONTEXT~~~%%%%%
 \end{tightitemize}
 %%%%%~~~$WORKED_EXAMPLES~~~%%%%%
+%%%%%~~~$MINED_EXAMPLE~~~%%%%%
 \begin{center}\footnotesize
 \begin{tabularx}{\linewidth}{@{}lllX@{}}
 \toprule
@@ -175,6 +179,7 @@ def parse_instructions(root: ET.Element) -> dict[str, list[dict]]:
             "opcodes": ", ".join(opcodes) if opcodes else "--",
             "fields": fields,
             "syntax_tex": fmt_colored_syntax(ins),
+            "ins_el": ins,
         })
     return mnem_specs
 
@@ -285,7 +290,7 @@ def build_instruction_reference(mnem_specs: dict[str, list[dict]], ch2_enums: se
             specs = mnem_specs[mn]
             beh, note = isa_semantics.behavior_of(mn)
             spv_op, _legacy_glsl, examples = isa_semantics.extras_of(mn)
-            equiv_glsl_tex = csf_abi_map.equiv_glsl_tex(mn)
+            pseudo_glsl_tex = csf_abi_map.pseudo_glsl_tex(mn)
             exec_ctx_tex = csf_abi_map.render_execution_context_tex(mn, cat)
 
             seen_syn: list[str] = []
@@ -305,14 +310,20 @@ def build_instruction_reference(mnem_specs: dict[str, list[dict]], ch2_enums: se
                         "BEHAVIOR": md_inline_to_tex(beh) if beh else "",
                         "NOTES": fmt_notes_tex(note) if note else "",
                         "SYNTAX_BODY": syn_body,
+                        "OPERANDS_LIST": operands_doc.render_operands_list_tex(
+                            mn,
+                            [sp["ins_el"] for sp in specs],
+                            {f[3] for sp in specs for f in sp["fields"]},
+                        ),
                         "SPIRV_OP": tex_esc(spv_op),
-                        "EQUIV_GLSL": equiv_glsl_tex,
+                        "PSEUDO_GLSL": pseudo_glsl_tex,
                         "EXEC_CONTEXT": exec_ctx_tex,
                         "WORKED_EXAMPLES": render_walkthroughs_tex(
                             examples,
                             heading_singular="Worked Example:",
                             heading_plural="Worked Examples:",
                         ),
+                        "MINED_EXAMPLE": mined_examples.render_mined_example_tex(mn),
                         "VARIANT_ROWS": render_variant_table_rows(specs),
                         "FIELD_ROWS": render_field_table_rows(rep["fields"], ch2_enums),
                         "FIELDS_EXPLAINED": render_fields_explained_items(

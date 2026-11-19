@@ -12,6 +12,8 @@ from tools.reference import csf_abi_map
 from tools.reference import fmt_helpers
 from tools.reference import gen_valhall_spec_tex as gen
 from tools.reference import isa_semantics
+from tools.reference import mined_examples
+from tools.reference import operands_doc
 from tools.reference import v3_enrichments as v3e
 
 
@@ -23,33 +25,65 @@ class TestValhallIsaReference(unittest.TestCase):
         cls.mnem_specs = gen.parse_instructions(cls.xml_root)
 
     def test_modular_refactor_boundaries(self) -> None:
-        """Semantics live in isa_semantics, formatting in fmt_helpers, Execution Context & GLSL in csf_abi_map."""
+        """Semantics live in isa_semantics, formatting in fmt_helpers, Execution Context & Pseudo-GLSL in csf_abi_map."""
         for attr in ("CAT_ORDER", "ISA_SEMANTICS", "INST_EXTRAS", "_SH_META", "_LOP_META", "KEY_ENUMS", "SECONDARY_ENUM_WALKTHROUGHS"):
             self.assertTrue(hasattr(isa_semantics, attr), f"isa_semantics missing {attr}")
         for attr in ("tex_esc", "md_inline_to_tex", "fmt_colored_syntax", "fmt_asm_line", "render_template", "split_notes", "fmt_notes_tex"):
             self.assertTrue(hasattr(fmt_helpers, attr), f"fmt_helpers missing {attr}")
-        for attr in ("equiv_glsl_tex", "execution_context_bullets", "render_execution_context_tex", "csf_abi_for_enum"):
+        for attr in ("pseudo_glsl_tex", "equiv_glsl_tex", "execution_context_bullets", "render_execution_context_tex", "csf_abi_for_enum"):
             self.assertTrue(hasattr(csf_abi_map, attr), f"csf_abi_map missing {attr}")
+        self.assertTrue(hasattr(operands_doc, "render_operands_list_tex"))
+        self.assertTrue(hasattr(mined_examples, "render_mined_example_tex"))
         self.assertIn("%%%%%~~~$MNEM_TEX~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
-        self.assertIn("%%%%%~~~$EQUIV_GLSL~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
+        self.assertIn("%%%%%~~~$OPERANDS_LIST~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
+        self.assertIn("%%%%%~~~$PSEUDO_GLSL~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
+        self.assertIn("%%%%%~~~$MINED_EXAMPLE~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
         self.assertIn("%%%%%~~~$EXEC_CONTEXT~~~%%%%%", gen.INSTRUCTION_ENTRY_TEMPLATE)
         self.assertNotIn("Exact Corresponding Valhall", gen.INSTRUCTION_ENTRY_TEMPLATE)
+        self.assertNotIn("Equivalent GLSL", gen.INSTRUCTION_ENTRY_TEMPLATE)
         self.assertIn(r"\clearpage", gen.INSTRUCTION_ENTRY_TEMPLATE)
 
-    def test_all_mnemonics_have_self_contained_behavior_examples_glsl_and_ctx(self) -> None:
-        """Every canonical mnemonic has self-contained behavior (no vague Per-lane), >=2 examples, Equiv GLSL, and bulleted Execution Context."""
+    def test_all_mnemonics_have_clear_behavior_operands_pseudo_glsl_and_ctx(self) -> None:
+        """Every canonical mnemonic has clear behavior (no nested backticks / no dst mismatch), Operands list, >=2 examples, Pseudo-GLSL, and Execution Context."""
         self.assertEqual(isa_semantics.missing_semantics(self.mnem_specs), [])
         for mn in sorted(self.mnem_specs):
             beh, _note = isa_semantics.behavior_of(mn)
             self.assertNotIn("Per-lane", beh, f"Vague 'Per-lane' remaining in {mn} behavior")
+            self.assertNotIn("``", beh, f"Nested backticks in {mn} behavior: {beh}")
+            self.assertEqual(beh.count("`") % 2, 0, f"Unbalanced backticks in {mn} behavior: {beh}")
+            self.assertNotIn("`dst`", beh, f"Use `dest` instead of `dst` in {mn} behavior")
+            self.assertNotIn("dst =", beh, f"Use `dest =` instead of `dst =` in {mn} behavior")
             self.assertIn(mn, isa_semantics.INST_EXTRAS, f"Missing INST_EXTRAS for {mn}")
             spv, _glsl, examples = isa_semantics.extras_of(mn)
             self.assertTrue(spv, f"Empty SPIR-V op for {mn}")
             self.assertGreaterEqual(len(examples), 2, f"Expected >= 2 worked examples for {mn}")
-            equiv_glsl = csf_abi_map.equiv_glsl_tex(mn)
-            self.assertTrue(equiv_glsl.strip(), f"Empty Equivalent GLSL for {mn}")
+            pseudo_glsl = csf_abi_map.pseudo_glsl_tex(mn)
+            self.assertTrue(pseudo_glsl.strip(), f"Empty Pseudo-GLSL for {mn}")
             bullets = csf_abi_map.execution_context_bullets(mn, isa_semantics.category_of(mn))
             self.assertGreaterEqual(len(bullets), 1, f"Empty Execution Context bullets for {mn}")
+            rep = self.mnem_specs[mn][0]
+            op_tex = operands_doc.render_operands_list_tex(mn, rep["ins_el"], {f[3] for f in rep["fields"]})
+            self.assertIn(r"\textbf{Operands:}", op_tex, f"Missing Operands list for {mn}")
+
+    def test_staging_syntax_uses_at_prefix(self) -> None:
+        """<staging> operands in XML must render as @sw/@sr, never as #sw/#sr immediates."""
+        load_syn = self.mnem_specs["LOAD"][0]["syntax_tex"]
+        self.assertIn(r"\dst{@sw}", load_syn)
+        self.assertNotIn(r"\#sw", load_syn)
+        store_syn = self.mnem_specs["STORE"][0]["syntax_tex"]
+        self.assertIn(r"\src{@sr}", store_syn)
+        self.assertNotIn(r"\#sr", store_syn)
+        tex_syn = self.mnem_specs["TEX_SINGLE"][0]["syntax_tex"]
+        self.assertIn(r"\dst{@sw}", tex_syn)
+        self.assertIn(r"\src{@sr}", tex_syn)
+
+    def test_mined_spirv_examples_coverage(self) -> None:
+        """Mined SPIR-V -> Valhall ISA examples cover common, confusing, and specialized instructions."""
+        self.assertGreaterEqual(len(mined_examples.MINED_SPIRV_EXAMPLES), 50)
+        for mn in ("FMA", "FEXP", "FADD_LSCALE", "CUBEFACE1", "CUBEFACE2", "CLPER", "LD_CHECKED", "LEA_TEX_IMM", "ZS_EMIT", "TEX_GATHER", "TEX_GRADIENT"):
+            self.assertIn(mn, mined_examples.MINED_SPIRV_EXAMPLES, f"Expected mined example for {mn}")
+            rendered = mined_examples.render_mined_example_tex(mn)
+            self.assertIn("Mined SPIR-V", rendered)
 
     def test_all_xml_fields_have_documentation(self) -> None:
         """Every non-reserved <field> across all 627 XML instruction specs must be documented."""
@@ -90,7 +124,7 @@ class TestValhallIsaReference(unittest.TestCase):
         self.assertEqual(multi.count(r"\item "), 3)
 
     def test_generated_tex_invariants_and_backlinks(self) -> None:
-        """End-to-end check: anchors, Equiv GLSL, bulleted Execution Context, Section 1.4 ABI & traces, backlinks, A.2 table."""
+        """End-to-end check: anchors, Operands, Pseudo-GLSL, Mined Examples, Execution Context, backlinks, A.2 table."""
         with tempfile.TemporaryDirectory() as tmpdir:
             out_tex = Path(tmpdir) / "valhall-isa-reference.tex"
             stats = gen.generate(out_tex=out_tex)
@@ -101,11 +135,14 @@ class TestValhallIsaReference(unittest.TestCase):
         self.assertEqual(re.findall(r"%%%%%~~~\$[A-Z0-9_]+~~~%%%%%", tex), [])
         self.assertNotIn("Uncommon Fields Explained", tex)
         self.assertNotIn(r"\textbf{Inducing GLSL:}", tex)
+        self.assertNotIn(r"\textbf{Equivalent GLSL (Operational Semantics \& Flag Variants):}", tex)
         self.assertNotIn(r"\textbf{Exact Corresponding Valhall Instruction(s):}", tex)
         self.assertNotIn(r"\textbf{CSF ABI / Descriptor Sideband Consumers:}", tex)
         self.assertEqual(tex.count(r"\textbf{Fields Explained:}"), n_mns)
-        self.assertEqual(tex.count(r"\textbf{Equivalent GLSL (Operational Semantics \& Flag Variants):}"), n_mns)
+        self.assertEqual(tex.count(r"\textbf{Operands:}"), n_mns)
+        self.assertEqual(tex.count(r"\textbf{Pseudo-GLSL (Operational Semantics):}"), n_mns)
         self.assertGreaterEqual(tex.count(r"\textbf{Execution Context:}"), n_mns)
+        self.assertGreaterEqual(tex.count(r"Mined SPIR-V $\to$ Valhall ISA Example"), 50)
 
         # CSF ABI is Section 1.4 inside Chapter 1 (before Chapter 2), NOT Chapter 4
         ch1_pos = tex.index(r"\chapter{Architecture Overview}")

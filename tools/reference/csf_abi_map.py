@@ -1,10 +1,11 @@
-"""Execution Context (CSF ABI) bullet mappings and syntax-aligned Equivalent GLSL
-operational semantics (with flag variants) for every canonical Valhall mnemonic
-and relevant Chapter 2 modifier enum.
+"""Execution Context (CSF ABI) bullet mappings and syntax-aligned Pseudo-GLSL
+operational semantics for every canonical Valhall mnemonic and relevant Chapter 2
+modifier enum.
 
-All Equivalent GLSL snippets are written directly in terms of the instruction's
-XML <syntax> operand and modifier names (dest, src0, src1, src2, src3, @sr,
-#offset, #imm, cmpf, result_type, saturate, clamp, round, etc.).
+All Pseudo-GLSL snippets express operational semantics as GLSL-flavored pseudocode
+written directly in terms of each instruction's XML <syntax> operands and
+modifiers (dest, @sw, @sr, src0..src3, #offset, #imm1w, #shift, cmpf,
+result_type, saturate, clamp, round, etc.).
 """
 
 from __future__ import annotations
@@ -12,497 +13,788 @@ from __future__ import annotations
 from .fmt_helpers import tex_esc
 
 # ============================================================================
-# 1. Syntax-Aligned Equivalent GLSL (Operational Semantics & Flag Variants)
+# 1. Syntax-Aligned Pseudo-GLSL (Operational Semantics)
 # ============================================================================
-_EQUIV_GLSL: dict[str, list[str]] = {
+_PSEUDO_GLSL: dict[str, list[str]] = {
     # 1. Integer Arithmetic
     "BITREV": [
-        "dest = bitfieldReverse(src0); // dest[k] = src0[31 - k] for k in 0..31",
+        "uint out_bits = 0u;",
+        "for (int k = 0; k < 32; ++k) out_bits |= ((src0 >> k) & 1u) << (31 - k);",
+        "dest = out_bits; // equivalent to bitfieldReverse(src0)",
     ],
     "CLZ": [
-        "// default:       dest[i] = (src0[i] == 0u) ? W : uint(W - 1 - findMSB(src0[i]));",
-        "// .mask:         dest[i] = (src0[i] == 0u) ? ~0u : uint(W - 1 - findMSB(src0[i]));",
+        "for (int i = 0; i < N; ++i) {",
+        "    if (src0[i] == 0u) dest[i] = flag_mask ? ~0u : uint(W);",
+        "    else               dest[i] = uint(W - 1 - findMSB(src0[i]));",
+        "}",
     ],
     "HADD": [
-        "// .round_down:   dest[i] = (ext(src0[i]) + ext(src1[i])) >> 1; // exact (W+1)-bit sum",
-        "// .round_up:     dest[i] = (ext(src0[i]) + ext(src1[i]) + 1) >> 1;",
+        "for (int i = 0; i < N; ++i) {",
+        "    int64_t sum = ext(src0[i]) + ext(src1[i]) + (round == round_up ? 1 : 0);",
+        "    dest[i] = T(sum >> 1); // exact (W+1)-bit sum, no overflow",
+        "}",
     ],
     "IABS": [
-        "dest[i] = (src0[i] < 0) ? uint(-src0[i]) : uint(src0[i]); // wraps INT_MIN -> INT_MIN",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = (src0[i] < 0) ? uint(-src0[i]) : uint(src0[i]); // INT_MIN wraps",
     ],
     "IADD": [
-        "// default:       dest[i] = widen0(src0)[i] + widen1(src1)[i]; // wrapping mod 2^W",
-        "// .sat (s32):    dest[i] = clamp(int64_t(widen0(src0)[i]) + int64_t(widen1(src1)[i]), MIN_W, MAX_W);",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto sum = ext(widen0(src0)[i]) + ext(widen1(src1)[i]);",
+        "    dest[i] = flag_sat ? clamp(sum, MIN_W, MAX_W) : wrap_W(sum);",
+        "}",
     ],
     "IADDC": [
-        "// default:       dest = uint((uint64_t(src0) + uint64_t(src1) + uint64_t(src2 & 1u)) & 0xFFFFFFFFul);",
-        "// .c:            dest = uint((uint64_t(src0) + uint64_t(src1) + uint64_t(src2 & 1u)) >> 32);",
+        "uint64_t sum = uint64_t(src0) + uint64_t(src1) + uint64_t(src2 & 1u);",
+        "dest = (return_carry == c) ? uint(sum >> 32) : uint(sum & 0xFFFFFFFFul);",
     ],
     "IADD_IMM": [
-        "dest[i] = src0[i] + imm1w[i]; // per-element wrapping add with inline 32-bit immediate",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = wrap_W(src0[i] + #imm1w[i]); // MOV_IMM when src0 == k0",
     ],
     "IDPADD": [
-        "// default:       dest = src2 + sum_{k=0..3}(ext(src0.b[k]) * ext(src1.b[k])); // wrapping",
-        "// .sat:          dest = clamp(int64_t(src2) + int64_t(dot4x8(src0, src1)), MIN_32, MAX_32);",
+        "int64_t acc = int64_t(src2);",
+        "for (int k = 0; k < 4; ++k) acc += ext(src0.b[k]) * ext(src1.b[k]);",
+        "dest = flag_sat ? clamp(acc, MIN_32, MAX_32) : wrap_32(acc);",
     ],
     "IMUL": [
-        "// default / .sat:dest[i] = sat_or_wrap(widen0(src0)[i] * widen1(src1)[i]);",
-        "// .u64 / .s64:   dest = ext64(widen0(src0)) * ext64(widen1(src1)); // 32x32->64 widening",
+        "if (is_64bit) dest = ext64(widen0(src0)) * ext64(widen1(src1)); // 32x32->64",
+        "else for (int i = 0; i < N; ++i) {",
+        "    auto prod = ext(widen0(src0)[i]) * ext(widen1(src1)[i]);",
+        "    dest[i] = flag_sat ? clamp(prod, MIN_W, MAX_W) : wrap_W(prod);",
+        "}",
     ],
     "ISUB": [
-        "// default:       dest[i] = widen0(src0)[i] - widen1(src1)[i]; // wrapping mod 2^W",
-        "// .sat (u32):    dest[i] = (widen0(src0)[i] >= widen1(src1)[i]) ? (a - b) : 0u;",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto diff = ext(widen0(src0)[i]) - ext(widen1(src1)[i]);",
+        "    dest[i] = flag_sat ? clamp(diff, MIN_W, MAX_W) : wrap_W(diff);",
+        "}",
     ],
     "ISUBB": [
-        "// default:       dest = src0 - src1 - (src2 & 1u);",
-        "// .c:            dest = (uint64_t(src0) < uint64_t(src1) + uint64_t(src2 & 1u)) ? 1u : 0u;",
+        "uint64_t rhs = uint64_t(src1) + uint64_t(src2 & 1u);",
+        "if (return_carry == c) dest = (uint64_t(src0) < rhs) ? 1u : 0u;",
+        "else                   dest = uint((uint64_t(src0) - rhs) & 0xFFFFFFFFul);",
     ],
     "MMUL": [
-        "// .v2f16 / .f16: dest = src2 + sum_{k=0..3}(A_sub(src0, sub0)[row,k] * B_sub(src1, sub1)[k,col]);",
-        "// .v4s8.sat:     dest = sat32(src2 + sum_{k=0..15}(A(src0)[row,k] * B(src1)[k,col])); // v14",
+        "// Cooperative subgroup matrix multiply-accumulate across warp lanes:",
+        "mat_tile D = mat_tile(src2) + submat(src0, sub0) * submat(src1, sub1);",
+        "dest = flag_sat ? saturate(D)[lane_slice] : D[lane_slice];",
     ],
     "POPCOUNT": [
-        "dest = uint(bitCount(src0)); // exact 32-bit population count in 0..32",
+        "dest = uint(bitCount(src0)); // exact count of 1-bits in 0..32",
     ],
     "SEG_ADD": [
-        "// default:       dest = src0 + widen1(src1);",
-        "// .preserve_null:dest = (src0 == 0ul) ? 0ul : (src0 + widen1(src1));",
+        "if (flag_preserve_null && src0 == 0ul) dest = 0ul;",
+        "else                                   dest = src0 + widen64(src1);",
     ],
     "SEG_SUB": [
-        "// default:       dest = src0 - widen1(src1);",
-        "// .preserve_null:dest = (src0 == 0ul) ? 0ul : (src0 - widen1(src1));",
+        "if (flag_preserve_null && src0 == 0ul) dest = 0ul;",
+        "else                                   dest = src0 - widen64(src1);",
     ],
     "SHADD": [
-        "// .u64:          dest = src0 + (uint64_t(widen1(src1)) << #shift);",
-        "// .s64:          dest = int64_t(src0) + (int64_t(widen1(src1)) << #shift);",
+        "dest = src0 + (widen64(src1) << #shift); // #shift in 0..7, wraps mod 2^64",
     ],
 
     # 2. Bitwise (non-shift)
     "AND": [
-        "// default:       res[i] = widen0(src0)[i] & (not2 ? ~src2[i] : src2[i]);",
-        "// .not_result:   dest[i] = not_result ? ~res[i] : res[i];",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto b = flag_not2 ? ~src2[i] : src2[i];",
+        "    auto r = widen0(src0)[i] & b;",
+        "    dest[i] = flag_not_result ? ~r : r;",
+        "}",
     ],
     "AND_IMM": [
-        "dest = src0 & #imm1w; // inline 32-bit bitwise AND (v11+)",
+        "dest = maskWrite(dest_width, src0 & #imm1w);",
     ],
     "OR": [
-        "// default:       res[i] = widen0(src0)[i] | (not2 ? ~src2[i] : src2[i]);",
-        "// .not_result:   dest[i] = not_result ? ~res[i] : res[i]; // NOR when .not_result",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto b = flag_not2 ? ~src2[i] : src2[i];",
+        "    auto r = widen0(src0)[i] | b;",
+        "    dest[i] = flag_not_result ? ~r : r; // NOR when .not_result",
+        "}",
     ],
     "OR_IMM": [
-        "dest = src0 | #imm1w; // inline 32-bit bitwise OR (v11+)",
+        "dest = maskWrite(dest_width, src0 | #imm1w);",
     ],
     "XOR": [
-        "// default:       res[i] = widen0(src0)[i] ^ (not2 ? ~src2[i] : src2[i]);",
-        "// .not_result:   dest[i] = not_result ? ~res[i] : res[i]; // XNOR when .not_result",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto b = flag_not2 ? ~src2[i] : src2[i];",
+        "    auto r = widen0(src0)[i] ^ b;",
+        "    dest[i] = flag_not_result ? ~r : r; // XNOR when .not_result",
+        "}",
     ],
     "XOR_IMM": [
-        "dest = src0 ^ #imm1w; // inline 32-bit bitwise XOR (v11+)",
+        "dest = maskWrite(dest_width, src0 ^ #imm1w);",
     ],
     "NOT": [
-        "dest = ~src0; // bitwise complement",
+        "dest = ~widen0(src0); // alias of OR(src0, 0) with .not_result",
     ],
     "NOT_OLD": [
-        "dest = ~src0; // legacy v9--v13 SFU bitwise complement",
+        "dest = ~src0; // legacy v9--v13 bitwise complement",
     ],
 
     # 3. Floating-Point ALU
     "FABS": [
-        "dest = uintBitsToFloat(floatBitsToUint(src0) & 0x7FFFFFFFu); // clears IEEE sign bit",
+        "float v = uintBitsToFloat(floatBitsToUint(src0) & 0x7FFFFFFFu);",
+        "dest = narrowOrMask(dest_width_narrow, clamp_mode(round_rm(v)));",
     ],
     "FADD": [
-        "// default:       dest[i] = clamp(round_rm(mod(src0)[i] + mod(src1)[i])); // mod = widen/swz -> abs -> neg",
-        "// .dest_width:   narrows FP32->FP16 into dest.h0/h1/h01 (or lane-masks v2f16)",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto r = clamp_mode(round_rm(mod(src0)[i] + mod(src1)[i]));",
+        "    dest[i] = narrowOrMask(dest_width_narrow, r);",
+        "}",
     ],
     "FADD_IMM": [
-        "dest[i] = round_rne(src0[i] + uintBitsToFloat(#imm1w)[i]);",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = round_rne(src0[i] + #imm1w[i]);",
     ],
     "FEXP": [
-        "dest = exp2(float(int(src0)) / 16777216.0); // Q8.24 fixed-point src0 + FP32 range src1",
+        "if (is_f32) dest = ftz_out(specialCaseFexp(src1, exp2(float(int(src0)) / 16777216.0)));",
+        "else        dest = replicate(dest_width_replicate, exp2(lane1(src1))); // v12+ f16",
     ],
     "FEXPF": [
         "dest = exp2(src0); // direct FP32 exp2 (v14+)",
     ],
     "FLOG": [
-        "dest = log2(src0); // 0 -> -Inf, <0 -> NaN (v12+ f16, v14+ f32)",
+        "dest = (src0 == 0.0) ? -INF : ((src0 < 0.0) ? NaN : log2(src0));",
     ],
     "FLUSH": [
-        "// .ftz:          if (isSubnormal(src0[i])) dest[i] = copysign(0.0, src0[i]);",
-        "// .flush_inf:    if (isinf(src0[i]))       dest[i] = copysign(MAX_FINITE, src0[i]);",
-        "// .flush_nan:    if (isnan(src0[i]))       dest[i] = +0.0; // .quiet_nan -> src0[i] | qbit",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto x = src0[i];",
+        "    if (flag_ftz && isSubnormal(x))   x = copysign(0.0, x);",
+        "    if (flag_flush_inf && isinf(x))   x = copysign(MAX_FINITE, x);",
+        "    if (flag_flush_nan && isnan(x))   x = +0.0;",
+        "    else if (flag_quiet_nan && isnan(x)) x = quieten(x);",
+        "    dest[i] = x;",
+        "}",
     ],
     "FMA": [
-        "// default:       dest[i] = clamp(round_rm(fma(mod(src0)[i], mod(src1)[i], mod(src2)[i])));",
-        "// .dest_width:   Stage C narrows FP32->FP16 (h0/h1/h01) or masks v2f16 halfword",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto r = clamp_mode(round_rm(fma(mod(src0)[i], mod(src1)[i], mod(src2)[i])));",
+        "    dest[i] = narrowOrMask(dest_width_narrow, r);",
+        "}",
     ],
     "FMAX": [
-        "// .nan_suppress: dest[i] = isnan(a) ? b : (isnan(b) ? a : (totalOrd(a)>totalOrd(b) ? a : b));",
-        "// .nan_propagate:dest[i] = (isnan(a)||isnan(b)) ? quieten(winNaN(a,b)) : maxTotal(a,b); // then clamp",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto a = mod(src0)[i], b = mod(src1)[i];",
+        "    auto r = flag_nan_suppress ? (isnan(a) ? b : (isnan(b) ? a : maxTotal(a, b)))",
+        "                               : ((isnan(a) || isnan(b)) ? quieten(winNaN(a, b)) : maxTotal(a, b));",
+        "    dest[i] = clamp_mode(r);",
+        "}",
     ],
     "FMIN": [
-        "// .nan_suppress: dest[i] = isnan(a) ? b : (isnan(b) ? a : (totalOrd(a)<totalOrd(b) ? a : b));",
-        "// .nan_propagate:dest[i] = (isnan(a)||isnan(b)) ? quieten(winNaN(a,b)) : minTotal(a,b); // then clamp",
+        "for (int i = 0; i < N; ++i) {",
+        "    auto a = mod(src0)[i], b = mod(src1)[i];",
+        "    auto r = flag_nan_suppress ? (isnan(a) ? b : (isnan(b) ? a : minTotal(a, b)))",
+        "                               : ((isnan(a) || isnan(b)) ? quieten(winNaN(a, b)) : minTotal(a, b));",
+        "    dest[i] = clamp_mode(r);",
+        "}",
     ],
     "FMUL": [
-        "dest[i] = clamp(round_rm(fma(mod(src0)[i], mod(src1)[i], -0.0))); // preserves -0.0",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = clamp_mode(round_rm(fma(mod(src0)[i], mod(src1)[i], -0.0)));",
     ],
     "FNEG": [
-        "dest = uintBitsToFloat(floatBitsToUint(src0) ^ 0x80000000u); // flips IEEE sign bit",
+        "float v = uintBitsToFloat(floatBitsToUint(src0) ^ 0x80000000u);",
+        "dest = narrowOrMask(dest_width_narrow, clamp_mode(round_rm(v)));",
     ],
     "FPCLASS": [
-        "dest = classifyIEEE754Mask(src0); // bitmask: sign, zero, subnormal, normal, inf, nan",
+        "dest = classifyIEEE754Bitmask(src0); // bits: sign, zero, subnormal, normal, inf, qnan, snan",
     ],
     "FPOW": [
-        "dest = placeReplicate(dest_width, pow(lane(src0), lane(src1))); // v12+ scalar f16",
+        "dest = replicate(dest_width_replicate, pow(lane0(src0), lane1(src1))); // v12+ f16",
     ],
     "FRCP": [
-        "dest = ftz(1.0 / ftz(src0)); // < 1 ULP; input & output subnormals flush to +-0.0 on f32",
+        "if (is_f32) dest = ftz(1.0 / ftz(src0)); // < 1 ULP, flushes subnormals",
+        "else        dest = float16_t(1.0h / lane0(src0)); // preserves f16 subnormals",
     ],
     "FROUND": [
-        "// .round_down:   dest[i] = floor(src0[i]); // .round_up: ceil; .round_zero: trunc",
-        "// default / .na: dest[i] = roundEven(src0[i]); // .round_na: sign(x)*floor(abs(x)+0.5)",
+        "for (int i = 0; i < N; ++i) {",
+        "    if      (round == round_down) dest[i] = floor(src0[i]);",
+        "    else if (round == round_up)   dest[i] = ceil(src0[i]);",
+        "    else if (round == round_zero) dest[i] = trunc(src0[i]);",
+        "    else if (round == round_na)   dest[i] = sign(src0[i]) * floor(abs(src0[i]) + 0.5);",
+        "    else                          dest[i] = roundEven(src0[i]);",
+        "}",
     ],
     "FRSQ": [
-        "dest = ftz(inversesqrt(ftz(src0))); // <= 1 ULP; -0.0 -> -Inf; <0 -> NaN",
+        "float x = is_f32 ? ftz(src0) : float(lane0(src0));",
+        "dest = (x < 0.0) ? NaN : ((x == 0.0) ? copysign(INF, x) : inversesqrt(x));",
     ],
     "FSINCOS": [
-        "// .sin:          dest = sin(reconstructAngle(src0, src1)); // v14+",
-        "// .cos:          dest = cos(reconstructAngle(src0, src1)); // v14+",
+        "float theta = reconstructAngle(src0, src1);",
+        "dest = (func == sin) ? sin(theta) : cos(theta); // v14+",
     ],
     "FSQRT": [
-        "dest = sqrt(src0); // -0.0 -> -0.0, <0 -> NaN (v14+)",
+        "dest = (src0 < 0.0) ? NaN : sqrt(src0); // preserves -0.0 -> -0.0 (v14+)",
     ],
     "LDEXP": [
-        "// default:       dest[i] = round_rm(ldexp(src0[i], int(src1[i])));",
-        "// .inf / .inf0:  overrides +-Inf (exp < -16384) and +-0.0 (exp >= +16384) to +-1.0",
+        "for (int i = 0; i < N; ++i) {",
+        "    int e = int(src1[i]);",
+        "    if (flag_inf_override && ((isinf(src0[i]) && e < -16384) || (src0[i] == 0.0 && e >= 16384)))",
+        "        dest[i] = copysign(1.0, src0[i]);",
+        "    else dest[i] = round_rm(ldexp(src0[i], e));",
+        "}",
     ],
 
     # 4. SFU Range-Reduction & Helpers
     "FADD_LSCALE": [
-        "dest = mod(src0) + reduceToLogInterval_0_75_to_1_5(src1); // log2(x) reduction",
+        "float m = isNormal(src1) ? reduceTo_0_75_to_1_5(src1) : src1;",
+        "dest = clamp_mode(round_rm(mod(src0) + m)); // src0=-1.0 yields m - 1",
     ],
     "FADD_RSCALE": [
-        "// default:       dest = float((double(src0) + double(src1)) * exp2(double(int(src2))));",
-        "// .n_add:        suppresses (+Inf + -Inf) NaN during expm1 range reduction",
+        "double s = double(src0) + double(src2);",
+        "if (special == n_add && isinf(src0) && isinf(src2) && sign(src0) != sign(src2)) s = 0.0;",
+        "dest = clamp_mode(round_rm(float(s * exp2(double(clamp(int(src3), -512, 512))))));",
     ],
     "FATAN_ASSIST": [
-        "dest = packAtanOctantAssist(src0 /*y*/, src1 /*x*/); // packed (i16 octant/exp, f16 seed)",
+        "dest = packAtanOctantAssist(src0 /*y*/, src1 /*x*/); // (i16 octant/exp, f16 seed)",
     ],
     "FATAN_TABLE": [
         "dest = ATAN_OCTANT_OFFSET_LUT[src0 & 0x7u]; // 0, +-pi/2, +-pi",
     ],
     "FCOS_TABLE": [
-        "dest = cos(float(src0 & 0x3Fu) * (PI / 32.0)); // 64-entry cosine LUT",
+        "if (isnan(src0))      dest = src0;",
+        "else if (isinf(src0)) dest = NaN;",
+        "else if (signExp(src0) != (0, 146)) dest = -0.0;",
+        "else { uint idx = floatBitsToUint(src0) & 0x3Fu; dest = cos(float(idx) * PI / 32.0); }",
     ],
     "FEXP_TABLE": [
-        "// default:       dest = exp2(float(src0 & 0xFu) / 16.0);",
-        "// .low:          dest = EXP2_LOW_CORRECTION_LUT[src0 & 0xFu];",
+        "uint idx = src0 & 0xFu;",
+        "dest = (adj == low) ? EXP2_LOW_CORRECTION_LUT[idx] : exp2(float(idx) / 16.0);",
     ],
     "FLOGD": [
-        "float m = reduceLog(src0); dest = (m == 1.0) ? (1.0/log(2.0)) : log2(m)/(m - 1.0);",
+        "float m = reduceTo_0_75_to_1_5(src0);",
+        "dest = (m == 1.0) ? (1.0 / log(2.0)) : (log2(m) / (m - 1.0));",
     ],
     "FLOG_TABLE": [
-        "// .base2:        dest = LOG2_POLY_LUT[precision][mantissaIdx(src0)];",
-        "// .natural:      dest = LN_POLY_LUT[precision][mantissaIdx(src0)];",
+        "uint idx = topMantissaBits(src0);",
+        "dest = (base == natural) ? LN_POLY_LUT[precision][idx] : LOG2_POLY_LUT[precision][idx];",
     ],
     "FMA_RSCALE": [
-        "// default:       dest = float(fma(double(src0), double(src1), double(src2)) * exp2(double(int(src3))));",
-        "// .n:            double p = (src0==0.0||src1==0.0) ? 0.0 : double(src0)*double(src1); dest = float((p+src2)*exp2(src3));",
+        "double p = (special == n && (src0 == 0.0 || src1 == 0.0)) ? copysign(0.0, src0 * src1)",
+        "                                                         : double(src0) * double(src1);",
+        "int e = clamp(int(src3), -512, 512);",
+        "dest = (special == left && isZeroTimesInf(src0, src1)) ? src0",
+        "                                                       : clamp_mode(round_rm(float((p + double(src2)) * exp2(double(e)))));",
     ],
     "FMUL_CSLICE": [
-        "dest = payneHanekCosSlice(lane(src0), src1); // extended-precision cosine range reduction",
+        "dest = payneHanekCosSlice(mod(lane0(src0)), src1);",
     ],
     "FMUL_RSCALE": [
-        "// default:       dest = float((double(src0) * double(src1)) * exp2(double(int(src2))));",
-        "// .left:         dest = isZeroInf(src0, src1) ? src0 : float((double(src0)*double(src1))*exp2(src2));",
+        "int e = clamp(int(src3), -512, 512);",
+        "if (special == left && isZeroTimesInf(src0, src1)) dest = src0;",
+        "else dest = clamp_mode(round_rm(float(double(src0) * double(src1) * exp2(double(e)))));",
     ],
     "FMUL_SLICE": [
-        "dest = payneHanekSlice(src0, src1); // sliced 2/pi range-reduction product",
+        "dest = payneHanekTwoOverPiSlice(src0, src1);",
     ],
     "FPOW_SC_APPLY": [
-        "dest = hasSpecialOverride(src1) ? decodeOverride(src1) : src0;",
+        "dest = hasSpecialOverride(src1) ? decodeSpecialOverride(src1) : src0;",
     ],
     "FPOW_SC_DET": [
-        "// .pow:          dest = detectPowSpecialCase(src0, src1); // pow(0,0)=1, (-x)^odd = -|x|^odd",
-        "// .powr:         dest = detectPowrSpecialCase(src0, src1); // powr(0,0)=NaN, x<0 -> NaN",
+        "dest = (func == powr) ? detectPowrSpecialCase(src0, src1) : detectPowSpecialCase(src0, src1);",
     ],
     "FRCBRT_APPROX_A": ["dest = approxInvCbrtStageA(src0); // initial x^(-1/3) seed"],
-    "FRCBRT_APPROX_B": ["dest = approxInvCbrtStageB(src0); // stage B refinement"],
-    "FRCBRT_APPROX_C": ["dest = approxInvCbrtStageC(src0); // stage C refinement"],
+    "FRCBRT_APPROX_B": ["dest = approxInvCbrtStageB(src0); // stage-B refinement"],
+    "FRCBRT_APPROX_C": ["dest = approxInvCbrtStageC(src0); // stage-C refinement"],
     "FRCP_APPROX": ["dest = approxRcp12Bit(src0); // Newton-Raphson 1/x seed"],
     "FREXPE": [
-        "// default:       int e; frexp(src0[i], e); dest[i] = neg_result ? -e : e;",
-        "// .sqrt / .log:  returns even sqrt exponent (e-125)>>1 or log exponent (e-127)+top_mant_bit",
+        "for (int i = 0; i < N; ++i) {",
+        "    int e; frexp(src0[i], e);",
+        "    if (mode == sqrt) e = (e - 125) >> 1;",
+        "    else if (mode == log) e = (e - 127) + (topMantBit(src0[i]) ? 1 : 0);",
+        "    dest[i] = flag_neg_result ? -e : e;",
+        "}",
     ],
     "FREXPM": [
-        "// default:       int e; dest[i] = frexp(src0[i], e); // in [0.5, 1.0)",
-        "// .log:          dest[i] = isinf(src0[i]) ? copysign(1.0, src0[i]) : normTo_0_75_1_5(src0[i]);",
+        "for (int i = 0; i < N; ++i) {",
+        "    if (mode == log) dest[i] = isinf(src0[i]) ? copysign(1.0, src0[i]) : reduceTo_0_75_to_1_5(src0[i]);",
+        "    else { int e; dest[i] = frexp(src0[i], e); } // in [0.5, 1.0)",
+        "}",
     ],
     "FRSQ_APPROX": ["dest = approxRsqrt12Bit(src0); // Newton-Raphson 1/sqrt(x) seed"],
     "FSINCOS_OFFSET": [
-        "// default:       dest = SINCOS_OFFSET_LUT[src0 & 0x7u];",
-        "// .scale:        dest = ldexp(SINCOS_OFFSET_LUT[src0 & 0x7u], 24);",
+        "float off = SINCOS_OFFSET_LUT[src0 & 0x7u];",
+        "dest = (scale == scale_24) ? ldexp(off, 24) : off;",
     ],
     "FSIN_TABLE": [
-        "dest = ((src0 & 0x3Fu) == 0u) ? -0.0 : sin(float(src0 & 0x3Fu) * (PI / 32.0));",
+        "if (isnan(src0))      dest = src0;",
+        "else if (isinf(src0)) dest = NaN;",
+        "else if (signExp(src0) != (0, 146)) dest = -0.0;",
+        "else { uint idx = floatBitsToUint(src0) & 0x3Fu; dest = (idx == 0u) ? -0.0 : sin(float(idx) * PI / 32.0); }",
     ],
     "ILOGB": [
-        "dest[i] = (src0[i] == 0.0) ? INT32_MIN : (isinf(src0[i]) ? INT32_MAX : int(floor(log2(abs(src0[i])))));",
+        "for (int i = 0; i < N; ++i) {",
+        "    if (src0[i] == 0.0)    dest[i] = INT32_MIN;",
+        "    else if (isinf(src0[i])) dest[i] = INT32_MAX;",
+        "    else                   dest[i] = int(floor(log2(abs(src0[i]))));",
+        "}",
     ],
     "LOGB": [
-        "dest[i] = (src0[i] == 0.0) ? -INF : (isinf(src0[i]) ? +INF : floor(log2(abs(src0[i]))));",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = (src0[i] == 0.0) ? -INF : (isinf(src0[i]) ? +INF : floor(log2(abs(src0[i]))));",
     ],
 
     # 5. Cubemap Helpers
     "CUBEFACE1": [
-        "float m = max(abs(src0), max(abs(src1), abs(src2))); dest = isinf(m) ? 1.0 : ((m == 0.0) ? 2.0 : m);",
+        "float m = max(abs(src0), max(abs(src1), abs(src2)));",
+        "if (isnan(src0) || isnan(src1) || isnan(src2)) dest = NaN;",
+        "else if (isinf(m)) dest = 1.0;",
+        "else if (m < FLT_MIN) dest = 2.0;",
+        "else dest = m;",
     ],
     "CUBEFACE2": [
-        "dest = (majorAxisFaceIndex(src0, src1, src2) << 29) | (anyInf(src0, src1, src2) ? 0x10000u : 0u);",
+        "uint face = majorAxisFaceIndex(src0, src1, src2); // |z| >= |y| >= |x|; NaN -> 4",
+        "uint inf_bit = (anyInf(src0, src1, src2) && !anyNaN(src0, src1, src2)) ? 0x10000u : 0u;",
+        "dest = (face << 29) | inf_bit;",
     ],
     "CUBE_SSEL": [
-        "dest = cubeSelectS(src0 /*Z*/, src1 /*X*/, src2 >> 29 /*face*/); // +X -> -Z, -Z -> -X",
+        "uint face = src2 >> 29; // src0 = z, src1 = x",
+        "dest = (face == 0u) ? -src0 : (face == 1u) ? src0 : (face == 5u) ? -src1 : src1;",
     ],
     "CUBE_TSEL": [
-        "dest = cubeSelectT(src0 /*Y*/, src1 /*Z*/, src2 >> 29 /*face*/); // +Y -> +Z, +X -> -Y",
+        "uint face = src2 >> 29; // src0 = y, src1 = z",
+        "dest = (face == 2u) ? src1 : (face == 3u) ? -src1 : -src0;",
     ],
 
     # 6. Compare, Select & Mux
     "CSEL": [
-        "dest[i] = cmpf(src0[i], src1[i]) ? src2[i] : src3[i]; // cmpf in {eq,ne,lt,le,gt,ge,gtlt,total}",
+        "for (int i = 0; i < N; ++i)",
+        "    dest[i] = cmpf(src0[i], src1[i]) ? src2[i] : src3[i];",
     ],
     "FCMP": [
-        "// For each lane i in 0..N-1: bool c = cmpf(mod(src0)[i], mod(src1)[i]);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(mod(src0)[i], mod(src1)[i]);",
+        "    dest[i] = (result_type == m1) ? (c ? ~0u : 0u) : (result_type == f1 ? (c ? 1.0 : 0.0) : (c ? 1u : 0u));",
+        "}",
     ],
     "FCMP_AND": [
-        "// For each lane i in 0..N-1: bool c = cmpf(mod(src0)[i], mod(src1)[i]) && (src2[i] != 0);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(mod(src0)[i], mod(src1)[i]) && (src2[i] != 0);",
+        "    dest[i] = formatResult(result_type, c); // .i1: 1/0, .m1: ~0/0, .f1: 1.0/0.0",
+        "}",
     ],
     "FCMP_OR": [
-        "// For each lane i in 0..N-1: bool c = cmpf(mod(src0)[i], mod(src1)[i]) || (src2[i] != 0);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(mod(src0)[i], mod(src1)[i]) || (src2[i] != 0);",
+        "    dest[i] = formatResult(result_type, c); // .i1: 1/0, .m1: ~0/0, .f1: 1.0/0.0",
+        "}",
     ],
     "ICMP": [
-        "// For each lane i in 0..N-1: bool c = cmpf(widen0(src0)[i], widen1(src1)[i]);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(widen0(src0)[i], widen1(src1)[i]);",
+        "    dest[i] = formatResult(result_type, c);",
+        "}",
     ],
     "ICMP_AND": [
-        "// For each lane i in 0..N-1: bool c = cmpf(widen0(src0)[i], widen1(src1)[i]) && (src2[i] != 0);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(widen0(src0)[i], widen1(src1)[i]) && (src2[i] != 0);",
+        "    dest[i] = formatResult(result_type, c);",
+        "}",
     ],
     "ICMP_MULTI": [
-        "// .c (low word): dest = (src0 < src1) ? -1 : ((src0 > src1) ? +1 : int(src2));",
-        "// .i1 (hi word): dest = (cmpf(src0, src1) || (src0 == src1 && carryMatches(cmpf, src2))) ? 1u : 0u;",
+        "int ord = (src0 < src1) ? -1 : ((src0 > src1) ? +1 : int(src2));",
+        "if (result_type == c) dest = uint(ord); // 3-way carry to next word",
+        "else                  dest = formatResult(result_type, matchesCmpf(cmpf, ord));",
     ],
     "ICMP_OR": [
-        "// For each lane i in 0..N-1: bool c = cmpf(widen0(src0)[i], widen1(src1)[i]) || (src2[i] != 0);",
-        "// result_type:   .i1 -> c?1u:0u; .m1 -> c?~0u:0u; .f1 -> c?1.0f:0.0f",
+        "for (int i = 0; i < N; ++i) {",
+        "    bool c = cmpf(widen0(src0)[i], widen1(src1)[i]) || (src2[i] != 0);",
+        "    dest[i] = formatResult(result_type, c);",
+        "}",
     ],
     "MUX": [
-        "// .int_zero(def):dest[i] = (src2[i] == 0) ? src0[i] : src1[i]; // .neg: (src2<0); .fp_zero: (f32==0.0)",
-        "// .bit:          dest[i] = (src0[i] & src2[i]) | (src1[i] & ~src2[i]);",
+        "for (int i = 0; i < N; ++i) {",
+        "    if (mux == bit)          dest[i] = (src0[i] & src2[i]) | (src1[i] & ~src2[i]);",
+        "    else if (mux == neg)     dest[i] = (int(src2[i]) < 0) ? src0[i] : src1[i];",
+        "    else if (mux == fp_zero) dest[i] = (asFloat(src2[i]) == 0.0) ? src0[i] : src1[i];",
+        "    else                     dest[i] = (src2[i] == 0u) ? src0[i] : src1[i]; // .int_zero",
+        "}",
     ],
 
     # 7. Conversions
-    "F16_TO_F32": ["dest = unpackHalf2x16(src0)[lane0]; // exact IEEE f16 -> f32 promotion"],
-    "F16_TO_S32": ["float h = unpackHalf2x16(src0)[lane0]; dest = isnan(h) ? 0 : int(clamp(round_rm(h), INT32_MIN, INT32_MAX));"],
-    "F16_TO_U32": ["float h = unpackHalf2x16(src0)[lane0]; dest = (isnan(h) || h < 0.0) ? 0u : uint(clamp(round_rm(h), 0.0, UINT32_MAX));"],
-    "F32_TO_F16": [
-        "// .h0 / .h1:     dest.lane = floatToHalfBits(round_rm(clamp(src0))); // preserves peer halfword",
-        "// .h01:          uint h = floatToHalfBits(round_rm(clamp(src0))); dest = h | (h << 16);",
+    "F16_TO_F32": ["dest = unpackHalf2x16(src0)[lane0]; // exact f16 -> f32 widening"],
+    "F16_TO_S32": [
+        "float h = unpackHalf2x16(src0)[lane0];",
+        "dest = isnan(h) ? 0 : int(clamp(round_rm(h), float(INT32_MIN), float(INT32_MAX)));",
     ],
-    "F32_TO_S32": ["dest = isnan(src0) ? 0 : int(clamp(round_rm(src0), INT32_MIN, INT32_MAX)); // .round_zero=trunc"],
-    "F32_TO_U32": ["dest = (isnan(src0) || src0 < 0.0) ? 0u : uint(clamp(round_rm(src0), 0.0, UINT32_MAX));"],
-    "S16_TO_F32": ["dest = float(int16_t(lane0(src0))); // exact s16 -> f32"],
-    "S16_TO_S32": ["dest = bitfieldExtract(int(src0), lane0 * 16, 16); // sign-extend h0 or h1"],
-    "S32_TO_F32": ["dest = round_rm(float(int(src0))); // default RNE; supports .round_up/down/zero/na"],
-    "S8_TO_F32": ["dest = float(bitfieldExtract(int(src0), lane0 * 8, 8)); // exact s8 -> f32"],
-    "S8_TO_S32": ["dest = bitfieldExtract(int(src0), lane0 * 8, 8); // sign-extend b0..b3"],
-    "U16_TO_F32": ["dest = float(bitfieldExtract(src0, lane0 * 16, 16)); // exact u16 -> f32"],
-    "U16_TO_U32": ["dest = bitfieldExtract(src0, lane0 * 16, 16); // zero-extend h0 or h1"],
-    "U32_TO_F32": ["dest = round_rm(float(uint(src0)));"],
-    "U8_TO_F32": ["dest = float(bitfieldExtract(src0, lane0 * 8, 8)); // exact u8 -> f32"],
-    "U8_TO_U32": ["dest = bitfieldExtract(src0, lane0 * 8, 8); // zero-extend b0..b3"],
-    "V2F16_TO_V2S16": ["dest[i] = isnan(h[i]) ? 0 : int16_t(clamp(round_rm(h[i]), -32768.0, 32767.0)); // i in {0,1}"],
-    "V2F16_TO_V2U16": ["dest[i] = (isnan(h[i]) || h[i] < 0.0) ? 0u : uint16_t(clamp(round_rm(h[i]), 0.0, 65535.0));"],
-    "V2F32_TO_V2F16": ["dest = packHalf2x16(vec2(round_rm(clamp(src0)), round_rm(clamp(src1)))); // clamp BEFORE narrow"],
-    "V2S16_TO_V2F16": ["dest[i] = round_rm(float16_t(int16_t(swz0(src0)[i]))); // i in {0,1}"],
-    "V2S8_TO_V2F16": ["dest = f16vec2(float16_t(s8(src0, swz0.x)), float16_t(s8(src0, swz0.y))); // default b02"],
-    "V2S8_TO_V2S16": ["dest = i16vec2(int16_t(s8(src0, swz0.x)), int16_t(s8(src0, swz0.y))); // default b02"],
-    "V2U16_TO_V2F16": ["dest[i] = round_rm(float16_t(uint16_t(swz0(src0)[i]))); // >=65520 -> +Inf"],
-    "V2U8_TO_V2F16": ["dest = f16vec2(float16_t(u8(src0, swz0.x)), float16_t(u8(src0, swz0.y))); // default b02"],
-    "V2U8_TO_V2U16": ["dest = maskWrite(dest_width, u16vec2(u8(src0, swz0.x), u8(src0, swz0.y)));"],
+    "F16_TO_U32": [
+        "float h = unpackHalf2x16(src0)[lane0];",
+        "dest = (isnan(h) || h <= 0.0) ? 0u : uint(clamp(round_rm(h), 0.0, float(UINT32_MAX)));",
+    ],
+    "F32_TO_F16": [
+        "uint h = floatToHalfBits(round_rm(clamp_mode(src0)));",
+        "if (dest_width_narrow == h01) dest = h | (h << 16);",
+        "else                          dest = writeHalf(dest, dest_width_narrow, h);",
+    ],
+    "F32_TO_S32": [
+        "if (isnan(src0)) dest = 0;",
+        "else             dest = int(clamp(round_rm(src0), double(INT32_MIN), double(INT32_MAX)));",
+    ],
+    "F32_TO_U32": [
+        "if (isnan(src0) || src0 <= 0.0) dest = 0u;",
+        "else                            dest = uint(clamp(round_rm(src0), 0.0, double(UINT32_MAX)));",
+    ],
+    "S16_TO_F32": ["dest = float(bitfieldExtract(int(src0), lane0 * 16, 16));"],
+    "S16_TO_S32": ["dest = bitfieldExtract(int(src0), lane0 * 16, 16);"],
+    "S32_TO_F32": ["dest = round_rm(float(int(widen0(src0))));"],
+    "S8_TO_F32": ["dest = float(bitfieldExtract(int(src0), lane0 * 8, 8));"],
+    "S8_TO_S32": ["dest = bitfieldExtract(int(src0), lane0 * 8, 8);"],
+    "U16_TO_F32": ["dest = float(bitfieldExtract(uint(src0), lane0 * 16, 16));"],
+    "U16_TO_U32": ["dest = bitfieldExtract(uint(src0), lane0 * 16, 16);"],
+    "U32_TO_F32": ["dest = round_rm(float(uint(widen0(src0))));"],
+    "U8_TO_F32": ["dest = float(bitfieldExtract(uint(src0), lane0 * 8, 8));"],
+    "U8_TO_U32": ["dest = bitfieldExtract(uint(src0), lane0 * 8, 8);"],
+    "V2F16_TO_V2S16": [
+        "vec2 h = unpackHalf2x16(src0);",
+        "for (int i = 0; i < 2; ++i) dest[i] = isnan(h[i]) ? 0 : int16_t(clamp(round_rm(h[i]), -32768.0, 32767.0));",
+    ],
+    "V2F16_TO_V2U16": [
+        "vec2 h = unpackHalf2x16(src0);",
+        "for (int i = 0; i < 2; ++i) dest[i] = (isnan(h[i]) || h[i] <= 0.0) ? 0u : uint16_t(clamp(round_rm(h[i]), 0.0, 65535.0));",
+    ],
+    "V2F32_TO_V2F16": [
+        "dest = packHalf2x16(vec2(round_rm(clamp_mode(src0)), round_rm(clamp_mode(src1))));",
+    ],
+    "V2S16_TO_V2F16": [
+        "for (int i = 0; i < 2; ++i) dest[i] = round_rm(float16_t(int16_t(swz0(src0)[i])));",
+    ],
+    "V2S8_TO_V2F16": [
+        "dest = f16vec2(float16_t(s8(src0, swz0.x)), float16_t(s8(src0, swz0.y)));",
+    ],
+    "V2S8_TO_V2S16": [
+        "dest = i16vec2(int16_t(s8(src0, swz0.x)), int16_t(s8(src0, swz0.y)));",
+    ],
+    "V2U16_TO_V2F16": [
+        "for (int i = 0; i < 2; ++i) dest[i] = round_rm(float16_t(uint16_t(swz0(src0)[i])));",
+    ],
+    "V2U8_TO_V2F16": [
+        "dest = f16vec2(float16_t(u8(src0, swz0.x)), float16_t(u8(src0, swz0.y)));",
+    ],
+    "V2U8_TO_V2U16": [
+        "dest = maskWrite(dest_width, u16vec2(u8(src0, swz0.x), u8(src0, swz0.y)));",
+    ],
 
     # 8. Move, Pack & Swizzle
-    "ADR": ["dest = uint((PC + 8ul + int64_t(#offset)) & 0xFFFFFFFFul); // PC-relative address"],
+    "ADR": ["dest = uint((PC + 8ul + int64_t(#imm1w)) & 0xFFFFFFFFul);"],
     "MKVEC": [
-        "// .v2i8:         dest = u8(src0, lane0) | (u8(src1, lane1) << 8) | ((src2 & 0xFFFFu) << 16);",
-        "// .v2i16:        dest = u16(src0, lane0) | (u16(src1, lane1) << 16);",
+        "if (is_v2i8) dest = u8(src0, lane0) | (u8(src1, lane1) << 8) | ((src2 & 0xFFFFu) << 16);",
+        "else         dest = u16(src0, lane0) | (u16(src1, lane1) << 16); // v2i16",
     ],
-    "MOV": ["dest = maskWrite(dest_width, src0); // full 32-bit or h0/h1 halfword lane mask"],
-    "MOV_IMM": ["dest = maskWrite(dest_width, #imm1w); // inline 32-bit constant load"],
-    "SWZ": ["dest = u8vec4(src0[lanes0.x], src0[lanes0.y], src0[lanes0.z], src0[lanes0.w]);"],
+    "MOV": ["dest = maskWrite(dest_width, src0);"],
+    "MOV_IMM": ["dest = maskWrite(dest_width, #imm1w);"],
+    "SWZ": [
+        "for (int i = 0; i < N; ++i) dest[i] = src0[lanes0[i]];",
+    ],
 
     # 9. Subgroup & Cross-Lane
     "CLPER": [
-        "uint tgt = laneOp(lane_id, src1.b0, subgroup_size); // none/xor/accumulate/shift/rotate/low/prefix",
-        "dest = laneActive(tgt) ? laneVal(src0, tgt) : inactiveConst(inactive_result);",
+        "uint tgt = laneOp(lane_id, src1 & 0xFFu, subgroup_size); // none/xor/accumulate/shift/rotate/low/prefix",
+        "dest = laneActive(tgt) ? readLane(src0, tgt) : inactiveConst(inactive_result);",
     ],
-    "CLPER_OR": ["dest = subgroupPermute(src0, lane_select, src1.b0) | src2; // v14 fused shuffle+OR"],
-    "WMASK": ["dest = subgroupBallot(src0 != 0u).x & ((1u << subgroup_size) - 1u);"],
+    "CLPER_OR": [
+        "uint tgt = laneOp(lane_id, src1 & 0xFFu, subgroup_size);",
+        "dest = (laneActive(tgt) ? readLane(src0, tgt) : inactiveConst(inactive_result)) | src2;",
+    ],
+    "WMASK": [
+        "uint mask = 0u;",
+        "for (uint k = 0u; k < subgroup_size; ++k) if (laneActive(k) && readLane(src0, k) != 0u) mask |= (1u << k);",
+        "dest = mask;",
+    ],
 
     # 10. Control Flow, Barriers & System
-    "BARRIER": ["barrier(); memoryBarrierShared(); // synchronizes all warps in WG_SIZE workgroup"],
+    "BARRIER": [
+        "barrier();",
+        "memoryBarrierShared(); // synchronize all warps in WG_SIZE workgroup",
+    ],
     "BRANCH": [
         "bool cond = combine(src0); // none: !=0, h0/h1, and: both!=0, lowbits",
-        "if (branch_negate ? !cond : cond) PC = PC + 8 + #offset;",
+        "if (flag_not ? !cond : cond) PC = PC + 8 + #offset;",
     ],
-    "DISCARD": ["if (cmpf(src0, src1)) discard; // marks active fragment lane discarded/helper"],
-    "DOORBELL": ["// privileged HW CSF doorbell notification (no GLSL equivalent)"],
-    "EUREKA": ["// privileged HW job-management event signal (no GLSL equivalent)"],
-    "JUMP": ["if (combine(src0)) { if (src1 == 0u) return; PC = (address_mode==absolute) ? src1 : PC + 8 + src1; }"],
+    "DISCARD": [
+        "if (cmpf(src0, src1)) discard; // mark active fragment lane discarded/helper",
+    ],
+    "DOORBELL": [
+        "csf_doorbell(); // signal privileged CSF firmware doorbell",
+    ],
+    "EUREKA": [
+        "csf_signal_event(); // signal privileged CSF job-management event",
+    ],
+    "JUMP": [
+        "bool cond = combine(src0);",
+        "if (flag_not ? !cond : cond) {",
+        "    if (src1 == 0u) return; // terminate shader warp",
+        "    PC = (address_mode == absolute) ? src1 : (PC + 8 + src1);",
+        "}",
+    ],
     "JUMP_EX": [
-        "// .call:         hw_stack.push(PC + 8); PC = target(src1, src2);",
-        "// .return:       PC = hw_stack.pop(); // .replace: tail-call without push",
+        "if (stack_mode == call)        { hw_stack.push(PC + 8); PC = resolveTarget(src1, src2); }",
+        "else if (stack_mode == ret)    { PC = hw_stack.pop(); }",
+        "else /* replace (tail-call) */ { PC = resolveTarget(src1, src2); }",
     ],
-    "KABOOM": ["// hw_trap(KABOOM): raises immediate GPU shader fault (unreachable sentinel)"],
+    "KABOOM": [
+        "gpu_fault_trap(KABOOM); // raise immediate shader fault",
+    ],
     "NOP": [
-        "// .wait*:        scoreboardWait(flow_wait_mask); // stalls until async slots drain",
-        "// .end:          return; // terminates shader warp",
+        "if (flow_wait_mask != 0u) scoreboardWait(flow_wait_mask);",
+        "if (flow == end)          return; // terminate shader warp",
     ],
 
     # 11. Memory Load / Store & LEA
     "LOAD": [
-        "// .i8/.i16:      @sr = (extend == .sext) ? sext32(mem[src0 + #offset]) : zext32(mem[src0 + #offset]);",
-        "// .i32..i128:    @sr = mem[src0 + #offset]; // access hint: none/istream/estream/force",
+        "uint64_t addr = src0 + int64_t(#offset);",
+        "if (width < 32) @sw = (extend == sext) ? sext32(mem[addr]) : zext32(mem[addr]);",
+        "else            @sw = mem_read(addr, width, access_hint);",
     ],
     "STORE": [
-        "// general:       mem[src0 + #offset] = @sr; // access hint: none/istream/estream/force",
-        "// IDVS graphics: .istream -> TILER_CTX::geometry_buffer (gl_Position); .estream -> VARY_SIZE",
+        "uint64_t addr = src0 + int64_t(#offset);",
+        "mem_write(addr, @sr, width, access_hint); // .istream/.estream for IDVS outputs",
     ],
     "LD_CHECKED": [
-        "// default:       @sr = (src1 + width <= src2) ? mem[src0 + src1] : 0;",
-        "// .oob_ignore:   if (src1 + width <= src2) @sr = mem[src0 + src1]; // v14 leaves @sr unchanged on OOB",
+        "if (uint64_t(src1) + access_bytes <= uint64_t(src2)) @sw = mem_read(src0 + src1, width);",
+        "else if (!flag_oob_ignore)                           @sw = 0;",
     ],
-    "LD_CHECKED_IMM": ["@sr = (#offset + width <= src1) ? mem[src0 + #offset] : 0;"],
-    "ST_CHECKED": ["if (src1 + width <= src2) mem[src0 + src1] = @sr; // OOB silently dropped"],
-    "ST_CHECKED_IMM": ["if (#offset + width <= src1) mem[src0 + #offset] = @sr; // OOB silently dropped"],
-    "LD_CVT": ["@sr = convertPixelFormat(mem[src0 + #offset], cvt_desc=src1, register_format, vecsize);"],
-    "ST_CVT": ["mem[src0 + #offset] = encodePixelFormat(@sr, cvt_desc=src1, register_format, vecsize);"],
+    "LD_CHECKED_IMM": [
+        "if (uint64_t(#offset) + access_bytes <= uint64_t(src2)) @sw = mem_read(src0 + #offset, width);",
+        "else if (!flag_oob_ignore)                              @sw = 0;",
+    ],
+    "ST_CHECKED": [
+        "if (uint64_t(src1) + access_bytes <= uint64_t(src2)) mem_write(src0 + src1, @sr, width);",
+    ],
+    "ST_CHECKED_IMM": [
+        "if (uint64_t(#offset) + access_bytes <= uint64_t(src2)) mem_write(src0 + #offset, @sr, width);",
+    ],
+    "LD_CVT": [
+        "@sw = decodePixelFormat(mem_read(src0 + #offset), cvt_desc = src2, register_format, vecsize);",
+    ],
+    "ST_CVT": [
+        "mem_write(src0 + #offset, encodePixelFormat(@sr, cvt_desc = src2, register_format, vecsize));",
+    ],
     "LD_GCLK": [
-        "// .cycle_counter:   @sr = clockARB(); // 64-bit per-core GPU cycle counter",
-        "// .system_timestamp:@sr = clockRealtimeEXT(); // 64-bit cross-core timestamp",
+        "if (clock_source == cycle_counter) @sw[0:1] = readPerCoreCycleCounter64();",
+        "else                               @sw[0:1] = readSystemTimestamp64();",
     ],
-    "LD_MULTI": ["for (int i = 0; i < sr_count; ++i) @sr[i] = mem_u32[src0 + #offset + i*4]; // v14 bulk load"],
-    "ST_MULTI": ["for (int i = 0; i < sr_count; ++i) mem_u32[src0 + #offset + i*4] = @sr[i]; // v14 bulk store"],
-    "LD_PKA": ["@sr = mem[resolveBufferDesc(src1).address + src0]; // UBO/SSBO descriptor load"],
-    "LEA_ATTR": ["(@sr[0:1], @sr[2]) = (attrAddr(handle=src2, vert=src0, inst=src1), attrFormatDesc(src2));"],
-    "LEA_ATTR_IMM": ["(@sr[0:1], @sr[2]) = (attrAddr(SRT[#table].Attr[#index], idx=src0), attrFormatDesc);"],
-    "LEA_BUF": ["@sr[0:1] = resolveBufferDesc(src1).address + uint64_t(src0);"],
-    "LEA_BUF_IMM": ["@sr[0:1] = SRT[#table].Buffer[#index].address + uint64_t(src0);"],
-    "LEA_PKA": ["@sr[0:1] = resolvePkaBuffer(src1).address + uint64_t(src0);"],
-    "LEA_TEX": ["(@sr[0:1], @sr[2]) = (texelAddr(handle=src2, xy=src0, z=src1), texFormatDesc(src2));"],
-    "LEA_TEX_IMM": ["(@sr[0:1], @sr[2]) = (texelAddr(SRT[#table].Tex[#index], xy=src0, z=src1), texFormatDesc);"],
+    "LD_MULTI": [
+        "for (int i = 0; i < sr_count; ++i) @sw[i] = mem_u32[src0 + #offset + i * 4];",
+    ],
+    "ST_MULTI": [
+        "for (int i = 0; i < sr_count; ++i) mem_u32[src0 + #offset + i * 4] = @sr[i];",
+    ],
+    "LD_PKA": [
+        "BufferDesc b = resolveBufferDesc(src1);",
+        "@sw = (src0 + access_bytes <= b.size) ? mem_read(b.address + src0, width) : 0;",
+    ],
+    "LEA_ATTR": [
+        "@sw[0:1] = attrAddress(handle = src2, vert = src0, inst = src1);",
+        "@sw[2]   = attrFormatDesc(handle = src2);",
+    ],
+    "LEA_ATTR_IMM": [
+        "AttrDesc a = SRT[#attribute_table_index].Attr[#attribute_index];",
+        "@sw[0:1] = attrAddress(a, vert = src0, inst = src1); @sw[2] = a.format_desc;",
+    ],
+    "LEA_BUF": [
+        "@sw[0:1] = resolveBufferDesc(src1).address + uint64_t(src0);",
+    ],
+    "LEA_BUF_IMM": [
+        "@sw[0:1] = SRT[#buffer_table_index].Buffer[#buffer_index].address + uint64_t(src0);",
+    ],
+    "LEA_PKA": [
+        "@sw[0:1] = resolvePkaBuffer(src1).address + uint64_t(src0);",
+    ],
+    "LEA_TEX": [
+        "@sw[0:1] = texelAddress(handle = src2, xy = src0, z = src1);",
+        "@sw[2]   = texFormatDesc(handle = src2);",
+    ],
+    "LEA_TEX_IMM": [
+        "TexDesc t = SRT[#texture_table_index].Tex[#texture_index];",
+        "@sw[0:1] = texelAddress(t, xy = src0, z = src1); @sw[2] = t.format_desc;",
+    ],
 
     # 12. Atomics
-    "ACMPXCHG": ["@sr[0] = atomicCompSwap(mem[src0 + #offset], @sr[0] /*cmp*/, @sr[1] /*swap*/);"],
-    "ATOM": ["atomicOp(atom_opc, mem[src0 + #offset], @sr); // aadd/asmin/asmax/aumin/aumax/aand/aor/axor; no return"],
-    "ATOM1": ["atomicUnary(atom1_opc, mem[src0 + #offset]); // ainc/adec/asmax1/aumax1/aor1; no return"],
-    "ATOM1_RETURN": ["@sr = atomicUnaryReturn(atom1_opc, mem[src0 + #offset]); // returns old value"],
-    "ATOM_RETURN": ["@sr = atomicOpReturn(atom_opc, mem[src0 + #offset], @sr); // returns old value"],
-    "AXCHG": ["@sr = atomicExchange(mem[src0 + #offset], @sr); // swaps & returns old value"],
+    "ACMPXCHG": [
+        "uint64_t addr = src0 + #offset;",
+        "@sw = atomicCompSwap(mem[addr], @sr[0] /*cmp*/, @sr[1] /*swap*/);",
+    ],
+    "ATOM": [
+        "atomicOp(atom_opc, mem[src0 + #offset], @sr); // fire-and-forget RMW",
+    ],
+    "ATOM1": [
+        "atomicUnary(atom1_opc, mem[src0 + #offset]); // ainc/adec/asmax1/aumax1/aor1",
+    ],
+    "ATOM1_RETURN": [
+        "@sw = atomicUnaryReturn(atom1_opc, mem[src0 + #offset]); // returns old value",
+    ],
+    "ATOM_RETURN": [
+        "@sw = atomicOpReturn(atom_opc, mem[src0 + #offset], @sr); // returns old value",
+    ],
+    "AXCHG": [
+        "@sw = atomicExchange(mem[src0 + #offset], @sr); // swaps & returns old value",
+    ],
 
     # 13. Attributes, Varyings & Fragment
-    "ATEST": ["@sr = applyAlphaToCoverageAndEarlyZ(src0 /*cov*/, src1 /*alpha*/, src2 /*datum*/); // no implicit discard"],
-    "BLEND": ["tileSRAM[rt] = blend(src0 /*blend_desc*/, @sr /*RGBA*/, tileSRAM[rt], cov=src1); // .end terminates warp"],
-    "LD_ATTR": ["@sr = fetchAndConvertVertexAttr(handle=src2, vert=src0, inst=src1, register_format, vecsize);"],
-    "LD_ATTR_IMM": ["@sr = fetchAndConvertVertexAttr(SRT[#table].Attr[#index], vert=src0, inst=src1);"],
-    "LD_TEX": ["@sr = imageLoad(images[src2], ivec2(src0.h0, src0.h1), z=src1);"],
-    "LD_TEX_IMM": ["@sr = imageLoad(SRT[#table].Image[#index], ivec2(src0.h0, src0.h1), z=src1);"],
+    "ATEST": [
+        "@sw = evalAlphaToCoverageAndEarlyZ(cov = src0, alpha = src1, datum = src2);",
+    ],
+    "BLEND": [
+        "tileSRAM[rt] = blendColor(desc = src0, rgba = @sr, dst = tileSRAM[rt], cov = src2);",
+        "if (flow == end) return;",
+    ],
+    "LD_ATTR": [
+        "@sw = fetchConvertAttr(handle = src2, vert = src0, inst = src1, register_format, vecsize);",
+    ],
+    "LD_ATTR_IMM": [
+        "AttrDesc a = SRT[#attribute_table_index].Attr[#attribute_index];",
+        "@sw = fetchConvertAttr(a, vert = src0, inst = src1, register_format, vecsize);",
+    ],
+    "LD_TEX": [
+        "@sw = imageLoad(handle = src2, ivec2(src0.h0, src0.h1), z = src1, register_format, vecsize);",
+    ],
+    "LD_TEX_IMM": [
+        "TexDesc t = SRT[#texture_table_index].Tex[#texture_index];",
+        "@sw = imageLoad(t, ivec2(src0.h0, src0.h1), z = src1, register_format, vecsize);",
+    ],
     "LD_TILE": [
-        "// default:       @sr = subpassLoad(tileColorSRAM[src2], pixel=src0, cov=src1);",
-        "// .z_stencil:    @sr = subpassLoad(tileDepthStencilSRAM, pixel=src0); // .last_read frees tile",
+        "if (flag_z_stencil) @sw = readTileDepthStencilSRAM(pixel = src0, cov = src1);",
+        "else                @sw = decodeTileColorSRAM(cvt = src2, pixel = src0, cov = src1);",
     ],
-    "LD_VAR": ["@sr = interpolateVarying(handle=src1, pixel=src0, sample_position, update_mode);"],
-    "LD_VAR_BUF": ["@sr = interpolateVaryingBuf(byte_off=src1, pixel=src0, source_format, sample_position);"],
-    "LD_VAR_BUF_FLAT": ["@sr = varyingBuf[vertex(src0)][byte_off=src0]; // .explicit_vertex indexes pervertexEXT"],
-    "LD_VAR_BUF_FLAT_IMM": ["@sr = varyingBuf[provoking_vtx][#offset]; // v14 immediate flat varying"],
-    "LD_VAR_BUF_IMM": ["@sr = interpolateVaryingBuf(byte_off=#offset, pixel=src0, update_mode);"],
-    "LD_VAR_FLAT": ["@sr = readFlatVarying(handle=src0, vertex); // .vertex0/1/2 selects triangle vertex"],
-    "LD_VAR_FLAT_IMM": ["@sr = readFlatVarying(SRT[#table].Attr[#index], vertex);"],
-    "LD_VAR_IMM": ["@sr = interpolateVarying(SRT[#table].Attr[#index], pixel=src0, sample_position, update_mode);"],
+    "LD_VAR": [
+        "@sw = interpolateVarying(handle = src1, pixel = src0, sample_position, update_mode);",
+    ],
+    "LD_VAR_BUF": [
+        "@sw = interpolateVaryingBuf(byte_off = src1, pixel = src0, source_format, sample_position, update_mode);",
+    ],
+    "LD_VAR_BUF_FLAT": [
+        "@sw = readVaryingBufFlat(off_and_vtx = src0, flag_explicit_vertex);",
+    ],
+    "LD_VAR_BUF_FLAT_IMM": [
+        "@sw = readVaryingBufFlat(provoking_vertex, byte_off = #offset);",
+    ],
+    "LD_VAR_BUF_IMM": [
+        "@sw = interpolateVaryingBuf(byte_off = #offset, pixel = src0, source_format, update_mode);",
+    ],
+    "LD_VAR_FLAT": [
+        "@sw = readFlatVarying(handle = src0, vertex);",
+    ],
+    "LD_VAR_FLAT_IMM": [
+        "AttrDesc v = SRT[#varying_table_index].Attr[#varying_index];",
+        "@sw = readFlatVarying(v, vertex);",
+    ],
+    "LD_VAR_IMM": [
+        "AttrDesc v = SRT[#varying_table_index].Attr[#varying_index];",
+        "@sw = interpolateVarying(v, pixel = src0, sample_position, update_mode);",
+    ],
     "LD_VAR_SPECIAL": [
-        "// .frag_w / .frag_z: @sr = gl_FragCoord.w / gl_FragCoord.z;",
-        "// .point / .bary:    @sr = gl_PointCoord / gl_BaryCoordEXT.xy;",
+        "if      (varying_name == frag_w) @sw = gl_FragCoord.w;",
+        "else if (varying_name == frag_z) @sw = gl_FragCoord.z;",
+        "else if (varying_name == point)  @sw = gl_PointCoord;",
+        "else /* bary */                  @sw = gl_BaryCoordEXT.xy;",
     ],
-    "ST_TILE": ["tileColorSRAM[src2][pixel=src0, cov=src1] = encodeRTFormat(@sr, register_format, vecsize);"],
+    "ST_TILE": [
+        "tileColorSRAM[pixel = src0, cov = src1] = encodeTileColor(@sr, cvt = src2, register_format, vecsize);",
+    ],
     "ZS_EMIT": [
-        "// .z:            gl_FragDepth = src0; @sr = lateDepthTest(src2 /*cov*/, src0);",
-        "// .z.stencil:    gl_FragDepth = src0; gl_FragStencilRefARB = int(src1 & 0xFFu); @sr = lateZSTest(...);",
+        "if (flag_z)       gl_FragDepth = src0;",
+        "if (flag_stencil) gl_FragStencilRefARB = int(src1 & 0xFFu);",
+        "@sw = evalLateDepthStencilTest(cov = src2, z = src0, stencil = src1);",
     ],
 
     # 14. Texture & Varying-Texture
-    "TEX_DUAL": ["@sr_write[0:3] = sample(tex0, @sr_read, lod_mode); @sr_write[4:7] = sample(tex1, @sr_read, lod_mode);"],
-    "TEX_FETCH": ["@sr_write = texelFetch(src0 /*handle*/, ivec(@sr_read), lod); // .array adds layer"],
+    "TEX_DUAL": [
+        "@sw[0:3] = textureSample(tex0_of(src0), coords = @sr, lod_mode);",
+        "@sw[4:7] = textureSample(tex1_of(src0), coords = @sr, lod_mode);",
+    ],
+    "TEX_FETCH": [
+        "@sw = texelFetch(handle = src0, icoords = @sr, flag_array, flag_texel_offset);",
+    ],
     "TEX_GATHER": [
-        "// .gather4_{r,g,b,a}: @sr_write = textureGather(src0, uv(@sr_read), gather_component);",
-        "// .compare:           @sr_write = textureGather(src0, uv(@sr_read), dref(@sr_read));",
+        "if (flag_compare) @sw = textureGatherCompare(handle = src0, uv_dref = @sr);",
+        "else              @sw = textureGather(handle = src0, uv = @sr, gather_component);",
     ],
     "TEX_GRADIENT": [
-        "// default:            @sr_write = textureGrad(src0, uv(@sr_read), dPdx(@sr_read), dPdy(@sr_read));",
-        "// .disable_lod_*:     @sr_write = textureQueryLod(src0, uv(@sr_read)); // .derivative -> dFdx/dFdy",
+        "if (flag_disable_lod_clamp) @sw = packFixed8_8(textureQueryLod(handle = src0, uv = @sr));",
+        "else if (flag_derivative)   @sw = evalScreenSpaceDerivatives(uv = @sr);",
+        "else                        @sw = textureGrad(handle = src0, uv_grads = @sr);",
     ],
     "TEX_SINGLE": [
-        "// .computed/.explicit:@sr_write = texture[Lod](src0, coords(@sr_read), lod_mode); // .skip skips helpers",
-        "// .project / .compare:divides by q (textureProj) / compares against Dref (shadow PCF)",
+        "@sw = textureSample(handle = src0, coords = @sr, dim, lod_mode, flag_project, flag_compare);",
     ],
-    "TEX_WEIGHTS": ["@sr_write = bilinearWeights2x2(src0, uv(@sr_read)); // v9 only"],
-    "VAR_TEX_BUF_DUAL": ["uv = interpVaryBuf(src2, src1); @sr_write[0:3] = sample(tex0, uv); @sr_write[4:7] = sample(tex1, uv);"],
-    "VAR_TEX_BUF_GATHER": ["@sr_write = textureGather(src0, interpVaryBuf(src2, src1), gather_component);"],
-    "VAR_TEX_BUF_GRADIENT": ["@sr_write = evalTexGradOrLod(src0, interpVaryBuf(src2, src1));"],
-    "VAR_TEX_BUF_SINGLE": ["@sr_write = texture(src0, interpVaryBuf(src2, src1)); // .project/.array/.compare"],
-    "VAR_TEX_DUAL": ["uv = interpVaryDesc(src2, src1); @sr_write[0:3] = sample(tex0, uv); @sr_write[4:7] = sample(tex1, uv);"],
-    "VAR_TEX_GATHER": ["@sr_write = textureGather(src0, interpVaryDesc(src2, src1), gather_component);"],
-    "VAR_TEX_GRADIENT": ["@sr_write = evalTexGradOrLod(src0, interpVaryDesc(src2, src1));"],
-    "VAR_TEX_SINGLE": ["@sr_write = texture(src0, interpVaryDesc(src2, src1)); // fused LD_VAR + TEX_SINGLE"],
+    "TEX_WEIGHTS": [
+        "@sw = bilinearFootprintWeights2x2(handle = src0, uv = @sr); // v9 only",
+    ],
+    "VAR_TEX_BUF_DUAL": [
+        "vec2 uv = interpolateVaryingBuf(byte_off = src2);",
+        "@sw[0:3] = textureSample(tex0_of(src0), uv); @sw[4:7] = textureSample(tex1_of(src0), uv);",
+    ],
+    "VAR_TEX_BUF_GATHER": [
+        "@sw = textureGather(handle = src0, interpolateVaryingBuf(byte_off = src2), gather_component);",
+    ],
+    "VAR_TEX_BUF_GRADIENT": [
+        "@sw = evalTexGradOrLod(handle = src0, interpolateVaryingBuf(byte_off = src2));",
+    ],
+    "VAR_TEX_BUF_SINGLE": [
+        "@sw = textureSample(handle = src0, interpolateVaryingBuf(byte_off = src2), dim, flag_project, flag_compare);",
+    ],
+    "VAR_TEX_DUAL": [
+        "vec2 uv = interpolateVarying(handle = src2);",
+        "@sw[0:3] = textureSample(tex0_of(src0), uv); @sw[4:7] = textureSample(tex1_of(src0), uv);",
+    ],
+    "VAR_TEX_GATHER": [
+        "@sw = textureGather(handle = src0, interpolateVarying(handle = src2), gather_component);",
+    ],
+    "VAR_TEX_GRADIENT": [
+        "@sw = evalTexGradOrLod(handle = src0, interpolateVarying(handle = src2));",
+    ],
+    "VAR_TEX_SINGLE": [
+        "@sw = textureSample(handle = src0, interpolateVarying(handle = src2), dim, flag_project, flag_compare);",
+    ],
 }
 
-_SHIFT_GLSL = {
-    "LSHIFT": "(src0[i] << (amt & (W - 1)))",
-    "RSHIFT": "(uint(src0[i]) >> (amt & (W - 1)))",
-    "ARSHIFT": "(int(src0[i]) >> (amt & (W - 1)))",
+_SHIFT_PSEUDO = {
+    "LSHIFT": "(src0[i] << s)",
+    "RSHIFT": "(uint(src0[i]) >> s)",
+    "ARSHIFT": "(int(src0[i]) >> s)",
     "LROT": "((src0[i] << s) | (src0[i] >> ((W - s) & (W - 1))))",
     "RROT": "((src0[i] >> s) | (src0[i] << ((W - s) & (W - 1))))",
 }
-_LOGIC_GLSL = {
-    "": "",
-    "_AND": " & (not2 ? ~src2[i] : src2[i])",
-    "_OR": " | (not2 ? ~src2[i] : src2[i])",
-    "_XOR": " ^ (not2 ? ~src2[i] : src2[i])",
+_LOGIC_PSEUDO = {
+    "": None,
+    "_AND": "&",
+    "_OR": "|",
+    "_XOR": "^",
 }
-for _sh, _expr in _SHIFT_GLSL.items():
-    for _lop, _lexpr in _LOGIC_GLSL.items():
+for _sh, _expr in _SHIFT_PSEUDO.items():
+    for _lop, _op in _LOGIC_PSEUDO.items():
         _mn = _sh + _lop
-        if _mn in _EQUIV_GLSL:
+        if _mn in _PSEUDO_GLSL:
             continue
-        _amt_note = "uint amt = extractByte(src1, lanes1); uint s = amt & (W - 1);"
-        if _lop:
-            _EQUIV_GLSL[_mn] = [
-                f"// For each lane i in 0..N-1: {_amt_note}",
-                f"// default:       dest[i] = ({_expr}){_lexpr};",
-                f"// .not_result:   dest[i] = ~(({_expr}){_lexpr});",
+        if _op is not None:
+            _PSEUDO_GLSL[_mn] = [
+                "for (int i = 0; i < N; ++i) {",
+                "    uint s = extractByte(src1, lanes1, i) & (W - 1);",
+                f"    auto r = {_expr} {_op} (flag_not2 ? ~src2[i] : src2[i]);",
+                "    dest[i] = flag_not_result ? ~r : r;",
+                "}",
             ]
         else:
-            _EQUIV_GLSL[_mn] = [
-                f"// For each lane i in 0..N-1: {_amt_note}",
-                f"// default / .not:dest[i] = not_result ? ~({_expr}) : ({_expr});",
+            _PSEUDO_GLSL[_mn] = [
+                "for (int i = 0; i < N; ++i) {",
+                "    uint s = extractByte(src1, lanes1, i) & (W - 1);",
+                f"    auto r = {_expr};",
+                "    dest[i] = flag_not_result ? ~r : r;",
+                "}",
             ]
 
+# Backward-compatible alias
+_EQUIV_GLSL = _PSEUDO_GLSL
 
-def equiv_glsl_tex(mnem: str) -> str:
-    """Return LaTeX-escaped Equivalent GLSL lines for *mnem*."""
-    return r"\\".join(tex_esc(g) for g in _EQUIV_GLSL[mnem])
+
+def pseudo_glsl_tex(mnem: str) -> str:
+    """Return LaTeX-escaped Pseudo-GLSL operational semantics lines for *mnem*."""
+    return r"\\".join(tex_esc(g) for g in _PSEUDO_GLSL[mnem])
+
+
+equiv_glsl_tex = pseudo_glsl_tex
 
 
 # ============================================================================
