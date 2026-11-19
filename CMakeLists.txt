@@ -61,6 +61,7 @@ if(PDFLATEX_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/isa_semantics.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/csf_abi_map.py"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating tools/reference/generated/valhall-isa-reference.tex..."
         VERBATIM
@@ -79,6 +80,7 @@ if(PDFLATEX_EXECUTABLE)
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/isa_semantics.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/csf_abi_map.py"
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         COMMENT "Generating Valhall valhall-isa-reference.pdf (${PDFLATEX_EXECUTABLE}))"
         VERBATIM

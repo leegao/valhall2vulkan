@@ -161,6 +161,289 @@ Idx & Value & Meaning & Idx & Value & Meaning \\
 \end{tabularx}
 \end{table}
 
+\section{CSF Execution Context \& Descriptor Graph ABI}
+\label{sec:csf-abi}
+
+\subsection{ABI}
+\label{sec:csf-modes}
+In Arm's Mali Command Stream Frontend (CSF, architecture v10--v14), Mesa Panfrost (\texttt{genxml/v10.xml}--\texttt{v14.xml}, \texttt{panvk}), and Arm's proprietary DDK (\texttt{libGLES\_mali.so}), the per-dispatch/per-draw register state and memory-resident descriptor hierarchy is formally the \textbf{CSF Execution Context \& Descriptor Graph ABI} (also called the \textbf{CSF Staging Register \& Descriptor Table ABI}).
+
+Once a CSF command stream populates the per-queue 96$\times$32-bit register file (\texttt{r0..r63} staging window; \texttt{r64..r95} CSHWIF scratch) and executes \texttt{RUN\_COMPUTE}, \texttt{RUN\_IDVS}, or \texttt{RUN\_FRAGMENT}, every ABI object is consumed in one or more of \textbf{three hardware modes}:
+\begin{enumerate}
+  \item \textbf{Implicit Pre-Execution (Warp Launch \& Preload):} Before instruction \texttt{0x00} executes, hardware reads \texttt{SPD\_k}, \texttt{TSD\_k}, \texttt{WG\_SIZE}/\texttt{JOB\_OFFSET}/\texttt{JOB\_SIZE}, or \texttt{INDEX\_BUFFER}/\texttt{VERTEX\_OFFSET} to configure warp occupancy (32 vs 64 GPRs), FP rounding/FTZ/NaN/Inf modes, TLS/WLS scratch pools, and pre-populated stage GPRs.
+  \item \textbf{Explicit Valhall ISA Instruction or Source Operand:} A 64-bit Valhall instruction directly references the ABI object---either via a message opcode (\texttt{LD\_ATTR\_IMM}, \texttt{LEA\_BUF\_IMM}, \texttt{LD\_PKA}, \texttt{LD\_VAR\_IMM}, \texttt{TEX\_SINGLE}, \texttt{VAR\_TEX\_SINGLE}, \texttt{STORE.istream/estream}, \texttt{ATEST}, \texttt{ZS\_EMIT}, \texttt{BLEND.end}) or via an 8-bit source operand (\texttt{mode=2} \texttt{FAU} uniform \texttt{u0..u31}; \texttt{mode=3} \texttt{FauSpecial} such as \texttt{pc}, \texttt{lane\_id}, \texttt{tls\_ptr}, \texttt{wls\_ptr}, \texttt{blend\_descriptor\_0..7}).
+  \item \textbf{Implicit Inter-Stage / Post-Execution (Fixed-Function):} Hardware units running between or after shader warps consume ABI descriptors without shader instructions touching them (Index Fetcher, Tiler clipping/culling/16$\times$16 binning, Early-Z, on-chip Tile SRAM clear/preload, and Morton 16$\times$16 U-interleaved / AFBC writeback).
+\end{enumerate}
+
+\codebox{%
+COMPUTE TIMELINE (Pilot + Main Compute):\\
+~~[IMPLICIT] SPD\_0, WG\_SIZE=(1,1,1), JOB\_SIZE=(1,1,1) -> 1 Pilot warp (r0:r1=fau\_dst, r2:r3=srt\_va)\\
+~~[EXPLICIT] Pilot: LOAD [r2:r3+off] (SRT\_0->Resource->Buffer[]) -> STORE [r0:r1+off] (populates FAU\_0)\\
+~~[SYNC]     CSWAIT scoreboard sync\\
+~~[IMPLICIT] SPD\_1, TSD\_0, WG\_SIZE, JOB\_OFFSET, JOB\_SIZE -> preloads r55..r57=WG\_ID, r60..r62=Local/GlobalID\\
+~~[EXPLICIT] Main: src=u0..u31 (FAU\_0), src=pc (embedded LUT), LOAD/STORE/ATOM via 64-bit BDA\\
+\\
+GRAPHICS TIMELINE (RUN\_IDVS + RUN\_FRAGMENT):\\
+~~[IMPLICIT] INDEX\_BUFFER, VERTEX/INSTANCE/GLOBAL\_ATTR\_OFF, SPD\_0, TSD\_0 -> r59/r60=VertID, r61=InstID\\
+~~[EXPLICIT] Position EBIN: LD\_ATTR\_IMM (SRT\_0) + FAU\_0 -> STORE.istream.end (TILER\_CTX::geometry\_buffer)\\
+~~[IMPLICIT] Fixed-Function Tiler: TILER\_CTX, TILER\_FLAGS, DCD0, SCISSOR\_BOX, DEPTH\_CLAMP -> 16x16 bins\\
+~~[EXPLICIT] Varying EBIN (visible verts only): LD\_ATTR\_IMM -> STORE.estream.end (VARY\_SIZE buffer)\\
+~~[IMPLICIT] FINISH\_TILING -> RUN\_FRAGMENT: FBD\_POINTER, BBOX, ZSD+DCD2 (Early-Z), SPD\_2 -> r59=z, r60=mask\\
+~~[EXPLICIT] Fragment EBIN: LD\_VAR\_IMM / VAR\_TEX\_SINGLE (VARY\_SIZE + SRT\_2) -> ATEST/ZS\_EMIT -> BLEND.end\\
+~~[IMPLICIT] RenderTarget[0..N-1] (FBD +0xC0): retiles 16x16 Tile SRAM -> Morton 16x16 writeback\_buffer%
+}
+
+\subsection{Complete CSF Staging Register Map (\texttt{r0..r63})}
+\label{sec:csf-regs}
+Each CSF Command Stream Interface (CSI) queue owns an isolated 96$\times$32-bit register file (\texttt{CsfQueueState::regs[96]}). Registers \texttt{r0..r63} form the staging window re-interpreted by \texttt{RUN\_COMPUTE}, \texttt{RUN\_IDVS}, and \texttt{RUN\_FRAGMENT}; \texttt{r64..r95} are CSHWIF scratch/overflow registers. Tagged 64-bit registers pack counts or flags in low/high bits that \textbf{must} be stripped before dereferencing.
+
+\begin{center}\footnotesize
+\begin{longtable}{@{}l l l l >{\raggedright\arraybackslash}p{0.34\linewidth}@{}}
+\toprule
+Regs & \texttt{COMPUTESR} & \texttt{IDVSSR} & \texttt{FRAGMENTSR} & Bitfield Packing, Alignment \& Conditions \\
+\midrule\endhead
+\texttt{r0:r7} & \texttt{SRT\_0..3} & \texttt{SRT\_0..3} & \texttt{SRT\_0..3} & \texttt{[47:6]} 64B-aligned VA (\texttt{\& \textasciitilde{}0x3FULL}); \texttt{[5:0]} entry count (max 63). \\
+\texttt{r8:r15} & \texttt{FAU\_0..3} & \texttt{FAU\_0..3} & \texttt{FAU\_0..3} & \texttt{[47:0]} 48-bit VA; \texttt{[63:56]} 64-bit slot count ($\times 2$ for 32-bit words). \\
+\texttt{r16:r23} & \texttt{SPD\_0..3} & \texttt{SPD\_0..2} & \texttt{SPD\_0..3} & \texttt{[47:0]} 32B-aligned VA to \texttt{ShaderProgram} (IDVS: 0=Pos, 1=Var, 2=Frag). \\
+\texttt{r24:r31} & \texttt{TSD\_0..3} & \texttt{TSD\_0..3} & \texttt{TSD\_0..3} & \texttt{[47:0]} 64B-aligned VA to 32B \texttt{LocalStorage} (TLS/WLS). \\
+\texttt{r32} & \texttt{GLOBAL\_ATTR\_OFF} & \texttt{GLOBAL\_ATTR\_OFF} & --- & \texttt{[31:0]} Global vertex/attribute index offset. \\
+\texttt{r33} & \texttt{WG\_SIZE} & \texttt{INDEX\_COUNT} & --- & Comp: \texttt{[9:0]=x-1, [19:10]=y-1, [29:20]=z-1}; IDVS: vertex/index count. \\
+\texttt{r34..r36} & \texttt{JOB\_OFFSET\_X/Y/Z} & \texttt{INST\_CNT, IDX\_OFF, VTX\_OFF} & --- & Comp: workgroup ID base offset; IDVS: instance count, index \& vertex offset. \\
+\texttt{r37..r39} & \texttt{JOB\_SIZE\_X/Y/Z} & \texttt{INST\_OFF, DCD2, IDX\_BUF\_SZ} & --- & Comp: dispatch grid; IDVS: instance offset, \texttt{DCD2} (ZS read/write), index bytes. \\
+\texttt{r40:r41} & --- & \texttt{TILER\_CTX} & \texttt{FBD\_POINTER} & IDVS: 64B-aligned TCD VA; Frag: \texttt{[0]=type, [1]=zs\_crc, [5:2]=rt\_cnt-1, [63:6]=VA}. \\
+\texttt{r42:r43} & --- & \texttt{SCISSOR\_BOX} & \texttt{BBOX\_MIN/MAX} & Packed 16-bit \texttt{(X, Y)} min/max inclusive coordinates (\texttt{+1} for extent). \\
+\texttt{r44:r45} & --- & \texttt{LOW/HIGH\_DEPTH\_CLAMP} & \texttt{TEM\_POINTER} & IDVS: IEEE-754 \texttt{f32} depth clamp bounds; Frag: Tile Emission Map VA. \\
+\texttt{r46:r47} & --- & \texttt{OQ} & \texttt{TEM\_ROW\_STRIDE} & IDVS: occlusion query counter VA; Frag: TEM row stride. \\
+\texttt{r48:r49} & --- & \texttt{VARY\_SIZE} & --- & Per-vertex varying buffer allocation size in bytes. \\
+\texttt{r50:r51} & --- & \texttt{BLEND\_DESC} & --- & \texttt{[47:4]} 16B-aligned VA (\texttt{\& \textasciitilde{}0xFULL}); \texttt{[3:0]} blend descriptor count. \\
+\texttt{r52:r53} & --- & \texttt{ZSD} & --- & \texttt{[47:0]} 32B-aligned VA to 32B \texttt{Depth/stencil} descriptor. \\
+\texttt{r54:r55} & --- & \texttt{INDEX\_BUFFER} & --- & \texttt{[47:0]} Index buffer base VA (stride from \texttt{PrimitiveFlags::index\_type}). \\
+\texttt{r56} & --- & \texttt{TILER\_FLAGS} & --- & Merged via \texttt{r56 | CSRUNIDVS::flags\_override} into \texttt{PrimitiveFlags}. \\
+\texttt{r57..r58} & --- & \texttt{DCD0, DCD1} & --- & \texttt{DCD0}: cull/front-face/kill/A2C; \texttt{DCD1}: sample mask \& RT mask. \\
+\texttt{r60..r61} & --- & \texttt{PRIMITIVE\_SIZE, TILER\_FLAGS2} & --- & \texttt{f32} point size / line width and secondary tiler flags. \\
+\texttt{r62:r63} & \texttt{ITER\_TRACE\_ID0/1} & \texttt{ITER\_TRACE\_ID0/1} & \texttt{ITER\_TRACE\_ID0/1} & Hardware performance/iterator trace correlation IDs. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Pointer-Chasing Descriptor Graph \& Memory Hierarchy}
+\label{sec:csf-chains}
+Every descriptor table indirection follows strict alignment and bounds invariants verified in \texttt{specs/csf/v11.xml}, \texttt{panvk}, and \texttt{valhall\_csf\_pipeline.cpp}:
+\codebox{%
+1. Vertex Attribute Pulling (LD\_ATTR\_IMM table=T, index=I):\\
+~~~IDVSSR::SRT\_0 (va = raw \& \textasciitilde{}0x3F, cnt = raw \& 0x3F)  [Precond: T < cnt]\\
+~~~  -> Resource[T] (16B @ va + T*16: address, size, contains\_descriptors=1)\\
+~~~  -> Attribute[I] (32B @ Resource[T].address + I*32: format, table=B\_T, buf\_idx=B\_I, off, stride)\\
+~~~  -> Resource[B\_T] (16B) -> Buffer[B\_I] (32B @ Resource[B\_T].address + B\_I*32: address, size)\\
+~~~  -> Vertex RAM @ Buffer[B\_I].address + Attribute[I].offset + VertexIndex * Attribute[I].stride\\
+\\
+2. Texture \& Sampler Lookup (TEX\_SINGLE / VAR\_TEX\_SINGLE):\\
+~~~IDVSSR::SRT\_2 (64B-aligned VA) -> Resource[T] -> Texture[tex\_idx] (32B, type=2)\\
+~~~  -> GenericPlane[mip] (32B @ Texture.surfaces + mip*32, type=10: pointer, row\_stride, Morton 16x16)\\
+~~~  +  Sampler[samp\_idx] (32B, type=1: filter, wrap, LOD clamp/bias, compare\_function)\\
+\\
+3. Framebuffer Contiguous Memory Block (RUN\_FRAGMENT):\\
+~~~FRAGMENTSR::FBD\_POINTER (va = raw \& \textasciitilde{}0x3F, type=bit0, zs\_crc=bit1, rt\_cnt=(bits[5:2])+1)\\
+~~~  +0x00: FramebufferParameters (72B fields + 56B pad = 128B)\\
+~~~  +0x80: ZSCRCExtension (64B, present iff zs\_crc == 1)\\
+~~~  +0x80/+0xC0: RenderTarget[0..rt\_cnt-1] (64B each; RGB writeback\_buffer @ +0x20, clear @ +0x30)%
+}
+
+\subsection{Descriptor Memory \& Table Entry Layouts (\texttt{specs/csf/v11.xml})}
+\label{sec:csf-layouts}
+
+\subsubsection{\texttt{ShaderProgram} (\texttt{SPD}, 32B, align 32) \& Stage Preload Table}
+\label{sec:csf-spd}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Word:Bits & Width & Field & Architectural Role \\
+\midrule
+\texttt{0:0..3} & 4b & \texttt{Type} & \texttt{DescriptorType::Shader} (\texttt{8}). \\
+\texttt{0:4..7} & 4b & \texttt{Stage} & \texttt{1}=Compute, \texttt{2}=Fragment, \texttt{3}=Vertex. \\
+\texttt{0:16..19} & 4b & \texttt{FP Modes} & \texttt{Suppress NaN} (b16), \texttt{Flush to zero mode} (b17:18), \texttt{Suppress Inf} (b19). \\
+\texttt{0:28..31} & 4b & \texttt{Exec Flags} & \texttt{Requires helper threads} (b28), \texttt{Shader contains JUMP\_EX} (b29), \texttt{Register allocation} (b30:31: \texttt{0}=64 GPRs, \texttt{2}=32 GPRs). \\
+\texttt{1:0..15} & 16b & \texttt{Preload} & Stage-specific bitmask controlling which GPRs hardware initializes at PC \texttt{0x00}. \\
+\texttt{2:0..3:31} & 64b & \texttt{Binary} & 48-bit GPU VA of 64-bit Valhall shader object code (\texttt{EBIN}). \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\textbf{Implicit Hardware Preloads at PC \texttt{0x00}:} Pilot: \texttt{r0:r1 = pilot\_fau\_dst\_va}, \texttt{r2:r3 = srt\_base\_va}; Compute: \texttt{r55..r57 = WorkGroupID.xyz + JOB\_OFFSET}, \texttt{r60..r62 = LocalInvocationID.xyz} (or \texttt{GlobalInvocationID.xyz}); Vertex (Pos \& Var): \texttt{r59, r60 = VertexIndex}, \texttt{r61 = InstanceIndex}; Fragment: \texttt{r59 = floatBitsToUint(FragCoord.z)}, \texttt{r60 = sample coverage mask}.
+
+\subsubsection{\texttt{Resource} Table Entry (\texttt{SRT}, 16B, align 64) \& \texttt{DescriptorType}}
+\label{sec:csf-srt}
+An \texttt{SRT\_k} register points to an array of \texttt{count} 16-byte \texttt{Resource} entries. Each 32-byte child descriptor carries \texttt{DescriptorType} in \texttt{word0[3:0]}: \texttt{0}=Null, \texttt{1}=Sampler, \texttt{2}=Texture, \texttt{5}=Attribute, \texttt{7}=Depth/stencil, \texttt{8}=Shader, \texttt{9}=Buffer, \texttt{10}=Plane.
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Word:Bits & Width & Field & Architectural Role \\
+\midrule
+\texttt{0:0..1:23} & 56b & \texttt{Address} & Base GPU VA of the child 32-byte descriptor array (or raw data table). \\
+\texttt{1:24} & 1b & \texttt{Contains descriptors} & \texttt{1} if array holds 32B hardware descriptors (\texttt{Buffer}/\texttt{Attribute}/\texttt{Texture}/\texttt{Sampler}). \\
+\texttt{2:0..3:31} & 64b & \texttt{Size} & Table byte size (\texttt{Size / 32} = number of 32B descriptors; bounds-checked by HW). \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsubsection{\texttt{Buffer} (32B, \texttt{type=9}) \& \texttt{Attribute} (32B, \texttt{type=5})}
+\label{sec:csf-buf-attr}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Struct & Word:Bits & Field & Architectural Role \\
+\midrule
+\texttt{Buffer} & \texttt{0:0..7}, \texttt{1:0..31}, \texttt{5:0..31} & \texttt{Type=9}, \texttt{Buffer type}, \texttt{Size} & 64-bit byte size (\texttt{Size | Size\_hi<<32}) checked by \texttt{LD\_CHECKED*}/\texttt{ST\_CHECKED*}. \\
+\texttt{Buffer} & \texttt{2:0..3:31}, \texttt{4:0..31} & \texttt{Address} (64b), \texttt{Stride} & Base GPU VA of SSBO/UBO/vertex buffer; optional packet/attribute stride. \\
+\texttt{Attribute} & \texttt{0:0..31} & \texttt{Type=5}, \texttt{Offset en}, \texttt{Format} (22b) & Hardware \texttt{PixelFormat} (e.g., \texttt{RGB32F}, \texttt{RGBA8\_UNORM}) converted on load. \\
+\texttt{Attribute} & \texttt{1:0..7}, \texttt{1:24..29} & \texttt{Table} (6b), \texttt{Frequency}, \texttt{Divisor R/E} & Selects \texttt{Resource[Table]} holding target \texttt{Buffer[]} and per-vertex/instanced rate. \\
+\texttt{Attribute} & \texttt{2:0..5:31} & \texttt{Offset}, \texttt{Buffer index}, \texttt{Stride}, \texttt{Divisor D} & Effective VA = \texttt{Buffer[idx].address + Offset + VertexIdx * Stride}. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsubsection{\texttt{Texture} (32B, \texttt{type=2}), \texttt{GenericPlane} (32B, \texttt{type=10}) \& \texttt{Sampler} (32B, \texttt{type=1})}
+\label{sec:csf-tex-samp}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Struct & Word:Bits & Field & Architectural Role \\
+\midrule
+\texttt{Texture} & \texttt{0:0..31}, \texttt{1:0..31} & \texttt{Type=2}, \texttt{Dim}(3b), \texttt{Format}(22b), \texttt{W/H}(16b) & 1D/2D/3D/Cube dimensions, texel format, and base width/height. \\
+\texttt{Texture} & \texttt{2:0..3:31}, \texttt{6..7} & \texttt{Swizzle}, \texttt{Levels}, \texttt{Min/Max LOD}, \texttt{Array/Depth} & Component swizzle, mipmap count, MSAA sample count, array layers, 3D depth. \\
+\texttt{Texture} & \texttt{4:0..5:31} & \texttt{Surfaces} (64b VA) & Pointer to contiguous array of 32B \texttt{GenericPlane} descriptors (1 per mip/plane). \\
+\texttt{GenericPlane} & \texttt{0:8..31}, \texttt{2:0..3:15} & \texttt{Clump ordering/format}, \texttt{Pointer} (48b) & Surface tiling (\texttt{Tiled\_U\_Interleaved} Morton 16$\times$16, linear, AFBC) \& texel VA. \\
+\texttt{GenericPlane} & \texttt{1:0..31}, \texttt{4:0..7:31} & \texttt{Size}, \texttt{Row/Slice stride}, \texttt{W/H} & Byte size, row/slice pitch, and plane dimensions. \\
+\texttt{Sampler} & \texttt{0:4..31}, \texttt{1..2}, \texttt{4..7} & \texttt{Wrap S/T/R}, \texttt{Filter}, \texttt{LOD/Compare}, \texttt{Border} & Minify/magnify/mipmap mode, LOD clamp \& bias, anisotropy, shadow compare, RGBA border. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsubsection{\texttt{LocalStorage} (\texttt{TSD}, 32B, align 64), \texttt{FAU} \& \texttt{ValhallSidebandBuffer}}
+\label{sec:csf-tsd-fau}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Word:Bits & Width & Field (\texttt{LocalStorage} / \texttt{TSD}) & Architectural Role \\
+\midrule
+\texttt{0:0..4} & 5b & \texttt{TLS Size} & Log2 per-thread scratch stack size (spills \& \texttt{Private} arrays). \\
+\texttt{1:0..12} & 13b & \texttt{WLS Instances}, \texttt{WLS Size Base/Scale} & Workgroup Local Storage (\texttt{shared} memory) pool sizing per workgroup. \\
+\texttt{2:0..3:31} & 48b+4b & \texttt{TLS Base Pointer}, \texttt{TLS Address Mode} & Base VA returned via \texttt{FauSpecial::tls\_ptr} for \texttt{SEG\_ADD}/\texttt{LOAD}/\texttt{STORE}. \\
+\texttt{4:0..5:31} & 64b & \texttt{WLS Base Pointer} & Base VA returned via \texttt{FauSpecial::wls\_ptr} for workgroup shared memory. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\textbf{FAU \& 8-Bit Source Multiplexing:} Every 8-bit Valhall source operand splits \texttt{mode = raw >> 6}: \texttt{0/1}=GPR \texttt{r0..r63} (\texttt{1}=last-use \texttt{\textasciicircum}); \texttt{2}=\texttt{FauUniform} reading \texttt{FAU\_k} (\texttt{u0..u31} on Page 0; 64-bit slot count in \texttt{FAU\_k[63:56]}); \texttt{3, bit5=0}=\texttt{SmallConstant} (Table~1.2); \texttt{3, bit5=1}=\texttt{FauSpecial} (\texttt{pc}, \texttt{lane\_id}, \texttt{lane\_width=16}, \texttt{warp\_id}, \texttt{framebuffer\_size}, \texttt{atest\_datum}, \texttt{sample}, \texttt{blend\_descriptor\_0..7}, \texttt{tls\_ptr}, \texttt{wls\_ptr}). In \texttt{valhall2spirv}, the 344-byte \texttt{ValhallSidebandBuffer} (Set~0, Binding~0) bridges \texttt{fau\_words[64]} (\texttt{+0}), \texttt{shader\_pc\_base} (\texttt{+256}), \texttt{srt\_base\_va} (\texttt{+264}), \texttt{pilot\_fau\_dst\_va} (\texttt{+272}), \texttt{blend\_descs[4]} (\texttt{+280}), \texttt{local\_size\_xyz+lane\_width} (\texttt{+312}), and \texttt{fb\_info} (\texttt{+328}).
+
+\subsubsection{\texttt{TilerContext} (\texttt{TCD}, 128B), \texttt{PrimitiveFlags} \& \texttt{DCD0..2}}
+\label{sec:csf-tiler}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Struct / Reg & Word:Bits & Key Fields & Fixed-Function / Shader Role \\
+\midrule
+\texttt{TilerContext} & \texttt{0..1}, \texttt{6..7}, \texttt{8..9} & \texttt{Polygon List}, \texttt{Heap}, \texttt{Geometry buffer} & 16$\times$16 tile polygon lists, heap VA, and Position FIFO written by \texttt{STORE.istream}. \\
+\texttt{TilerContext} & \texttt{2..4} & \texttt{Hierarchy Mask}, \texttt{FB W/H}, \texttt{Layers} & Hierarchical binning mask, framebuffer dimensions, and provoking vertex rule. \\
+\texttt{PrimitiveFlags} (\texttt{r56}) & \texttt{0:0..31} & \texttt{Draw mode}, \texttt{Index type}, \texttt{Secondary Shader}, \texttt{Depth Cull} & OR'd with \texttt{CSRUNIDVS::flags\_override}; enables Varying EBIN (\texttt{b18}). \\
+\texttt{DCD0} (\texttt{r57}) & \texttt{0:0..26} & \texttt{Front Face CCW}, \texttt{Cull Front/Back}, \texttt{A2C}, \texttt{Cull Zero Area} & Rasterization culling, alpha-to-coverage, \texttt{Shader Modifies Coverage} (b20). \\
+\texttt{DCD1} (\texttt{r58}) & \texttt{0:0..27} & \texttt{Sample Mask} (16b), \texttt{RT Mask} (11b) & Active MSAA sample mask and color render-target enable mask. \\
+\texttt{DCD2} (\texttt{r38}) & \texttt{0:0..25} & \texttt{Read/Write Mask}, \texttt{No Shader Depth/Stencil Read} & Controls Early-Z (\texttt{b25=1}) vs Late-Z (\texttt{b25=0}) with \texttt{ZS\_EMIT}/\texttt{ATEST}. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsubsection{\texttt{Depth/stencil} (\texttt{ZSD}, 32B, \texttt{type=7}) \& \texttt{Blend} (16B, align 64)}
+\label{sec:csf-zsd-blend}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Struct & Word:Bits & Key Fields & Hardware Role \\
+\midrule
+\texttt{Depth/stencil} & \texttt{0:0..31}, \texttt{1..2} & \texttt{Front/Back Stencil Ops}, \texttt{Stencil from shader}(b30), \texttt{Masks/Ref} & Early/Late stencil test; \texttt{b30=1} accepts \texttt{ZS\_EMIT.stencil}. \\
+\texttt{Depth/stencil} & \texttt{4:22..31}, \texttt{5..7} & \texttt{Depth write}(b27), \texttt{Depth func}(b29:31), \texttt{Units/Factor/Clamp} & Depth compare function, write enable, and polygon offset bias. \\
+\texttt{Blend} & \texttt{0:0..31}, \texttt{1:0..31} & \texttt{Load Dest}, \texttt{Enable}(b9), \texttt{sRGB}, \texttt{Constant}, \texttt{Equation} & Fixed-function blend enable, constant alpha, and RGB/A blend equation. \\
+\texttt{Blend} & \texttt{2:0..3:31} & \texttt{Internal} (\texttt{Mode} b0:1: Fixed-Function vs \texttt{Shader} PC) & Consumed by \texttt{BLEND.end} via \texttt{FauSpecial::blend\_descriptor\_0..7}. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsubsection{\texttt{FramebufferParameters} (128B), \texttt{ZSCRCExtension} (64B) \& \texttt{RenderTarget} (64B)}
+\label{sec:csf-fbd}
+\begin{center}\footnotesize
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Struct & Word:Bits & Key Fields & Hardware Role \\
+\midrule
+\texttt{FramebufferParams} & \texttt{8..10}, \texttt{11:0..31} & \texttt{W/H}, \texttt{Bound Min/Max}, \texttt{Sample Cnt}, \texttt{Tile Size}, \texttt{RT Cnt} & Tile grid dimensions (16$\times$16 Tile SRAM), MSAA count, and color buffer allocation. \\
+\texttt{FramebufferParams} & \texttt{12:0..31}, \texttt{13}, \texttt{14..15} & \texttt{S/Z Clear/Preload/Unload}, \texttt{Has ZS CRC}(b21), \texttt{Z Clear}, \texttt{Tiler} & Initializes Tile SRAM depth/stencil clear values and links Tiler polygon lists. \\
+\texttt{ZSCRCExtension} & \texttt{0..15} (64B) & \texttt{CRC}, \texttt{ZS} / \texttt{AFBC ZS}, \texttt{S} / \texttt{AFBC S} & Present at \texttt{FBD +0x80} when \texttt{FBD\_POINTER[1]==1}; backs \texttt{LD\_TILE.z\_stencil}. \\
+\texttt{RenderTarget[i]} & \texttt{0..1}, \texttt{8..11}, \texttt{12..15} & \texttt{Internal/Writeback Format}, \texttt{Block Format}, \texttt{Writeback buffer}, \texttt{Clear} & 64B per RT; \texttt{Writeback buffer} (\texttt{+0x20}) holds destination VA \& \texttt{row\_stride}; \texttt{Clear} (\texttt{+0x30}) holds 128-bit clear color. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+\textbf{Morton 16$\times$16 \texttt{Tiled\_U\_Interleaved} Bit Interleaving:} Within each 16$\times$16 tile, texel $(t_x, t_y)$ maps to linear tile index $b_7 b_6 b_5 b_4 b_3 b_2 b_1 b_0$ where $b_0 = t_{x0} \oplus t_{y0}$, $b_1 = t_{y0}$, $b_2 = t_{x1} \oplus t_{y1}$, $b_3 = t_{y1}$, $b_4 = t_{x2}$, $b_5 = t_{y2}$, $b_6 = t_{x3}$, $b_7 = t_{y3}$.
+
+\subsection{Worked End-to-End ABI Traces (Compute \& Graphics)}
+\label{sec:csf-traces}
+
+\subsubsection*{Trace A: End-to-End Compute Shader Execution (\texttt{sample.comp}, Mali-G615, 256 Threads)}
+Verified bit-exact across 256/256 output elements and 5/5 atomic debug counters (\texttt{tests/test\_moc\_roundtrip\_compute.cpp}):
+\begin{enumerate}
+  \item \textbf{Phase 1 --- Pilot Shader (\texttt{EBIN\_44}, 1 thread):} The command stream populates \texttt{COMPUTESR::WG\_SIZE = 0x0} ($1\times 1\times 1$), \texttt{JOB\_SIZE = (1, 1, 1)}, \texttt{SRT\_0 = 0x500000010000}, and \texttt{FAU\_0 = 0x500000020000}, then fires \texttt{RUN\_COMPUTE (spd=0, srt=0, fau=0)}. Hardware preloads \texttt{r0:r1 = 0x500000020000} (\texttt{pilot\_fau\_dst\_va}) and \texttt{r2:r3 = 0x500000010000} (\texttt{srt\_base\_va}).
+  \codebox{%
+  0x00: LOAD.i64  @r4:r5, [r2:r3], \#+0   ; reads SRT\_0::Resource[0].address (Buffer[] table VA)\\
+  0x08: LOAD.i64  @r6:r7, [r4:r5], \#+8   ; reads Buffer[0].address (input SSBO VA)\\
+  0x10: STORE.i64 @r6:r7, [r0:r1], \#+0   ; writes input SSBO VA into FAU\_0 slot u0\\
+  ...   (repeats for Buffer[1] -> u1 @ +8, Buffer[2] -> u2 @ +16, and writes 16u -> u3.w0 @ +24)\\
+  0x48: NOP.end                           ; signals scoreboard; CSWAIT unblocks Main Compute%
+  }
+  \item \textbf{Phase 2 --- Main Compute (\texttt{EBIN\_42}, 256 threads + Embedded LUT at \texttt{+0x100}):} The command stream sets \texttt{SPD\_1} (64 GPRs/thread, PC \texttt{0x00 = EBIN\_42}), \texttt{WG\_SIZE = 0x0000000f} ($16\times 1\times 1$), \texttt{JOB\_OFFSET = (0,0,0)}, and \texttt{JOB\_SIZE = (16,1,1)}, spawning 16 workgroups. Hardware preloads \texttt{r55..r57 = WorkGroupID.xyz} and \texttt{r60..r62 = LocalInvocationID.xyz}.
+  \codebox{%
+  ; 1. Global thread ID using implicit preloads r55/r60 + Pilot-populated FAU u3.w0 (16):\\
+  IMAD.u32     r0, r55, u3.w0, r60           ; gid = WorkGroupID.x * 16 + LocalInvocationID.x\\
+  ; 2. Direct 64-bit BDA load from input SSBO (FAU u0):\\
+  SHADD.u64    [r2:r3], u0, r0.w0, \#2       ; \&input[gid] = u0 + (gid << 2)\\
+  LOAD.i32     @r4, [r2:r3], \#0             ; reads input[gid]\\
+  ; 3. Embedded constant LUT read via FauSpecial::pc (+0x100 past .end inside shader BO):\\
+  IADD\_IMM.u64 [r6:r7], pc, \#+0x100         ; \&packed\_trit\_data\_0[0]\\
+  LOAD.i8      @r8, [r6:r7], \#0             ; reads LUT byte\\
+  ; 4. Atomic debug counters (FAU u2) \& output store (FAU u1):\\
+  ATOM1.i32.ainc.slot0 [u2 + off]            ; increments 5 debug counters -> 256\\
+  STORE.i32.slot0.end @r10, [u1 + gid*4]     ; writes output[gid] and terminates warp%
+  }
+\end{enumerate}
+
+\subsubsection*{Trace B: End-to-End Graphics Execution (\texttt{vkcube\_frame1}, Pixel~8 \texttt{libr54p3\_vulkan\_icd.so}, 256$\times$256)}
+Every raw 64-bit word and address below comes verbatim from \texttt{tests/data/vkcube\_frame1/}:
+\begin{enumerate}
+  \item \textbf{Stage 1 --- Position EBIN (\texttt{pos\_shader.bin}, 54 insns, \texttt{SPD\_0 = 0x10050580}):} \texttt{IDVSSR::SRT\_0 = 0x000078682c5fc1c8} strips \texttt{\& \textasciitilde{}0x3F} $\to$ base VA \texttt{0x78682c5fc1c0}, \texttt{count = 8}. \texttt{FAU\_0 = 0x010078682c5fc240} gives \texttt{slots64 = 1} (\texttt{u0.w0 = 128.0f}, \texttt{u0.w1 = 256.0f}). The Index Fetcher reads 36 \texttt{uint16} indices from \texttt{INDEX\_BUFFER} (\texttt{0x78685bd17000}) and preloads \texttt{r59 = r60 = VertexIndex}, \texttt{r61 = InstanceIndex (0)}.
+  \codebox{%
+  0x000: 0x0066800622017d7c  LD\_ATTR\_IMM @r0:r2, r60, r61, \#0, \#0\\
+  ~~-> Chases SRT\_0 -> Resource[1] -> Attribute[0] (RGB32F, off=0, stride=24, table=2)\\
+  ~~-> Resource[2] -> Buffer[0] (0x78685bd19000) -> loads vec3 position into @r0:r2\\
+  0x008..0x020:              LD\_PKA @r4..r7, u\_buf + 0x00..0x30 (flow=wait0)\\
+  ~~-> Chases Resource[4] -> Buffer[1] (64B @ 0x78685bd18000) -> loads 4x4 MVP matrix\\
+  0x028..0x1a0:              48x FMA.f32 / FMUL.f32 reading FAU\_0 u0.w0 (128.0f), u0.w1 (256.0f)\\
+  0x1a8: 0x7861480839000040  STORE.istream.end @r0:r3 (flow=0xf = END)\\
+  ~~-> Writes 16B clip-space gl\_Position into TILER\_CTX::geometry\_buffer FIFO%
+  }
+  \item \textbf{Stage 2 --- Fixed-Function Tiler (100\% Implicit):} Zero shader instructions execute. The Tiler merges \texttt{r56 | flags\_override = 0x00470208} (\texttt{Triangles}, \texttt{UINT16}, \texttt{secondary\_shader=1}), applies \texttt{DCD0 = 0x04010040} (CCW front face, zero-area cull), clips against \texttt{SCISSOR\_BOX = (0,0)..(255,255)} and \texttt{DEPTH\_CLAMP = [-3.77e-5f, 1.0f]}, and bins surviving triangles into 16$\times$16 tile polygon lists in \texttt{TILER\_CTX} (\texttt{0x78682c63e400}).
+  \item \textbf{Stage 3 --- Varying EBIN (\texttt{var\_shader.bin}, 3 insns, \texttt{SPD\_1 = 0x10050800}):} Runs \emph{only} for vertices of surviving visible triangles; hardware reloads \texttt{r59..r61}.
+  \codebox{%
+  0x000: 0x0066800622117d7c  LD\_ATTR\_IMM @r0:r2, r60, r61, \#0, \#1\\
+  ~~-> Chases Resource[1] -> Attribute[1] (RGB32F, off=12, stride=24, table=2) -> vec3 color\\
+  0x010: 0x7861400632000044  STORE.estream.end @r0:r2 -> writes 12B into VARY\_SIZE (0x0c) buffer%
+  }
+  \item \textbf{Stage 4 --- Fragment EBIN (\texttt{frag\_shader.bin}, 3 insns, \texttt{SPD\_2 = 0x10050900}) \& Tile Writeback:} \texttt{FBD\_POINTER = 0x000078682c63e483} unpacks \texttt{type=1, zs\_crc=1, rt\_count=1}, base VA \texttt{0x78682c63e480}, clearing 16$\times$16 Tile SRAM to \texttt{z\_clear = 1.0f} and \texttt{RTD[0]::clear\_color = 0xff2e241f}. \texttt{ZSD} (\texttt{0x78685bcfc0e0}) + \texttt{DCD2} (\texttt{no\_shader\_depth\_read=1}) run implicit Early-Z (\texttt{Less}) before spawning warps with \texttt{r59 = FragCoord.z}, \texttt{r60 = mask}.
+  \codebox{%
+  0x000: 0x685c8006220000c0  LD\_VAR\_IMM.f32.v3 @r0:r2, slot=0 (flow=0xd wait/reconverge)\\
+  ~~-> Hardware barycentric interpolator reads 12B vec3 color from VARY\_SIZE into r0..r2\\
+  0x008: 0x4910c33f800000c0  MOV\_IMM r3, \#0x3f800000 (sets alpha = 1.0f)\\
+  0x010: 0x787f4008327c00f0  BLEND.end @r0:r3, blend\_descriptor\_0 (flow=0xf = END)\\
+  ~~-> IDVSSR::BLEND\_DESC (0x78685bcfc0c1 \& \textasciitilde{}0xF -> 0x78685bcfc0c0, count=1) -> Blend[0] -> Tile SRAM%
+  }
+  Once all triangles in a 16$\times$16 tile complete, fixed-function hardware retiles on-chip Tile SRAM into Morton 16$\times$16 \texttt{Tiled\_U\_Interleaved} layout at \texttt{RTD[0]} (\texttt{FBD +0xC0}, \texttt{writeback\_buffer.base = 0x78685bd1b000}, \texttt{row\_stride = 16384}). In textured pipelines (\texttt{test\_moc\_roundtrip\_graphics.cpp}), a single \texttt{VAR\_TEX\_SINGLE} fuses \texttt{LD\_VAR\_IMM} (\texttt{VARY\_SIZE}) with \texttt{SRT\_2} $\to$ \texttt{Texture[0]} $\to$ \texttt{GenericPlane} (Morton detile) + \texttt{Sampler[0]} directly into \texttt{@r0:r3} for \texttt{BLEND.end}.
+\end{enumerate}
+
 % ============================================================================
 % Chapter 2: Enumerations & Modifiers (Every Entry + Worked Example, All 128 Enums)
 % ============================================================================
@@ -190,12 +473,13 @@ Enum Name (Jump) & Values (Encoding) \\
 This chapter documents all \textbf{201} canonical Valhall mnemonics (\textbf{627} \texttt{<instruction>} XML specifications across v9--v14). Each instruction starts on its own page and provides:
 \begin{itemize}
   \item Operational semantics, structured bulleted notes, and color-coded syntax (\mnem{Mnemonic}, \imod{Modifiers}, \dst{Destination}, \src{Sources}, \imm{Immediates}).
-  \item Closest SPIR-V opcode, compact inducing GLSL snippet, and multiple concrete worked examples.
+  \item Closest SPIR-V opcode, syntax-aligned Equivalent GLSL operational semantics (with flag variants), bulleted Execution Context (cross-linked to Section~\ref{sec:csf-abi}), and multiple concrete worked examples.
   \item Variant/architecture/opcode table, representative 64-bit encoding bit-layout table (with clickable backlinks from modifier field names to their Chapter~2 definitions), and explicit explanations for every instruction field.
 \end{itemize}
 \clearpage
 
 %%%%%~~~$INSTRUCTION_REFERENCE~~~%%%%%
+
 
 % ============================================================================
 % Appendix A: Concrete Decompiled libGLES_mali.so vs Mesa Panfrost Differences

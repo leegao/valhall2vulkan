@@ -3,7 +3,9 @@
 All ISA semantics, worked examples, and curated enum walkthroughs live in
 ``isa_semantics.py``; all LaTeX/Markdown/assembly formatting helpers live in
 ``fmt_helpers.py``; all field and enum-entry descriptions live in
-``v3_enrichments.py``; and static document boilerplate lives in ``template.tex``.
+``v3_enrichments.py``; Equivalent GLSL, exact Valhall mappings, and CSF ABI
+sideband mappings live in ``csf_abi_map.py``; and static document boilerplate
+(including Chapter 4 CSF ABI and Appendix A) lives in ``template.tex``.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
 
+from . import csf_abi_map
 from . import isa_semantics
 from . import v3_enrichments as v3e
 from .fmt_helpers import (
@@ -35,6 +38,7 @@ TEMPLATE_PATH = Path("tools/reference/template.tex")
 KEY_ENUM_SECTION_TEMPLATE = r'''\section{%%%%%~~~$TITLE~~~%%%%%}
 \label{enum:%%%%%~~~$ENAME~~~%%%%%}
 %%%%%~~~$DESC~~~%%%%%
+%%%%%~~~$CSF_ABI_NOTE~~~%%%%%
 %%%%%~~~$ENTRIES_TABLE~~~%%%%%
 %%%%%~~~$WALKTHROUGHS~~~%%%%%
 '''
@@ -42,6 +46,7 @@ KEY_ENUM_SECTION_TEMPLATE = r'''\section{%%%%%~~~$TITLE~~~%%%%%}
 REM_ENUM_SUBSECTION_TEMPLATE = r'''\subsection{%%%%%~~~$PRETTY~~~%%%%% (\texttt{%%%%%~~~$ENAME_TEX~~~%%%%%})}
 \label{enum:%%%%%~~~$ENAME~~~%%%%%}
 Used by \texttt{%%%%%~~~$SAMPLE_INS~~~%%%%%} and related instructions (%%%%%~~~$VAL_COUNT~~~%%%%% encoding values):
+%%%%%~~~$CSF_ABI_NOTE~~~%%%%%
 %%%%%~~~$ENTRIES_TABLE~~~%%%%%
 %%%%%~~~$WALKTHROUGHS~~~%%%%%
 '''
@@ -51,7 +56,13 @@ INSTRUCTION_ENTRY_TEMPLATE = r'''\subsection*{%%%%%~~~$MNEM_TEX~~~%%%%%}
 %%%%%~~~$BEHAVIOR~~~%%%%%
 %%%%%~~~$NOTES~~~%%%%%
 \codebox{%%%%%~~~$SYNTAX_BODY~~~%%%%%}
-\textbf{Closest SPIR-V Op:} \texttt{%%%%%~~~$SPIRV_OP~~~%%%%%} \quad|\quad \textbf{Inducing GLSL:} \texttt{%%%%%~~~$GLSL_SNIP~~~%%%%%}
+\textbf{Closest SPIR-V Op:} \texttt{%%%%%~~~$SPIRV_OP~~~%%%%%}
+\par\textbf{Equivalent GLSL (Operational Semantics \& Flag Variants):}
+\codebox{%%%%%~~~$EQUIV_GLSL~~~%%%%%}
+\textbf{Execution Context:}
+\begin{tightitemize}\footnotesize
+%%%%%~~~$EXEC_CONTEXT~~~%%%%%
+\end{tightitemize}
 %%%%%~~~$WORKED_EXAMPLES~~~%%%%%
 \begin{center}\footnotesize
 \begin{tabularx}{\linewidth}{@{}lllX@{}}
@@ -179,6 +190,8 @@ def build_enum_sections(enums, enum_sample_ins):
             continue
         documented_enums.add(ename)
         sample_ins = enum_sample_ins.get(ename, "OP")
+        abi_note = csf_abi_map.csf_abi_for_enum(ename)
+        abi_tex = f"\\par\\textbf{{CSF ABI Interaction:}} {abi_note}" if abi_note else ""
         key_enum_blocks.append(
             render_template(
                 KEY_ENUM_SECTION_TEMPLATE,
@@ -186,6 +199,7 @@ def build_enum_sections(enums, enum_sample_ins):
                     "TITLE": title,
                     "ENAME": ename,
                     "DESC": md_inline_to_tex(desc),
+                    "CSF_ABI_NOTE": abi_tex,
                     "ENTRIES_TABLE": render_enum_entries_table(ename, vals, sample_ins, v3e.describe_enum_entry),
                     "WALKTHROUGHS": render_walkthroughs_tex(
                         walkthroughs,
@@ -215,6 +229,8 @@ def build_enum_sections(enums, enum_sample_ins):
         sec_walks = isa_semantics.secondary_enum_walkthroughs(ename)
         if not sec_walks:
             raise KeyError(f"Missing worked example for secondary enum {ename!r} in isa_semantics.SECONDARY_ENUM_WALKTHROUGHS")
+        abi_note = csf_abi_map.csf_abi_for_enum(ename)
+        abi_tex = f"\\par\\textbf{{CSF ABI Interaction:}} {abi_note}" if abi_note else ""
         rem_subsection_blocks.append(
             render_template(
                 REM_ENUM_SUBSECTION_TEMPLATE,
@@ -224,6 +240,7 @@ def build_enum_sections(enums, enum_sample_ins):
                     "ENAME": ename,
                     "SAMPLE_INS": tex_esc(sample_ins),
                     "VAL_COUNT": str(len(vals)),
+                    "CSF_ABI_NOTE": abi_tex,
                     "ENTRIES_TABLE": render_enum_entries_table(ename, vals, sample_ins, v3e.describe_enum_entry),
                     "WALKTHROUGHS": render_walkthroughs_tex(
                         sec_walks,
@@ -267,7 +284,9 @@ def build_instruction_reference(mnem_specs: dict[str, list[dict]], ch2_enums: se
         for mn in mns:
             specs = mnem_specs[mn]
             beh, note = isa_semantics.behavior_of(mn)
-            spv_op, glsl_snip, examples = isa_semantics.extras_of(mn)
+            spv_op, _legacy_glsl, examples = isa_semantics.extras_of(mn)
+            equiv_glsl_tex = csf_abi_map.equiv_glsl_tex(mn)
+            exec_ctx_tex = csf_abi_map.render_execution_context_tex(mn, cat)
 
             seen_syn: list[str] = []
             for sp in specs:
@@ -287,7 +306,8 @@ def build_instruction_reference(mnem_specs: dict[str, list[dict]], ch2_enums: se
                         "NOTES": fmt_notes_tex(note) if note else "",
                         "SYNTAX_BODY": syn_body,
                         "SPIRV_OP": tex_esc(spv_op),
-                        "GLSL_SNIP": tex_esc(glsl_snip),
+                        "EQUIV_GLSL": equiv_glsl_tex,
+                        "EXEC_CONTEXT": exec_ctx_tex,
                         "WORKED_EXAMPLES": render_walkthroughs_tex(
                             examples,
                             heading_singular="Worked Example:",

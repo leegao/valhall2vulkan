@@ -34,27 +34,27 @@ CAT_ORDER = [
 ISA_SEMANTICS = {
     'BITREV': {
         "category": 'Integer Arithmetic',
-        "behavior": '32-bit bit reversal: `dst[k] = src0[31 - k]` for `k in 0..32`.',
+        "behavior": 'Reverses all 32 bits of `src0`: for every bit position $k \\in \\{0, \\dots, 31\\}$, sets `dest[k] = src0[31 - k]`.',
         "notes": 'Exact bit-for-bit reversal (`hw_tests.rs:1265-1272`). (`kraid/ops.rs:331-355`, `encode_v9.rs:811-828`, `nir.rs:1255-1261`, `hw_tests.rs:1265-1272`)',
     },
     'CLZ': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane count leading zeros: `res = leading_zeros_N(src0[i])`; if `mask && src0[i] == 0`, `res = ~0_N` (all-ones).',
+        "behavior": 'Counts leading zero bits independently in each SIMD element $i \\in \\{0, \\dots, N-1\\}$ of `src0` (where $N=1$ for `u32`, $N=2$ for `v2u16`, and $N=4$ for `v4u8` on v9--v10, with lane width $W = 32/N$). When `src0[i] != 0`, writes `leading_zeros_W(src0[i])` to `dest[i]`; when `src0[i] == 0`, writes `W` by default or all-ones (`~0_W`) if `.mask` is set.',
         "notes": 'When `src0[i] == 0`: returns `bits` (32/16/8) if `!mask`, or `0xFFFFFFFF`/`0xFFFF`/`0xFF` if `mask` (`hw_tests.rs:1279-1282`). (`kraid/ops.rs:696-732`, `encode_v9.rs:902-920`, `nir.rs:1240-1279`, `hw_tests.rs:1275-1315`)',
     },
     'HADD': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane halving add (arch <= v10): `dst[i] = (ext(src0[i]) + ext(src1[i]) + (round == round_up ? 1 : 0)) >> 1` (exact intermediate width, no overflow).',
+        "behavior": 'Computes the overflow-free halving average independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ (where $N=1$ for `s32`/`u32`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8`; arch <= v10): `dest[i] = (ext(src0[i]) + ext(src1[i]) + (round == round_up ? 1 : 0)) >> 1` using an exact $(W+1)$-bit intermediate sum.',
         "notes": 'Removed in v11 (`hw_tests.rs:1768`). Arithmetic shift right for signed, logical shift right for unsigned. (`kraid/ops.rs:2157-2203`, `encode_v9.rs:1710-1734`, `nir.rs:1071-1090`, `hw_tests.rs:1765-1812`)',
     },
     'IABS': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane signed absolute value: `dst[i] = (src0[i] as iN).unsigned_abs()`.',
+        "behavior": 'Computes the wrapping signed absolute value for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ for `s32`, $N=2$ for `v2s16`, $N=4$ for `v4s8` on v9--v10): `dest[i] = (src0[i] < 0) ? -src0[i] : src0[i]` (wrapping on `INT_MIN`).',
         "notes": 'For `INT_MIN` (`-2^(N-1)`), `unsigned_abs()` returns `2^(N-1)` (identical bit pattern to `INT_MIN`, wrapping, non-saturating; verified in `hw_tests.rs:1815-1845`). (`kraid/ops.rs:2211-2240`, `encode_v9.rs:1736-1753`, `nir.rs:1064-1070`, `hw_tests.rs:1815-1845`)',
     },
     'IADD': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane `dst[i] = sat(widen(src0)[i] + widen(src1)[i])` (or wrapping if `!sat`). 64-bit: `s64`/`u64` single-lane add.',
+        "behavior": 'Adds Stage A widened/swizzled `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`/`s64`/`u64`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10): `dest[i] = sat(widen0(src0)[i] + widen1(src1)[i])` when `.sat` is set, or wraps modulo $2^W$ otherwise.',
         "notes": '64-bit `IADD.sat` is NOT supported by HW (`kraid/ops.rs:2281-2284`, `hw_tests.rs:1885`). `v4s8`/`v4u8` only exist on arch <= v10 (`hw_tests.rs:1876`). (`kraid/ops.rs:2250-2298`, `encode_v9.rs:1755-1793`, `nir.rs:1091-1105`, `hw_tests.rs:1848-1902`)',
     },
     'IADDC': {
@@ -64,22 +64,22 @@ ISA_SEMANTICS = {
     },
     'IADD_IMM': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane `dst[i] = src0[i] + imm1w[i]` (wrapping; 32-bit inline immediate).',
+        "behavior": 'Adds the inline 32-bit immediate `imm1w` to `src0` with wrapping arithmetic for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10): `dest[i] = src0[i] + imm1w[i]`.',
         "notes": 'With `src0 = 0`, canonical immediate move (`ISA.xml:62`). `v4i8` only arch <= v10. (`kraid/encode_v9.rs:1766-1782`, `bifrost/valhall/ISA.xml`)',
     },
     'IDPADD': {
         "category": 'Integer Arithmetic',
-        "behavior": '4-element 8-bit integer dot product + 32-bit accumulate: `dot = sum_{k=0..3}(ext(src0.b[k]) * ext(src1.b[k]))`; `dst = sat(src2 + dot)` (or wrapping).',
+        "behavior": 'Computes the 4-element 8-bit integer dot product of bytes $k \\in \\{0, 1, 2, 3\\}$ of `src0` and `src1` and accumulates into 32-bit `src2`: `dot = sum_{k=0..3}(ext(src0.b[k]) * ext(src1.b[k]))`; writes `sat(src2 + dot)` if `.sat` is set, or wrapping `src2 + dot` otherwise.',
         "notes": 'On `v4s8` (v9-v13), both inputs are signed (`V4S8`), dst is `S32`. On v14, `unsigned0`/`unsigned1` override per-src signedness while dst remains `S32`. On `v4u8`, all unsigned. (`kraid/ops.rs:2354-2423`, `encode_v9.rs:1820-1865`, `hw_tests.rs:1952-1989`)',
     },
     'IMUL': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane `dst[i] = sat(widen(src0)[i] * widen(src1)[i])` (or wrapping low `bits` if `!sat`). 64-bit (`s64`/`u64`): 32x32->64 widening multiply (requires `w0`/`w1` widen on both sources).',
+        "behavior": 'Multiplies Stage A widened/swizzled `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`/`s64`/`u64`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10): `dest[i] = sat(widen0(src0)[i] * widen1(src1)[i])` under `.sat`, or low $W$ bits otherwise. For 64-bit `s64`/`u64`, performs a $32 \\times 32 \\to 64$ widening multiply requiring `.w0`/`.w1` on both sources.',
         "notes": '64-bit `IMUL.sat` NOT supported (`ops.rs:2465-2468`); `IMUL.s64/u64` requires widening swizzle (`None` swizzle unsupported, `hw_tests.rs:2022-2027`). (`kraid/ops.rs:2433-2483`, `encode_v9.rs:1867-1896`, `nir.rs:1106-1136`, `hw_tests.rs:1992-2060`)',
     },
     'ISUB': {
         "category": 'Integer Arithmetic',
-        "behavior": 'Per-lane `dst[i] = sat(widen(src0)[i] - widen(src1)[i])` (or wrapping if `!sat`). 64-bit: `s64`/`u64` single-lane sub.',
+        "behavior": 'Subtracts Stage A widened/swizzled `src1` from `src0` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`/`s64`/`u64`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10): `dest[i] = sat(widen0(src0)[i] - widen1(src1)[i])` when `.sat` is set, or wraps modulo $2^W$ otherwise.',
         "notes": '64-bit `ISUB.sat` NOT supported by HW (`kraid/ops.rs:2523-2526`, `hw_tests.rs:2093`). Unsigned sat clamps underflow to 0. `v4s8`/`v4u8` arch <= v10. (`kraid/ops.rs:2492-2540`, `encode_v9.rs:1898-1918`, `nir.rs:1137-1159`, `hw_tests.rs:2063-2110`)',
     },
     'ISUBB': {
@@ -114,7 +114,7 @@ ISA_SEMANTICS = {
     },
     'AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `res = widen(src0) & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`. (`src1` unused/fixed 0).',
+        "behavior": 'Computes bitwise AND independently across each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10): `res = widen0(src0)[i] & (not2 ? ~src2[i] : src2[i])`, then writes `not_result ? ~res : res` to `dest[i]` (`src1` unused/fixed 0).',
         "notes": 'Second operand is `src2` (NOT `src1`) in XML encoding (`encode_v9.rs:2982-2985`). Supports `i32`, `i64`, `v2i16`, `v4i8`. (`kraid/ops.rs:3944-4025`, `encode_v9.rs:2916-3093`, `hw_tests.rs:2148-2198`)',
     },
     'AND_IMM': {
@@ -124,62 +124,62 @@ ISA_SEMANTICS = {
     },
     'ARSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane arithmetic right shift `(val as iN) >> (amt & (bits-1))` (`amt` is 8-bit per lane from `src1` via `lanes1`); `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` arithmetic right shift `(val as iN) >> (amt & (bits-1))`; `res = s & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` arithmetic right shift `(val as iN) >> (amt & (bits-1))`; `res = s | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'ARSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` arithmetic right shift `(val as iN) >> (amt & (bits-1))`; `res = s ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes arithmetic right shift `s = `(val as iW) >> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane rotate left `rotate_left(val, amt & (bits-1))` (`amt` is 8-bit per lane from `src1` via `lanes1`); `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate left `rotate_left(val, amt & (bits-1))`; `res = s & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate left `rotate_left(val, amt & (bits-1))`; `res = s | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LROT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate left `rotate_left(val, amt & (bits-1))`; `res = s ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate left `s = `rotate_left(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane logical left shift `val << (amt & (bits-1))` (`amt` is 8-bit per lane from `src1` via `lanes1`); `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical left shift `val << (amt & (bits-1))`; `res = s & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical left shift `val << (amt & (bits-1))`; `res = s | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'LSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical left shift `val << (amt & (bits-1))`; `res = s ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical left shift `s = `val << (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'NOT': {
@@ -194,7 +194,7 @@ ISA_SEMANTICS = {
     },
     'OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `res = widen(src0) | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'Computes bitwise OR independently across each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10): `res = widen0(src0)[i] | (not2 ? ~src2[i] : src2[i])`, then writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Second operand is `src2`. `OpShiftLop(None, None)` encodes as `OR src0, 0` (`encode_v9.rs:3060-3066`). (`kraid/ops.rs:3944-4025`, `encode_v9.rs:2916-3093`, `hw_tests.rs:2148-2198`)',
     },
     'OR_IMM': {
@@ -204,47 +204,47 @@ ISA_SEMANTICS = {
     },
     'RROT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane rotate right `rotate_right(val, amt & (bits-1))` (`amt` is 8-bit per lane from `src1` via `lanes1`); `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate right `rotate_right(val, amt & (bits-1))`; `res = s & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate right `rotate_right(val, amt & (bits-1))`; `res = s | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RROT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` rotate right `rotate_right(val, amt & (bits-1))`; `res = s ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes rotate right `s = `rotate_right(val, amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane logical right shift `val >>> (amt & (bits-1))` (`amt` is 8-bit per lane from `src1` via `lanes1`); `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`; writes `not_result ? ~s : s` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_AND': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical right shift `val >>> (amt & (bits-1))`; `res = s & (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise AND `res = s & (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_OR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical right shift `val >>> (amt & (bits-1))`; `res = s | (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise OR `res = s | (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'RSHIFT_XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `s =` logical right shift `val >>> (amt & (bits-1))`; `res = s ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10, lane width $W$), computes logical right shift `s = `val >>> (amt & (W - 1))`` where `val = src0[i]` and 8-bit shift count `amt` is extracted from `src1` via `lanes1`, then applies bitwise XOR `res = s ^ (not2 ? ~src2[i] : src2[i])` and writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Shift amount is masked modulo lane width (`wrapping_shl`/`wrapping_shr`/`rotate_*`, `kraid/ops.rs:3984-4009`). On `v2i16`, `src1` is `V2I8` (`ops.rs:3953`) with byte lanes selected by `lanes1` (default `b02`: byte 0 -> lane 0, byte 2 -> lane 1). (`kraid/ops.rs:3878-4025`, `encode_v9.rs:2940-3093`, `hw_tests.rs:2148-2198`)',
     },
     'XOR': {
         "category": 'Bitwise & Shift-Logic',
-        "behavior": 'Per-lane `res = widen(src0) ^ (not2 ? ~src2 : src2)`; `dst = not_result ? ~res : res`.',
+        "behavior": 'Computes bitwise XOR independently across each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `i32`/`i64`, $N=2$ for `v2i16`, $N=4$ for `v4i8` on v9--v10): `res = widen0(src0)[i] ^ (not2 ? ~src2[i] : src2[i])`, then writes `not_result ? ~res : res` to `dest[i]`.',
         "notes": 'Second operand is `src2`. (`kraid/ops.rs:3944-4025`, `encode_v9.rs:2916-3093`, `hw_tests.rs:2148-2198`)',
     },
     'XOR_IMM': {
@@ -259,12 +259,12 @@ ISA_SEMANTICS = {
     },
     'FADD': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane `dst[i] = clamp(round_rm(src0[i] + src1[i]))`. Supports `f32` and `v2f16`.',
+        "behavior": 'Adds floating-point operands `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `f32`, $N=2$ for packed `v2f16`), rounding via `round` and applying optional post-op `clamp`: `dest[i] = clamp(round_rm(src0[i] + src1[i]))`.',
         "notes": 'Clamp suppresses NaN (`x.ieee_max(lo).ieee_min(hi)`, `ops.rs:1136-1143`). `dest_width_narrow` narrows f32->f16 using `round` (`dst_mod_prop.rs:226-229`, `builder.rs:50-65`). (`kraid/ops.rs:1267-1302`, `encode_v9.rs:1271-1315`, `dst_mod_prop.rs:199-236`, `hw_tests.rs:1486-1519`)',
     },
     'FADD_IMM': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane `dst[i] = round_rne(src0[i] + imm1w[i])` (`f32` or `v2f16`).',
+        "behavior": 'Adds the inline 32-bit floating-point immediate `imm1w` to `src0` under IEEE-754 RNE for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `f32`, $N=2$ for `v2f16`): `dest[i] = round_rne(src0[i] + imm1w[i])`.',
         "notes": 'Always RNE, unclamped (`encode_v9.rs:1282-1302`). (`kraid/encode_v9.rs:1282-1302`, `bifrost/valhall/ISA.xml:40-42`)',
     },
     'FEXP': {
@@ -284,27 +284,27 @@ ISA_SEMANTICS = {
     },
     'FLUSH': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane FP canonicalization: if `NaN` -> `flush_nan ? +0.0 : (quiet_nan ? x|qnan_bit : x)`; else if `Inf && flush_inf` -> `copysign(MAX_FINITE, x)`; else if `Subnormal && ftz` -> `copysign(0.0, x)`; else `x`.',
+        "behavior": 'Canonicalizes IEEE-754 special values independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`): NaN maps to `+0.0` (`.flush_nan`) or quietened NaN (`.quiet_nan`); `±Inf` clamps to `±MAX_FINITE` (`.flush_inf`); subnormals flush to `±0.0` (`.ftz`); normal finite values pass through unchanged.',
         "notes": '`qnan_bit` is `0x00400000` (f32) / `0x0200` (f16); `MAX_FINITE` is `0x7F7FFFFF` / `0x7BFF`. Exact bit-for-bit verified (`hw_tests.rs:1570-1596`). (`kraid/ops.rs:1681-1783`, `encode_v9.rs:1440-1470`, `hw_tests.rs:1570-1596`)',
     },
     'FMA': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane fused multiply-add: `dst[i] = clamp(round_rm(fma(src0[i], src1[i], src2[i])))` (`f32` or `v2f16`).',
+        "behavior": 'Computes single-rounded fused multiply-add independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `f32`, $N=2$ for `v2f16`): `dest[i] = clamp(round_rm(fma(src0[i], src1[i], src2[i])))`.',
         "notes": 'Single rounding for `a*b+c`; `dest_width_narrow` narrows f32->f16 using `round` (`dst_mod_prop.rs:566-569`). (`kraid/ops.rs:1788-1824`, `encode_v9.rs:1472-1495`, `hw_tests.rs:1599-1631`)',
     },
     'FMAX': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane IEEE max with deterministic `-0.0 < +0.0`: under `nan_suppress` (default), non-NaN wins; under `nan_propagate`, preserves winning NaN sign & payload (`| qbit`) with total-order tie-break on two NaNs. `clamp` applied after `sem`.',
+        "behavior": 'Computes IEEE-754 maximum independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`) with deterministic `-0.0 < +0.0`. Under `nan_suppress` (default), a non-NaN wins over NaN; under `nan_propagate`, returns the quietened winning NaN preserving sign and payload (`| qbit`). Optional `clamp` runs after `sem`.',
         "notes": 'Verified in `libGLES_mali.so` `_mali_max*_sf32` (`0x2e28300, 0x2e28590`) and `kraid/ops.rs:1862-1902`.',
     },
     'FMIN': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane IEEE min with deterministic `-0.0 < +0.0`: under `nan_suppress` (default), non-NaN wins; under `nan_propagate`, preserves winning NaN sign & payload (`| qbit`) with total-order tie-break on two NaNs. `clamp` applied after `sem`.',
+        "behavior": 'Computes IEEE-754 minimum independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`) with deterministic `-0.0 < +0.0`. Under `nan_suppress` (default), a non-NaN wins over NaN; under `nan_propagate`, returns the quietened winning NaN preserving sign and payload (`| qbit`). Optional `clamp` runs after `sem`.',
         "notes": 'Verified in `libGLES_mali.so` `_mali_min_sf32` (`0x2e28500`) and `kraid/ops.rs:1907-1947`.',
     },
     'FMUL': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane `dst[i] = clamp(round_rm(src0[i] * src1[i]))` (alias of `FMA(src0, src1, -0.0)` with `src2` fixed to `-0.0`).',
+        "behavior": 'Multiplies floating-point `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`): `dest[i] = clamp(round_rm(src0[i] * src1[i]))` (hardware alias of `FMA(src0, src1, -0.0)` so `(+0.0)*(-0.0)` preserves `-0.0`).',
         "notes": 'In `kraid/nir.rs:896-904`, `nir_op_fmul` lowers to `OpFma(a, b, -0.0)`. `a*b + (-0.0)` preserves `-0.0` sign for `(+0)*(-0)`. (`kraid/nir.rs:896-904`, `isa-v9-v14.xml`)',
     },
     'FNEG': {
@@ -329,7 +329,7 @@ ISA_SEMANTICS = {
     },
     'FROUND': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane round-to-integral float using `round` (`round_integer_m`: `none`=RNE, `round_up`=ceil, `round_down`=floor, `round_zero`=trunc, `round_na`=round-away).',
+        "behavior": 'Rounds each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`) to an integral floating-point value using `round` (`round_integer_m`: `none`=RNE, `round_up`=ceil, `round_down`=floor, `round_zero`=trunc, `round_na`=ties-away-from-zero).',
         "notes": '`v2f16` only on arch <= v10 (`hw_tests.rs:1716-1719`). On arch >= v11, `round_up`/`round_down` does NOT auto-FTZ inputs (`kraid/nir.rs:849-868`). (`kraid/ops.rs:2053-2077`, `encode_v9.rs:1651-1669`, `nir.rs:839-876`, `hw_tests.rs:1703-1730`)',
     },
     'FRSQ': {
@@ -349,7 +349,7 @@ ISA_SEMANTICS = {
     },
     'LDEXP': {
         "category": 'Floating-Point ALU & Canonicalization',
-        "behavior": 'Per-lane `dst[i] = round_rm(src0[i] * 2^src1[i])` (`src1` signed int). `.inf`: if `exp < -16384`, `±Inf -> ±1.0`, finite `-> ±0.0`; `.inf0`: additionally if `exp >= +16384`, `±0.0 -> ±1.0`, non-zero `-> ±Inf`. No `clamp` modifier.',
+        "behavior": 'Scales each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` by $2^{\\text{src1}[i]}$ ($N=1$ `f32`, $N=2$ `v2f16`; `src1[i]` signed integer), rounding via `round`. Under `.inf`, `exp < -16384` maps `±Inf -> ±1.0` and finite `-> ±0.0`; under `.inf0`, `exp >= +16384` also maps `±0.0 -> ±1.0` and non-zero `-> ±Inf`.',
         "notes": 'Verified in `libGLES_mali.so` `_mali_ldexp_{sf32,inf_sf32,inf0_sf32}` (`0x2e288c0..0x2e28b60`).',
     },
     'FADD_LSCALE': {
@@ -444,12 +444,12 @@ ISA_SEMANTICS = {
     },
     'FREXPE': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Per-lane signed integer exponent `E` of float `x` (`0` for `±0, ±Inf, NaN`; `e = exp!=0 ? exp : 9-clz(|x|)`): `none` -> `e-126`; `sqrt` -> `(e-125)>>1`; `log` -> `(e-127)+top_norm_mant_bit`. Negated if `neg_result=neg`.',
+        "behavior": 'Extracts the signed integer exponent $E$ of each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`), returning `0` for `±0`, `±Inf`, and `NaN`: `none` gives `e - 126` (`[0.5, 1.0)`), `sqrt` gives `(e - 125) >> 1` (`[0.25, 1.0)`), and `log` gives `(e - 127) + top_mant_bit` (`[0.75, 1.5)`). Negates the result when `neg_result=neg`.',
         "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpe_*` (`0x2e291d0..0x2e293c8`). `v2f16` arch v9--v10 only.',
     },
     'FREXPM': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Per-lane significand `M` of float `x` (`NaN -> x|qbit`; `±0 -> x`): `none` (`±Inf -> x`, `|M| in [0.5, 1.0)`); `sqrt` (`±Inf -> x`, `[0.5,1.0)` if `e` even else `[0.25,0.5)`); `log` (`±Inf -> ±1.0` via `x & 0xbf800000`, `|M| in [0.75, 1.5)`).',
+        "behavior": 'Extracts the normalized significand $M$ of each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`): passes `±0` unchanged and quietens `NaN`; maps finite values into `[0.5, 1.0)` (`none`), `[0.25, 1.0)` (`sqrt`), or `[0.75, 1.5)` (`log`). On `±Inf`, `none`/`sqrt` return `±Inf` whereas `log` returns `±1.0` (`x & 0xbf800000`).',
         "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpm_*` (`0x2e28fb0..0x2e2914c`). `v2f16` arch v9--v10 only.',
     },
     'FRSQ_APPROX': {
@@ -469,12 +469,12 @@ ISA_SEMANTICS = {
     },
     'ILOGB': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Per-lane integer base-2 unbiased exponent (arch <= v10): `floor(log2(|src0|))` as signed integer (`s32` / `v2s16`).',
+        "behavior": 'Extracts the unbiased base-2 integer exponent `floor(log2(|src0[i]|))` for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32 -> s32`, $N=2$ `v2f16 -> v2s16`; arch <= v10).',
         "notes": 'IEEE-754 `ilogb` special cases: `0 -> FP_ILOGB0`, `Inf -> INT_MAX`, `NaN -> FP_ILOGBNAN`. (`bifrost/bifrost/ISA.xml:5778-5788`, `isa-v9-v14.xml`)',
     },
     'LOGB': {
         "category": 'SFU Range-Reduction & Helpers',
-        "behavior": 'Per-lane floating-point base-2 unbiased exponent (arch <= v10): `floor(log2(|src0|))` as float (`f32` / `v2f16`).',
+        "behavior": 'Extracts the unbiased base-2 floating-point exponent `floor(log2(|src0[i]|))` for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`; arch <= v10).',
         "notes": 'IEEE-754 `logb` special cases: `+-0 -> -Inf`, `+-Inf -> +Inf`, `NaN -> NaN`. (`bifrost/bifrost/ISA.xml:7386-7396`, `isa-v9-v14.xml`)',
     },
     'CUBEFACE1': {
@@ -499,32 +499,32 @@ ISA_SEMANTICS = {
     },
     'CSEL': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane conditional select: `dst[i] = cmpf(src0[i], src1[i]) ? src2[i] : src3[i]` (`f32`/`s32`/`u32`/`v2f16`/`v2s16`/`v2u16`).',
+        "behavior": 'Compares `src0[i]` and `src1[i]` using predicate `cmpf` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `f32`/`s32`/`u32`, $N=2$ for `v2f16`/`v2s16`/`v2u16`) and writes `src2[i]` to `dest[i]` if true, or `src3[i]` if false.',
         "notes": '`src2`/`src3` are raw bit payloads (`VNIN`, `ops.rs:859`). Exact match verified in `hw_tests.rs:1391-1430`. (`kraid/ops.rs:851-894`, `encode_v9.rs:1026-1050`, `nir.rs:1222-1239`, `hw_tests.rs:1391-1430`)',
     },
     'FCMP': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane FP compare `c = cmpf(src0[i], src1[i])`; `dst[i] = res_type(c)` (`i1`->1, `m1`->all-ones, `f1`->1.0, false->0).',
+        "behavior": 'Compares floating-point `src0[i]` and `src1[i]` using predicate `cmpf` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`) and encodes the boolean into `dest[i]` via `result_type` (`i1` $\\to$ `1`, `m1` $\\to$ all-ones, `f1` $\\to$ `1.0`, false $\\to$ `0`).',
         "notes": '`ne` is unordered (`True` on NaN); `gtlt` is ordered not-equal (`False` on NaN); `total` is IEEE-754 `total_cmp(a, b) <= 0` (`ops.rs:1489-1521`). (`kraid/ops.rs:741-790, 1386-1522`, `encode_v9.rs:933-1024`, `hw_tests.rs:1318-1388`)',
     },
     'FCMP_AND': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane `c = cmpf(src0[i], src1[i]) && (src2[i] != 0)`; `dst[i] = res_type(c)`.',
+        "behavior": 'Compares floating-point `src0[i]` and `src1[i]` via `cmpf` for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`), combines the predicate with `(src2[i] != 0)` using logical AND, and formats the boolean into `dest[i]` according to `result_type`.',
         "notes": '`src2[i]` tested as `!= 0` per lane before formatting via `result_type` (`ops.rs:785-786`). (`kraid/ops.rs:741-790`, `encode_v9.rs:974-982`, `opt_fuse.rs:188-238`, `hw_tests.rs:1318-1388`)',
     },
     'FCMP_OR': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane `c = cmpf(src0[i], src1[i]) || (src2[i] != 0)`; `dst[i] = res_type(c)`.',
+        "behavior": 'Compares floating-point `src0[i]` and `src1[i]` via `cmpf` for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`), combines the predicate with `(src2[i] != 0)` using logical OR, and formats the boolean into `dest[i]` according to `result_type`.',
         "notes": '`src2[i]` tested as `!= 0` per lane before formatting via `result_type`. (`kraid/ops.rs:741-790`, `encode_v9.rs:983-991`, `opt_fuse.rs:188-238`, `hw_tests.rs:1318-1388`)',
     },
     'ICMP': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane integer compare `c = cmpf(widen(src0)[i], widen(src1)[i])`; `dst[i] = res_type(c)`.',
+        "behavior": 'Compares Stage A widened/swizzled integer lanes `src0[i]` and `src1[i]` via `cmpf` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10) and encodes the boolean into `dest[i]` via `result_type`.',
         "notes": '`v4s8`/`v4u8` only arch <= v10 (`hw_tests.rs:1351`). `gtlt`/`total` invalid for ints. (`kraid/ops.rs:741-790, 1463-1522`, `encode_v9.rs:994-1002`, `hw_tests.rs:1318-1388`)',
     },
     'ICMP_AND': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane `c = cmpf(widen(src0)[i], widen(src1)[i]) && (src2[i] != 0)`; `dst[i] = res_type(c)`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10), compares Stage A widened/swizzled `src0[i]` and `src1[i]` using predicate `cmpf`, combines the boolean with `(src2[i] != 0)` via logical AND, and formats the result into `dest[i]` according to `result_type` (`i1` $\\to$ `1`, `m1` $\\to$ all-ones, `f1` $\\to$ `1.0`, false $\\to$ `0`).',
         "notes": '`v4s8`/`v4u8` only arch <= v10. (`kraid/ops.rs:741-790`, `encode_v9.rs:1003-1011`, `hw_tests.rs:1318-1388`)',
     },
     'ICMP_MULTI': {
@@ -534,12 +534,12 @@ ISA_SEMANTICS = {
     },
     'ICMP_OR': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane `c = cmpf(widen(src0)[i], widen(src1)[i]) || (src2[i] != 0)`; `dst[i] = res_type(c)`.',
+        "behavior": 'For each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `s32`/`u32`, $N=2$ for `v2s16`/`v2u16`, $N=4$ for `v4s8`/`v4u8` on v9--v10), compares Stage A widened/swizzled `src0[i]` and `src1[i]` using predicate `cmpf`, combines the boolean with `(src2[i] != 0)` via logical OR, and formats the result into `dest[i]` according to `result_type` (`i1` $\\to$ `1`, `m1` $\\to$ all-ones, `f1` $\\to$ `1.0`, false $\\to$ `0`).',
         "notes": '`v4s8`/`v4u8` only arch <= v10. (`kraid/ops.rs:741-790`, `encode_v9.rs:1012-1020`, `hw_tests.rs:1318-1388`)',
     },
     'MUX': {
         "category": 'Compare, Select & Mux',
-        "behavior": 'Per-lane mux (`i32`/`v2i16`/`v4i8`): `neg`: `(sel & sign_bit) != 0 ? src0 : src1`; `int_zero`: `sel == 0 ? src0 : src1`; `fp_zero` (`i32` only): `f32(sel) == 0.0 ? src0 : src1`; `bit`: `(src0 & sel) | (src1 & ~sel)`.',
+        "behavior": 'Selects between `src0[i]` and `src1[i]` using selector `src2[i]` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `i32`, $N=2$ `v2i16`, $N=4$ `v4i8`): `.neg` selects `src0[i]` if the sign bit of `src2[i]` is 1; `.int_zero` (default) if `src2[i] == 0`; `.fp_zero` (`i32` only) if `f32(src2) == ±0.0`; `.bit` blends bitwise `(src0[i] & src2[i]) | (src1[i] & ~src2[i])`.',
         "notes": '`fp_zero` is `i32`-only (`ops.rs:3639`, `hw_tests.rs:2121`) and treats both `+0.0` and `-0.0` as true. Exact match verified in `hw_tests.rs:2113-2135`. (`kraid/ops.rs:3573-3647`, `encode_v9.rs:2858-2885`, `opt_fuse.rs:150-180`, `hw_tests.rs:2113-2135`)',
     },
     'F16_TO_F32': {
@@ -624,12 +624,12 @@ ISA_SEMANTICS = {
     },
     'V2F16_TO_V2S16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane saturating v2f16->v2s16 (arch <= v10): `dst[i] = sat_i16(round_rm(f16(swz(src0)[i])))` (NaN -> 0).',
+        "behavior": 'Converts each half-precision lane $i \\in \\{0, 1\\}$ of swizzled `src0` to a saturating signed 16-bit integer `dest[i] = sat_i16(round_rm(src0[i]))` (NaN maps to `0`; arch <= v10).',
         "notes": 'Arch v9-v10 only. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'V2F16_TO_V2U16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane saturating v2f16->v2u16 (arch <= v10): `dst[i] = sat_u16(round_rm(f16(swz(src0)[i])))` (NaN or `<= 0` -> 0).',
+        "behavior": 'Converts each half-precision lane $i \\in \\{0, 1\\}$ of swizzled `src0` to a saturating unsigned 16-bit integer `dest[i] = sat_u16(round_rm(src0[i]))` (NaN or `<= 0` maps to `0`; arch <= v10).',
         "notes": 'Arch v9-v10 only. (`isa-v9-v14.xml`, `bifrost/valhall/ISA.xml`)',
     },
     'V2F32_TO_V2F16': {
@@ -639,12 +639,12 @@ ISA_SEMANTICS = {
     },
     'V2S16_TO_V2F16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane `dst[i] = round_rm((swz(src0)[i] as i16) as f16)` (arch <= v10).',
+        "behavior": 'Converts each signed 16-bit integer lane $i \\in \\{0, 1\\}$ of swizzled `src0` to IEEE-754 FP16 `dest[i] = round_rm(f16(src0[i]))` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/ops.rs:2542`). (`kraid/ops.rs:2542-2570`, `encode_v9.rs:1945-1949`, `nir.rs:750-765`)',
     },
     'V2S8_TO_V2F16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane `dst.h0 = (src0.b[x] as i8) as f16`, `dst.h1 = (src0.b[y] as i8) as f16` (exact; arch <= v10).',
+        "behavior": 'Extracts two signed 8-bit bytes selected by `swz0` (`bXY`, default `b02`) from `src0` and converts them exactly to packed FP16 lanes `dest.h0 = f16(s8(src0.b[X]))` and `dest.h1 = f16(s8(src0.b[Y]))` (arch <= v10).',
         "notes": 'Arch v9-v10 only (`kraid/ops.rs:2542`, `encode_v9.rs:1933`). (`kraid/ops.rs:2542-2570`, `encode_v9.rs:1937-1940`)',
     },
     'V2S8_TO_V2S16': {
@@ -654,12 +654,12 @@ ISA_SEMANTICS = {
     },
     'V2U16_TO_V2F16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane `dst[i] = round_rm((swz(src0)[i] as u16) as f16)` (arch <= v10).',
+        "behavior": 'Converts each unsigned 16-bit integer lane $i \\in \\{0, 1\\}$ of swizzled `src0` to IEEE-754 FP16 `dest[i] = round_rm(f16(src0[i]))` (arch <= v10).',
         "notes": 'Arch v9-v10 only; values `>= 65520` overflow to `+Inf` in RNE. (`kraid/ops.rs:2542-2570`, `encode_v9.rs:1950-1954`, `nir.rs:750-765`)',
     },
     'V2U8_TO_V2F16': {
         "category": 'Conversions',
-        "behavior": 'Per-lane `dst.h0 = (src0.b[x] as u8) as f16`, `dst.h1 = (src0.b[y] as u8) as f16` (exact; arch <= v10).',
+        "behavior": 'Extracts two unsigned 8-bit bytes selected by `swz0` (`bXY`, default `b02`) from `src0` and converts them exactly to packed FP16 lanes `dest.h0 = f16(u8(src0.b[X]))` and `dest.h1 = f16(u8(src0.b[Y]))` (arch <= v10).',
         "notes": 'Arch v9-v10 only. (`kraid/ops.rs:2542-2570`, `encode_v9.rs:1941-1944`)',
     },
     'V2U8_TO_V2U16': {
