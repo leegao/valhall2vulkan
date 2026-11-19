@@ -145,8 +145,10 @@ class TestPanfrostZ3Model(unittest.TestCase):
         lscale, _, _ = eval_panfrost_instruction("FADD_LSCALE", "f32", [bv32(0), bv32(0x40C00000)])
         self.assertEqual(z3.simplify(lscale).as_long(), 0x3F400000)
 
-        wd = write_dst_32(bv32(0x0000ABCD), bv32(0x12345678), dest_width="h1")
+        wd = write_dst_32(bv32(0xABCD0000), bv32(0x12345678), dest_width="h1")
         self.assertEqual(z3.simplify(wd).as_long(), 0xABCD5678)
+        wd_sh1 = write_dst_32(bv32(0x0000ABCD), bv32(0x12345678), dest_width="sh1")
+        self.assertEqual(z3.simplify(wd_sh1).as_long(), 0xABCD5678)
 
         st0 = ValhallZ3State.symbolic("cf")
         _, st1, _ = eval_panfrost_instruction("DISCARD", "", [bv32(1)], state=st0)
@@ -455,6 +457,88 @@ class TestPanfrostZ3Model(unittest.TestCase):
             "LOAD", "i8", [bv64(0x2000)], modifiers={"extend": "sext"}, state=st_m2
         )
         self.assertEqual(z3.simplify(ld_sext).as_long(), 0xFFFFFFFE)
+
+
+    def test_reg_audit_of_audit_soundness_fixes(self) -> None:
+        # NEW-1: dest_width="h1" on packed ops masks lane 1 ([31:16]) without shifting lane 0
+        # Real ASTC/ETC2 pattern: FADD.v2f16 r39.h1, r5.h10, r4.h01
+        fadd_v2_h1, _, _ = eval_panfrost_instruction(
+            "FADD", "v2f16", [bv32(0x3C004000), bv32(0x3C000000)],
+            modifiers={"dest_width": "h1"}, dst_old=bv32(0x00001234),
+        )
+        # Lane 1: 1.0 (0x3C00) + 1.0 (0x3C00) = 2.0 (0x4000) -> [31:16]; [15:0] preserved (0x1234)
+        self.assertEqual(z3.simplify(fadd_v2_h1).as_long(), 0x40001234)
+
+        # Real ASTC/ETC2 pattern: MOV_IMM.i32 r4.h1, #0xe3d0e3d0
+        mov_h1, _, _ = eval_panfrost_instruction(
+            "MOV_IMM", "i32", [], modifiers={"imm": 0xE3D01111, "dest_width": "h1"}, dst_old=bv32(0x00005678)
+        )
+        self.assertEqual(z3.simplify(mov_h1).as_long(), 0xE3D05678)
+
+        # Scalar f16 ops with h1 (F32_TO_F16, FRCP.f16 v9-10 dest_width=h1, v11-14 dest_width_replicate=h1)
+        f32_h1, _, _ = eval_panfrost_instruction(
+            "F32_TO_F16", "", [bv32(0x3F800000)],
+            modifiers={"dest_width_narrow": "h1"}, dst_old=bv32(0x0000BEEF)
+        )
+        self.assertEqual(z3.simplify(f32_h1).as_long(), 0x3C00BEEF)
+        rcp_h1_no_old, _, _ = eval_panfrost_instruction(
+            "FRCP", "f16", [bv32(0x00004000)], modifiers={"dest_width": "h1"}
+        )
+        self.assertEqual(z3.simplify(rcp_h1_no_old).as_long(), 0x38000000)
+
+        # NEW-2: LD_CHECKED / LD_CHECKED_IMM / ST_CHECKED bounds checking (Mali-G720 v12)
+        st0 = ValhallZ3State.symbolic("chk")
+        _, st1, _ = eval_panfrost_instruction("STORE", "i32", [bv64(0x1008), bv32(0xDEADBEEF)], state=st0)
+        ld_ok, _, _ = eval_panfrost_instruction("LD_CHECKED", "i32", [bv64(0x1000), bv32(8), bv32(16)], state=st1)
+        self.assertEqual(z3.simplify(ld_ok).as_long(), 0xDEADBEEF)
+        ld_oob, _, _ = eval_panfrost_instruction("LD_CHECKED", "i32", [bv64(0x1000), bv32(16), bv32(16)], state=st1)
+        self.assertEqual(z3.simplify(ld_oob).as_long(), 0)
+        ld_imm_oob, _, _ = eval_panfrost_instruction(
+            "LD_CHECKED_IMM", "i32", [bv64(0x1000), bv32(8)], modifiers={"offset": 8}, state=st1
+        )
+        self.assertEqual(z3.simplify(ld_imm_oob).as_long(), 0)
+        # OOB ST_CHECKED must not overwrite memory
+        _, st2, _ = eval_panfrost_instruction(
+            "ST_CHECKED", "i32", [bv64(0x1000), bv32(8), bv32(8), bv32(0x11111111)], state=st1
+        )
+        ld_after_oob_st, _, _ = eval_panfrost_instruction("LOAD", "i32", [bv64(0x1008)], state=st2)
+        self.assertEqual(z3.simplify(ld_after_oob_st).as_long(), 0xDEADBEEF)
+
+        # NEW-3: LOAD encoded_extend="sext" + sub-register lane packing (LOAD.i16.h0 + LOAD.i8.b2) & STORE.i8.b2
+        _, st_l1, _ = eval_panfrost_instruction("STORE", "i32", [bv64(0x3000), bv32(0x000012FE)], state=st0)
+        ld_enc_sext, _, _ = eval_panfrost_instruction(
+            "LOAD", "i8", [bv64(0x3000)], modifiers={"encoded_extend": "sext"}, state=st_l1
+        )
+        self.assertEqual(z3.simplify(ld_enc_sext).as_long(), 0xFFFFFFFE)
+        ld_b2, _, _ = eval_panfrost_instruction(
+            "LOAD", "i8", [bv64(0x3000)], modifiers={"lane": "b2"}, dst_old=bv32(0xAA005678), state=st_l1
+        )
+        self.assertEqual(z3.simplify(ld_b2).as_long(), 0xAAFE5678)
+        _, st_b2, _ = eval_panfrost_instruction(
+            "STORE", "i8", [bv64(0x3010), bv32(0x00AB0000)], modifiers={"lane": "b2"}, state=st0
+        )
+        ld_st_b2, _, _ = eval_panfrost_instruction("LOAD", "i8", [bv64(0x3010)], state=st_b2)
+        self.assertEqual(z3.simplify(ld_st_b2).as_long(), 0xAB)
+
+        # D-18: MKVEC.v2i8 always extracts src2[15:0] regardless of spurious lanes2/swz2
+        mk_b02, _, _ = eval_panfrost_instruction(
+            "MKVEC", "v2i8", [bv32(0x11), bv32(0x22), bv32(0xAABB4433)], modifiers={"lanes2": "b02"}
+        )
+        self.assertEqual(z3.simplify(mk_b02).as_long(), 0x44332211)
+
+        # D-17: FADD_RSCALE special="n_add" produces distinct UF (not silently collapsed into none)
+        r_nadd, _, _ = eval_panfrost_instruction(
+            "FADD_RSCALE", "f32", [bv32(0x3F800000), bv32(0x3F800000), bv32(0)], modifiers={"special": "n_add"}
+        )
+        self.assertIn("hw_FADD_RSCALE_n_add", str(r_nadd))
+
+        # D-20 / D-21 / D-26: LD_CVT distinct from raw LOAD; KABOOM emits hw_trap side effect
+        ld_cvt, _, tr_cvt = eval_panfrost_instruction(
+            "LD_CVT", "", [bv64(0x4000)], modifiers={"register_format": "f32", "vecsize": "v4"}, state=st0
+        )
+        self.assertIn("hw_MSG_LD_CVT_f32_v4", str(ld_cvt))
+        _, _, tr_kab = eval_panfrost_instruction("KABOOM", "", [], state=st0)
+        self.assertIn("hw_trap(KABOOM)", tr_kab.side_effects)
 
 
 if __name__ == "__main__":

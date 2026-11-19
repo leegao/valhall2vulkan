@@ -598,6 +598,10 @@ def write_dst_32(
     if dw == "h0":
         mask &= 0x3
     elif dw == "h1":
+        # Valhall dest_width=h1 on packed/32-bit ops is a pure lane-1 write-mask (val32[31:16] -> dst[31:16])
+        mask &= 0xC
+    elif dw == "sh1":
+        # Scalar 16-bit result in [15:0] placed into upper halfword [31:16] (F32_TO_F16, FRCP/FRSQ/FEXP/FLOG/FPOW.f16)
         val32 = z3.Concat(z3.Extract(15, 0, val32), bv16(0))
         mask &= 0xC
     elif dw == "h01":
@@ -1171,8 +1175,12 @@ def _sem_rscale(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
     if mnem == "FADD_RSCALE":
         fa64, fb64 = to_f64(srcs[0]), to_f64(srcs[1])
         exp = srcs[2]
-        scaled = z3.fpMul(z3.RNE(), z3.fpAdd(z3.RNE(), fa64, fb64), _fp64_pow2_clamped(exp))
-        res_bv = fp32_to_bv32(z3.fpFPToFP(rm, scaled, FP32_SORT))
+        if special == "n_add":
+            rm_name = str(mods.get("round", "rte")).lower()
+            res_bv = _hw_uf(f"FADD_RSCALE_n_add_{rm_name}", BV32, BV32, BV32, BV32)(srcs[0], srcs[1], exp)
+        else:
+            scaled = z3.fpMul(z3.RNE(), z3.fpAdd(z3.RNE(), fa64, fb64), _fp64_pow2_clamped(exp))
+            res_bv = fp32_to_bv32(z3.fpFPToFP(rm, scaled, FP32_SORT))
     elif mnem == "FMUL_RSCALE":
         fa32, fb32 = bv32_to_fp32(srcs[0]), bv32_to_fp32(srcs[1])
         fa64, fb64 = to_f64(srcs[0]), to_f64(srcs[1])
@@ -1202,6 +1210,9 @@ def _sem_rscale(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
             zero_inf = z3.Or(z3.And(z3.fpIsZero(fa32), z3.fpIsInf(fb32)), z3.And(z3.fpIsInf(fa32), z3.fpIsZero(fb32)))
             add_scaled = z3.fpMul(z3.RNE(), z3.fpAdd(z3.RNE(), fa64, fc64), pow2)
             res_bv = z3.If(zero_inf, fp32_to_bv32(z3.fpFPToFP(rm, add_scaled, FP32_SORT)), normal_bv)
+        elif special == "n_add":
+            rm_name = str(mods.get("round", "rte")).lower()
+            res_bv = _hw_uf(f"FMA_RSCALE_n_add_{rm_name}", BV32, BV32, BV32, BV32, BV32)(srcs[0], srcs[1], srcs[2], exp)
         else:
             res_bv = normal_bv
     tr.stage_b_note = f"{mnem}.{var} special={special} clamp={clamp}"
@@ -1487,12 +1498,7 @@ def _sem_conv(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any
     if mnem == "F32_TO_F16":
         c0 = apply_clamp_f32(x, clamp)
         lo = f32_bv_to_f16_bv(c0, rm)
-        if len(srcs) > 1:
-            c1 = apply_clamp_f32(srcs[1], clamp)
-            hi = f32_bv_to_f16_bv(c1, rm)
-        else:
-            hi = bv16(0)
-        return z3.Concat(hi, lo), st
+        return z3.Concat(bv16(0), lo), st
     if mnem == "V2F32_TO_V2F16":
         c0 = apply_clamp_f32(srcs[0], clamp)
         c1 = apply_clamp_f32(srcs[1], clamp) if len(srcs) > 1 else bv32(0)
@@ -1586,11 +1592,6 @@ def _sem_mkvec_swz_mov(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict
             b1 = z3.Extract(7, 0, srcs[1])
             if len(srcs) <= 2:
                 return z3.Concat(bv16(0), b1, b0), st
-            swz2 = str(mods.get("swz2", mods.get("lanes2", ""))).lower()
-            if len(swz2) == 3 and swz2[0] == "b" and swz2[1].isdigit() and swz2[2].isdigit():
-                s2_b0 = z3.Extract(7, 0, srcs[2])
-                s2_b1 = z3.Extract(23, 16, srcs[2])
-                return z3.Concat(s2_b1, s2_b0, b1, b0), st
             return z3.Concat(z3.Extract(15, 0, srcs[2]), b1, b0), st
         if v == "v4i8":
             if len(srcs) > 3:
@@ -1675,11 +1676,30 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
     _var_widths = {"i8": 1, "i16": 2, "i24": 3, "i32": 4, "i48": 6, "i64": 8, "i96": 12, "i128": 16}
     mw = str(mods.get("memory_width", var or "")).lower()
     width_bytes = int(mods["width_bytes"]) if "width_bytes" in mods else _var_widths.get(mw, 4)
-    offset = bv64(_mod_int(mods, "offset", default=0))
-    addr = ((srcs[0] if srcs[0].size() == 64 else z3.ZeroExt(32, srcs[0])) + offset) if srcs else offset
-    if mnem in ("LOAD", "LD_MULTI", "LD_CHECKED", "LD_CHECKED_IMM", "LD_CVT"):
-        ext_mod = str(mods.get("extend", "")).lower()
+    offset_int = _mod_int(mods, "offset", "offset_lo", default=0)
+    offset = bv64(offset_int)
+    base_addr = (srcs[0] if srcs[0].size() == 64 else z3.ZeroExt(32, srcs[0])) if srcs else bv64(0)
+    lane = str(mods.get("lane", "")).lower()
+
+    if mnem in ("LOAD", "LD_CHECKED", "LD_CHECKED_IMM"):
+        ext_mod = str(mods.get("extend", mods.get("encoded_extend", ""))).lower()
         sign_ext = ext_mod in ("sext", "sign_extend") or ("unsigned" in mods and not _mod_bool(mods, "unsigned", True))
+        oob_ignore = str(mods.get("oob_mode", "none")).lower() == "oob_ignore"
+        in_bounds = z3.BoolVal(True)
+        if mnem == "LD_CHECKED":
+            idx32 = z3.Extract(31, 0, srcs[1]) if len(srcs) > 1 else bv32(0)
+            addr = base_addr + z3.ZeroExt(32, idx32) + offset
+            if len(srcs) > 2 and not oob_ignore:
+                bound32 = z3.Extract(31, 0, srcs[2])
+                in_bounds = z3.ULT(idx32, bound32)
+        elif mnem == "LD_CHECKED_IMM":
+            addr = base_addr + offset
+            if len(srcs) > 1 and not oob_ignore:
+                bound32 = z3.Extract(31, 0, srcs[1])
+                in_bounds = z3.ULT(bv32(offset_int & 0xFFFFFFFF), bound32)
+        else:
+            addr = base_addr + offset
+
         n_bytes = min(width_bytes, 16)
         bytes_read = [z3.Select(st.mem_global, addr + bv64(i)) for i in range(n_bytes)]
         if len(bytes_read) == 1:
@@ -1689,24 +1709,63 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
             val = z3.SignExt(16, raw16) if sign_ext else z3.ZeroExt(16, raw16)
         else:
             val = z3.Concat(*reversed(bytes_read))
-        tr.stage_b_note = f"{mnem} load {n_bytes}B from mem_global sign_ext={sign_ext}"
+        if mnem in ("LD_CHECKED", "LD_CHECKED_IMM") and not oob_ignore:
+            val = z3.If(in_bounds, val, z3.BitVecVal(0, val.size()))
+        tr.stage_b_note = f"{mnem} load {n_bytes}B from mem_global sign_ext={sign_ext} lane={lane or 'none'}"
         return val, st
-    if mnem in ("STORE", "ST_MULTI", "ST_CHECKED", "ST_CHECKED_IMM", "ST_CVT"):
-        data = srcs[1] if len(srcs) > 1 else bv32(0)
+
+    if mnem in ("STORE", "ST_CHECKED", "ST_CHECKED_IMM"):
+        oob_ignore = str(mods.get("oob_mode", "none")).lower() == "oob_ignore"
+        in_bounds = z3.BoolVal(True)
+        if mnem == "ST_CHECKED":
+            idx32 = z3.Extract(31, 0, srcs[1]) if len(srcs) > 1 else bv32(0)
+            addr = base_addr + z3.ZeroExt(32, idx32) + offset
+            data = srcs[3] if len(srcs) > 3 else (srcs[2] if len(srcs) > 2 else bv32(0))
+            if len(srcs) > 2 and not oob_ignore:
+                bound32 = z3.Extract(31, 0, srcs[2])
+                in_bounds = z3.ULT(idx32, bound32)
+        elif mnem == "ST_CHECKED_IMM":
+            addr = base_addr + offset
+            data = srcs[2] if len(srcs) > 2 else (srcs[1] if len(srcs) > 1 else bv32(0))
+            if len(srcs) > 1 and not oob_ignore:
+                bound32 = z3.Extract(31, 0, srcs[1])
+                in_bounds = z3.ULT(bv32(offset_int & 0xFFFFFFFF), bound32)
+        else:
+            addr = base_addr + offset
+            data = srcs[1] if len(srcs) > 1 else bv32(0)
+
+        # Sub-register lane extraction for STORE.i8 (b0..b3) / STORE.i16 (h0..h1)
+        if width_bytes == 1 and lane in ("b1", "b2", "b3") and data.size() >= 32:
+            b_idx = int(lane[1])
+            data = z3.ZeroExt(24, z3.Extract(8 * b_idx + 7, 8 * b_idx, data))
+        elif width_bytes == 2 and lane == "h1" and data.size() >= 32:
+            data = z3.ZeroExt(16, z3.Extract(31, 16, data))
+
         mem = st.mem_global
         max_store = min(width_bytes, data.size() // 8, 16)
         for i in range(max_store):
-            mem = z3.Store(mem, addr + bv64(i), z3.Extract(8 * i + 7, 8 * i, data))
+            byte_val = z3.Extract(8 * i + 7, 8 * i, data)
+            if mnem in ("ST_CHECKED", "ST_CHECKED_IMM") and not oob_ignore:
+                old_b = z3.Select(mem, addr + bv64(i))
+                byte_val = z3.If(in_bounds, byte_val, old_b)
+            mem = z3.Store(mem, addr + bv64(i), byte_val)
         new_st = dataclasses.replace(st, mem_global=mem)
-        tr.side_effects.append(f"mem_global store {max_store}B")
+        tr.side_effects.append(f"mem_global store {max_store}B lane={lane or 'none'}")
         return None, new_st
-    # Distinguish hardware messages by semantic opcode modifiers (atom_opc, source, name, etc.)
+
+    # Distinguish hardware messages (LD_CVT/ST_CVT/LD_MULTI/ST_MULTI/ATOM*/LD_VAR*/TEX_*/LD_GCLK)
     tag_parts = [mnem]
     if var:
         tag_parts.append(var)
-    for mk in ("atom_opc", "atom1_opc", "source", "name", "dimensionality", "lod_mode"):
+    for mk in (
+        "atom_opc", "atom1_opc", "source", "name", "dimensionality", "lod_mode",
+        "register_format", "vecsize", "sample_position", "update",
+        "array_enable", "compare_enable", "write_mask", "gather_component", "sr_count",
+    ):
         if mk in mods and mods[mk] is not None:
-            tag_parts.append(str(mods[mk]).lower())
+            v_str = str(mods[mk]).lower()
+            if v_str not in ("", "none"):
+                tag_parts.append(v_str)
     tag = "_".join(tag_parts)
     tr.stage_b_note = f"{tag} hardware message/system op"
     tr.side_effects.append(f"hw_msg({tag})")
@@ -1718,6 +1777,10 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
 
 
 def _sem_noop(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any], st: ValhallZ3State, tr: ModelTrace):
+    if mnem == "KABOOM":
+        tr.stage_b_note = "KABOOM hardware fault/trap"
+        tr.side_effects.append("hw_trap(KABOOM)")
+        return None, st
     tr.stage_b_note = f"{mnem} no-op"
     return None, st
 
@@ -1982,7 +2045,10 @@ def eval_panfrost_instruction(
         else:
             mod_idx = idx
 
-        swz = str(mods.get(f"swz{mod_idx}", mods.get(f"widen{mod_idx}", mods.get(f"lanes{mod_idx}", mods.get(f"lane{mod_idx}", "")))))
+        if mnem == "MKVEC" and (variant or "").lower() == "v2i8" and idx == 2:
+            swz = ""
+        else:
+            swz = str(mods.get(f"swz{mod_idx}", mods.get(f"widen{mod_idx}", mods.get(f"lanes{mod_idx}", mods.get(f"lane{mod_idx}", "")))))
         if idx == 0 and not swz:
             swz = str(mods.get("halfswizzle0", ""))
         if not swz:
@@ -2032,22 +2098,42 @@ def eval_panfrost_instruction(
     if core_res is not None:
         narrow = str(mods.get("dest_width_narrow", "")).lower()
         repl = str(mods.get("dest_width_replicate", "")).lower()
-        has_narrow_or_repl = (narrow in ("h0", "h1", "h01")) or (repl in ("h0", "h1", "h01"))
+        raw_dw = str(mods.get("dest_width", "w0")).lower()
+        is_scalar_f16 = (variant or "").lower() == "f16" or mnem == "F32_TO_F16"
+        load_lane = ""
+        if mnem in ("LOAD", "LD_CHECKED", "LD_CHECKED_IMM"):
+            ext_m = str(mods.get("extend", mods.get("encoded_extend", ""))).lower()
+            ln = str(mods.get("lane", "")).lower()
+            if ext_m not in ("sext", "sign_extend") and ln in ("b0", "b1", "b2", "b3", "h0", "h1"):
+                load_lane = ln
+        has_transform = (
+            narrow in ("h0", "h1", "h01")
+            or repl in ("h0", "h1", "h01")
+            or (is_scalar_f16 and raw_dw == "h1")
+            or (load_lane in ("b1", "b2", "b3", "h1"))
+        )
         if core_res.size() == 64:
             if dst_old is not None:
                 final_res = write_dst_64(core_res, dst_old, int(mods.get("write_mask", 0xFF)))
                 trace.stage_c_note = f"write_dst width=w64 mask=0x{int(mods.get('write_mask', 0xFF)):x}"
             else:
                 final_res = core_res
-        elif core_res.size() == 32 and (dst_old is not None or has_narrow_or_repl):
+        elif core_res.size() == 32 and (dst_old is not None or has_transform):
             eff_old = dst_old if dst_old is not None else bv32(0)
             rm_c = _z3_rm(mods.get("round", "rte")) if ("round" in mods) else None
             if narrow in ("h0", "h1", "h01"):
-                dw = narrow if mnem == "F32_TO_F16" else f"hf{narrow[1:]}"
+                if mnem == "F32_TO_F16":
+                    dw = "sh1" if narrow == "h1" else narrow
+                else:
+                    dw = f"hf{narrow[1:]}"
             elif repl in ("h0", "h1", "h01"):
-                dw = repl
+                dw = "sh1" if repl == "h1" else repl
+            elif load_lane:
+                dw = "sh1" if load_lane == "h1" else load_lane
+            elif is_scalar_f16 and raw_dw == "h1":
+                dw = "sh1"
             else:
-                dw = str(mods.get("dest_width", "w0"))
+                dw = raw_dw
             final_res = write_dst_32(
                 core_res,
                 eff_old,
