@@ -1,0 +1,543 @@
+% AUTO-GENERATED with python3 -m tools.reference.gen_valhall_spec_tex, DO NOT EDIT
+\documentclass[10pt,letterpaper]{report}
+\usepackage[margin=20mm]{geometry}
+\usepackage{charter}
+\usepackage[scaled=0.88]{helvet}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{microtype}
+\usepackage{hyperref}
+
+\definecolor{primary}{RGB}{36, 52, 118}
+\definecolor{subtle}{RGB}{88, 94, 110}
+\definecolor{codebg}{RGB}{246, 247, 251}
+% Distinct instruction syntax colors (Mnemonic, Modifier, Destination, Source, Immediate)
+\definecolor{cMnem}{RGB}{20, 58, 148}
+\definecolor{cMod}{RGB}{128, 34, 138}
+\definecolor{cDst}{RGB}{16, 118, 60}
+\definecolor{cSrc}{RGB}{178, 56, 22}
+\definecolor{cImm}{RGB}{0, 114, 128}
+
+\newcommand{\mnem}[1]{\textcolor{cMnem}{\textbf{#1}}}
+\newcommand{\imod}[1]{\textcolor{cMod}{#1}}
+\newcommand{\dst}[1]{\textcolor{cDst}{\textbf{#1}}}
+\newcommand{\src}[1]{\textcolor{cSrc}{#1}}
+\newcommand{\imm}[1]{\textcolor{cImm}{#1}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=primary,
+  urlcolor=primary,
+  citecolor=primary,
+  pdftitle={Valhall Instruction Set Reference (v9--v14)},
+  pdfauthor={3-Workstream Ground-Truth Audited Specification}
+}
+
+\setlength{\parskip}{5pt plus 2pt minus 1pt}
+\setlength{\parindent}{0pt}
+\setlength{\headheight}{14pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{subtle}\textsf{Valhall Instruction Set Reference (v9--v14)}}
+\fancyhead[R]{\small\color{subtle}\textsf{\leftmark}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\codebox}[1]{%
+  \par\vspace{2pt}\noindent\colorbox{codebg}{%
+    \parbox{\dimexpr\linewidth-2\fboxsep\relax}{\ttfamily\footnotesize #1}%
+  }\par\vspace{3pt}%
+}
+
+\newenvironment{tightitemize}{%
+  \begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}\setlength{\parsep}{0pt}%
+}{\end{itemize}}
+
+\sloppy
+\begin{document}
+
+% ============================================================================
+% Title Page
+% ============================================================================
+\begin{titlepage}
+\centering
+\vspace*{4.5cm}
+{\Huge\bfseries\textsf{Valhall Instruction Set Reference}\par}
+\vspace{0.7cm}
+{\Large\color{primary}\textsf{Architecture Versions v9 through v14}\par}
+\vfill
+\begin{minipage}{0.84\textwidth}
+\centering\small\color{subtle}
+\url{https://github.com/leegao/valhall2vulkan/valhall-isa-reference.pdf}\\[1.2em]
+{\bfseries Revision \today}
+\end{minipage}
+\vspace*{1.8cm}
+\end{titlepage}
+
+% ============================================================================
+% Provenance, Syntax Color Legend & Change Log
+% ============================================================================
+\thispagestyle{plain}
+\section*{Assembly Syntax Color Legend}
+All Valhall instruction syntax blocks and worked examples in this manual are color-coded by operand role:
+\codebox{\mnem{FMA.f32}\imod{.clamp\_0\_1} \dst{r0}\imod{.h1}, \src{r1\textasciicircum}\imod{.abs}, \src{r2}\imod{.neg}, \src{u0.w0} \quad\textnormal{\textit{and}}\quad \mnem{SHADD.u64} \dst{[r0:r1]}, \src{[r2:r3]}, \src{r4}\imod{.w0}, \imm{\#2}}
+\begin{itemize}
+  \item \texttt{\mnem{Blue Bold}}: Canonical mnemonic and type variant (\texttt{\mnem{FMA.f32}}, \texttt{\mnem{LD\_CHECKED.i32}})
+  \item \texttt{\imod{Purple}}: Instruction flags, pre-source modifiers (\texttt{\imod{.abs}}, \texttt{\imod{.neg}}, \texttt{\imod{.h1}}), and post-destination modifiers (\texttt{\imod{.h01}})
+  \item \texttt{\dst{Green Bold}}: Destination GPR or write staging window (\texttt{\dst{dest}}, \texttt{\dst{r0}}, \texttt{\dst{@r0:r3}})
+  \item \texttt{\src{Orange-Red}}: Source GPRs, uniforms, FAU constants, or read staging windows (\texttt{\src{src0}}, \texttt{\src{r1\textasciicircum}}, \texttt{\src{u0.w0}}, \texttt{\src{k1f}})
+  \item \texttt{\imm{Teal}}: Inline immediates, offsets, and shift counts (\texttt{\imm{\#0x10}}, \texttt{\imm{\#2}})
+\end{itemize}
+
+\newpage
+\tableofcontents
+\newpage
+
+% ============================================================================
+% Chapter 1: Architecture Overview
+% ============================================================================
+\chapter{Architecture Overview}
+
+\section{GPU Generation Matrix (v9--v14)}
+Valhall is a dynamically scheduled, 64-bit fixed-width superscalar GPU ISA introduced in architecture major version 9. It supports 16-thread warps, SIMD-within-a-word 8/16/32-bit operations, and explicit scoreboard slots (\texttt{slot0..slot7}).
+
+\begin{table}[!htbp]
+\centering
+\caption{Arm Mali Valhall Architecture Generations (v9--v14)}
+\begin{tabularx}{\linewidth}{@{}lllX@{}}
+\toprule
+Arch & Representative GPUs & Codenames & Key ISA Milestones \\
+\midrule
+v9 & Mali-G77, G57, G78, G68 & Trym, Natt, Borr, Ottr & Initial Valhall ISA; sole version with \texttt{TEX\_WEIGHTS}; includes \texttt{V2F32\_TO\_V2F16}, \texttt{HADD}, \texttt{ILOGB}/\texttt{LOGB}, \texttt{v4*8} ALU. \\
+v10 & Mali-G710, G610, G510 & Odinn, Turse-pre & Removes \texttt{TEX\_WEIGHTS}; adds \texttt{source\_format} on \texttt{LD\_VAR\_BUF*} / \texttt{VAR\_TEX\_BUF*}; software cubemap projection. \\
+v11 & Mali-G715, Immortalis-G715 & Turse & Adds \texttt{F32\_TO\_F16}, \texttt{AND/OR/XOR\_IMM.i32}, \texttt{MMUL}, hardware \texttt{TEX\_SINGLE.cube.project}, \texttt{CLPER} \texttt{low/prefix}; removes 16 legacy ops (\texttt{V2F32\_TO\_V2F16}, \texttt{HADD}, \texttt{v4*8} ALU, narrow converts). \\
+v12 & Mali-G720, Immortalis-G720 & Titan & Adds native FP16 transcendentals (\texttt{FEXP/FLOG/FPOW.f16}) and hardware bounds-checked \texttt{LD\_CHECKED*}/\texttt{ST\_CHECKED*}. \\
+v13 & Immortalis-G925 & Krake (Avalon) & Retains v12 shader ISA; CSF v13 queue/descriptor extensions. \\
+v14 & Next-Gen Valhall & Avalon+ & Adds \texttt{FEXPF.f32}, \texttt{FLOG.f32}, \texttt{FSINCOS.f32}, \texttt{FSQRT.f32}, \texttt{CLPER\_OR}, \texttt{LD\_MULTI}/\texttt{ST\_MULTI}, \texttt{LD\_VAR\_BUF\_FLAT*}, \texttt{MMUL.f16}, mixed-sign \texttt{IDPADD}/\texttt{MMUL.v4s8}, \texttt{oob\_mode}; removes \texttt{NOT\_OLD}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Instruction Word, Operands \& Execution Pipeline}
+Every Valhall instruction executes in three strictly ordered stages:
+\begin{enumerate}
+  \item \textbf{Stage A (Pre-Source):} Swizzle/widen/lane extraction runs \emph{before} \texttt{abs}/\texttt{neg}/\texttt{not} (\texttt{kraid/ir.rs:882}). Exception: \texttt{BRANCH}/\texttt{JUMP}/\texttt{JUMP\_EX} \texttt{.not} negates the boolean branch condition, not \texttt{src0} bits.
+  \item \textbf{Stage B (Core Op \& Post-Op):} Evaluates the core operation. On \texttt{FMIN}/\texttt{FMAX}, \texttt{sem} runs \emph{before} \texttt{clamp}. On \texttt{V2F32\_TO\_V2F16} and \texttt{F32\_TO\_F16}, \texttt{clamp} runs \emph{before} FP32$\to$FP16 rounding.
+  \item \textbf{Stage C (Post-Destination):} \texttt{dest\_width} (\texttt{h0}/\texttt{h1}) is a \textbf{pure lane write-mask} (\texttt{h1} writes \texttt{val32[31:16]} to \texttt{dst[31:16]} without shifting); \texttt{dest\_width\_narrow} (\texttt{h0}/\texttt{h1}/\texttt{h01}) narrows FP32$\to$FP16 using the instruction's \texttt{round} mode; \texttt{dest\_width\_replicate} places/replicates scalar FP16 outputs.
+\end{enumerate}
+
+\section{Small Constants Table (FAU Page 0)}
+\begin{table}[!htbp]
+\centering
+\caption{32 Hardware Small Constants (FAU Page 0, Indices \texttt{0xC0..0xDF})}
+\begin{tabularx}{\linewidth}{@{}lll|lll@{}}
+\toprule
+Idx & Value & Meaning & Idx & Value & Meaning \\
+\midrule
+0 & \texttt{0x00000000} & Zero (\texttt{k0}) & 16 & \texttt{0x3F800000} & Float $1.0$ (\texttt{k1f}) \\
+1 & \texttt{0xFFFFFFFF} & All ones / $-1$ (\texttt{k1n}) & 17 & \texttt{0x3DCCCCCD} & Float $0.1$ \\
+2 & \texttt{0x7FFFFFFF} & \texttt{INT32\_MAX} / qNaN & 18 & \texttt{0x3EA2F983} & Float $1/\pi$ \\
+3 & \texttt{0xFAFCFDFE} & Bytes $(-2,-3,-4,-5)$ & 19 & \texttt{0x3F317218} & Float $\ln 2$ \\
+4 & \texttt{0x01000000} & 16-bit $2^8$ & 20 & \texttt{0x40490FDB} & Float $\pi$ \\
+5 & \texttt{0x80002000} & Bytes $(0, 32, 0, 128)$ & 21 & \texttt{0x00000000} & Float $0.0$ \\
+6 & \texttt{0x70605030} & Bytes $(48, 80, 96, 112)$ & 22 & \texttt{0x477FFF00} & Float $65535.0$ \\
+7 & \texttt{0xC0B0A090} & Bytes $(144, 160, 176, 192)$ & 23 & \texttt{0x5C005BF8} & Half $(255.0, 256.0)$ \\
+8 & \texttt{0x03020100} & Bytes $(0, 1, 2, 3)$ & 24 & \texttt{0x2E660000} & Half $0.1$ (hi16) \\
+9 & \texttt{0x07060504} & Bytes $(4, 5, 6, 7)$ & 25 & \texttt{0x34000000} & Half $0.25$ (hi16) \\
+10 & \texttt{0x0B0A0908} & Bytes $(8, 9, 10, 11)$ & 26 & \texttt{0x38000000} & Half $0.5$ (hi16) \\
+11 & \texttt{0x0F0E0D0C} & Bytes $(12, 13, 14, 15)$ & 27 & \texttt{0x3C000000} & Half $1.0$ (hi16) \\
+12 & \texttt{0x13121110} & Bytes $(16, 17, 18, 19)$ & 28 & \texttt{0x40000000} & Half $2.0$ (hi16) \\
+13 & \texttt{0x17161514} & Bytes $(20, 21, 22, 23)$ & 29 & \texttt{0x44000000} & Half $4.0$ (hi16) \\
+14 & \texttt{0x1B1A1918} & Bytes $(24, 25, 26, 27)$ & 30 & \texttt{0x48000000} & Half $8.0$ (hi16) \\
+15 & \texttt{0x1F1E1D1C} & Bytes $(28, 29, 30, 31)$ & 31 & \texttt{0x42480000} & Half $\pi$ (hi16) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================================
+% Chapter 2: Enumerations & Modifiers (Every Entry + Worked Example, All 128 Enums)
+% ============================================================================
+\chapter{Enumerations \& Modifiers}
+This chapter documents all \textbf{128} Valhall modifier enumerations directly from \texttt{specs/kraid/isa-v9-v14.xml}.
+
+%%%%%~~~$KEY_ENUM_SECTIONS~~~%%%%%
+
+\section{Additional Specialized Modifier Enumerations (%%%%%~~~$REM_ENUM_COUNT~~~%%%%% Enums)}
+The summary table below indexes all remaining secondary modifier enumerations in \texttt{isa-v9-v14.xml}; each enumeration is walked through entry-by-entry with a concrete worked example in the subsections immediately following.
+\begin{center}\footnotesize
+\begin{longtable}{@{}p{0.36\linewidth}>{\raggedright\arraybackslash}p{0.60\linewidth}@{}}
+\toprule
+Enum Name (Jump) & Values (Encoding) \\
+\midrule\endhead
+%%%%%~~~$REM_ENUM_SUMMARY_ROWS~~~%%%%%
+\bottomrule
+\end{longtable}
+\end{center}
+
+%%%%%~~~$REM_ENUM_SUBSECTIONS~~~%%%%%
+
+% ============================================================================
+% Chapter 3: Complete Instruction Reference (All 201 Mnemonics / 627 Specs)
+% ============================================================================
+\chapter{Instruction Reference}
+This chapter documents all \textbf{201} canonical Valhall mnemonics (\textbf{627} \texttt{<instruction>} XML specifications across v9--v14). Each instruction starts on its own page and provides:
+\begin{itemize}
+  \item Operational semantics, structured bulleted notes, and color-coded syntax (\mnem{Mnemonic}, \imod{Modifiers}, \dst{Destination}, \src{Sources}, \imm{Immediates}).
+  \item Closest SPIR-V opcode, compact inducing GLSL snippet, and multiple concrete worked examples.
+  \item Variant/architecture/opcode table, representative 64-bit encoding bit-layout table (with clickable backlinks from modifier field names to their Chapter~2 definitions), and explicit explanations for every instruction field.
+\end{itemize}
+\clearpage
+
+%%%%%~~~$INSTRUCTION_REFERENCE~~~%%%%%
+
+% ============================================================================
+% Appendix A: Concrete Decompiled libGLES_mali.so vs Mesa Panfrost Differences
+% ============================================================================
+\appendix
+\chapter[DDK vs Panfrost Differences]{Arm \texttt{libGLES\_mali.so} vs Mesa Panfrost: Concrete Decompiled Differences}
+
+Comparing Arm's proprietary LLVM Valhall backend in \texttt{libGLES\_mali.so} (Pixel 8 r54p3, 2,265 \texttt{XMLInstrInfo} entries) against Mesa Panfrost (\texttt{kraid}/\texttt{bifrost}, \texttt{isa-v9-v14.xml} with 627 specs) shows 100\% Valhall v9--v11 parity (374/374 specs), 45 v12--v14 Mesa-only specs, 12 real hardware DDK-only opcodes, and 12 concrete behavioral/modifier differences. Every entry below provides exact AArch64 disassembly from \texttt{libGLES\_mali.so} \emph{and} C/pseudocode decompilation alongside Mesa Panfrost.
+
+\section{Hardware Opcodes in \texttt{libGLES\_mali.so} Absent from \texttt{isa-v9-v14.xml}}
+
+\begin{table}[!htbp]
+\centering\footnotesize
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X@{}}
+\toprule
+Group & Mnemonics in \texttt{libGLES\_mali.so} (\texttt{ValhallInsts} \texttt{0x300fd18}) \\
+\midrule
+Ray Tracing (3) & \texttt{RT\_RAY\_BOX} (\texttt{0x319}), \texttt{RT\_RAY\_TRI} (\texttt{0x31a}), \texttt{RT\_RAY\_TRI\_CO.i\{32,64,96,128\}\_i288} (\texttt{0x805..0x808}) \\
+Geometry / Viewport (3) & \texttt{VIEWPORT\_TRANSFORM} (\texttt{0xaa5}), \texttt{VIEWPORT\_TRANSFORM\_W1} (\texttt{0xaa6}), \texttt{VIEWPORT\_TRANSFORM\_Z0W1} (\texttt{0xaa7}) \\
+System / Sync / FAU (5) & \texttt{FAU\_STORE.i\{8..128\}} (\texttt{0x450..0x459}), \texttt{FENCE} (\texttt{0x46f}), \texttt{CONDITIONAL\_WAIT} (\texttt{0x40f}), \texttt{ENTER\_SIMD\_STATE} (\texttt{0x210}), \texttt{ENTER\_SIMD\_STATE\_RQ\_LOOP} (\texttt{0x42f}), \texttt{EXIT\_SIMD\_STATE} (\texttt{0x212}) \\
+Bitwise Variant (1) & \texttt{AND\_IMM.i16} (\texttt{0x35c}) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection*{A.1.1 \texttt{RT\_RAY\_BOX} (\texttt{0x319}, \texttt{xml=360}, \texttt{ops=6, defs=1})}
+\textbf{Usage \& Induced Semantics:} Hardware Ray--AABB slab intersection unit (v11+ Immortalis ray-query/ray-tracing). Takes a staging register window containing ray origin, inverse direction, $t_{\min}/t_{\max}$, and AABB bounds (with \texttt{S1.zext} on the descriptor/node offset) and asynchronously writes hit mask / sorted child node distances to destination staging registers on \texttt{slot0..slot2}.\\
+\textbf{AArch64 Disassembly (\texttt{ValhallHoistLargeRegSequence::runOnMachineFunction} @ \texttt{0x1ea9a5c}):}
+\codebox{%
+0x01ea9a5c: ldr   x8, [x25, \#0x18] ; MI->getDesc()\\
+0x01ea9a60: ldrh  w8, [x8]          ; Opcode = MI->getOpcode()\\
+0x01ea9a64: cmp   w8, \#0x319       ; RT\_RAY\_BOX\\
+0x01ea9a68: b.ne  \#0x1eab08c\\
+0x01ea9a6c: ldr   x8, [x25, \#0x28] ; MI->getOperand(1) (staging RegSequence)\\
+0x01ea9a70: ldr   x0, [x19, \#0x100]\\
+0x01ea9a74: ldr   w1, [x8, \#0x24]  ; src staging vreg\\
+0x01ea9a78: bl    \#0x27c6a30        ; MRI->getVRegDef(vreg) for hoisting%
+}
+\textbf{C/Pseudocode Decompilation (Compiler \& HW Semantics):}
+\codebox{%
+// Compiler pass (ValhallHoistLargeRegSequence):\\
+if (MI.getOpcode() == Valhall::RT\_RAY\_BOX) \{\\
+~~MachineInstr *Def = MRI.getVRegDef(MI.getOperand(1).getReg());\\
+~~hoistStagingRegSequence(Def, MI); // minimize live-range of wide ray payload\\
+\}\\
+// Induced HW Semantics (async on slot0..2):\\
+vec3 t0 = (box\_min - ray\_orig) * ray\_inv\_dir;\\
+vec3 t1 = (box\_max - ray\_orig) * ray\_inv\_dir;\\
+float t\_enter = max(ray\_tmin, max(min(t0.x,t1.x), max(min(t0.y,t1.y), min(t0.z,t1.z))));\\
+float t\_exit  = min(ray\_tmax, min(max(t0.x,t1.x), min(max(t0.y,t1.y), max(t0.z,t1.z))));\\
+dst\_sr = (t\_enter <= t\_exit) ? pack\_hit(t\_enter) : MISS\_SENTINEL;%
+}
+
+\subsubsection*{A.1.2 \texttt{RT\_RAY\_TRI} (\texttt{0x31a}, \texttt{xml=361}, \texttt{ops=8, defs=1})}
+\textbf{Usage \& Induced Semantics:} Hardware watertight Ray--Triangle intersection unit. \texttt{XMLInstrInfo} \texttt{ModInfo} exposes \texttt{S4 = [slot0..slot2, t, uv, flow\_control]}, selecting whether the async return window delivers hit distance $t$ (\texttt{.t}) or barycentric coordinates $(u, v)$ (\texttt{.uv}).\\
+\textbf{AArch64 Disassembly (\texttt{XMLInstrInfo} \texttt{0x4b1a28 + 361*0x48} \& \texttt{ValhallShrinkRayTri} @ \texttt{0x1f40ed0}):}
+\codebox{%
+// XMLInstrInfo[361]: q1=0x000000003c000000, S1=[zext], S4=[slot0..2, t, uv, flow]\\
+0x01f40ecc: ldr   x8, [x28, \#0x18] ; MI->getDesc()\\
+0x01f40ed0: ldrh  w8, [x8]          ; inspect RT\_RAY\_TRI / RT\_RAY\_TRI\_CO opcode\\
+0x01f40ed4: cmp   w8, \#0x805       ; RT\_RAY\_TRI\_CO.i128\_i288%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+// Induced HW Semantics (async on slot0..2, Watertight Moller-Trumbore):\\
+vec3 e1 = v1 - v0, e2 = v2 - v0, p = cross(ray\_dir, e2);\\
+float det = dot(e1, p);\\
+float u = dot(ray\_orig - v0, p) / det;\\
+float v = dot(ray\_dir, cross(ray\_orig - v0, e1)) / det;\\
+float t = dot(e2, cross(ray\_orig - v0, e1)) / det;\\
+bool hit = (u >= 0 \&\& v >= 0 \&\& u + v <= 1 \&\& t >= ray\_tmin \&\& t <= ray\_tmax);\\
+dst\_sr = mode\_uv ? pack(hit, u, v) : pack(hit, t);%
+}
+
+\subsubsection*{A.1.3 \texttt{RT\_RAY\_TRI\_CO.i\{32,64,96,128\}\_i288} (\texttt{0x805..0x808}, \texttt{ops=8, defs=1})}
+\textbf{Usage \& Induced Semantics:} Compact-output Ray--Triangle intersection taking a 288-bit (9-GPR) ray+triangle input window and writing a shrunken 32/64/96/128-bit result window. \texttt{ValhallShrinkRayTri::runOnMachineFunction} (\texttt{0x1f40d60}) analyzes live destination subregisters of \texttt{RT\_RAY\_TRI\_CO.i128\_i288} (\texttt{0x805}) and shrinks the opcode to \texttt{i96}, \texttt{i64}, or \texttt{i32} when upper output components are dead.\\
+\textbf{AArch64 Disassembly (\texttt{ValhallShrinkRayTri::runOnMachineFunction} @ \texttt{0x1f40ecc}):}
+\codebox{%
+0x01f40ecc: ldr   x8, [x28, \#0x18] ; MI->getDesc()\\
+0x01f40ed0: ldrh  w8, [x8]          ; MI->getOpcode()\\
+0x01f40ed4: cmp   w8, \#0x805       ; RT\_RAY\_TRI\_CO.i128\_i288\\
+0x01f40ed8: b.ne  \#0x1f41844        ; skip if not 128-bit output variant\\
+0x01f40edc: ldr   x8, [x28, \#0x28] ; operand array\\
+0x01f40ee8: ldr   w23, [x8, \#4]    ; dst staging super-register (4x32b)%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+if (MI.getOpcode() == Valhall::RT\_RAY\_TRI\_CO\_i128\_i288) \{\\
+~~unsigned dstReg = MI.getOperand(0).getReg();\\
+~~unsigned liveWords = countLiveSubregs(MRI, dstReg); // 1..4 GPRs\\
+~~static const unsigned shrunk[4] = \{0x806, 0x807, 0x808, 0x805\}; // i32..i128\\
+~~if (liveWords < 4) MI.setDesc(TII.get(shrunk[liveWords - 1]));\\
+\}%
+}
+
+\subsubsection*{A.1.4 \texttt{VIEWPORT\_TRANSFORM}, \texttt{\_W1}, \texttt{\_Z0W1} (\texttt{0xaa5..0xaa7}, \texttt{ops=7, defs=0})}
+\textbf{Usage \& Induced Semantics:} Post-RA vertex-position viewport transform instructions lowered by \texttt{ValhallExpandViewportTransform::runOnMachineFunction} (\texttt{0x1e66970}) and recognized in \texttt{ValhallTTIImpl::instCombineIntrinsic} (\texttt{0x1f67150}). Transforms clip-space $(x, y, z, w)$ to window-space coordinates via perspective divide $1/w$ and viewport scale/bias; \texttt{\_W1} specializes $w = 1.0$ (elides \texttt{FRCP.f32}), and \texttt{\_Z0W1} specializes $z = 0.0, w = 1.0$ (2D/UI fast path).\\
+\textbf{AArch64 Disassembly (\texttt{ValhallExpandViewportTransform} @ \texttt{0x1e669c4} \& \texttt{instCombineIntrinsic} @ \texttt{0x1f67150}):}
+\codebox{%
+0x01e669c4: ldrb  w8, [x8, \#0x17] ; subtarget/shader stage flags\\
+0x01e669c8: tbnz  w8, \#5, \#0x1e66a50 ; skip if viewport transform disabled\\
+0x01e669cc: ldr   w8, [x20, \#0x10] ; ShaderType == VERTEX (1)\\
+0x01e669d0: cmp   w8, \#1 ; b.ne \#0x1e66a50\\
+// instCombineIntrinsic @ 0x1f67150:\\
+0x01f67150: mov   w9, \#0xaa7      ; VIEWPORT\_TRANSFORM\_Z0W1\\
+0x01f6715c: str   w9, [sp]         ; record specialized intrinsic opcode%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+// Induced Semantics (expanded post-RA for Vertex/Position shaders):\\
+float inv\_w = (opc == VIEWPORT\_TRANSFORM) ? frcp\_f32(clip.w) : 1.0f;\\
+float ndc\_x = clip.x * inv\_w, ndc\_y = clip.y * inv\_w;\\
+float ndc\_z = (opc == VIEWPORT\_TRANSFORM\_Z0W1) ? 0.0f : (clip.z * inv\_w);\\
+win\_pos = vec4(fma(ndc\_x, vp\_scale.x, vp\_bias.x), fma(ndc\_y, vp\_scale.y, vp\_bias.y),\\
+~~~~~~~~~~~~~~~fma(ndc\_z, vp\_scale.z, vp\_bias.z), inv\_w);%
+}
+
+\subsubsection*{A.1.5 \texttt{FAU\_STORE.i\{8,16,24,32,48,64,96,128\}} (\texttt{0x450..0x459}, \texttt{ops=7, defs=0})}
+\textbf{Usage \& Induced Semantics:} Asynchronous store into the per-workgroup/pilot-shader FAU (Fast Access Uniform) RAM buffer. Emitted by \texttt{selectFauStore} (\texttt{0x1ed04c0}) during pilot-shader preloading so subsequent main-shader instructions can read computed uniforms directly via FAU operands without GPR pressure. Allows \texttt{slot0..slot2, slot7}.\\
+\textbf{AArch64 Disassembly (\texttt{selectFauStore} @ \texttt{0x1ed04d4..0x1ed050c}):}
+\codebox{%
+0x01ed04d8: ldr   x21, [x1, \#0x28] ; MI->operands()\\
+0x01ed04dc: mov   w1, w2            ; target FAU\_STORE.iN opcode (0x450..0x459)\\
+0x01ed04e4: bl    \#0x1e65620        ; ValhallMIBuilder::build(Opc)\\
+0x01ed04e8: add   x1, x21, \#0x20   ; src staging value operand\\
+0x01ed04ec: bl    \#0x1e641c0        ; addOperand(val)\\
+0x01ed04f0: add   x1, x21, \#0x40   ; FAU base/offset operand\\
+0x01ed04f4: bl    \#0x1e641c0        ; addOperand(offset)\\
+0x01ed04f8: mov   x1, x21 ; bl \#0x1e641c0 ; addOperand(base)%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+MachineInstr *selectFauStore(ValhallMIBuilder \&B, MachineInstr \&MI, unsigned Opc) \{\\
+~~auto NewMI = B.build(Opc).add(MI.getOperand(1)).add(MI.getOperand(2)).add(MI.getOperand(0));\\
+~~return NewMI; // HW: FAU\_RAM[base + offset : +N\_bytes] = src\_staging\_regs (async slot)\\
+\}%
+}
+
+\subsubsection*{A.1.6 \texttt{FENCE} (\texttt{0x46f}, \texttt{xml=833}, \texttt{ops=1, defs=0}) \& \texttt{CONDITIONAL\_WAIT} (\texttt{0x40f}, \texttt{xml=710}, \texttt{ops=5, defs=0})}
+\textbf{Usage \& Induced Semantics:} \texttt{FENCE} is a standalone memory/pipeline ordering fence (accepting only \texttt{S4 = flow\_control}). \texttt{CONDITIONAL\_WAIT} is a predicated scoreboard wait (\texttt{S0, S1, S4 = flow\_control}) that stalls on the specified scoreboard slots only if its runtime predicate register is non-zero, avoiding unnecessary warp stalls on skipped async paths. Both are finalized together in \texttt{ValhallFinalize::runOnMachineFunction} (\texttt{0x1e71350}).\\
+\textbf{AArch64 Disassembly (\texttt{ValhallFinalize::runOnMachineFunction} @ \texttt{0x1e71350}):}
+\codebox{%
+0x01e71350: ldr   x8, [x22, \#0x18] ; MI->getDesc()\\
+0x01e71354: ldrh  w9, [x8]          ; MI->getOpcode()\\
+0x01e71358: cmp   w9, \#0x46f       ; FENCE\\
+0x01e7135c: b.eq  \#0x1e713c0        ; handle standalone fence\\
+0x01e71360: cmp   w9, \#0x40f       ; CONDITIONAL\_WAIT\\
+0x01e71364: b.ne  \#0x1e713f0%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+if (MI.getOpcode() == Valhall::FENCE) \{\\
+~~emitPipelineMemoryFence(MI.getFlowControl()); // HW: order prior loads/stores\\
+\} else if (MI.getOpcode() == Valhall::CONDITIONAL\_WAIT) \{\\
+~~// HW: if (any\_active\_lane(src0 != 0)) scoreboard\_wait(MI.wait\_mask);\\
+~~finalizeConditionalWait(MI, MI.getOperand(0), MI.getOperand(1));\\
+\}%
+}
+
+\subsubsection*{A.1.7 \texttt{ENTER\_SIMD\_STATE} (\texttt{0x210}), \texttt{\_RQ\_LOOP} (\texttt{0x42f}), \& \texttt{EXIT\_SIMD\_STATE} (\texttt{0x212})}
+\textbf{Usage \& Induced Semantics:} Hardware SIMD execution-state management instructions used for call-stack / ray-query loop state entry and exit. \texttt{ModInfo} restricts \texttt{S4} strictly to \texttt{['reconverge']}. \texttt{ValhallSplitEnterSIMD} (\texttt{0x1f4db40}) splits ray-query loop regions around \texttt{ENTER\_SIMD\_STATE\_RQ\_LOOP} (\texttt{0x42f}), while \texttt{EmitInstrWithCustomInserter} (\texttt{0x1eccb8c}, \texttt{0x1ecebf0}) emits \texttt{EXIT\_SIMD\_STATE} (\texttt{0x212}) and \texttt{ENTER\_SIMD\_STATE\_RQ\_LOOP} (\texttt{0x42f}).\\
+\textbf{AArch64 Disassembly (\texttt{EmitInstrWithCustomInserter} @ \texttt{0x1eccb88}, \texttt{0x1ecebf0} \& \texttt{ValhallSplitEnterSIMD} @ \texttt{0x1f4dbf0}):}
+\codebox{%
+0x01eccb88: add   x0, sp, \#0x280 ; ValhallMIBuilder\\
+0x01eccb8c: mov   w1, \#0x212     ; EXIT\_SIMD\_STATE\\
+0x01eccb90: bl    \#0x1e65620      ; build(EXIT\_SIMD\_STATE)\\
+0x01ecebf0: mov   w1, \#0x42f     ; ENTER\_SIMD\_STATE\_RQ\_LOOP\\
+0x01ecebf4: mov   w2, \#0x1e1     ; target register class\\
+0x01ecebf8: bl    \#0x1e65f80      ; buildDef(ENTER\_SIMD\_STATE\_RQ\_LOOP)\\
+0x01f4dbf4: cmp   w11, \#0x42f    ; ValhallSplitEnterSIMD detects RQ\_LOOP%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+// HW Semantics (Ray-Query / Divergent SIMD State Stack):\\
+uint32\_t saved\_mask = ENTER\_SIMD\_STATE(active\_lane\_mask); // push SIMD exec state\\
+// ENTER\_SIMD\_STATE\_RQ\_LOOP: initialize HW ray-query traversal loop state\\
+// ... divergent ray-query traversal body ...\\
+EXIT\_SIMD\_STATE(saved\_mask); // pop/restore prior warp exec mask + reconverge%
+}
+
+\subsubsection*{A.1.8 \texttt{AND\_IMM.i16} (\texttt{0x35c}, \texttt{xml=449}, \texttt{ops=6, defs=1})}
+\textbf{Usage \& Induced Semantics:} 16-bit bitwise AND with inline 16-bit immediate, synthesized by \texttt{ValhallMachineOptimizeNode::optimizeInstruction} (\texttt{0x1f12bb0}) when folding a 16-bit mask onto a halfword operand without allocating an FAU constant.\\
+\textbf{AArch64 Disassembly (\texttt{ValhallMachineOptimizeNode::optimizeInstruction} @ \texttt{0x1f12bac}):}
+\codebox{%
+0x01f12bac: ldr   x8, [x20, \#0x18] ; MI->getDesc()\\
+0x01f12bb0: mov   w23, \#0x35c      ; Valhall::AND\_IMM\_i16\\
+0x01f12bb4: ldrh  w2, [x8]          ; original opcode\\
+0x01f12bbc: add   x0, sp, \#0x110   ; builder context\\
+0x01f12bc4: mov   w3, \#3           ; imm operand index%
+}
+\textbf{C/Pseudocode Decompilation:}
+\codebox{%
+// Compiler optimization fold (ValhallMachineOptimizeNode):\\
+if (isMaskConstant16(MI, imm16)) \{\\
+~~replaceWith(MI, Valhall::AND\_IMM\_i16, MI.getOperand(0), MI.getOperand(1), imm16);\\
+\}\\
+// Induced HW Semantics: dst.h0 = (uint16\_t)(src0.h0 \& imm16);%
+}
+
+\section{Concrete Decompiled Comparisons (DDK vs Panfrost)}
+
+Table~\ref{tab:a2-ddk-panfrost-summary} summarizes all 12 concrete behavioral, encoding, and modifier differences identified between Arm's \texttt{libGLES\_mali.so} (r54p3) and Mesa Panfrost (\texttt{kraid}/\texttt{isa-v9-v14.xml}) before the decompiled deep dives below.
+
+\begin{table}[!htbp]
+\centering\footnotesize
+\caption{Summary of Concrete DDK (\texttt{libGLES\_mali.so}) vs Mesa Panfrost Differences}
+\label{tab:a2-ddk-panfrost-summary}
+\begin{tabularx}{\linewidth}{@{}l l >{\raggedright\arraybackslash}p{0.23\linewidth} >{\raggedright\arraybackslash}p{0.23\linewidth} >{\raggedright\arraybackslash}X@{}}
+\toprule
+Ref & Instruction / Feature & Arm \texttt{libGLES\_mali.so} & Mesa Panfrost & Resolution / Impact \\
+\midrule
+A.2.1 & \texttt{FMIN}/\texttt{FMAX} & Deterministic $-0.0 < +0.0$; payload-preserving quietened NaN & Canonical \texttt{0x7FC00000} on \texttt{nan\_propagate} & Z3 model adopts DDK hardware semantics \\
+A.2.2 & \texttt{FRCP}/\texttt{FRSQ.f32} & Shared input + output FTZ tail on both & Input+output FTZ on \texttt{FRCP}; input-only on \texttt{FRSQ} & Mathematically identical on normal inputs \\
+A.2.3 & \texttt{*\_RSCALE} \texttt{.n\_add} & \texttt{FMA}/\texttt{FADD\_RSCALE} only (\texttt{ModId 0xe2}) & XML lists on all 3; \texttt{kraid} hardcodes \texttt{None} & Track allow-list per opcode \\
+A.2.4 & \texttt{FREXPM.f32.log($\pm\infty$)} & Returns $\pm 1.0$ (\texttt{x \& 0xbf800000}) & Not constant-folded in \texttt{kraid} & Z3 model implements exact DDK formula \\
+A.2.5 & \texttt{F32\_TO\_F16} dispatch & \texttt{V2F32\_TO\_V2F16} (v9--v10) vs \texttt{F32\_TO\_F16} (v11+) & Matches 100\% on arch $\le 10$ vs $\ge 11$ & Full parity verified \\
+A.2.6 & \texttt{MKVEC.v2i8} \texttt{src2} & \texttt{ModInfo} allows only \texttt{b01} (rejects \texttt{b02}) & Reserved zero + virtual \texttt{exact="b01"} & Identical \texttt{Concat(src2[15:0], ...)} \\
+A.2.7 & \texttt{LDEXP.f32} \texttt{widen0} & Permits \texttt{h0}/\texttt{h1} (\texttt{F136}) & Omitted in XML on v9--v13 & DDK supports FP16 widen on \texttt{src0} \\
+A.2.7 & \texttt{MMUL} \texttt{sub0/1} \& \texttt{.sat} & \texttt{F77} on \texttt{f32}; \texttt{.sat} on v9--v11 \texttt{v4u8} & \texttt{sub0/1} on \texttt{v2f16/f16}; \texttt{.sat} v14-only & Minor table-gating delta \\
+A.2.7 & \texttt{JUMP} \texttt{address\_mode} & Dynamic relative/absolute (\texttt{F37}) & Fixes \texttt{absolute(1)} in v11--v14 & Equivalent for absolute jumps \\
+A.2.7 & \texttt{LOAD.extend} / \texttt{BLEND} & \texttt{sext/zext/none}; \texttt{BLEND} \texttt{v2..v4/none} & \texttt{encoded\_extend}; \texttt{BLEND} fixed \texttt{v4} & Compressed encoding vs full enum \\
+A.2.7 & \texttt{LD\_VAR\_BUF*} / \texttt{TEX\_WEIGHTS} & \texttt{F49} flat mode; \texttt{project}, \texttt{4x1/1x4} & Split \texttt{LD\_VAR\_BUF\_FLAT*}; \texttt{2x2} only & Mesa splits flat op in v14 \\
+A.2.7 & Unconditional \texttt{BRANCH} & \texttt{BRANCH k1n, \#off} & \texttt{BRANCH.not k0, \#off} & Identical always-taken semantics \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection*{A.2.1 \texttt{FMIN}/\texttt{FMAX} Signed-Zero Ordering \& \texttt{nan\_propagate} Payload Preservation}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{\_mali\_max\_nan\_propagate\_sf32} @ \texttt{0x2e28300}) --- Disassembly:}
+\codebox{%
+0x02e28320: asr  w8, w0, \#0x1f ; sign-magnitude -> signed int key\\
+0x02e28328: eor  w8, w0, w8, lsr \#1 ; -0.0 (0x80000000) -> -1 < +0.0 (0)\\
+0x02e28330: cmp  w8, w9 ; csel w8, w0, w1, gt\\
+0x02e28340: orr  w9, w1, \#0x400000 ; quieten winning NaN preserving sign \& payload!%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+uint32\_t \_mali\_max\_nan\_propagate\_sf32(uint32\_t a, uint32\_t b) \{\\
+~~int32\_t ka = a \^ ((int32\_t)a >> 31 >> 1), kb = b \^ ((int32\_t)b >> 31 >> 1);\\
+~~if (is\_nan(a) \&\& is\_nan(b)) return ((ka > kb) ? a : b) | 0x00400000u;\\
+~~if (is\_nan(a)) return a | 0x00400000u;\\
+~~if (is\_nan(b)) return b | 0x00400000u;\\
+~~return (ka > kb) ? a : b; // -0.0 (-1) < +0.0 (0) deterministically\\
+\}%
+}
+\textbf{Mesa Panfrost (\texttt{kraid/ops.rs:1892-1896, 1937-1941}):}
+\codebox{%
+if self.propagate\_nan \&\& (a.is\_nan() || b.is\_nan()) \{ f32::NAN \} // canonical 0x7FC00000%
+}
+\textbf{Impact:} \texttt{panfrost\_z3\_model.py} adopts DDK's exact hardware behavior: deterministic $-0.0 < +0.0$ and payload-preserving quietened NaN on \texttt{nan\_propagate}.
+
+\subsubsection*{A.2.2 \texttt{FRCP.f32} / \texttt{FRSQ.f32} Output Subnormal Flushing}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{ValhallInstrEval::compute} @ \texttt{0x2e24ba0..0x2e24c28}) --- Disassembly:}
+\codebox{%
+0x02e24ba8: and  w9, w8, \#0x80000000 ; tst w8, \#0x7f800000 ; csel w0, w9, w8, eq\\
+0x02e24bb4: bl   eval\_rsqrt (0x2e2ae80) ; b 0x2e24c20\\
+0x02e24c20: and  w8, w0, \#0x80000000 ; tst w0, \#0x7f800000 ; csel w0, w8, w0, eq%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+uint32\_t ftz(uint32\_t x) \{ return ((x \& 0x7f800000u) == 0) ? (x \& 0x80000000u) : x; \}\\
+uint32\_t eval\_frsq\_or\_frcp(uint32\_t x, bool is\_rsq) \{\\
+~~uint32\_t in = ftz(x);\\
+~~uint32\_t r  = is\_rsq ? \_mali\_rsqrt\_sf32(in) : \_mali\_rcp\_sf32(in);\\
+~~return ftz(r); // shared output-FTZ tail for both FRCP and FRSQ\\
+\}%
+}
+\textbf{Mesa Panfrost (\texttt{kraid/ops.rs:1971-1974, 2101}):} Flushes subnormals on input+output for \texttt{FRCP.f32}, and input-only for \texttt{FRSQ.f32} (mathematically equivalent since $1/\sqrt{\text{normal}}$ never underflows FP32).
+
+\subsubsection*{A.2.3 \texttt{FMA\_RSCALE} / \texttt{FADD\_RSCALE} \texttt{.special=n\_add} (\texttt{ModId 0xe2})}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{insert\_FEXPM1\_32} @ \texttt{0x1ed6b30} \& \texttt{ModInfo} @ \texttt{0x4f42d8}) --- Disassembly:}
+\codebox{%
+0x01ed6b30: mov  w1, \#0xe2 ; ModId 0xe2 = n\_add\\
+0x01ed6b34: bl   0x1e6abf0 ; attaches .n\_add to FADD\_RSCALE.f32%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+// In insert\_FEXPM1\_32():\\
+MachineInstr *MI = build(Valhall::FADD\_RSCALE\_f32, dst, a, b, exp);\\
+MI->addModifier(ModId::n\_add /* 0xe2 */);\\
+// ModInfo allow-list: FMA\_RSCALE(0x234): {n, left, n\_add};\\
+// FADD\_RSCALE(0x220): {n\_add} ONLY; FMUL\_RSCALE(0x23a): {n, left} ONLY.%
+}
+\textbf{Mesa Panfrost (\texttt{kraid/encode\_v9.rs:1518}):} \texttt{isa-v9-v14.xml} lists \texttt{n\_add} on all three opcodes, while \texttt{kraid} hardcodes \texttt{special: FmaRscaleSpecial32M::None}.
+
+\subsubsection*{A.2.4 \texttt{FREXPM.f32.log($\pm\infty$)} Behavior}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{\_mali\_frexpm\_log\_sf32} @ \texttt{0x2e290fc..0x2e29114}) --- Disassembly:}
+\codebox{%
+0x02e290fc: mov  w8, \#0x7f800000 ; cmp w0, w8 ; b.eq 0x2e2910c ; cbnz w0, 0x2e29118\\
+0x02e2910c: mov  w8, \#-0x40800000 ; // 0xBF800000\\
+0x02e29110: and  w0, w0, w8 ; ret%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+uint32\_t \_mali\_frexpm\_log\_sf32(uint32\_t x) \{\\
+~~uint32\_t ax = x \& 0x7fffffffu;\\
+~~if (ax > 0x7f800000u) return x | 0x00400000u; // NaN -> quiet NaN\\
+~~if (ax == 0 || ax == 0x7f800000u) return x \& 0xbf800000u; // +-0->+-0, +-Inf->+-1.0!\\
+~~return normalize\_mantissa\_log(x); // [0.75, 1.5)\\
+\}%
+}
+\textbf{Mesa Panfrost (\texttt{kraid/ops.rs:2031-2047}):} \texttt{OpFrexpM} is not constant-folded in \texttt{kraid}; \texttt{panfrost\_z3\_model.py} implements the exact DDK bit-vector formula.
+
+\subsubsection*{A.2.5 \texttt{F32\_TO\_F16} vs \texttt{V2F32\_TO\_V2F16} Architecture Dispatch}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{Valhall::expandF32ToF16} @ \texttt{0x1e81040}) --- Disassembly:}
+\codebox{%
+0x01e81054: ldrb w8, [x6, \#0x155] ; feature bit 33 (1 on v9--v10, 0 on v11+)\\
+0x01e8106c: cmp  w8, \#1 ; b.ne 0x1e81100%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+void Valhall::expandF32ToF16(MachineInstr \&MI, const ValhallSubtarget \&ST) \{\\
+~~if (ST.hasFeatureBit33() /* v9--v10: tNAx..tVAx */)\\
+~~~~emit(Valhall::V2F32\_TO\_V2F16 /* 0x33d */, dst, src0, src1);\\
+~~else /* v11--v14: tTUx..tMAx */\\
+~~~~emit(Valhall::F32\_TO\_F16 /* 0x216 */, dst, src0);\\
+\}%
+}
+\textbf{Mesa Panfrost (\texttt{kraid/nir.rs:642-689}):} Matches 100\%: emits \texttt{V2F32\_TO\_V2F16} on arch $\le 10$ and \texttt{F32\_TO\_F16} on arch $\ge 11$.
+
+\subsubsection*{A.2.6 \texttt{MKVEC.v2i8} \texttt{src2} Modifier Encoding}
+\textbf{Arm \texttt{libGLES\_mali.so} (\texttt{OperandModifiers::getDefaultModId} @ \texttt{0x23e37d0} \& \texttt{ModInfo} @ \texttt{0x4f42d8}) --- Disassembly:}
+\codebox{%
+0x023e37f4: bl   OperandModifiers::find (0x23e2e20) ; binary search ModInfo[3004..3005]\\
+// XMLInstrInfo[MKVEC.v2i8 (0x2e0)] S2: fams=F79(def=b02), mods=2@3004 = [\_\_last\_use, b01]%
+}
+\textbf{Arm \texttt{libGLES\_mali.so} --- C/Pseudocode Decompilation:}
+\codebox{%
+uint16\_t getDefaultModId(const XMLInstrInfo \&Info, unsigned slot, uint8\_t famId) \{\\
+~~uint16\_t cand = ModifierFamily[famId].defaultModId(); // b02 (0x1f) for F79\\
+~~return Info.modInfo(slot).contains(cand) ? cand : 0;  // fails -> only b01 is legal!\\
+\}%
+}
+\textbf{Mesa Panfrost (\texttt{isa-v9-v14.xml}):} Bits \texttt{24:35} are \texttt{<reserved type="zero"/>} with \texttt{<virtual name="lanes2" type="swiz8\_2\_full\_m" exact="b01"/>}. Both implementations agree on \texttt{Concat(src2[15:0], src1.lane1, src0.lane0)}.
+
+\subsubsection*{A.2.7 Additional \texttt{XMLInstrInfo} vs \texttt{isa-v9-v14.xml} Table Deltas (6 Items with Pseudocode)}
+\begin{itemize}
+  \item \textbf{\texttt{LDEXP.f32} \texttt{widen0}:} DDK \texttt{XMLInstrInfo[0x294].S0.F136} permits \texttt{h0}/\texttt{h1} (\texttt{widen\_f16\_to\_f32(src0)} before scaling); \texttt{isa-v9-v14.xml} omits \texttt{widen0} on v9--v13.
+  \item \textbf{\texttt{MMUL.f32} \texttt{sub0/1} \& \texttt{MMUL.v4u8.sat}:} DDK \texttt{0x2e1}/\texttt{0x2e4} decode \texttt{F77} (\texttt{f0/f1/none}) on \texttt{MMUL.f32} and \texttt{.sat} on v9--v11 \texttt{MMUL.v4u8}; Mesa restricts \texttt{sub0/1} to \texttt{v2f16}/\texttt{f16} and gates \texttt{.sat} to v14.
+  \item \textbf{\texttt{JUMP} \texttt{address\_mode}:} DDK \texttt{0x291.S4.F37} executes \texttt{pc = (mode == 0) ? pc + off : target}; Mesa fixes \texttt{absolute(1)} in v11--v14.
+  \item \textbf{\texttt{LOAD} \texttt{extend} \& \texttt{BLEND} \texttt{vecsize}:} DDK \texttt{0x2b8.S4.F75} decodes \texttt{sext(0)/zext(1)/none(2)} (Mesa: \texttt{encoded\_extend} \texttt{sext/zext\_or\_none}); DDK \texttt{BLEND} \texttt{S4.F132} allows \texttt{v2/v3/v4/none} (Mesa fixes \texttt{v4}).
+  \item \textbf{\texttt{LD\_VAR\_BUF*} Flat Varyings \& \texttt{TEX\_WEIGHTS}:} DDK encodes \texttt{src\_flat16}/\texttt{src\_flat32} in \texttt{F49} on \texttt{LD\_VAR\_BUF*} (Mesa splits to \texttt{LD\_VAR\_BUF\_FLAT*} in v14); DDK \texttt{TEX\_WEIGHTS} adds \texttt{project} and \texttt{4x1}/\texttt{1x4} footprints (Mesa: \texttt{2x2} only).
+  \item \textbf{Unconditional Branch Idiom:} DDK emits \texttt{\mnem{BRANCH} \src{k1n}, \imm{\#off}} (\texttt{if (0xFFFFFFFFu != 0) pc += off;}); Mesa emits \texttt{\mnem{BRANCH}\imod{.not} \src{k0}, \imm{\#off}} (\texttt{if (!(0u != 0)) pc += off;}). Both evaluate identically to always-taken.
+\end{itemize}
+\end{document}

@@ -45,6 +45,56 @@ add_custom_target(codegen
     COMMENT "Regenerating Valhall ISA, CSF descriptor, and SpirvBuilder C++17 sources"
 )
 
+find_program(PDFLATEX_EXECUTABLE
+    NAMES pdflatex-quiet pdflatex
+    DOC "PDFLaTeX compiler"
+)
+
+if(PDFLATEX_EXECUTABLE)
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/generated/valhall-isa-reference.tex"
+        COMMAND "${VALHALL_PYTHON}" -m tools.reference.gen_valhall_spec_tex
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/template.tex"
+            "${CMAKE_CURRENT_SOURCE_DIR}/specs/kraid/isa-v9-v14.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/gen_valhall_spec_tex.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/isa_semantics.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Generating tools/reference/generated/valhall-isa-reference.tex..."
+        VERBATIM
+    )
+    add_custom_command(
+        OUTPUT "${CMAKE_BINARY_DIR}/reference/valhall-isa-reference.pdf"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/reference"
+        COMMAND "${PDFLATEX_EXECUTABLE}" -interaction=nonstopmode -output-directory "${CMAKE_BINARY_DIR}/reference" "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/generated/valhall-isa-reference.tex" 2>&1 > /dev/null
+        COMMAND "${PDFLATEX_EXECUTABLE}" -interaction=nonstopmode -output-directory "${CMAKE_BINARY_DIR}/reference" "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/generated/valhall-isa-reference.tex" 2>&1 > /dev/null
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_BINARY_DIR}/reference/valhall-isa-reference.pdf" "${CMAKE_SOURCE_DIR}/valhall-isa-reference.pdf"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/generated/valhall-isa-reference.tex"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/template.tex"
+            "${CMAKE_CURRENT_SOURCE_DIR}/specs/kraid/isa-v9-v14.xml"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/gen_valhall_spec_tex.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/isa_semantics.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/v3_enrichments.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/reference/fmt_helpers.py"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Generating Valhall valhall-isa-reference.pdf (${PDFLATEX_EXECUTABLE}))"
+        VERBATIM
+    )
+    add_custom_target(valhall_isa_reference ALL
+        DEPENDS "${CMAKE_BINARY_DIR}/reference/valhall-isa-reference.pdf"
+    )
+else()
+    message(STATUS "pdflatex not found; skipping Valhall ISA reference PDF generation")
+endif()
+
+add_test(NAME test_valhall_isa_reference
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/reference/test_valhall_isa_reference.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 add_library(spirv_reflect STATIC
     third_party/spirv-reflect/spirv_reflect.c
 )
