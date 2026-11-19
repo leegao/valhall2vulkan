@@ -155,34 +155,64 @@ add_test(NAME test_vkcube_frame1_replay
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
+add_library(mali_csf_dump_core STATIC
+    tools/mali_csf_dump_layer/csf_config_log.cpp
+    tools/mali_csf_dump_layer/csf_va_tracker.cpp
+    tools/mali_csf_dump_layer/csf_interpreter.cpp
+    tools/mali_csf_dump_layer/csf_dumper.cpp
+    tools/mali_csf_dump_layer/csf_elf_hooks.cpp
+    tools/mali_csf_dump_layer/csf_layer_state.cpp
+)
+set_target_properties(mali_csf_dump_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mali_csf_dump_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/mali_csf_dump_layer"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
+    "${VULKAN_INCLUDE_DIR}"
+)
+target_compile_options(mali_csf_dump_core PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(mali_csf_dump_core PUBLIC ${CMAKE_DL_LIBS})
+
 add_library(VkLayer_mali_csf_dump SHARED
     tools/mali_csf_dump_layer/mali_csf_dump_layer.cpp
 )
 target_include_directories(VkLayer_mali_csf_dump PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/mali_csf_dump_layer"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     "${VULKAN_INCLUDE_DIR}"
 )
 target_compile_options(VkLayer_mali_csf_dump PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
-target_link_libraries(VkLayer_mali_csf_dump PRIVATE ${CMAKE_DL_LIBS})
+target_link_libraries(VkLayer_mali_csf_dump PRIVATE mali_csf_dump_core ${CMAKE_DL_LIBS})
 add_custom_command(TARGET VkLayer_mali_csf_dump POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/mali_csf_dump_layer/VkLayer_mali_csf_dump.json"
         "$<TARGET_FILE_DIR:VkLayer_mali_csf_dump>/VkLayer_mali_csf_dump.json"
 )
 
-add_executable(test_csf_dump_layer tests/test_csf_dump_layer.cpp)
-target_include_directories(test_csf_dump_layer PRIVATE "${VULKAN_INCLUDE_DIR}")
-target_compile_options(test_csf_dump_layer PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_definitions(test_csf_dump_layer PRIVATE
-    CSF_DUMP_LAYER_PATH="$<TARGET_FILE:VkLayer_mali_csf_dump>"
-    CSF_DUMP_LAYER_DIR="$<TARGET_FILE_DIR:VkLayer_mali_csf_dump>"
-)
-target_link_libraries(test_csf_dump_layer PRIVATE "${VULKAN_LIBRARY}" ${CMAKE_DL_LIBS})
-add_dependencies(test_csf_dump_layer VkLayer_mali_csf_dump)
-add_test(NAME test_csf_dump_layer
-    COMMAND test_csf_dump_layer
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
+if(NOT ANDROID)
+    add_library(mock_lazy_mali_driver SHARED
+        tools/mali_csf_dump_layer/mock_lazy_mali_driver.cpp
+    )
+    target_compile_options(mock_lazy_mali_driver PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
+
+    add_executable(test_csf_dump_layer tests/test_csf_dump_layer.cpp)
+    target_include_directories(test_csf_dump_layer PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/mali_csf_dump_layer"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
+        "${VULKAN_INCLUDE_DIR}"
+    )
+    target_compile_options(test_csf_dump_layer PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_compile_definitions(test_csf_dump_layer PRIVATE
+        CSF_DUMP_LAYER_PATH="$<TARGET_FILE:VkLayer_mali_csf_dump>"
+        CSF_DUMP_LAYER_DIR="$<TARGET_FILE_DIR:VkLayer_mali_csf_dump>"
+        MOCK_LAZY_MALI_PATH="$<TARGET_FILE:mock_lazy_mali_driver>"
+    )
+    target_link_libraries(test_csf_dump_layer PRIVATE mali_csf_dump_core "${VULKAN_LIBRARY}" ${CMAKE_DL_LIBS})
+    add_dependencies(test_csf_dump_layer VkLayer_mali_csf_dump mock_lazy_mali_driver)
+    add_test(NAME test_csf_dump_layer
+        COMMAND test_csf_dump_layer
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+endif()
 
 add_test(NAME test_panfrost_z3_model
     COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_panfrost_z3_model.py

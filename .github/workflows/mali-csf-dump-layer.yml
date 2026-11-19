@@ -1,0 +1,101 @@
+name: Build & Package mali_csf_dump_layer (x86-64 & Android NDK)
+
+on:
+  push:
+    paths:
+      - 'tools/mali_csf_dump_layer/**'
+      - 'tests/test_csf_dump_layer.cpp'
+      - 'src/generated/valhall_csf_descriptors_generated.h'
+      - 'CMakeLists.txt'
+      - '.github/workflows/mali-csf-dump-layer.yml'
+  pull_request:
+    paths:
+      - 'tools/mali_csf_dump_layer/**'
+      - 'tests/test_csf_dump_layer.cpp'
+      - 'src/generated/valhall_csf_descriptors_generated.h'
+      - 'CMakeLists.txt'
+      - '.github/workflows/mali-csf-dump-layer.yml'
+  workflow_dispatch:
+
+jobs:
+  build-x86-64:
+    name: Linux x86-64 (Build, Test & Package)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build & Vulkan dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libvulkan-dev vulkan-headers mesa-vulkan-drivers
+
+      - name: Configure & Build (build-x86-64)
+        run: |
+          cmake -B build-x86-64 -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-x86-64 --target VkLayer_mali_csf_dump test_csf_dump_layer -j$(nproc)
+
+      - name: Run test_csf_dump_layer on Lavapipe
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          ctest --test-dir build-x86-64 -R test_csf_dump_layer --output-on-failure
+
+      - name: Package x86-64 layer artifact
+        run: |
+          mkdir -p dist/x86_64
+          cp build-x86-64/libVkLayer_mali_csf_dump.so dist/x86_64/
+          cp build-x86-64/VkLayer_mali_csf_dump.json dist/x86_64/
+          cp tools/mali_csf_dump_layer/check_driver.py dist/x86_64/
+          tar -czf mali_csf_dump_layer-linux-x86_64.tar.gz -C dist/x86_64 .
+
+      - name: Upload x86-64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mali_csf_dump_layer-linux-x86_64
+          path: mali_csf_dump_layer-linux-x86_64.tar.gz
+
+  build-android-ndk:
+    name: Android arm64-v8a NDK (Build & Package)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install CMake & Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Verify Android NDK availability
+        run: |
+          echo "ANDROID_NDK_LATEST_HOME=${ANDROID_NDK_LATEST_HOME}"
+          ls -la "${ANDROID_NDK_LATEST_HOME}/build/cmake/android.toolchain.cmake"
+
+      - name: Configure & Build (build-android)
+        run: |
+          cmake -B build-android -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_LATEST_HOME}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-30 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-android --target VkLayer_mali_csf_dump -j$(nproc)
+
+      - name: Verify AArch64 ELF symbols & manifest
+        run: |
+          file build-android/libVkLayer_mali_csf_dump.so
+          "${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d build-android/libVkLayer_mali_csf_dump.so | head -n 40
+          "${ANDROID_NDK_LATEST_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D build-android/libVkLayer_mali_csf_dump.so | grep -E "vkNegotiateLoaderLayerInterfaceVersion|vkGetInstanceProcAddr|vkGetDeviceProcAddr"
+
+      - name: Package Android arm64-v8a layer artifact
+        run: |
+          mkdir -p dist/android-arm64-v8a
+          cp build-android/libVkLayer_mali_csf_dump.so dist/android-arm64-v8a/
+          cp build-android/VkLayer_mali_csf_dump.json dist/android-arm64-v8a/
+          tar -czf mali_csf_dump_layer-android-arm64-v8a.tar.gz -C dist/android-arm64-v8a .
+
+      - name: Upload Android arm64-v8a artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mali_csf_dump_layer-android-arm64-v8a
+          path: mali_csf_dump_layer-android-arm64-v8a.tar.gz
