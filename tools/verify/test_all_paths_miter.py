@@ -49,7 +49,6 @@ class TestAllPathsMiter(unittest.TestCase):
             ("FADD", "f32", {}),
             ("FMUL", "f32", {}),
             ("FMA", "f32", {}),
-            ("FMIN", "f32", {"nan_mode": "nan_suppress"}),
             ("FCMP", "f32", {"cmpf": "ne", "result_type": "i1"}),
             ("ICMP", "u32", {"cmpf": "lt", "result_type": "m1"}),
             ("MOV", "i32", {}),
@@ -73,6 +72,7 @@ class TestAllPathsMiter(unittest.TestCase):
             ("CUBEFACE2", "", {}),
             ("MUX", "u32", {"muxf": "int_zero"}),
             ("IDPADD", "v4s8", {}),
+            ("FMIN", "f32", {"nan_mode": "nan_suppress"}),  # Psi_pan deterministic -0.0 < +0.0 vs ssa_z3_eval fpMin
         ]
         for mnem, var, mods in buggy_cases:
             mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)

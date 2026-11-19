@@ -4,6 +4,7 @@ Unit & Formal SMT Property Tests for Frozen Panfrost Reference Semantics (Psi_pa
 Includes regression tests for all 14 Mesa kraid discrepancies + 3 minor gaps.
 """
 
+import dataclasses
 import os
 import sys
 import unittest
@@ -319,6 +320,141 @@ class TestPanfrostZ3Model(unittest.TestCase):
             modifiers={"dest_width_narrow": "h1"}, dst_old=bv32(0x00001234)
         )
         self.assertEqual(z3.simplify(fadd_narrow).as_long(), 0x40001234)
+
+
+
+    def test_reg_v18_three_workstream_audit_fixes(self) -> None:
+        # D-01: BRANCH.not 0 must NOT double-negate src0 in Stage A (unconditional branch is taken!)
+        st0 = ValhallZ3State.symbolic("br_not")
+        _, st_br, _ = eval_panfrost_instruction(
+            "BRANCH", "", [bv32(0)], modifiers={"not": "not", "offset": 16}, state=st0
+        )
+        self.assertEqual(z3.simplify(st_br.pc == st0.pc + bv64(24)), z3.BoolVal(True))
+
+        # D-02: XML string enum "none" must evaluate to False (not bool("none") == True)
+        iadd_no_sat, _, _ = eval_panfrost_instruction(
+            "IADD", "s32", [bv32(0x7FFFFFFF), bv32(1)], modifiers={"saturate": "none"}
+        )
+        self.assertEqual(z3.simplify(iadd_no_sat).as_long(), 0x80000000)
+
+        # D-03: WMASK is a subgroup ballot UF, NOT an identity MOV
+        x = z3.BitVec("wmask_x", 32)
+        wm, _, _ = eval_panfrost_instruction("WMASK", "", [x], modifiers={"subgroup": "subgroup16"})
+        self.assertIn("hw_WMASK_subgroup16", str(wm))
+
+        # D-04: DISCARD.f32 2-source FP comparison
+        st_d0 = ValhallZ3State.symbolic("disc2")
+        _, st_d1, _ = eval_panfrost_instruction(
+            "DISCARD", "f32", [bv32(0xBF800000), bv32(0x00000000)],
+            modifiers={"cmpf": "lt"}, state=st_d0
+        )
+        self.assertEqual(z3.simplify(st_d1.discarded), z3.BoolVal(True))
+        _, st_d2, _ = eval_panfrost_instruction(
+            "DISCARD", "f32", [bv32(0x3F800000), bv32(0x00000000)],
+            modifiers={"cmpf": "lt"}, state=st_d0
+        )
+        self.assertEqual(z3.simplify(st_d2.discarded == st_d0.discarded), z3.BoolVal(True))
+
+        # D-05 / D-08 / D-09: F32_TO_F16 no double-narrowing, dest_width_narrow h01, dest_width_replicate h01
+        f32_h0, _, tr0 = eval_panfrost_instruction(
+            "F32_TO_F16", "", [bv32(0x3F800000)],
+            modifiers={"dest_width_narrow": "h0"}, dst_old=bv32(0xDEAD0000)
+        )
+        self.assertEqual(z3.simplify(f32_h0).as_long(), 0xDEAD3C00)
+        self.assertIn("width=h0", tr0.stage_c_note)
+
+        fadd_h01, _, _ = eval_panfrost_instruction(
+            "FADD", "f32", [bv32(0x3F800000), bv32(0x3F800000)],
+            modifiers={"dest_width_narrow": "h01"}
+        )
+        self.assertEqual(z3.simplify(fadd_h01).as_long(), 0x40004000)
+
+        rcp_h01, _, _ = eval_panfrost_instruction(
+            "FRCP", "f16", [bv32(0x00004000)], modifiers={"dest_width_replicate": "h01"}
+        )
+        self.assertEqual(z3.simplify(rcp_h01).as_long(), 0x38003800)
+
+        # D-06 / D-07: apply_swizzle_u32 signed b02 (widen_v2s8) & b1 replication on 16-bit / 8-bit
+        swz_v2s8 = apply_swizzle_u32(bv32(0x00FE00FF), "b02", signed_widen=True, lane_bits=16)
+        self.assertEqual(z3.simplify(swz_v2s8).as_long(), 0xFFFEFFFF)
+        swz_b1_16 = apply_swizzle_u32(bv32(0x0000FF00), "b1", signed_widen=True, lane_bits=16)
+        self.assertEqual(z3.simplify(swz_b1_16).as_long(), 0xFFFFFFFF)
+        swz_b1_8 = apply_swizzle_u32(bv32(0x0000AB00), "b1", signed_widen=False, lane_bits=8)
+        self.assertEqual(z3.simplify(swz_b1_8).as_long(), 0xABABABAB)
+
+        # D-10 / D-12: Deterministic -0.0 < +0.0 & FMIN/FMAX sem="nan_propagate" payload preservation
+        self.assertEqual(z3.simplify(apply_clamp_f32(bv32(0x80000000), "clamp_0_inf")).as_long(), 0x00000000)
+        fmin_z, _, _ = eval_panfrost_instruction("FMIN", "f32", [bv32(0x00000000), bv32(0x80000000)])
+        self.assertEqual(z3.simplify(fmin_z).as_long(), 0x80000000)
+        fmin_pnan, _, _ = eval_panfrost_instruction(
+            "FMIN", "f32", [bv32(0xFF800001), bv32(0x3F800000)], modifiers={"sem": "nan_propagate"}
+        )
+        self.assertEqual(z3.simplify(fmin_pnan).as_long(), 0xFFC00001)
+
+        # D-11 / D-13 / D-14 / D-15 / D-19 / D-23 / D-24: defaults & XML keys
+        mux_def, _, _ = eval_panfrost_instruction("MUX", "i32", [bv32(0xAAAAAAAA), bv32(0xBBBBBBBB), bv32(0)])
+        self.assertEqual(z3.simplify(mux_def).as_long(), 0xAAAAAAAA)
+        flush_xml, _, _ = eval_panfrost_instruction(
+            "FLUSH", "f32", [bv32(0xFF800000)], modifiers={"inf_mode": "flush_inf"}
+        )
+        self.assertEqual(z3.simplify(flush_xml).as_long(), 0xFF7FFFFF)
+        adr_r, _, _ = eval_panfrost_instruction("ADR", "", [], modifiers={"imm1w": 16}, state=st0)
+        self.assertEqual(adr_r.size(), 32)
+        fneg_r, _, _ = eval_panfrost_instruction("FNEG", "f32", [bv32(0x3F800000)], modifiers={"neg0": "neg"})
+        self.assertEqual(z3.simplify(fneg_r).as_long(), 0xBF800000)
+        and_not2, _, tr_and = eval_panfrost_instruction("AND", "i32", [bv32(0xFF), bv32(0x0F)], modifiers={"not2": "not"})
+        self.assertEqual(z3.simplify(and_not2).as_long(), 0xF0)
+        self.assertEqual(tr_and.stage_a_srcs[1]["mod_idx"], 2)
+        icmp_m_def, _, _ = eval_panfrost_instruction("ICMP_MULTI", "s32", [bv32(5), bv32(5), bv32(0)], modifiers={"cmpf": "eq"})
+        self.assertEqual(z3.simplify(icmp_m_def).as_long(), 1)
+        seg_neg, _, _ = eval_panfrost_instruction("SEG_ADD", "u64", [bv64(100), bv64(30)], modifiers={"neg": "neg"})
+        self.assertEqual(z3.simplify(seg_neg).as_long(), 70)
+
+        # D-17 / WS2: FMA_RSCALE.f32 single-round FP64 + .special="n" (0 * Inf + 1.0 == 1.0)
+        rs_n, _, _ = eval_panfrost_instruction(
+            "FMA_RSCALE", "f32", [bv32(0x00000000), bv32(0x7F800000), bv32(0x3F800000), bv32(0)],
+            modifiers={"special": "n"}
+        )
+        self.assertEqual(z3.simplify(rs_n).as_long(), 0x3F800000)
+        # Single-round FP64: (2^100 * 2^50 + 0) * 2^-150 == 1.0 (would overflow to Inf if double-rounded in FP32!)
+        rs_ovf, _, _ = eval_panfrost_instruction(
+            "FMA_RSCALE", "f32", [bv32(0x71800000), bv32(0x58800000), bv32(0x00000000), bv32(-150)]
+        )
+        self.assertEqual(z3.simplify(rs_ovf).as_long(), 0x3F800000)
+
+        # WS2: Exact FREXPE / FREXPM.f32 (none, sqrt, log, neg_result, +Inf)
+        fe_std, _, _ = eval_panfrost_instruction("FREXPE", "f32", [bv32(0x40400000)])  # 3.0 = 0.75 * 2^2 -> exp=2
+        self.assertEqual(z3.simplify(fe_std).as_long(), 2)
+        fe_neg, _, _ = eval_panfrost_instruction("FREXPE", "f32", [bv32(0x40400000)], modifiers={"neg_result": "neg"})
+        self.assertEqual(z3.simplify(fe_neg).as_long(), 0xFFFFFFFE)
+        fm_log_inf, _, _ = eval_panfrost_instruction("FREXPM", "f32", [bv32(0x7F800000)], modifiers={"special": "log"})
+        self.assertEqual(z3.simplify(fm_log_inf).as_long(), 0x3F800000)  # +Inf -> +1.0
+
+        # WS2: Exact CUBE_SSEL / CUBE_TSEL
+        cs_f0, _, _ = eval_panfrost_instruction("CUBE_SSEL", "", [bv32(0x3F800000), bv32(0x40000000), bv32(0 << 29)])
+        self.assertEqual(z3.simplify(cs_f0).as_long(), 0xBF800000)  # face 0 -> -Z (-1.0)
+        ct_f2, _, _ = eval_panfrost_instruction("CUBE_TSEL", "", [bv32(0x3F800000), bv32(0x40000000), bv32(2 << 29)])
+        self.assertEqual(z3.simplify(ct_f2).as_long(), 0x40000000)  # face 2 -> +Z (2.0)
+
+        # D-18: MKVEC.v2i8 with swz2="none" extracts src2[15:0] (not src2[23:16])
+        mk_none, _, _ = eval_panfrost_instruction(
+            "MKVEC", "v2i8", [bv32(0x11), bv32(0x22), bv32(0x00004433)], modifiers={"swz2": "none"}
+        )
+        self.assertEqual(z3.simplify(mk_none).as_long(), 0x44332211)
+
+        # D-20 / D-21: LDEXP.inf vs LDEXP.inf0 distinct UFs, LOAD.i8 sext, STORE.i64 8B
+        ld_inf, _, _ = eval_panfrost_instruction("LDEXP", "f32", [bv32(0x3F800000), bv32(1)], modifiers={"inf": "inf"})
+        ld_inf0, _, _ = eval_panfrost_instruction("LDEXP", "f32", [bv32(0x3F800000), bv32(1)], modifiers={"inf": "inf0"})
+        self.assertNotEqual(str(ld_inf), str(ld_inf0))
+
+        st_m = ValhallZ3State.symbolic("mem_v18")
+        _, st_m2, _ = eval_panfrost_instruction(
+            "STORE", "i64", [bv64(0x2000), bv64(0x01020304050607FE)], state=st_m
+        )
+        ld_sext, _, _ = eval_panfrost_instruction(
+            "LOAD", "i8", [bv64(0x2000)], modifiers={"extend": "sext"}, state=st_m2
+        )
+        self.assertEqual(z3.simplify(ld_sext).as_long(), 0xFFFFFFFE)
 
 
 if __name__ == "__main__":
