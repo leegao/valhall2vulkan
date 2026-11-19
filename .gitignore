@@ -74,3 +74,4 @@ archive.zip
 __pycache__/
 *.pyc
 llvm-21
+tools/mali_csf_dump_layer/bringup_notes.md

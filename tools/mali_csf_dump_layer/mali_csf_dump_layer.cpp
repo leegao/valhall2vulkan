@@ -32,7 +32,7 @@
 #include <vector>
 
 // ============================================================================
-// 1. Minimal Mali kbase UAPI Definitions (r44p1 + r54p3 compatible)
+// 1. Minimal Mali kbase CSF UAPI Definitions (r38p1 + r44p1 + r49p1 + r54p3)
 // ============================================================================
 namespace {
 
@@ -169,6 +169,7 @@ struct CsfQueueState {
 
 struct CapturedIdvs {
     bool valid = false;
+    bool is_idvs2 = false;
     uint64_t run_idvs_insn = 0;
     uint32_t idvs_sr[64] = {0};
     uint32_t frag_sr[64] = {0};
@@ -185,7 +186,7 @@ struct LayerState {
     std::vector<GpuMapping> mappings;
     std::unordered_map<uint64_t, CsfQueueState> queues_by_gpu_va;
     std::unordered_map<uint64_t, uint64_t> queue_by_mmap_handle;
-    std::string detected_abi = "unknown"; // "r54p3", "r44p1", or DDK version string
+    std::string detected_abi = "unknown";
     uint32_t regs[96] = {0};
     std::atomic<uint32_t> current_frame{1};
     std::atomic<bool> dump_done{false};
@@ -242,7 +243,7 @@ void ensure_dir(const std::string& dir) {
 }
 
 // ============================================================================
-// 4. vkcube_frame1 Format Dumper (Exact 1:1 Layout with 64B-Aligned SRTs)
+// 4. vkcube_frame1 Format Dumper (v10/v11 IDVS + v12/v13/v14 IDVS2)
 // ============================================================================
 void dump_sr_u64(const std::string& path, const uint32_t* sr64) {
     uint64_t words[64] = {0};
@@ -252,26 +253,7 @@ void dump_sr_u64(const std::string& path, const uint32_t* sr64) {
     write_bin_file(path, words, sizeof(words));
 }
 
-void dump_idvs_capture_locked(LayerState& s, uint64_t run_idvs_insn, const uint32_t* idvs_sr) {
-    std::string out_dir = get_dump_dir();
-    ensure_dir(out_dir);
-
-    s.captured.valid = true;
-    s.captured.run_idvs_insn = run_idvs_insn;
-    std::memcpy(s.captured.idvs_sr, idvs_sr, sizeof(s.captured.idvs_sr));
-    s.captured.out_dir = out_dir;
-
-    dump_sr_u64(out_dir + "/idvs_sr.bin", idvs_sr);
-    write_bin_file(out_dir + "/csrunidvs_insn.bin", &run_idvs_insn, sizeof(run_idvs_insn));
-
-    auto rd64 = [&](valhall::csf::IDVSSR r) -> uint64_t {
-        uint32_t idx = static_cast<uint32_t>(r) & 62u;
-        return static_cast<uint64_t>(idvs_sr[idx]) | (static_cast<uint64_t>(idvs_sr[idx + 1u]) << 32);
-    };
-
-    // Mask SRT pointers with & ~0x3FULL (64B aligned) and extract low 6-bit entry count
-    uint64_t raw_pos_srt = rd64(valhall::csf::IDVSSR::SRT_0);
-    uint64_t raw_frag_srt = rd64(valhall::csf::IDVSSR::SRT_2);
+void dump_srt_and_buffers_locked(LayerState& s, const std::string& out_dir, uint64_t raw_pos_srt, uint64_t raw_frag_srt) {
     uint64_t pos_srt_va = raw_pos_srt & 0x0000FFFFFFFFFFFFULL & ~0x3FULL;
     uint64_t frag_srt_va = raw_frag_srt & 0x0000FFFFFFFFFFFFULL & ~0x3FULL;
     uint32_t pos_srt_count = static_cast<uint32_t>(raw_pos_srt & 0x3FULL);
@@ -296,6 +278,39 @@ void dump_idvs_capture_locked(LayerState& s, uint64_t run_idvs_insn, const uint3
     if (const void* p = gpu_to_cpu_locked(s, frag_srt_va, 512)) {
         write_bin_file(out_dir + "/frag_srt.bin", p, 512);
     }
+}
+
+void dump_spd_and_shader_locked(LayerState& s, const std::string& out_dir, uint64_t spd_va,
+                                const char* spd_name, const char* bin_name) {
+    if (const void* p = gpu_to_cpu_locked(s, spd_va, 32)) {
+        write_bin_file(out_dir + "/" + spd_name, p, 32);
+        valhall::csf::ShaderProgram spd = valhall::csf::ShaderProgram::unpack(reinterpret_cast<const uint32_t*>(p));
+        uint64_t code_va = spd.binary & 0x0000FFFFFFFFFFFFULL;
+        if (const void* cp = gpu_to_cpu_locked(s, code_va, 512)) {
+            write_bin_file(out_dir + "/" + bin_name, cp, 512);
+        }
+    }
+}
+
+void dump_idvs_capture_locked(LayerState& s, uint64_t run_idvs_insn, const uint32_t* idvs_sr) {
+    std::string out_dir = get_dump_dir();
+    ensure_dir(out_dir);
+
+    s.captured.valid = true;
+    s.captured.is_idvs2 = false;
+    s.captured.run_idvs_insn = run_idvs_insn;
+    std::memcpy(s.captured.idvs_sr, idvs_sr, sizeof(s.captured.idvs_sr));
+    s.captured.out_dir = out_dir;
+
+    dump_sr_u64(out_dir + "/idvs_sr.bin", idvs_sr);
+    write_bin_file(out_dir + "/csrunidvs_insn.bin", &run_idvs_insn, sizeof(run_idvs_insn));
+
+    auto rd64 = [&](valhall::csf::IDVSSR r) -> uint64_t {
+        uint32_t idx = static_cast<uint32_t>(r) & 62u;
+        return static_cast<uint64_t>(idvs_sr[idx]) | (static_cast<uint64_t>(idvs_sr[idx + 1u]) << 32);
+    };
+
+    dump_srt_and_buffers_locked(s, out_dir, rd64(valhall::csf::IDVSSR::SRT_0), rd64(valhall::csf::IDVSSR::SRT_2));
 
     uint64_t raw_fau = rd64(valhall::csf::IDVSSR::FAU_0);
     uint64_t fau_va = raw_fau & 0x0000FFFFFFFFFFFFULL;
@@ -304,23 +319,9 @@ void dump_idvs_capture_locked(LayerState& s, uint64_t run_idvs_insn, const uint3
         write_bin_file(out_dir + "/fau.bin", p, fau_bytes);
     }
 
-    uint64_t pos_spd_va = rd64(valhall::csf::IDVSSR::SPD_0) & 0x0000FFFFFFFFFFFFULL;
-    uint64_t var_spd_va = rd64(valhall::csf::IDVSSR::SPD_1) & 0x0000FFFFFFFFFFFFULL;
-    uint64_t frag_spd_va = rd64(valhall::csf::IDVSSR::SPD_2) & 0x0000FFFFFFFFFFFFULL;
-
-    auto dump_spd_and_shader = [&](uint64_t spd_va, const char* spd_name, const char* bin_name) {
-        if (const void* p = gpu_to_cpu_locked(s, spd_va, 32)) {
-            write_bin_file(out_dir + "/" + spd_name, p, 32);
-            valhall::csf::ShaderProgram spd = valhall::csf::ShaderProgram::unpack(reinterpret_cast<const uint32_t*>(p));
-            uint64_t code_va = spd.binary & 0x0000FFFFFFFFFFFFULL;
-            if (const void* cp = gpu_to_cpu_locked(s, code_va, 512)) {
-                write_bin_file(out_dir + "/" + bin_name, cp, 512);
-            }
-        }
-    };
-    dump_spd_and_shader(pos_spd_va, "pos_spd.bin", "pos_shader.bin");
-    dump_spd_and_shader(var_spd_va, "var_spd.bin", "var_shader.bin");
-    dump_spd_and_shader(frag_spd_va, "frag_spd.bin", "frag_shader.bin");
+    dump_spd_and_shader_locked(s, out_dir, rd64(valhall::csf::IDVSSR::SPD_0) & 0x0000FFFFFFFFFFFFULL, "pos_spd.bin", "pos_shader.bin");
+    dump_spd_and_shader_locked(s, out_dir, rd64(valhall::csf::IDVSSR::SPD_1) & 0x0000FFFFFFFFFFFFULL, "var_spd.bin", "var_shader.bin");
+    dump_spd_and_shader_locked(s, out_dir, rd64(valhall::csf::IDVSSR::SPD_2) & 0x0000FFFFFFFFFFFFULL, "frag_spd.bin", "frag_shader.bin");
 
     uint64_t tsd_va = rd64(valhall::csf::IDVSSR::TSD_0) & 0x0000FFFFFFFFFFFFULL;
     uint64_t tcd_va = rd64(valhall::csf::IDVSSR::TILER_CTX) & 0x0000FFFFFFFFFFFFULL;
@@ -333,7 +334,56 @@ void dump_idvs_capture_locked(LayerState& s, uint64_t run_idvs_insn, const uint3
     if (const void* p = gpu_to_cpu_locked(s, bd_va, 64))   write_bin_file(out_dir + "/bd.bin", p, 64);
 }
 
-void dump_fragment_capture_locked(LayerState& s, const uint32_t* frag_sr) {
+void dump_idvs2_capture_locked(LayerState& s, uint64_t run_idvs2_insn, const uint32_t* idvs_sr) {
+    std::string out_dir = get_dump_dir();
+    ensure_dir(out_dir);
+
+    s.captured.valid = true;
+    s.captured.is_idvs2 = true;
+    s.captured.run_idvs_insn = run_idvs2_insn;
+    std::memcpy(s.captured.idvs_sr, idvs_sr, sizeof(s.captured.idvs_sr));
+    s.captured.out_dir = out_dir;
+
+    dump_sr_u64(out_dir + "/idvs_sr.bin", idvs_sr);
+    write_bin_file(out_dir + "/csrunidvs_insn.bin", &run_idvs2_insn, sizeof(run_idvs2_insn));
+
+    auto rd64 = [&](valhall::csf::V13IDVSSR r) -> uint64_t {
+        uint32_t idx = static_cast<uint32_t>(r) & 62u;
+        return static_cast<uint64_t>(idvs_sr[idx]) | (static_cast<uint64_t>(idvs_sr[idx + 1u]) << 32);
+    };
+
+    dump_srt_and_buffers_locked(s, out_dir,
+        rd64(valhall::csf::V13IDVSSR::VERTEX_SRT),
+        rd64(valhall::csf::V13IDVSSR::FRAGMENT_SRT));
+
+    uint64_t raw_fau = rd64(valhall::csf::V13IDVSSR::VERTEX_FAU);
+    uint64_t fau_va = raw_fau & 0x0000FFFFFFFFFFFFULL;
+    size_t fau_bytes = std::max<size_t>(8u, static_cast<size_t>((raw_fau >> 56) & 0xFFu) * 8u);
+    if (const void* p = gpu_to_cpu_locked(s, fau_va, fau_bytes)) {
+        write_bin_file(out_dir + "/fau.bin", p, fau_bytes);
+    }
+    uint64_t raw_frag_fau = rd64(valhall::csf::V13IDVSSR::FRAGMENT_FAU);
+    uint64_t frag_fau_va = raw_frag_fau & 0x0000FFFFFFFFFFFFULL;
+    size_t frag_fau_bytes = std::max<size_t>(8u, static_cast<size_t>((raw_frag_fau >> 56) & 0xFFu) * 8u);
+    if (const void* p = gpu_to_cpu_locked(s, frag_fau_va, frag_fau_bytes)) {
+        write_bin_file(out_dir + "/frag_fau.bin", p, frag_fau_bytes);
+    }
+
+    dump_spd_and_shader_locked(s, out_dir, rd64(valhall::csf::V13IDVSSR::VERTEX_SPD) & 0x0000FFFFFFFFFFFFULL, "pos_spd.bin", "pos_shader.bin");
+    dump_spd_and_shader_locked(s, out_dir, rd64(valhall::csf::V13IDVSSR::FRAGMENT_SPD) & 0x0000FFFFFFFFFFFFULL, "frag_spd.bin", "frag_shader.bin");
+
+    uint64_t tsd_va = rd64(valhall::csf::V13IDVSSR::VERTEX_TSD) & 0x0000FFFFFFFFFFFFULL;
+    uint64_t tcd_va = rd64(valhall::csf::V13IDVSSR::TILER_CTX) & 0x0000FFFFFFFFFFFFULL;
+    uint64_t zsd_va = rd64(valhall::csf::V13IDVSSR::ZSD) & 0x0000FFFFFFFFFFFFULL;
+    uint64_t bd_va = rd64(valhall::csf::V13IDVSSR::BLEND_DESC) & 0x0000FFFFFFFFFFFFULL & ~0xFULL;
+
+    if (const void* p = gpu_to_cpu_locked(s, tsd_va, 512)) write_bin_file(out_dir + "/tsd.bin", p, 512);
+    if (const void* p = gpu_to_cpu_locked(s, tcd_va, 256)) write_bin_file(out_dir + "/tcd.bin", p, 256);
+    if (const void* p = gpu_to_cpu_locked(s, zsd_va, 64))  write_bin_file(out_dir + "/zsd.bin", p, 64);
+    if (const void* p = gpu_to_cpu_locked(s, bd_va, 64))   write_bin_file(out_dir + "/bd.bin", p, 64);
+}
+
+void dump_fragment_capture_locked(LayerState& s, const uint32_t* frag_sr, uint32_t fbd_reg_idx) {
     if (!s.captured.valid) return;
     s.captured.has_frag_sr = true;
     std::memcpy(s.captured.frag_sr, frag_sr, sizeof(s.captured.frag_sr));
@@ -341,8 +391,8 @@ void dump_fragment_capture_locked(LayerState& s, const uint32_t* frag_sr) {
 
     dump_sr_u64(out_dir + "/frag_sr.bin", frag_sr);
 
-    uint32_t fbd_lo = frag_sr[static_cast<uint32_t>(valhall::csf::FRAGMENTSR::FBD_POINTER)];
-    uint32_t fbd_hi = frag_sr[static_cast<uint32_t>(valhall::csf::FRAGMENTSR::FBD_POINTER) + 1u];
+    uint32_t fbd_lo = frag_sr[fbd_reg_idx];
+    uint32_t fbd_hi = frag_sr[fbd_reg_idx + 1u];
     uint32_t fbd_words[2] = { fbd_lo, fbd_hi };
     valhall::csf::FramebufferPointer fbp = valhall::csf::FramebufferPointer::unpack(fbd_words);
     uint64_t fbd_va = fbp.pointer & 0x0000FFFFFFFFFFFFULL;
@@ -360,21 +410,27 @@ void dump_fragment_capture_locked(LayerState& s, const uint32_t* frag_sr) {
         s.captured.rt_color_va = rtd.rgb.writeback_buffer.base & 0x0000FFFFFFFFFFFFULL;
     }
 
-    auto rd64 = [&](valhall::csf::IDVSSR r) -> uint64_t {
-        uint32_t idx = static_cast<uint32_t>(r) & 62u;
+    auto rd64 = [&](uint32_t idx) -> uint64_t {
         return static_cast<uint64_t>(s.captured.idvs_sr[idx]) |
                (static_cast<uint64_t>(s.captured.idvs_sr[idx + 1u]) << 32);
     };
+    uint32_t pos_srt_reg = s.captured.is_idvs2 ? static_cast<uint32_t>(valhall::csf::V13IDVSSR::VERTEX_SRT)
+                                              : static_cast<uint32_t>(valhall::csf::IDVSSR::SRT_0);
+    uint32_t frag_srt_reg = s.captured.is_idvs2 ? static_cast<uint32_t>(valhall::csf::V13IDVSSR::FRAGMENT_SRT)
+                                               : static_cast<uint32_t>(valhall::csf::IDVSSR::SRT_2);
+    uint32_t fau_reg = s.captured.is_idvs2 ? static_cast<uint32_t>(valhall::csf::V13IDVSSR::VERTEX_FAU)
+                                           : static_cast<uint32_t>(valhall::csf::IDVSSR::FAU_0);
 
     std::ostringstream js;
     js << "{\n"
        << "  \"frame\": " << s.current_frame.load() << ",\n"
        << "  \"driver_abi\": \"" << s.detected_abi << "\",\n"
+       << "  \"csf_draw_op\": \"" << (s.captured.is_idvs2 ? "RUN_IDVS2" : "RUN_IDVS") << "\",\n"
        << "  \"fb_width\": " << s.captured.fb_width << ",\n"
        << "  \"fb_height\": " << s.captured.fb_height << ",\n"
-       << "  \"pos_srt_va\": \"0x" << std::hex << (rd64(valhall::csf::IDVSSR::SRT_0) & 0x0000FFFFFFFFFFFFULL & ~0x3FULL) << "\",\n"
-       << "  \"frag_srt_va\": \"0x" << (rd64(valhall::csf::IDVSSR::SRT_2) & 0x0000FFFFFFFFFFFFULL & ~0x3FULL) << "\",\n"
-       << "  \"fau_va\": \"0x" << (rd64(valhall::csf::IDVSSR::FAU_0) & 0x0000FFFFFFFFFFFFULL) << "\",\n"
+       << "  \"pos_srt_va\": \"0x" << std::hex << (rd64(pos_srt_reg) & 0x0000FFFFFFFFFFFFULL & ~0x3FULL) << "\",\n"
+       << "  \"frag_srt_va\": \"0x" << (rd64(frag_srt_reg) & 0x0000FFFFFFFFFFFFULL & ~0x3FULL) << "\",\n"
+       << "  \"fau_va\": \"0x" << (rd64(fau_reg) & 0x0000FFFFFFFFFFFFULL) << "\",\n"
        << "  \"fbd_va\": \"0x" << fbd_va << "\",\n"
        << "  \"rt_color_va\": \"0x" << s.captured.rt_color_va << "\"\n"
        << "}\n";
@@ -383,7 +439,7 @@ void dump_fragment_capture_locked(LayerState& s, const uint32_t* frag_sr) {
 }
 
 // ============================================================================
-// 5. CSF Command Stream Interpreter (Ring + CALL Recursion)
+// 5. CSF Command Stream Interpreter (v10–v14: RUN_IDVS, RUN_IDVS2, RUN_FRAGMENT/2)
 // ============================================================================
 void walk_csf_stream_locked(LayerState& s, const uint64_t* words, size_t count, int depth) {
     if (!words || count == 0 || depth > 8) return;
@@ -406,6 +462,20 @@ void walk_csf_stream_locked(LayerState& s, const uint64_t* words, size_t count, 
             if (m.destination < 96) {
                 s.regs[m.destination] = m.immediate;
             }
+        } else if (op == valhall::csf::CSOpcode::ADD_IMMEDIATE32) {
+            auto a = valhall::csf::CSADDIMM32::unpack_u64(insn);
+            if (a.source < 96 && a.destination < 96) {
+                s.regs[a.destination] = static_cast<uint32_t>(static_cast<int32_t>(s.regs[a.source]) + a.immediate);
+            }
+        } else if (op == valhall::csf::CSOpcode::ADD_IMMEDIATE64) {
+            auto a = valhall::csf::CSADDIMM64::unpack_u64(insn);
+            if (a.source + 1 < 96 && a.destination + 1 < 96) {
+                uint64_t src_v = static_cast<uint64_t>(s.regs[a.source]) |
+                                 (static_cast<uint64_t>(s.regs[a.source + 1]) << 32);
+                uint64_t dst_v = static_cast<uint64_t>(static_cast<int64_t>(src_v) + static_cast<int64_t>(a.immediate));
+                s.regs[a.destination] = static_cast<uint32_t>(dst_v & 0xFFFFFFFFULL);
+                s.regs[a.destination + 1] = static_cast<uint32_t>(dst_v >> 32);
+            }
         } else if (op == valhall::csf::CSOpcode::CALL) {
             auto c = valhall::csf::CSCALL::unpack_u64(insn);
             uint32_t r_addr = c.address;
@@ -425,10 +495,20 @@ void walk_csf_stream_locked(LayerState& s, const uint64_t* words, size_t count, 
                 s.current_frame.load() == target_frame && !s.captured.valid) {
                 dump_idvs_capture_locked(s, insn, s.regs);
             }
+        } else if (op_raw == static_cast<uint32_t>(valhall::csf::V13CSOpcode::RUN_IDVS2)) {
+            if (is_dump_enabled() && !s.dump_done.load() &&
+                s.current_frame.load() == target_frame && !s.captured.valid) {
+                dump_idvs2_capture_locked(s, insn, s.regs);
+            }
         } else if (op == valhall::csf::CSOpcode::RUN_FRAGMENT) {
             if (is_dump_enabled() && !s.dump_done.load() &&
                 s.current_frame.load() == target_frame && s.captured.valid && !s.captured.has_frag_sr) {
-                dump_fragment_capture_locked(s, s.regs);
+                dump_fragment_capture_locked(s, s.regs, static_cast<uint32_t>(valhall::csf::FRAGMENTSR::FBD_POINTER));
+            }
+        } else if (op_raw == static_cast<uint32_t>(valhall::csf::V14CSOpcode::RUN_FRAGMENT2)) {
+            if (is_dump_enabled() && !s.dump_done.load() &&
+                s.current_frame.load() == target_frame && s.captured.valid && !s.captured.has_frag_sr) {
+                dump_fragment_capture_locked(s, s.regs, static_cast<uint32_t>(valhall::csf::V14FRAGMENTSR::FBD_POINTER));
             }
         }
     }
@@ -521,6 +601,23 @@ int hooked_openat(int dirfd, const char* pathname, int flags, ...) {
     }
     int fd = (flags & O_CREAT) ? state().orig_openat(dirfd, pathname, flags, mode)
                                : state().orig_openat(dirfd, pathname, flags);
+    if (fd >= 0 && is_mali_path(pathname)) {
+        std::lock_guard<std::mutex> lk(state().mu);
+        state().mali_fds.insert(fd);
+    }
+    return fd;
+}
+
+int hooked_openat64(int dirfd, const char* pathname, int flags, ...) {
+    mode_t mode = 0;
+    if (flags & O_CREAT) {
+        va_list ap;
+        va_start(ap, flags);
+        mode = static_cast<mode_t>(va_arg(ap, int));
+        va_end(ap);
+    }
+    int fd = (flags & O_CREAT) ? state().orig_openat64(dirfd, pathname, flags, mode)
+                               : state().orig_openat64(dirfd, pathname, flags);
     if (fd >= 0 && is_mali_path(pathname)) {
         std::lock_guard<std::mutex> lk(state().mu);
         state().mali_fds.insert(fd);
@@ -625,13 +722,14 @@ int hooked_ioctl(int fd, unsigned long request, ...) {
 }
 
 // ============================================================================
-// 7. ELF GOT/PLT Hooking for libGLES_mali.so (r54p3 & r44p1)
+// 7. ELF GOT/PLT Hooking for libGLES_mali.so (r38p1, r44p1, r49p1, r54p3)
 // ============================================================================
 void* resolve_hook_target(const char* sym) {
     if (std::strcmp(sym, "open") == 0) return reinterpret_cast<void*>(&hooked_open);
     if (std::strcmp(sym, "open64") == 0) return reinterpret_cast<void*>(&hooked_open64);
     if (std::strcmp(sym, "__open_2") == 0) return reinterpret_cast<void*>(&hooked_open_2);
     if (std::strcmp(sym, "openat") == 0) return reinterpret_cast<void*>(&hooked_openat);
+    if (std::strcmp(sym, "openat64") == 0) return reinterpret_cast<void*>(&hooked_openat64);
     if (std::strcmp(sym, "close") == 0) return reinterpret_cast<void*>(&hooked_close);
     if (std::strcmp(sym, "ioctl") == 0) return reinterpret_cast<void*>(&hooked_ioctl);
     if (std::strcmp(sym, "mmap") == 0) return reinterpret_cast<void*>(&hooked_mmap);
@@ -640,39 +738,42 @@ void* resolve_hook_target(const char* sym) {
     return nullptr;
 }
 
-int patch_elf_got_cb(struct dl_phdr_info* info, size_t /*size*/, void* /*data*/) {
-    if (!info->dlpi_name || std::strstr(info->dlpi_name, "libGLES_mali") == nullptr) {
-        return 0;
-    }
-    if (state().detected_abi == "unknown") {
-        state().detected_abi = (std::strstr(info->dlpi_name, "r44p1") != nullptr) ? "r44p1" : "r54p3";
-    }
-
-    const ElfW(Dyn)* dyn = nullptr;
+std::string detect_ddk_version_from_phdr(const struct dl_phdr_info* info) {
     for (ElfW(Half) i = 0; i < info->dlpi_phnum; ++i) {
-        if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) {
-            dyn = reinterpret_cast<const ElfW(Dyn)*>(info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
-            break;
+        const auto& ph = info->dlpi_phdr[i];
+        if (ph.p_type != PT_LOAD || (ph.p_flags & PF_W) != 0 || ph.p_memsz < 16) continue;
+        const char* base = reinterpret_cast<const char*>(info->dlpi_addr + ph.p_vaddr);
+        size_t len = static_cast<size_t>(ph.p_filesz);
+        for (size_t j = 0; j + 12 < len; ++j) {
+            if (base[j] == 'r' &&
+                base[j + 1] >= '0' && base[j + 1] <= '9' &&
+                base[j + 2] >= '0' && base[j + 2] <= '9' &&
+                base[j + 3] == 'p' &&
+                base[j + 4] >= '0' && base[j + 4] <= '9' &&
+                base[j + 5] == '-' &&
+                base[j + 6] >= '0' && base[j + 6] <= '9' &&
+                base[j + 7] >= '0' && base[j + 7] <= '9' &&
+                base[j + 8] == 'e' && base[j + 9] == 'a' && base[j + 10] == 'c') {
+                size_t k = j;
+                while (k < len && k - j < 32 && base[k] >= 0x20 && base[k] < 0x7f && base[k] != '"') ++k;
+                return std::string(base + j, k - j);
+            }
         }
     }
-    if (!dyn) return 0;
+    return {};
+}
 
-    const char* strtab = nullptr;
-    const ElfW(Sym)* symtab = nullptr;
-    const ElfW(Rela)* jmprel = nullptr;
-    size_t jmprel_sz = 0;
-    for (; dyn->d_tag != DT_NULL; ++dyn) {
-        if (dyn->d_tag == DT_STRTAB) strtab = reinterpret_cast<const char*>(dyn->d_un.d_ptr);
-        else if (dyn->d_tag == DT_SYMTAB) symtab = reinterpret_cast<const ElfW(Sym)*>(dyn->d_un.d_ptr);
-        else if (dyn->d_tag == DT_JMPREL) jmprel = reinterpret_cast<const ElfW(Rela)*>(dyn->d_un.d_ptr);
-        else if (dyn->d_tag == DT_PLTRELSZ) jmprel_sz = dyn->d_un.d_val;
-    }
-    if (!strtab || !symtab || !jmprel || jmprel_sz == 0) return 0;
+uintptr_t fix_dyn_ptr(ElfW(Addr) dlpi_addr, ElfW(Addr) val) {
+    if (val == 0) return 0;
+    return (val < dlpi_addr) ? (dlpi_addr + val) : val;
+}
 
-    const size_t page_sz = static_cast<size_t>(sysconf(_SC_PAGESIZE));
-    const size_t n_rel = jmprel_sz / sizeof(ElfW(Rela));
+void patch_rela_table(ElfW(Addr) dlpi_addr, const char* strtab, const ElfW(Sym)* symtab,
+                      const ElfW(Rela)* rela, size_t rela_sz, size_t page_sz) {
+    if (!rela || rela_sz == 0) return;
+    const size_t n_rel = rela_sz / sizeof(ElfW(Rela));
     for (size_t i = 0; i < n_rel; ++i) {
-        const ElfW(Rela)& r = jmprel[i];
+        const ElfW(Rela)& r = rela[i];
 #if defined(__aarch64__)
         uint32_t sym_idx = ELF64_R_SYM(r.r_info);
         uint32_t r_type = ELF64_R_TYPE(r.r_info);
@@ -688,12 +789,55 @@ int patch_elf_got_cb(struct dl_phdr_info* info, size_t /*size*/, void* /*data*/)
         void* replacement = resolve_hook_target(sym_name);
         if (!replacement) continue;
 
-        void** got_slot = reinterpret_cast<void**>(info->dlpi_addr + r.r_offset);
+        void** got_slot = reinterpret_cast<void**>(dlpi_addr + r.r_offset);
         uintptr_t page_base = reinterpret_cast<uintptr_t>(got_slot) & ~(page_sz - 1u);
         if (mprotect(reinterpret_cast<void*>(page_base), page_sz, PROT_READ | PROT_WRITE) == 0) {
             *got_slot = replacement;
         }
     }
+}
+
+int patch_elf_got_cb(struct dl_phdr_info* info, size_t /*size*/, void* /*data*/) {
+    if (!info->dlpi_name || std::strstr(info->dlpi_name, "libGLES_mali") == nullptr) {
+        return 0;
+    }
+    if (state().detected_abi == "unknown") {
+        std::string probed = detect_ddk_version_from_phdr(info);
+        if (!probed.empty()) state().detected_abi = probed;
+        else if (std::strstr(info->dlpi_name, "r49p1") != nullptr) state().detected_abi = "r49p1";
+        else if (std::strstr(info->dlpi_name, "r44p1") != nullptr) state().detected_abi = "r44p1";
+        else if (std::strstr(info->dlpi_name, "r38p1") != nullptr) state().detected_abi = "r38p1";
+        else state().detected_abi = "csf-unknown";
+    }
+
+    const ElfW(Dyn)* dyn = nullptr;
+    for (ElfW(Half) i = 0; i < info->dlpi_phnum; ++i) {
+        if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) {
+            dyn = reinterpret_cast<const ElfW(Dyn)*>(info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
+            break;
+        }
+    }
+    if (!dyn) return 0;
+
+    const char* strtab = nullptr;
+    const ElfW(Sym)* symtab = nullptr;
+    const ElfW(Rela)* jmprel = nullptr;
+    const ElfW(Rela)* rela = nullptr;
+    size_t jmprel_sz = 0;
+    size_t rela_sz = 0;
+    for (; dyn->d_tag != DT_NULL; ++dyn) {
+        if (dyn->d_tag == DT_STRTAB) strtab = reinterpret_cast<const char*>(fix_dyn_ptr(info->dlpi_addr, dyn->d_un.d_ptr));
+        else if (dyn->d_tag == DT_SYMTAB) symtab = reinterpret_cast<const ElfW(Sym)*>(fix_dyn_ptr(info->dlpi_addr, dyn->d_un.d_ptr));
+        else if (dyn->d_tag == DT_JMPREL) jmprel = reinterpret_cast<const ElfW(Rela)*>(fix_dyn_ptr(info->dlpi_addr, dyn->d_un.d_ptr));
+        else if (dyn->d_tag == DT_PLTRELSZ) jmprel_sz = dyn->d_un.d_val;
+        else if (dyn->d_tag == DT_RELA) rela = reinterpret_cast<const ElfW(Rela)*>(fix_dyn_ptr(info->dlpi_addr, dyn->d_un.d_ptr));
+        else if (dyn->d_tag == DT_RELASZ) rela_sz = dyn->d_un.d_val;
+    }
+    if (!strtab || !symtab) return 0;
+
+    const size_t page_sz = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    patch_rela_table(info->dlpi_addr, strtab, symtab, jmprel, jmprel_sz, page_sz);
+    patch_rela_table(info->dlpi_addr, strtab, symtab, rela, rela_sz, page_sz);
     return 0;
 }
 
@@ -705,6 +849,7 @@ void install_mali_hooks() {
         s.orig_open64 = reinterpret_cast<int (*)(const char*, int, ...)>(dlsym(RTLD_NEXT, "open64"));
         s.orig_open_2 = reinterpret_cast<int (*)(const char*, int)>(dlsym(RTLD_NEXT, "__open_2"));
         s.orig_openat = reinterpret_cast<int (*)(int, const char*, int, ...)>(dlsym(RTLD_NEXT, "openat"));
+        s.orig_openat64 = reinterpret_cast<int (*)(int, const char*, int, ...)>(dlsym(RTLD_NEXT, "openat64"));
         s.orig_close = reinterpret_cast<int (*)(int)>(dlsym(RTLD_NEXT, "close"));
         s.orig_ioctl = reinterpret_cast<int (*)(int, unsigned long, ...)>(dlsym(RTLD_NEXT, "ioctl"));
         s.orig_mmap = reinterpret_cast<void* (*)(void*, size_t, int, int, int, off_t)>(dlsym(RTLD_NEXT, "mmap"));
@@ -753,7 +898,10 @@ VKAPI_ATTR VkResult VKAPI_CALL layer_CreateInstance(
                           layer_info->function != VK_LAYER_LINK_INFO)) {
         layer_info = reinterpret_cast<const VkLayerInstanceCreateInfo*>(layer_info->pNext);
     }
-    if (!layer_info || !layer_info->u.pLayerInfo) { std::fprintf(stderr, "layer_info=%p\n", (void*)layer_info); return VK_ERROR_INITIALIZATION_FAILED; }
+    if (!layer_info || !layer_info->u.pLayerInfo) {
+        std::fprintf(stderr, "layer_info=%p\n", (void*)layer_info);
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
 
     PFN_vkGetInstanceProcAddr next_gipa = layer_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;
     const_cast<VkLayerInstanceCreateInfo*>(layer_info)->u.pLayerInfo = layer_info->u.pLayerInfo->pNext;
@@ -761,6 +909,7 @@ VKAPI_ATTR VkResult VKAPI_CALL layer_CreateInstance(
     if (!next_create) return VK_ERROR_INITIALIZATION_FAILED;
 
     VkResult res = next_create(pCreateInfo, pAllocator, pInstance);
+    install_mali_hooks();
     if (res == VK_SUCCESS && *pInstance) {
         InstanceDispatch d{};
         d.gipa = next_gipa;
