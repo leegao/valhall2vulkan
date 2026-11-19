@@ -28,7 +28,7 @@ jobs:
       - name: Install build & Vulkan dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libvulkan-dev vulkan-headers mesa-vulkan-drivers
+          sudo apt-get install -y cmake ninja-build libvulkan-dev mesa-vulkan-drivers
 
       - name: Configure & Build (build-x86-64)
         run: |
