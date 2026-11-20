@@ -48,7 +48,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
     for (size_t i = 0; i < cfg.instructions.size(); ++i) {
         const auto& ins = cfg.instructions[i];
         bool is_br = is_branch_inst(ins);
-        bool is_end = (ins.flow == FlowControlM::end) || (ins.canonical_mnemonic == Mnemonic::DISCARD);
+        bool is_end = (ins.flow == FlowControlM::end) || (ins.canonical_mnemonic == Mnemonic::DISCARD && ins.srcs.size() < 2);
         bool is_reconv = (ins.flow == FlowControlM::reconverge);
 
         if (is_br) {
@@ -97,7 +97,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
         const auto& last_ins = cfg.instructions[blk.inst_indices.back()];
         blk.has_reconverge = (last_ins.flow == FlowControlM::reconverge);
         blk.is_terminated_by_end = (last_ins.flow == FlowControlM::end);
-        blk.is_terminated_by_discard = (last_ins.canonical_mnemonic == Mnemonic::DISCARD);
+        blk.is_terminated_by_discard = (last_ins.canonical_mnemonic == Mnemonic::DISCARD && last_ins.srcs.size() < 2);
 
         if (is_branch_inst(last_ins)) {
             if (last_ins.has_branch_offset) {

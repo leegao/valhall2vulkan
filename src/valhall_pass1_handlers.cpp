@@ -481,8 +481,12 @@ SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& 
 
 SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, bool is_flat) {
     uint32_t var_loc = 0;
-    auto it = ins.fields.find("index");
-    if (it != ins.fields.end()) var_loc = it->second / 16u;
+    auto it = ins.fields.find("varying_index");
+    if (it != ins.fields.end()) {
+        var_loc = it->second;
+    } else if (auto it2 = ins.fields.find("index"); it2 != ins.fields.end()) {
+        var_loc = it2->second;
+    }
     SsaNode ld{};
     ld.op = SsaOp::LoadFragVarying;
     ld.type = ValType::V4F32;
@@ -620,6 +624,16 @@ void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
 namespace abi {
 
 std::string get_src_swz(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    // For AND/OR/XOR/NOT aliases of SHIFT_BITWISE_I32, lanes1 in the raw encoding belongs
+    // to the omitted shift-amount operand (k0.b0), not to ins.srcs[1].
+    bool is_shift_bitwise_alias_src1 = (src_idx == 1) && (
+        ins.mnemonic == Mnemonic::AND || ins.canonical_mnemonic == Mnemonic::AND ||
+        ins.mnemonic == Mnemonic::OR  || ins.canonical_mnemonic == Mnemonic::OR  ||
+        ins.mnemonic == Mnemonic::XOR || ins.canonical_mnemonic == Mnemonic::XOR ||
+        ins.mnemonic == Mnemonic::NOT || ins.canonical_mnemonic == Mnemonic::NOT);
+    if (is_shift_bitwise_alias_src1) {
+        return "";
+    }
     if (src_idx < ins.srcs.size() && !ins.srcs[src_idx].swizzle_mod.empty()) {
         return ins.srcs[src_idx].swizzle_mod;
     }

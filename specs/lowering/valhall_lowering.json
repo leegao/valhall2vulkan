@@ -1379,12 +1379,20 @@
       "op_class": "sys_discard",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "f32",
+        "f32"
+      ],
       "splits_block": true,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "Kill(#token)[barrier][side_effect];"
+        "if ($has_src0 && $has_src1) {",
+        "  %cond : bool = @LOOKUP(float_cmpf, $modifiers.cmpf)(%0, %1);",
+        "  @kill_cond(%cond, #token);",
+        "} else {",
+        "  Kill(#token)[barrier][side_effect];",
+        "}"
       ]
     },
     {
@@ -6625,13 +6633,25 @@
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%c0 : f32 = @bitcast(@sr_get(0));",
-        "%c1 : f32 = @bitcast(@sr_get(1));",
-        "%c2 : f32 = @bitcast(@sr_get(2));",
-        "%c3 : f32 = @bitcast(@sr_get(3));",
-        "%col : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
-        "%tok : token = @store_frag_color(%col, #token);",
-        "@set_token(%tok);"
+        "if (@mod_eq(register_format, f16)) {",
+        "  %p0 : v2f32 = UnpackHalf2x16(@sr_get(0));",
+        "  %p1 : v2f32 = UnpackHalf2x16(@sr_get(1));",
+        "  %c0 : f32 = @extract(%p0, 0);",
+        "  %c1 : f32 = @extract(%p0, 1);",
+        "  %c2 : f32 = @extract(%p1, 0);",
+        "  %c3 : f32 = @extract(%p1, 1);",
+        "  %col : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "  %tok : token = @store_frag_color(%col, #token);",
+        "  @set_token(%tok);",
+        "} else {",
+        "  %c0 : f32 = @bitcast(@sr_get(0));",
+        "  %c1 : f32 = @bitcast(@sr_get(1));",
+        "  %c2 : f32 = @bitcast(@sr_get(2));",
+        "  %c3 : f32 = @bitcast(@sr_get(3));",
+        "  %col : v4f32 = VecConstruct4(%c0, %c1, %c2, %c3);",
+        "  %tok : token = @store_frag_color(%col, #token);",
+        "  @set_token(%tok);",
+        "}"
       ]
     },
     {

@@ -1,4 +1,5 @@
 #include "spirv2valhall.h"
+#include "equiv_bundle.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -19,6 +20,7 @@ static void print_usage(const char* argv0) {
         << "  --out-bin <PREFIX>          Write raw EBIN bytecode to <PREFIX>_0.bin, ...\n"
         << "  --dump-spirv                Lift Valhall ISA back to SPIR-V via valhall2spirv and dump\n"
         << "  --out-spirv <PREFIX>        Write lifted SPIR-V binary(ies) to <PREFIX>_0.spv, ...\n"
+        << "  --dump-equiv-json <FILE>    Write dual ValhallSSA equivalence bundle JSON\n"
         << "  --no-context                Omit the CSF Execution Context & Descriptor Graph header\n"
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
@@ -35,6 +37,7 @@ int main(int argc, char** argv) {
     std::string spv_path;
     std::string out_bin_prefix;
     std::string out_spirv_prefix;
+    std::string dump_equiv_json_path;
     bool include_mods = false;
     bool show_context = true;
     bool context_only = false;
@@ -61,6 +64,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--out-spirv" && i + 1 < argc) {
             out_spirv_prefix = argv[++i];
             opts.lift_to_spirv = true;
+        } else if (arg == "--dump-equiv-json" && i + 1 < argc) {
+            dump_equiv_json_path = argv[++i];
         } else if (arg == "--no-context") {
             show_context = false;
         } else if (arg == "--context-only") {
@@ -125,6 +130,21 @@ int main(int argc, char** argv) {
             ofs.write(reinterpret_cast<const char*>(sh.spirv_words.data()),
                       static_cast<std::streamsize>(sh.spirv_words.size() * sizeof(uint32_t)));
         }
+    }
+
+    if (!dump_equiv_json_path.empty()) {
+        std::string bundle_json;
+        std::string berr;
+        if (!valhall::spirv2valhall::build_equivalence_bundle_json(spv_path, res, &bundle_json, &berr)) {
+            std::cerr << "[spirv2valhall] ERROR: " << berr << "\n";
+            return 1;
+        }
+        std::ofstream ofs(dump_equiv_json_path, std::ios::binary);
+        if (!ofs.good()) {
+            std::cerr << "[spirv2valhall] ERROR: Failed to write " << dump_equiv_json_path << "\n";
+            return 1;
+        }
+        ofs << bundle_json;
     }
 
     if (!quiet) {

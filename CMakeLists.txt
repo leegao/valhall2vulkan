@@ -137,6 +137,11 @@ add_library(valhall2spirv STATIC
     src/generated/valhall_spirv_builder_generated.cpp
     src/generated/valhall_tables_generated.cpp
     src/ssa/valhall_ssa.cpp
+    src/ssa/valhall_ssa_json.cpp
+    src/spirv2ssa/spirv_module.cpp
+    src/spirv2ssa/spirv2ssa_mem.cpp
+    src/spirv2ssa/spirv2ssa_ops.cpp
+    src/spirv2ssa/spirv2ssa.cpp
     src/generated/valhall_operands_generated.cpp
     src/valhall_pass1.cpp
     src/valhall_pass1_handlers.cpp
@@ -154,6 +159,7 @@ add_library(valhall2spirv STATIC
 target_include_directories(valhall2spirv PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ssa"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/spirv2ssa"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dataflow"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     "${VULKAN_INCLUDE_DIR}"
@@ -193,6 +199,7 @@ add_library(spirv2valhall_lib STATIC
     tools/spirv2valhall/mbs2_context_dumper.cpp
     tools/spirv2valhall/isa_enricher.cpp
     tools/spirv2valhall/spirv_roundtrip.cpp
+    tools/spirv2valhall/equiv_bundle.cpp
     tools/spirv2valhall/spirv2valhall.cpp
 )
 target_include_directories(spirv2valhall_lib PUBLIC
@@ -210,7 +217,7 @@ add_executable(spirv2valhall
 target_compile_options(spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(spirv2valhall PRIVATE spirv2valhall_lib)
 
-foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow)
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow test_spirv2ssa)
     add_executable(${test_name} "tests/${test_name}.cpp")
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
@@ -338,6 +345,11 @@ add_test(NAME test_lowering_extractor
 
 add_test(NAME test_all_paths_miter
     COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_all_paths_miter.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_test(NAME test_shader_equiv
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_shader_equiv.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
