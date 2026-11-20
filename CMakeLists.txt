@@ -169,6 +169,13 @@ target_compile_options(moc_hook PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(moc_hook PRIVATE ${CMAKE_DL_LIBS})
 
 add_library(spirv2valhall_lib STATIC
+    tools/spirv2valhall/spirv_inspect.cpp
+    tools/spirv2valhall/json_lite.cpp
+    tools/spirv2valhall/moc_runner.cpp
+    tools/spirv2valhall/mbs2_ast_parser.cpp
+    tools/spirv2valhall/mbs2_context_dumper.cpp
+    tools/spirv2valhall/isa_enricher.cpp
+    tools/spirv2valhall/spirv_roundtrip.cpp
     tools/spirv2valhall/spirv2valhall.cpp
 )
 target_include_directories(spirv2valhall_lib PUBLIC
@@ -177,6 +184,7 @@ target_include_directories(spirv2valhall_lib PUBLIC
 target_compile_options(spirv2valhall_lib PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_compile_definitions(spirv2valhall_lib PRIVATE
     SPIRV2VALHALL_DEFAULT_MOC_HOOK_PATH="$<TARGET_FILE:moc_hook>"
+    SPIRV2VALHALL_DEFAULT_CMPBE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
 )
 target_link_libraries(spirv2valhall_lib PUBLIC valhall2spirv)
 add_dependencies(spirv2valhall_lib moc_hook)
@@ -346,9 +354,9 @@ if(NOT ANDROID)
 endif()
 
 if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
-    set(_DUMPER_SRCS tools/verify/clang_ast_dumper/clang_ast_dumper.cpp)
+    set(_DUMPER_SRCS tools/clang_ast_dumper/clang_ast_dumper.cpp)
     if(_VALHALL_USE_BUNDLED_LLVM21)
-        list(APPEND _DUMPER_SRCS tools/verify/clang_ast_dumper/glibc_compat.c)
+        list(APPEND _DUMPER_SRCS tools/clang_ast_dumper/glibc_compat.c)
     endif()
 
     add_executable(clang_ast_dumper ${_DUMPER_SRCS})
@@ -359,7 +367,7 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         if(_SYS_LLVM_RTTI STREQUAL "NO")
             list(APPEND _DUMPER_CXX_FLAGS "-fno-rtti")
         endif()
-        set_source_files_properties(tools/verify/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
+        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
             COMPILE_OPTIONS "${_DUMPER_CXX_FLAGS}"
         )
 
@@ -412,10 +420,10 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         find_library(VALHALL_ZLIB_LIBRARY NAMES z libz.so.1 HINTS /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu REQUIRED)
 
         target_include_directories(clang_ast_dumper PRIVATE "${VALHALL_LLVM21_DIR}/include")
-        set_source_files_properties(tools/verify/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
+        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
             COMPILE_OPTIONS "-O2;-fno-rtti;-fno-exceptions;-Wall;-Wextra;-Wno-unused-parameter"
         )
-        set_source_files_properties(tools/verify/clang_ast_dumper/glibc_compat.c PROPERTIES
+        set_source_files_properties(tools/clang_ast_dumper/glibc_compat.c PROPERTIES
             COMPILE_OPTIONS "-O2;-Wall;-Wextra"
         )
 
@@ -484,6 +492,13 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_clang_ast_dumper.py
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
+    target_compile_definitions(spirv2valhall_lib PRIVATE
+        SPIRV2VALHALL_DEFAULT_CLANG_AST_DUMPER_PATH="$<TARGET_FILE:clang_ast_dumper>"
+        SPIRV2VALHALL_DEFAULT_CLANG_RESOURCE_DIR="${_TEST_RES_DIR}"
+    )
+    add_dependencies(spirv2valhall_lib clang_ast_dumper)
+    add_dependencies(spirv2valhall clang_ast_dumper)
+
     set_tests_properties(test_clang_ast_dumper PROPERTIES
         ENVIRONMENT "CLANG_AST_DUMPER_BIN=$<TARGET_FILE:clang_ast_dumper>;VALHALL_HOST_HANDLERS_AST_JSON=${VALHALL_HOST_HANDLERS_AST_JSON};CLANG_RESOURCE_DIR=${_TEST_RES_DIR};VULKAN_INCLUDE_DIR=${VULKAN_INCLUDE_DIR}"
     )

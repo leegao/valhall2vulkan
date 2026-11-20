@@ -219,5 +219,48 @@ uint64_t generic_features(const std::vector<uint32_t>& xs, Mode m) {
                 {"receiver": "SymbolicSsaModule", "expr": "this.emit_const_u32(args[0])"},
             )
 
+    def test_globals_mode_structs_and_binary_strings(self) -> None:
+        dumper_bin = os.environ.get("CLANG_AST_DUMPER_BIN", "")
+        if not dumper_bin or not Path(dumper_bin).is_file():
+            self.skipTest("CLANG_AST_DUMPER_BIN not set")
+        res_dir = os.environ.get(
+            "CLANG_RESOURCE_DIR",
+            str(REPO_ROOT / "third_party" / "prebuilts" / "llvm-21" / "lib" / "clang" / "21"),
+        )
+        mbs2_fixture = REPO_ROOT / "tests" / "fixtures" / "sample_mbs2_shader.h"
+        inc_dir = REPO_ROOT / "tools" / "spirv2valhall"
+        self.assertTrue(mbs2_fixture.is_file())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = os.path.join(tmp, "mbs2_ast.json")
+            cmd = [
+                dumper_bin,
+                str(mbs2_fixture),
+                "-o", out_path,
+                "--globals",
+                "--strict",
+                "--",
+                "-x", "c++",
+                "-std=c++17",
+                "-include", str(inc_dir / "cmpbe_chunks.h"),
+                f"-I{inc_dir}",
+                "-Wno-writable-strings",
+                "-Wno-c++11-narrowing",
+            ] + (["-resource-dir", res_dir] if Path(res_dir).is_dir() else [])
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+            with open(out_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["unhandled_count"], 0)
+            self.assertGreaterEqual(data["global_count"], 70)
+            by_name = {g["name"]: g for g in data["globals"]}
+            self.assertIn("MBS2", by_name)
+            self.assertIn("EBIN_42", by_name)
+            self.assertIn("b_41", by_name)
+            self.assertEqual(by_name["b_41"]["init"]["byte_length"], 504)
+            self.assertEqual(len(by_name["b_41"]["init"]["bytes_hex"]), 1008)
+            self.assertIn("bytecode", by_name["EBIN_42"]["init"]["fields"])
+            self.assertEqual(by_name["MBS2"]["init"]["fields"]["cble"]["lit_kind"], "null")
+
 if __name__ == "__main__":
     unittest.main()

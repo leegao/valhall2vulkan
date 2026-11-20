@@ -37,6 +37,8 @@ static cl::opt<bool> Verbose("verbose", cl::desc("Print diagnostic and timing su
                              cl::init(false), cl::cat(DumperCategory));
 static cl::opt<bool> Strict("strict", cl::desc("Fail if any unhandled AST nodes are encountered"),
                             cl::init(false), cl::cat(DumperCategory));
+static cl::opt<bool> IncludeGlobals("globals", cl::desc("Also dump top-level global/static VarDecls with struct field names and raw string hex bytes"),
+                                    cl::init(false), cl::cat(DumperCategory));
 
 namespace {
 
@@ -634,7 +636,27 @@ public:
         if (auto* sl = llvm::dyn_cast<clang::StringLiteral>(e)) {
             obj["kind"] = "literal";
             obj["lit_kind"] = "string";
-            obj["value"] = sl->getString().str();
+            llvm::StringRef bytes = sl->getBytes();
+            if (IncludeGlobals) {
+                static const char kHex[] = "0123456789abcdef";
+                std::string hex;
+                hex.reserve(bytes.size() * 2);
+                bool allPrintableAscii = true;
+                for (unsigned char c : bytes) {
+                    hex.push_back(kHex[c >> 4]);
+                    hex.push_back(kHex[c & 0xF]);
+                    if (c < 0x20 || c > 0x7E) allPrintableAscii = false;
+                }
+                obj["byte_length"] = static_cast<int64_t>(bytes.size());
+                obj["bytes_hex"] = std::move(hex);
+                if (allPrintableAscii) {
+                    obj["value"] = bytes.str();
+                } else {
+                    obj["value"] = "";
+                }
+            } else {
+                obj["value"] = sl->getString().str();
+            }
             return obj;
         }
 
@@ -645,7 +667,7 @@ public:
             return obj;
         }
 
-        if (llvm::isa<clang::CXXNullPtrLiteralExpr>(e)) {
+        if (llvm::isa<clang::CXXNullPtrLiteralExpr>(e) || llvm::isa<clang::GNUNullExpr>(e)) {
             obj["kind"] = "literal";
             obj["lit_kind"] = "null";
             obj["value"] = nullptr;
@@ -655,8 +677,28 @@ public:
         if (auto* ile = llvm::dyn_cast<clang::InitListExpr>(e)) {
             obj["kind"] = "init_list";
             llvm::json::Array items;
+            llvm::json::Object fieldsObj;
+            const clang::RecordDecl* rd = nullptr;
+            if (IncludeGlobals) {
+                if (const auto* rt = ile->getType()->getAs<clang::RecordType>()) {
+                    rd = rt->getDecl()->getDefinition();
+                    if (rd) {
+                        obj["record_type"] = rd->getNameAsString();
+                    }
+                }
+            }
+            auto fieldIt = rd ? rd->field_begin() : clang::RecordDecl::field_iterator();
+            auto fieldEnd = rd ? rd->field_end() : clang::RecordDecl::field_iterator();
             for (const clang::Expr* item : ile->inits()) {
-                items.push_back(serializeExpr(item));
+                llvm::json::Value sv = serializeExpr(item);
+                if (rd && fieldIt != fieldEnd) {
+                    fieldsObj[fieldIt->getNameAsString()] = sv;
+                    ++fieldIt;
+                }
+                items.push_back(std::move(sv));
+            }
+            if (rd && !fieldsObj.empty()) {
+                obj["fields"] = std::move(fieldsObj);
             }
             obj["items"] = std::move(items);
             return obj;
@@ -828,9 +870,10 @@ public:
 class DumperVisitor : public clang::RecursiveASTVisitor<DumperVisitor> {
 public:
     DumperVisitor(clang::ASTContext& ctx, llvm::json::Array& functions,
+                  llvm::json::Array& globals,
                   llvm::json::Object& verifierAttrs, size_t& unhandledCount)
         : ctx_(ctx), sm_(ctx.getSourceManager()), serializer_(ctx),
-          functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount) {}
+          functions_(functions), globals_(globals), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount) {}
 
     bool TraverseDecl(clang::Decl* d) {
         if (!d) return true;
@@ -880,11 +923,24 @@ public:
         return TraverseFunctionDecl(md);
     }
 
+    bool TraverseVarDecl(clang::VarDecl* vd) {
+        if (!vd || !IncludeGlobals) return true;
+        if (vd->isFileVarDecl() && vd->hasInit() && !vd->isImplicit() &&
+            !vd->getDeclContext()->isDependentContext() && vd->getLocation().isValid() &&
+            !sm_.isInSystemHeader(vd->getLocation()) &&
+            sm_.isInMainFile(vd->getLocation())) {
+            globals_.push_back(serializer_.serializeVarDecl(vd));
+            unhandledCount_ = serializer_.unhandledCount();
+        }
+        return true;
+    }
+
 private:
     clang::ASTContext& ctx_;
     clang::SourceManager& sm_;
     JsonAstSerializer serializer_;
     llvm::json::Array& functions_;
+    llvm::json::Array& globals_;
     llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
@@ -892,9 +948,9 @@ private:
 
 class DumperConsumer : public clang::ASTConsumer {
 public:
-    DumperConsumer(llvm::json::Array& functions, llvm::json::Object& verifierAttrs,
-                   size_t& unhandledCount, bool verbose)
-        : functions_(functions), verifierAttrs_(verifierAttrs),
+    DumperConsumer(llvm::json::Array& functions, llvm::json::Array& globals,
+                   llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
+        : functions_(functions), globals_(globals), verifierAttrs_(verifierAttrs),
           unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     void HandleTranslationUnit(clang::ASTContext& ctx) override {
@@ -902,18 +958,20 @@ public:
         if (verbose_) {
             llvm::errs() << "[clang_ast_dumper] ParseAST finished, traversing main-file AST...\n";
         }
-        DumperVisitor visitor(ctx, functions_, verifierAttrs_, unhandledCount_);
+        DumperVisitor visitor(ctx, functions_, globals_, verifierAttrs_, unhandledCount_);
         visitor.TraverseDecl(ctx.getTranslationUnitDecl());
         auto tEnd = std::chrono::steady_clock::now();
         if (verbose_) {
             auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count();
             llvm::errs() << "[clang_ast_dumper] AST traversal + JSON build: "
-                         << functions_.size() << " functions in " << ms << " ms\n";
+                         << functions_.size() << " functions, " << globals_.size()
+                         << " globals in " << ms << " ms\n";
         }
     }
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Array& globals_;
     llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
@@ -921,16 +979,19 @@ private:
 
 class DumperAction : public clang::ASTFrontendAction {
 public:
-    DumperAction(llvm::json::Array& functions, llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
-        : functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount), verbose_(verbose) {}
+    DumperAction(llvm::json::Array& functions, llvm::json::Array& globals,
+                 llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
+        : functions_(functions), globals_(globals), verifierAttrs_(verifierAttrs),
+          unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance&,
                                                           llvm::StringRef) override {
-        return std::make_unique<DumperConsumer>(functions_, verifierAttrs_, unhandledCount_, verbose_);
+        return std::make_unique<DumperConsumer>(functions_, globals_, verifierAttrs_, unhandledCount_, verbose_);
     }
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Array& globals_;
     llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
@@ -938,15 +999,18 @@ private:
 
 class DumperActionFactory : public clang::tooling::FrontendActionFactory {
 public:
-    DumperActionFactory(llvm::json::Array& functions, llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
-        : functions_(functions), verifierAttrs_(verifierAttrs), unhandledCount_(unhandledCount), verbose_(verbose) {}
+    DumperActionFactory(llvm::json::Array& functions, llvm::json::Array& globals,
+                        llvm::json::Object& verifierAttrs, size_t& unhandledCount, bool verbose)
+        : functions_(functions), globals_(globals), verifierAttrs_(verifierAttrs),
+          unhandledCount_(unhandledCount), verbose_(verbose) {}
 
     std::unique_ptr<clang::FrontendAction> create() override {
-        return std::make_unique<DumperAction>(functions_, verifierAttrs_, unhandledCount_, verbose_);
+        return std::make_unique<DumperAction>(functions_, globals_, verifierAttrs_, unhandledCount_, verbose_);
     }
 
 private:
     llvm::json::Array& functions_;
+    llvm::json::Array& globals_;
     llvm::json::Object& verifierAttrs_;
     size_t& unhandledCount_;
     bool verbose_ = false;
@@ -974,9 +1038,10 @@ int main(int argc, const char** argv) {
     }
     clang::tooling::ClangTool tool(*compDb, InputFiles);
     llvm::json::Array functions;
+    llvm::json::Array globals;
     llvm::json::Object verifierAttrs;
     size_t unhandledCount = 0;
-    DumperActionFactory factory(functions, verifierAttrs, unhandledCount, isVerbose);
+    DumperActionFactory factory(functions, globals, verifierAttrs, unhandledCount, isVerbose);
     int rc = tool.run(&factory);
 
     llvm::json::Object root;
@@ -991,6 +1056,10 @@ int main(int argc, const char** argv) {
     root["unhandled_count"] = static_cast<int64_t>(unhandledCount);
     root["verifier_attrs"] = std::move(verifierAttrs);
     root["functions"] = std::move(functions);
+    if (IncludeGlobals) {
+        root["global_count"] = static_cast<int64_t>(globals.size());
+        root["globals"] = std::move(globals);
+    }
 
     std::error_code ec;
     llvm::SmallString<256> outParent = llvm::sys::path::parent_path(OutputPath);
