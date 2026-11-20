@@ -12,42 +12,38 @@ using compiler::SsaNode;
 using compiler::ValType;
 using tables::SsaOp;
 
-constexpr uint32_t kScUniformConstant = 0;
-constexpr uint32_t kScInput = 1;
-constexpr uint32_t kScUniform = 2;
-constexpr uint32_t kScOutput = 3;
-constexpr uint32_t kScWorkgroup = 4;
-constexpr uint32_t kScPrivate = 6;
-constexpr uint32_t kScFunction = 7;
-constexpr uint32_t kScPushConstant = 9;
-constexpr uint32_t kScStorageBuffer = 12;
-constexpr uint32_t kScPhysicalStorageBuffer = 5349;
-
 const char* builtin_canonical_name(uint32_t bi) {
-    switch (bi) {
-        case 0: return "gl_Position";
-        case 1: return "gl_PointSize";
-        case 15: return "gl_FragCoord";
-        case 17: return "gl_FrontFacing";
-        case 22: return "gl_FragDepth";
-        case 26: return "gl_WorkGroupID";
-        case 27: return "gl_LocalInvocationID";
-        case 28: return "gl_GlobalInvocationID";
-        case 29: return "gl_LocalInvocationIndex";
-        case 36: return "gl_SubgroupSize";
-        case 41: return "gl_SubgroupInvocationID";
-        case 42: return "gl_VertexIndex";
-        case 43: return "gl_InstanceIndex";
-        default: return "gl_BuiltIn";
+    switch (static_cast<SpvBuiltIn>(bi)) {
+        case SpvBuiltInPosition: return "gl_Position";
+        case SpvBuiltInPointSize: return "gl_PointSize";
+        case SpvBuiltInFragCoord: return "gl_FragCoord";
+        case SpvBuiltInFrontFacing: return "gl_FrontFacing";
+        case SpvBuiltInFragDepth: return "gl_FragDepth";
+        case SpvBuiltInWorkgroupId: return "gl_WorkGroupID";
+        case SpvBuiltInLocalInvocationId: return "gl_LocalInvocationID";
+        case SpvBuiltInGlobalInvocationId: return "gl_GlobalInvocationID";
+        case SpvBuiltInLocalInvocationIndex: return "gl_LocalInvocationIndex";
+        case SpvBuiltInSubgroupSize: return "gl_SubgroupSize";
+        case SpvBuiltInSubgroupLocalInvocationId: return "gl_SubgroupInvocationID";
+        case SpvBuiltInVertexIndex: return "gl_VertexIndex";
+        case SpvBuiltInInstanceIndex: return "gl_InstanceIndex";
+        default: return spirv_parser::spv_builtin_name(bi);
     }
 }
 
 bool is_buffer_storage_class(uint32_t sc) {
-    return sc == kScUniform || sc == kScStorageBuffer || sc == kScPushConstant ||
-           sc == kScPhysicalStorageBuffer || sc == kScWorkgroup;
+    switch (static_cast<SpvStorageClass>(sc)) {
+        case SpvStorageClassUniform:
+        case SpvStorageClassStorageBuffer:
+        case SpvStorageClassPushConstant:
+        case SpvStorageClassPhysicalStorageBuffer:
+        case SpvStorageClassWorkgroup:
+            return true;
+        default:
+            return false;
+    }
 }
 
-/// Compute flat lane index offset inside a composite type along a constant index path.
 uint32_t compute_flat_offset(
     const SpirvModule& mod,
     const SpirvLowerer& lowerer,
@@ -104,14 +100,12 @@ SsaId SpirvLowerer::read_slot(uint32_t blk_id, uint64_t slot_key, ValType vt) {
         return z;
     }
 
-    // Single forward predecessor in RPO: inherit directly without creating a Phi.
     if (blk.preds.size() == 1 && blk.preds[0] < blk_id) {
         SsaId v = read_slot(blk.preds[0], slot_key, vt);
         blk_slot_defs_[blk_id][slot_key] = v;
         return v;
     }
 
-    // Join block or loop header: create a deferred mem2reg Phi node and record it.
     SsaNode phi{};
     phi.op = SsaOp::Phi;
     phi.type = vt;
@@ -123,7 +117,6 @@ SsaId SpirvLowerer::read_slot(uint32_t blk_id, uint64_t slot_key, ValType vt) {
 }
 
 void SpirvLowerer::seal_mem_phis() {
-    // Iterative resolution because reading a predecessor slot may insert new Phis upstream.
     size_t idx = 0;
     while (idx < pending_mem_phis_.size()) {
         PendingMemPhi p = pending_mem_phis_[idx++];
@@ -140,7 +133,6 @@ void SpirvLowerer::seal_mem_phis() {
 }
 
 void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
-    // Sort global variables deterministically by ID so sideband slot assignment is stable.
     std::vector<uint32_t> var_ids;
     var_ids.reserve(mod_.global_vars.size());
     for (const auto& [vid, _] : mod_.global_vars) {
@@ -150,6 +142,7 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
 
     for (uint32_t vid : var_ids) {
         const auto& gv = mod_.global_vars.at(vid);
+        const auto sc = static_cast<SpvStorageClass>(gv.storage_class);
         PointerRef ptr{};
         ptr.root_var_id = vid;
         ptr.pointee_type_id = gv.pointee_type_id;
@@ -165,14 +158,14 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
             uint32_t slot = next_sideband_slot_++;
 
             const SpirvType* pt = mod_.get_type(gv.pointee_type_id);
-            bool is_ssbo = (gv.storage_class == kScStorageBuffer) ||
-                           (gv.storage_class == kScUniform && pt && pt->is_buffer_block);
+            bool is_ssbo = (sc == SpvStorageClassStorageBuffer) ||
+                           (sc == SpvStorageClassUniform && pt && pt->is_buffer_block);
             ResourceKind rk = ResourceKind::UniformBuffer;
             std::string key;
-            if (gv.storage_class == kScPushConstant) {
+            if (sc == SpvStorageClassPushConstant) {
                 rk = ResourceKind::PushConstant;
                 key = "push_const";
-            } else if (gv.storage_class == kScWorkgroup) {
+            } else if (sc == SpvStorageClassWorkgroup) {
                 rk = ResourceKind::StorageBuffer;
                 key = "workgroup:" + std::to_string(vid);
             } else if (is_ssbo) {
@@ -205,7 +198,7 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
             rb.name = gv.name;
             rb.canonical_key = key;
             res_.bindings.push_back(std::move(rb));
-        } else if (gv.storage_class == kScInput) {
+        } else if (sc == SpvStorageClassInput) {
             ptr.kind = PtrKind::InputVar;
             SpirvResourceBinding rb{};
             if (gv.dec.builtin >= 0) {
@@ -221,7 +214,7 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
             rb.spv_var_id = vid;
             rb.name = gv.name;
             res_.bindings.push_back(std::move(rb));
-        } else if (gv.storage_class == kScOutput) {
+        } else if (sc == SpvStorageClassOutput) {
             ptr.kind = PtrKind::OutputVar;
             local_var_types_[vid] = gv.pointee_type_id;
             output_var_ids_.push_back(vid);
@@ -240,7 +233,7 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
             rb.spv_var_id = vid;
             rb.name = gv.name;
             res_.bindings.push_back(std::move(rb));
-        } else if (gv.storage_class == kScUniformConstant) {
+        } else if (sc == SpvStorageClassUniformConstant) {
             ptr.kind = PtrKind::ImageVar;
             uint32_t set = (gv.dec.descriptor_set >= 0) ? static_cast<uint32_t>(gv.dec.descriptor_set) : 0u;
             uint32_t binding = (gv.dec.binding >= 0) ? static_cast<uint32_t>(gv.dec.binding) : 0u;
@@ -254,7 +247,7 @@ void SpirvLowerer::init_global_resources(uint32_t entry_blk) {
             rb.name = gv.name;
             rb.canonical_key = ptr.canonical_key;
             res_.bindings.push_back(std::move(rb));
-        } else if (gv.storage_class == kScPrivate || gv.storage_class == kScFunction) {
+        } else if (sc == SpvStorageClassPrivate || sc == SpvStorageClassFunction) {
             ptr.kind = PtrKind::LocalVar;
             local_var_types_[vid] = gv.pointee_type_id;
             if (gv.initializer_id != 0) {
@@ -289,7 +282,6 @@ void SpirvLowerer::register_local_variable(uint32_t blk_id, uint32_t var_id, uin
 }
 
 PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& inst) {
-    // OpAccessChain / OpInBoundsAccessChain: [hdr, result_type, result_id, base_ptr, idx0, ...]
     PointerRef res{};
     if (inst.words.size() < 4) return res;
     uint32_t result_ptr_type = inst.words[1];
@@ -299,7 +291,6 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
     if (it != pointers_.end()) {
         res = it->second;
     } else {
-        // PhysicalStorageBuffer pointer constructed from u64 value via OpConvertUToPtr/OpBitcast
         LoweredValue bv = get_value(blk_id, base_id);
         res.kind = PtrKind::Buffer;
         res.base_ptr = bv.scalar();
@@ -373,7 +364,6 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
                 cur_type = t->elem_type;
             }
         } else {
-            // LocalVar / InputVar / OutputVar
             if (t->kind == SpirvTypeKind::Struct) {
                 if (c_idx < t->member_builtins.size() && t->member_builtins[c_idx] >= 0) {
                     res.builtin = t->member_builtins[c_idx];
@@ -401,7 +391,6 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
 }
 
 LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
-    // OpLoad: [hdr, result_type, result_id, pointer, (memory_operands...)]
     LoweredValue out{};
     if (inst.words.size() < 4) return out;
     uint32_t res_type = inst.words[1];
@@ -415,7 +404,6 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
     const PointerRef& ptr = pit->second;
 
     if (ptr.kind == PtrKind::ImageVar) {
-        // Loading a SampledImage/Image variable yields a handle tracked via sampled_images_.
         sampled_images_[inst.words[2]] = ptr;
         out.lanes.push_back(sb_.emit_const_u32(blk_id, ptr.root_var_id));
         return out;
@@ -429,7 +417,6 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
         ValType elem_vt = to_val_type(elem_tid);
         uint32_t elem_bytes = mod_.type_byte_size(elem_tid);
 
-        // Emit one PsbLoad per scalar lane (matching Valhall's 32-bit word PsbLoad model).
         for (uint32_t i = 0; i < nlanes; ++i) {
             SsaId lane_addr = (i == 0)
                                   ? base_addr
@@ -448,7 +435,7 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
 
             SsaNode ev{};
             ev.op = SsaOp::TupleExtract;
-            ev.type = (elem_vt == ValType::U64 || elem_vt == ValType::S64) ? ValType::U32 : ValType::U32;
+            ev.type = ValType::U32;
             ev.imm_u32 = 0;
             ev.args = {tup};
             SsaId raw_u32 = sb_.emit(blk_id, std::move(ev));
@@ -461,7 +448,6 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
             sb_.set_token(blk_id, sb_.emit(blk_id, std::move(et)));
 
             if (elem_bytes == 8u) {
-                // 64-bit load: combine lo32 and hi32 via Pack64.
                 SsaId hi_addr = emit_op(blk_id, SsaOp::IAdd64, ValType::U64,
                                         {lane_addr, sb_.emit_const_u64(blk_id, 4u)});
                 SsaNode ld_hi{};
@@ -474,30 +460,15 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
                 ld_hi.is_side_effect = true;
                 SsaId tup_hi = sb_.emit(blk_id, std::move(ld_hi));
 
-                SsaNode ev_hi{};
-                ev_hi.op = SsaOp::TupleExtract;
-                ev_hi.type = ValType::U32;
-                ev_hi.imm_u32 = 0;
-                ev_hi.args = {tup_hi};
+                SsaNode ev_hi{}; ev_hi.op = SsaOp::TupleExtract; ev_hi.type = ValType::U32; ev_hi.imm_u32 = 0; ev_hi.args = {tup_hi};
                 SsaId hi_u32 = sb_.emit(blk_id, std::move(ev_hi));
-
-                SsaNode et_hi{};
-                et_hi.op = SsaOp::TupleExtract;
-                et_hi.type = ValType::Token;
-                et_hi.imm_u32 = 1;
-                et_hi.args = {tup_hi};
+                SsaNode et_hi{}; et_hi.op = SsaOp::TupleExtract; et_hi.type = ValType::Token; et_hi.imm_u32 = 1; et_hi.args = {tup_hi};
                 sb_.set_token(blk_id, sb_.emit(blk_id, std::move(et_hi)));
 
-                SsaId packed = emit_op(blk_id, SsaOp::Pack64, ValType::U64, {raw_u32, hi_u32});
-                out.lanes.push_back(packed);
+                out.lanes.push_back(emit_op(blk_id, SsaOp::Pack64, ValType::U64, {raw_u32, hi_u32}));
             } else if (rt && rt->kind == SpirvTypeKind::Float && rt->width == 16) {
-                // FP16 load -> unpack low half to F32.
                 SsaId v2 = emit_op(blk_id, SsaOp::UnpackHalf2x16, ValType::V2F32, {raw_u32});
-                SsaNode ex{};
-                ex.op = SsaOp::VecExtract;
-                ex.type = ValType::F32;
-                ex.imm_u32 = 0;
-                ex.args = {v2};
+                SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = 0; ex.args = {v2};
                 out.lanes.push_back(sb_.emit(blk_id, std::move(ex)));
             } else {
                 out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, raw_u32));
@@ -512,10 +483,19 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
             const SpirvVariable* gv = mod_.get_global_var(ptr.root_var_id);
             uint32_t root_tid = gv ? gv->pointee_type_id : res_type;
             ValType bi_vt = to_val_type(root_tid);
-            if (bi == 15) bi_vt = ValType::V4F32;       // FragCoord
-            else if (bi == 26 || bi == 27 || bi == 28) bi_vt = ValType::V3U32;
-            else if (bi == 42 || bi == 43 || bi == 29 || bi == 41 || bi == 36) bi_vt = ValType::U32;
-            else if (bi == 17) bi_vt = ValType::Bool;
+            switch (static_cast<SpvBuiltIn>(bi)) {
+                case SpvBuiltInFragCoord: bi_vt = ValType::V4F32; break;
+                case SpvBuiltInWorkgroupId:
+                case SpvBuiltInLocalInvocationId:
+                case SpvBuiltInGlobalInvocationId: bi_vt = ValType::V3U32; break;
+                case SpvBuiltInVertexIndex:
+                case SpvBuiltInInstanceIndex:
+                case SpvBuiltInLocalInvocationIndex:
+                case SpvBuiltInSubgroupLocalInvocationId:
+                case SpvBuiltInSubgroupSize: bi_vt = ValType::U32; break;
+                case SpvBuiltInFrontFacing: bi_vt = ValType::Bool; break;
+                default: break;
+            }
 
             SsaNode ld{};
             ld.op = SsaOp::LoadBuiltinInput;
@@ -544,7 +524,6 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
             return out;
         }
 
-        // Location-based Vertex Attribute or Fragment Varying
         uint32_t loc = (ptr.location >= 0) ? static_cast<uint32_t>(ptr.location) : 0u;
         SsaNode ld{};
         ld.op = (res_.stage == ShaderStage::Vertex) ? SsaOp::LoadVertAttr : SsaOp::LoadFragVarying;
@@ -569,14 +548,12 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
         return out;
     }
 
-    // LocalVar or OutputVar (read-back of previously stored output)
     uint32_t root_tid = local_var_types_.count(ptr.root_var_id) ? local_var_types_[ptr.root_var_id] : res_type;
     uint32_t base_flat = compute_flat_offset(mod_, *this, root_tid, ptr.const_path);
     uint32_t nlanes = flat_lane_count(res_type);
     ValType lane_vt = to_val_type(scalar_elem_type(res_type));
 
     if (ptr.dynamic_index != compiler::kInvalidSsa) {
-        // Select-mux across array elements for dynamic local array indexing.
         const SpirvType* rt = mod_.get_type(root_tid);
         uint32_t total_elems = (rt && (rt->kind == SpirvTypeKind::Array || rt->kind == SpirvTypeKind::Vector))
                                    ? std::min<uint32_t>(rt->count, 32u)
@@ -601,7 +578,6 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
 }
 
 void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
-    // OpStore: [hdr, pointer, object, (memory_operands...)]
     if (inst.words.size() < 3) return;
     uint32_t ptr_id = inst.words[1];
     uint32_t val_id = inst.words[2];
@@ -624,10 +600,7 @@ void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
                                             {base_addr, sb_.emit_const_u64(blk_id, uint64_t(i) * elem_bytes)});
             SsaId lane_val = val.lanes[i];
             if (elem_bytes == 8u) {
-                SsaNode sp{};
-                sp.op = SsaOp::Split64;
-                sp.type = ValType::TupleU32x2;
-                sp.args = {lane_val};
+                SsaNode sp{}; sp.op = SsaOp::Split64; sp.type = ValType::TupleU32x2; sp.args = {lane_val};
                 SsaId tup = sb_.emit(blk_id, std::move(sp));
                 SsaNode e0{}; e0.op = SsaOp::TupleExtract; e0.type = ValType::U32; e0.imm_u32 = 0; e0.args = {tup};
                 SsaNode e1{}; e1.op = SsaOp::TupleExtract; e1.type = ValType::U32; e1.imm_u32 = 1; e1.args = {tup};
@@ -635,43 +608,30 @@ void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
                 SsaId hi = sb_.emit(blk_id, std::move(e1));
 
                 SsaNode st0{};
-                st0.op = SsaOp::PsbStore;
-                st0.type = ValType::Token;
-                st0.imm_u32 = 4u;
-                st0.aux_str = ptr.canonical_key;
-                st0.args = {lane_addr, lo, sb_.current_token(blk_id)};
-                st0.is_barrier_or_cf = true;
-                st0.is_side_effect = true;
+                st0.op = SsaOp::PsbStore; st0.type = ValType::Token; st0.imm_u32 = 4u;
+                st0.aux_str = ptr.canonical_key; st0.args = {lane_addr, lo, sb_.current_token(blk_id)};
+                st0.is_barrier_or_cf = true; st0.is_side_effect = true;
                 sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st0)));
 
                 SsaId hi_addr = emit_op(blk_id, SsaOp::IAdd64, ValType::U64,
                                         {lane_addr, sb_.emit_const_u64(blk_id, 4u)});
                 SsaNode st1{};
-                st1.op = SsaOp::PsbStore;
-                st1.type = ValType::Token;
-                st1.imm_u32 = 4u;
-                st1.aux_str = ptr.canonical_key;
-                st1.args = {hi_addr, hi, sb_.current_token(blk_id)};
-                st1.is_barrier_or_cf = true;
-                st1.is_side_effect = true;
+                st1.op = SsaOp::PsbStore; st1.type = ValType::Token; st1.imm_u32 = 4u;
+                st1.aux_str = ptr.canonical_key; st1.args = {hi_addr, hi, sb_.current_token(blk_id)};
+                st1.is_barrier_or_cf = true; st1.is_side_effect = true;
                 sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st1)));
             } else {
                 SsaId u32_val = sb_.emit_bitcast(blk_id, ValType::U32, lane_val);
                 SsaNode st{};
-                st.op = SsaOp::PsbStore;
-                st.type = ValType::Token;
-                st.imm_u32 = std::min<uint32_t>(elem_bytes, 4u);
-                st.aux_str = ptr.canonical_key;
-                st.args = {lane_addr, u32_val, sb_.current_token(blk_id)};
-                st.is_barrier_or_cf = true;
-                st.is_side_effect = true;
+                st.op = SsaOp::PsbStore; st.type = ValType::Token; st.imm_u32 = std::min<uint32_t>(elem_bytes, 4u);
+                st.aux_str = ptr.canonical_key; st.args = {lane_addr, u32_val, sb_.current_token(blk_id)};
+                st.is_barrier_or_cf = true; st.is_side_effect = true;
                 sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
             }
         }
         return;
     }
 
-    // LocalVar or OutputVar: update SSA mem2reg slots.
     if (ptr.kind == PtrKind::OutputVar) {
         written_output_vars_.insert(ptr.root_var_id);
     }
@@ -711,7 +671,6 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
         const SpirvType* pt = mod_.get_type(gv->pointee_type_id);
         if (!pt) continue;
 
-        // Handle gl_PerVertex struct outputs (e.g. gl_Position at member 0).
         if (pt->kind == SpirvTypeKind::Struct) {
             uint32_t flat_off = 0;
             for (size_t m = 0; m < pt->member_types.size(); ++m) {
@@ -788,9 +747,6 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
 }
 
 LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) {
-    // OpAtomicIAdd(234), OpAtomicISub(235), OpAtomicSMin(236), OpAtomicUMin(237),
-    // OpAtomicSMax(238), OpAtomicUMax(239), OpAtomicAnd(240), OpAtomicOr(241),
-    // OpAtomicXor(242), OpAtomicExchange(229), OpAtomicCompareExchange(230)
     LoweredValue out{};
     if (inst.words.size() < 7) return out;
     uint32_t res_type = inst.words[1];
@@ -810,11 +766,12 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     at.is_barrier_or_cf = true;
     at.is_side_effect = true;
 
-    if (inst.opcode == 229) { // OpAtomicExchange
+    const auto op = static_cast<SpvOp>(inst.opcode);
+    if (op == SpvOpAtomicExchange) {
         SsaId val = get_value(blk_id, inst.words[6]).scalar();
         at.op = SsaOp::AtomicExchange;
         at.args = {addr, val, tok};
-    } else if (inst.opcode == 230 && inst.words.size() >= 9) { // OpAtomicCompareExchange
+    } else if (op == SpvOpAtomicCompareExchange && inst.words.size() >= 9) {
         SsaId val = get_value(blk_id, inst.words[7]).scalar();
         SsaId cmp = get_value(blk_id, inst.words[8]).scalar();
         at.op = SsaOp::AtomicCmpXchg;
@@ -822,16 +779,16 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     } else {
         SsaId val = get_value(blk_id, inst.words[6]).scalar();
         at.op = SsaOp::AtomicRmw;
-        switch (inst.opcode) {
-            case 234: at.aux_str = "aadd"; break;
-            case 235: at.aux_str = "asub"; break;
-            case 236: at.aux_str = "asmin"; break;
-            case 237: at.aux_str = "aumin"; break;
-            case 238: at.aux_str = "asmax"; break;
-            case 239: at.aux_str = "aumax"; break;
-            case 240: at.aux_str = "aand"; break;
-            case 241: at.aux_str = "aor"; break;
-            case 242: at.aux_str = "axor"; break;
+        switch (op) {
+            case SpvOpAtomicIAdd: at.aux_str = "aadd"; break;
+            case SpvOpAtomicISub: at.aux_str = "asub"; break;
+            case SpvOpAtomicSMin: at.aux_str = "asmin"; break;
+            case SpvOpAtomicUMin: at.aux_str = "aumin"; break;
+            case SpvOpAtomicSMax: at.aux_str = "asmax"; break;
+            case SpvOpAtomicUMax: at.aux_str = "aumax"; break;
+            case SpvOpAtomicAnd: at.aux_str = "aand"; break;
+            case SpvOpAtomicOr: at.aux_str = "aor"; break;
+            case SpvOpAtomicXor: at.aux_str = "axor"; break;
             default: at.aux_str = "aadd"; break;
         }
         at.args = {addr, val, tok};
@@ -846,7 +803,6 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
 }
 
 LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& inst) {
-    // OpImageSampleImplicitLod(87), OpImageSampleExplicitLod(88), OpImageFetch(95), OpImageGather(96)
     LoweredValue out{};
     if (inst.words.size() < 5) return out;
     uint32_t res_type = inst.words[1];
@@ -862,12 +818,14 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
         tex_key = it->second.canonical_key;
     }
 
+    const auto op = static_cast<SpvOp>(inst.opcode);
     SsaNode ts{};
     ts.op = SsaOp::TexSample;
     ts.type = ValType::TupleValToken;
     ts.aux_str = tex_key;
-    ts.aux_bool = (inst.opcode == 87);  // implicit LOD
-    ts.aux_bool2 = (inst.opcode == 96); // gather
+    ts.aux_bool = (op == SpvOpImageSampleImplicitLod || op == SpvOpImageSampleDrefImplicitLod ||
+                   op == SpvOpImageSampleProjImplicitLod);
+    ts.aux_bool2 = (op == SpvOpImageGather || op == SpvOpImageDrefGather);
     ts.args = {uv, sb_.current_token(blk_id)};
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
@@ -890,6 +848,36 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
         out.lanes.push_back(sb_.emit_bitcast(blk_id, lane_vt, f));
     }
     return out;
+}
+
+void SpirvLowerer::lower_image_write(uint32_t blk_id, const SpirvInst& inst) {
+    // OpImageWrite: [hdr, image, coordinate, texel, (image_operands...)]
+    if (inst.words.size() < 4) return;
+    uint32_t img_id = inst.words[1];
+    LoweredValue coord = get_value(blk_id, inst.words[2]);
+    LoweredValue texel = get_value(blk_id, inst.words[3]);
+
+    std::string img_key = "img:0:0";
+    if (auto it = sampled_images_.find(img_id); it != sampled_images_.end()) {
+        img_key = it->second.canonical_key;
+    }
+
+    // Represent image stores via PsbStore on a synthetic image buffer key indexed by packed (x,y).
+    SsaId x = !coord.lanes.empty() ? coord.lanes[0] : sb_.emit_const_u32(blk_id, 0u);
+    SsaId y = (coord.lanes.size() >= 2) ? coord.lanes[1] : sb_.emit_const_u32(blk_id, 0u);
+    SsaId xy = emit_op(blk_id, SsaOp::Pack64, ValType::U64, {x, y});
+    for (uint32_t c = 0; c < texel.lanes.size(); ++c) {
+        SsaId addr = (c == 0) ? xy : emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {xy, sb_.emit_const_u64(blk_id, uint64_t(c) * 4u)});
+        SsaNode st{};
+        st.op = SsaOp::PsbStore;
+        st.type = ValType::Token;
+        st.imm_u32 = 4u;
+        st.aux_str = img_key;
+        st.args = {addr, sb_.emit_bitcast(blk_id, ValType::U32, texel.lanes[c]), sb_.current_token(blk_id)};
+        st.is_barrier_or_cf = true;
+        st.is_side_effect = true;
+        sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
+    }
 }
 
 } // namespace valhall::spirv2ssa

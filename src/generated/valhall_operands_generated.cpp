@@ -328,6 +328,10 @@ SsaId fetch_src_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& i
         _n34.args = { pc_base, abi::ins_pc_u64(ctx, blk, ins, rule) };
         _n34.effects.cap_bits |= EffectSet::kCapInt64;
         return ctx.sb.emit(blk, std::move(_n34));
+    } else if (abi::src_is_fau_tls(ctx, blk, ins, rule, src_idx)) {
+        return abi::load_sideband_u64(ctx, blk, ins, rule, 6);
+    } else if (abi::src_is_fau_wls(ctx, blk, ins, rule, src_idx)) {
+        return abi::load_sideband_u64(ctx, blk, ins, rule, 7);
     } else {
         uint32_t base = abi::src_reg_base(ctx, blk, ins, rule, src_idx);
         return abi::emit_pack_u64(ctx, blk, ins, rule, abi::load_fau(ctx, blk, ins, rule, base), abi::load_fau(ctx, blk, ins, rule, abi::add_u32(ctx, blk, ins, rule, base, 1)));

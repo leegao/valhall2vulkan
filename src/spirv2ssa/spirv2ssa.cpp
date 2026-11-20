@@ -13,40 +13,11 @@ using compiler::SsaNode;
 using compiler::ValType;
 using tables::SsaOp;
 
-constexpr uint16_t kOpNop = 0;
-constexpr uint16_t kOpExtInst = 12;
-constexpr uint16_t kOpVariable = 59;
-constexpr uint16_t kOpLoad = 61;
-constexpr uint16_t kOpStore = 62;
-constexpr uint16_t kOpAccessChain = 65;
-constexpr uint16_t kOpInBoundsAccessChain = 66;
-constexpr uint16_t kOpImageSampleImplicitLod = 87;
-constexpr uint16_t kOpImageSampleExplicitLod = 88;
-constexpr uint16_t kOpImageFetch = 95;
-constexpr uint16_t kOpImageGather = 96;
-constexpr uint16_t kOpControlBarrier = 224;
-constexpr uint16_t kOpMemoryBarrier = 225;
-constexpr uint16_t kOpAtomicExchange = 229;
-constexpr uint16_t kOpAtomicCompareExchange = 230;
-constexpr uint16_t kOpAtomicIAdd = 234;
-constexpr uint16_t kOpAtomicXor = 242;
-constexpr uint16_t kOpPhi = 245;
-constexpr uint16_t kOpLoopMerge = 246;
-constexpr uint16_t kOpSelectionMerge = 247;
-constexpr uint16_t kOpBranch = 249;
-constexpr uint16_t kOpBranchConditional = 250;
-constexpr uint16_t kOpSwitch = 251;
-constexpr uint16_t kOpKill = 252;
-constexpr uint16_t kOpReturn = 253;
-constexpr uint16_t kOpReturnValue = 254;
-constexpr uint16_t kOpUnreachable = 255;
-constexpr uint16_t kOpDemoteToHelperInvocation = 5380;
-
 ShaderStage execution_model_to_stage(uint32_t em) {
-    switch (em) {
-        case 0: return ShaderStage::Vertex;
-        case 4: return ShaderStage::Fragment;
-        case 5: return ShaderStage::Compute;
+    switch (static_cast<SpvExecutionModel>(em)) {
+        case SpvExecutionModelVertex: return ShaderStage::Vertex;
+        case SpvExecutionModelFragment: return ShaderStage::Fragment;
+        case SpvExecutionModelGLCompute: return ShaderStage::Compute;
         default: return ShaderStage::Compute;
     }
 }
@@ -55,24 +26,57 @@ std::vector<uint32_t> block_succ_labels(const SpirvBasicBlock& blk) {
     std::vector<uint32_t> succs;
     if (blk.insts.empty()) return succs;
     const auto& term = blk.insts.back();
-    if (term.opcode == kOpBranch && term.words.size() >= 2) {
+    const auto op = static_cast<SpvOp>(term.opcode);
+    if (op == SpvOpBranch && term.words.size() >= 2) {
         succs.push_back(term.words[1]);
-    } else if (term.opcode == kOpBranchConditional && term.words.size() >= 4) {
+    } else if (op == SpvOpBranchConditional && term.words.size() >= 4) {
         succs.push_back(term.words[2]);
         if (term.words[3] != term.words[2]) succs.push_back(term.words[3]);
-    } else if (term.opcode == kOpSwitch && term.words.size() >= 3) {
+    } else if (op == SpvOpSwitch && term.words.size() >= 3) {
         succs.push_back(term.words[2]);
         for (size_t k = 4; k < term.words.size(); k += 2) {
-            succs.push_back(term.words[k]);
+            if (std::find(succs.begin(), succs.end(), term.words[k]) == succs.end()) {
+                succs.push_back(term.words[k]);
+            }
         }
     }
     return succs;
+}
+
+bool is_atomic_opcode(SpvOp op) {
+    switch (op) {
+        case SpvOpAtomicExchange:
+        case SpvOpAtomicCompareExchange:
+        case SpvOpAtomicIAdd:
+        case SpvOpAtomicISub:
+        case SpvOpAtomicSMin:
+        case SpvOpAtomicUMin:
+        case SpvOpAtomicSMax:
+        case SpvOpAtomicUMax:
+        case SpvOpAtomicAnd:
+        case SpvOpAtomicOr:
+        case SpvOpAtomicXor:
+            return true;
+        default:
+            return false;
+    }
 }
 
 } // namespace
 
 SpirvLowerer::SpirvLowerer(const SpirvModule& mod, const Spirv2SsaOptions& opts, Spirv2SsaResult& res)
     : mod_(mod), opts_(opts), res_(res), sb_(res.ssa) {}
+
+uint32_t SpirvLowerer::allocate_ssa_block() {
+    uint32_t bid = static_cast<uint32_t>(res_.ssa.blocks.size());
+    SsaBlock blk{};
+    blk.id = bid;
+    res_.ssa.blocks.push_back(std::move(blk));
+    res_.ssa.block_in_token.push_back(compiler::kInvalidSsa);
+    res_.ssa.block_out_token.push_back(compiler::kInvalidSsa);
+    blk_slot_defs_.emplace_back();
+    return bid;
+}
 
 ValType SpirvLowerer::to_val_type(uint32_t spv_type_id) const {
     const SpirvType* t = mod_.get_type(spv_type_id);
@@ -239,6 +243,428 @@ void SpirvLowerer::record_unsupported(const std::string& desc) {
     }
 }
 
+void SpirvLowerer::lower_switch(
+    uint32_t blk_id,
+    const SpirvInst& inst,
+    const std::unordered_map<uint32_t, uint32_t>& lbl_map) {
+    // OpSwitch: [hdr, selector, default_lbl, lit0, target0, lit1, target1, ...]
+    if (inst.words.size() < 3) return;
+    LoweredValue sel = get_value(blk_id, inst.words[1]);
+    auto dit = lbl_map.find(inst.words[2]);
+    int32_t default_blk = (dit != lbl_map.end()) ? static_cast<int32_t>(dit->second) : -1;
+
+    std::vector<std::pair<uint32_t, uint32_t>> cases;
+    for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
+        auto tit = lbl_map.find(inst.words[k + 1]);
+        if (tit != lbl_map.end()) {
+            cases.push_back({inst.words[k], tit->second});
+        }
+    }
+
+    if (cases.empty()) {
+        if (default_blk >= 0) {
+            res_.ssa.blocks[blk_id].is_unconditional_branch = true;
+            res_.ssa.blocks[blk_id].branch_target_block = default_blk;
+            res_.ssa.blocks[default_blk].preds.push_back(blk_id);
+        }
+        return;
+    }
+
+    uint32_t cur_blk = blk_id;
+    for (size_t i = 0; i < cases.size(); ++i) {
+        uint32_t lit = cases[i].first;
+        uint32_t target_blk = cases[i].second;
+        SsaId cmp = emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
+                            {sel.scalar(), sb_.emit_const_u32(cur_blk, lit)});
+        res_.ssa.blocks[cur_blk].is_conditional_branch = true;
+        res_.ssa.blocks[cur_blk].branch_cond = cmp;
+        res_.ssa.blocks[cur_blk].branch_target_block = static_cast<int32_t>(target_blk);
+        res_.ssa.blocks[target_blk].preds.push_back(cur_blk);
+
+        if (i + 1 < cases.size()) {
+            uint32_t next_test_blk = allocate_ssa_block();
+            res_.ssa.blocks[cur_blk].fallthrough_block = static_cast<int32_t>(next_test_blk);
+            res_.ssa.blocks[next_test_blk].preds.push_back(cur_blk);
+            res_.ssa.block_in_token[next_test_blk] = res_.ssa.block_out_token[cur_blk];
+            res_.ssa.block_out_token[next_test_blk] = res_.ssa.block_out_token[cur_blk];
+            cur_blk = next_test_blk;
+        } else if (default_blk >= 0) {
+            res_.ssa.blocks[cur_blk].fallthrough_block = default_blk;
+            res_.ssa.blocks[default_blk].preds.push_back(cur_blk);
+        }
+    }
+}
+
+bool SpirvLowerer::lower_function_call(uint32_t* io_blk_id, const SpirvInst& inst) {
+    // OpFunctionCall: [hdr, result_type, result_id, function_id, arg0, ...]
+    if (inst.words.size() < 4) return true;
+    uint32_t res_type = inst.words[1];
+    uint32_t res_id = inst.words[2];
+    uint32_t callee_id = inst.words[3];
+
+    const SpirvFunction* callee = mod_.get_function(callee_id);
+    if (!callee || callee->blocks.empty() || inline_depth_ >= opts_.max_inline_depth) {
+        record_unsupported("OpFunctionCall(depth/missing)");
+        if (!opts_.tolerant) return false;
+        values_[res_id] = make_zero_value(*io_blk_id, res_type);
+        return true;
+    }
+
+    // Bind callee parameters (both values and pointer arguments) in a scoped snapshot.
+    auto saved_values = values_;
+    auto saved_pointers = pointers_;
+    for (size_t i = 0; i < callee->params.size() && (4 + i) < inst.words.size(); ++i) {
+        uint32_t param_id = callee->params[i].first;
+        uint32_t arg_id = inst.words[4 + i];
+        if (auto pit = saved_pointers.find(arg_id); pit != saved_pointers.end()) {
+            pointers_[param_id] = pit->second;
+        } else {
+            values_[param_id] = get_value(*io_blk_id, arg_id);
+        }
+    }
+
+    ++inline_depth_;
+    uint32_t exit_blk = *io_blk_id;
+    LoweredValue ret_val{};
+    bool ok = lower_function_body(*callee, *io_blk_id, /*is_entry_point=*/false, &exit_blk, &ret_val);
+    --inline_depth_;
+
+    // Restore caller scope and publish call result
+    values_ = std::move(saved_values);
+    pointers_ = std::move(saved_pointers);
+    if (res_type != 0 && flat_lane_count(res_type) > 0) {
+        values_[res_id] = ret_val.empty() ? make_zero_value(exit_blk, res_type) : std::move(ret_val);
+    }
+    *io_blk_id = exit_blk;
+    return ok;
+}
+
+bool SpirvLowerer::lower_function_body(
+    const SpirvFunction& fn,
+    uint32_t entry_blk,
+    bool is_entry_point,
+    uint32_t* out_exit_blk,
+    LoweredValue* out_ret_val) {
+    std::unordered_map<uint32_t, const SpirvBasicBlock*> lbl_to_spv;
+    for (const auto& b : fn.blocks) {
+        lbl_to_spv[b.label_id] = &b;
+    }
+
+    std::set<uint32_t> visited;
+    std::vector<const SpirvBasicBlock*> postorder;
+    std::function<void(uint32_t)> dfs = [&](uint32_t lbl) {
+        if (!visited.insert(lbl).second) return;
+        auto it = lbl_to_spv.find(lbl);
+        if (it == lbl_to_spv.end()) return;
+        for (uint32_t succ : block_succ_labels(*it->second)) {
+            dfs(succ);
+        }
+        postorder.push_back(it->second);
+    };
+    dfs(fn.blocks[0].label_id);
+    std::vector<const SpirvBasicBlock*> rpo(postorder.rbegin(), postorder.rend());
+
+    std::unordered_map<uint32_t, uint32_t> local_lbl_to_blk;
+    std::vector<uint32_t> ssa_blks;
+    ssa_blks.reserve(rpo.size());
+    for (size_t i = 0; i < rpo.size(); ++i) {
+        uint32_t bid = (i == 0) ? entry_blk : allocate_ssa_block();
+        local_lbl_to_blk[rpo[i]->label_id] = bid;
+        ssa_blks.push_back(bid);
+    }
+
+    // Wire static CFG edges (except OpSwitch which allocates test blocks dynamically during lowering)
+    for (size_t i = 0; i < rpo.size(); ++i) {
+        const auto& spv_blk = *rpo[i];
+        uint32_t b = ssa_blks[i];
+        auto& ssa_blk = res_.ssa.blocks[b];
+        for (const auto& inst : spv_blk.insts) {
+            const auto op = static_cast<SpvOp>(inst.opcode);
+            if (op == SpvOpSelectionMerge && inst.words.size() >= 2) {
+                if (auto it = local_lbl_to_blk.find(inst.words[1]); it != local_lbl_to_blk.end()) {
+                    ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
+                }
+            } else if (op == SpvOpLoopMerge && inst.words.size() >= 3) {
+                ssa_blk.is_loop_header = true;
+                if (auto it = local_lbl_to_blk.find(inst.words[1]); it != local_lbl_to_blk.end()) {
+                    ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
+                }
+                if (auto it = local_lbl_to_blk.find(inst.words[2]); it != local_lbl_to_blk.end()) {
+                    ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
+                }
+            }
+        }
+        if (spv_blk.insts.empty()) continue;
+        const auto& term = spv_blk.insts.back();
+        const auto top = static_cast<SpvOp>(term.opcode);
+        if (top == SpvOpBranch && term.words.size() >= 2) {
+            if (auto it = local_lbl_to_blk.find(term.words[1]); it != local_lbl_to_blk.end()) {
+                ssa_blk.is_unconditional_branch = true;
+                ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
+                res_.ssa.blocks[it->second].preds.push_back(b);
+            }
+        } else if (top == SpvOpBranchConditional && term.words.size() >= 4) {
+            auto it_t = local_lbl_to_blk.find(term.words[2]);
+            auto it_f = local_lbl_to_blk.find(term.words[3]);
+            ssa_blk.is_conditional_branch = true;
+            if (it_t != local_lbl_to_blk.end()) {
+                ssa_blk.branch_target_block = static_cast<int32_t>(it_t->second);
+                res_.ssa.blocks[it_t->second].preds.push_back(b);
+            }
+            if (it_f != local_lbl_to_blk.end()) {
+                ssa_blk.fallthrough_block = static_cast<int32_t>(it_f->second);
+                if (it_t == local_lbl_to_blk.end() || it_f->second != it_t->second) {
+                    res_.ssa.blocks[it_f->second].preds.push_back(b);
+                }
+            }
+        } else if (top == SpvOpReturn || top == SpvOpReturnValue) {
+            if (is_entry_point) ssa_blk.is_terminated_by_end = true;
+        } else if (top == SpvOpKill || top == SpvOpTerminateInvocation || top == SpvOpUnreachable) {
+            ssa_blk.is_terminated_by_discard = (top == SpvOpKill || top == SpvOpTerminateInvocation);
+            ssa_blk.is_terminated_by_end = (top == SpvOpUnreachable);
+        }
+    }
+
+    std::vector<PendingSpvPhi> local_phis;
+    std::vector<std::pair<uint32_t, LoweredValue>> return_sites;
+
+    for (size_t i = 0; i < rpo.size(); ++i) {
+        uint32_t cur_b = ssa_blks[i];
+        if (i > 0) {
+            const auto& blk = res_.ssa.blocks[cur_b];
+            if (blk.preds.size() == 1 && blk.preds[0] < cur_b) {
+                res_.ssa.block_in_token[cur_b] = res_.ssa.block_out_token[blk.preds[0]];
+                res_.ssa.block_out_token[cur_b] = res_.ssa.block_out_token[blk.preds[0]];
+            } else {
+                SsaNode tphi{};
+                tphi.op = SsaOp::Phi;
+                tphi.type = ValType::Token;
+                tphi.aux_bool = true;
+                SsaId tpid = sb_.emit(cur_b, std::move(tphi));
+                res_.ssa.block_in_token[cur_b] = tpid;
+                res_.ssa.block_out_token[cur_b] = tpid;
+            }
+        }
+
+        const auto& spv_blk = *rpo[i];
+        for (const auto& inst : spv_blk.insts) {
+            const auto op = static_cast<SpvOp>(inst.opcode);
+            switch (op) {
+                case SpvOpNop:
+                case SpvOpSelectionMerge:
+                case SpvOpLoopMerge:
+                case SpvOpMemoryBarrier:
+                case SpvOpLine:
+                case SpvOpNoLine:
+                case SpvOpBranch:
+                case SpvOpUnreachable:
+                    break;
+
+                case SpvOpVariable:
+                    if (inst.words.size() >= 4) {
+                        uint32_t init_id = (inst.words.size() >= 5) ? inst.words[4] : 0u;
+                        register_local_variable(cur_b, inst.words[2], inst.words[1], init_id);
+                    }
+                    break;
+
+                case SpvOpPhi: {
+                    if (inst.words.size() < 3) break;
+                    uint32_t res_type = inst.words[1];
+                    uint32_t res_id = inst.words[2];
+                    uint32_t nlanes = flat_lane_count(res_type);
+                    ValType lane_vt = to_val_type(scalar_elem_type(res_type));
+                    PendingSpvPhi p{};
+                    p.blk_id = cur_b;
+                    p.result_id = res_id;
+                    p.type_id = res_type;
+                    LoweredValue lv{};
+                    lv.spv_type_id = res_type;
+                    for (uint32_t l = 0; l < nlanes; ++l) {
+                        SsaNode phi{};
+                        phi.op = SsaOp::Phi;
+                        phi.type = lane_vt;
+                        SsaId pid = sb_.emit(cur_b, std::move(phi));
+                        p.lane_phi_ids.push_back(pid);
+                        lv.lanes.push_back(pid);
+                    }
+                    for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
+                        p.raw_incomings.push_back({inst.words[k], inst.words[k + 1]});
+                    }
+                    values_[res_id] = std::move(lv);
+                    local_phis.push_back(std::move(p));
+                    break;
+                }
+
+                case SpvOpAccessChain:
+                case SpvOpInBoundsAccessChain:
+                case SpvOpPtrAccessChain:
+                    if (inst.words.size() >= 4) {
+                        pointers_[inst.words[2]] = lower_access_chain(cur_b, inst);
+                    }
+                    break;
+
+                case SpvOpLoad:
+                    if (inst.words.size() >= 4) {
+                        values_[inst.words[2]] = lower_load(cur_b, inst);
+                    }
+                    break;
+
+                case SpvOpStore:
+                    lower_store(cur_b, inst);
+                    break;
+
+                case SpvOpFunctionCall:
+                    if (!lower_function_call(&cur_b, inst)) return false;
+                    break;
+
+                case SpvOpImageSampleImplicitLod:
+                case SpvOpImageSampleExplicitLod:
+                case SpvOpImageSampleDrefImplicitLod:
+                case SpvOpImageSampleDrefExplicitLod:
+                case SpvOpImageSampleProjImplicitLod:
+                case SpvOpImageSampleProjExplicitLod:
+                case SpvOpImageFetch:
+                case SpvOpImageGather:
+                case SpvOpImageDrefGather:
+                case SpvOpImageRead:
+                    if (inst.words.size() >= 5) {
+                        values_[inst.words[2]] = lower_image_sample(cur_b, inst);
+                    }
+                    break;
+
+                case SpvOpImageWrite:
+                    lower_image_write(cur_b, inst);
+                    break;
+
+                case SpvOpControlBarrier: {
+                    SsaNode cb{};
+                    cb.op = SsaOp::ControlBarrier;
+                    cb.type = ValType::Token;
+                    cb.args = {sb_.current_token(cur_b)};
+                    cb.is_barrier_or_cf = true;
+                    cb.is_side_effect = true;
+                    sb_.set_token(cur_b, sb_.emit(cur_b, std::move(cb)));
+                    break;
+                }
+
+                case SpvOpExtInst:
+                    if (!lower_glsl450_ext_inst(cur_b, inst)) {
+                        res_.error_message = "Unsupported GLSL.std.450 instruction";
+                        return false;
+                    }
+                    break;
+
+                case SpvOpBranchConditional:
+                    if (inst.words.size() >= 4) {
+                        LoweredValue cond = get_value(cur_b, inst.words[1]);
+                        res_.ssa.blocks[cur_b].branch_cond = cond.scalar();
+                    }
+                    break;
+
+                case SpvOpSwitch:
+                    lower_switch(cur_b, inst, local_lbl_to_blk);
+                    break;
+
+                case SpvOpKill:
+                case SpvOpTerminateInvocation:
+                case SpvOpDemoteToHelperInvocation: {
+                    SsaNode k{};
+                    k.op = SsaOp::Kill;
+                    k.type = ValType::Void;
+                    k.aux_bool = true;
+                    k.args = {sb_.emit_const_bool(cur_b, true), sb_.current_token(cur_b)};
+                    k.is_barrier_or_cf = true;
+                    k.is_side_effect = true;
+                    sb_.emit(cur_b, std::move(k));
+                    break;
+                }
+
+                case SpvOpReturn:
+                    if (is_entry_point) {
+                        flush_stage_outputs(cur_b);
+                    } else {
+                        return_sites.push_back({cur_b, LoweredValue{}});
+                    }
+                    break;
+
+                case SpvOpReturnValue:
+                    if (is_entry_point) {
+                        flush_stage_outputs(cur_b);
+                    } else if (inst.words.size() >= 2) {
+                        return_sites.push_back({cur_b, get_value(cur_b, inst.words[1])});
+                    }
+                    break;
+
+                default:
+                    if (is_atomic_opcode(op)) {
+                        values_[inst.words[2]] = lower_atomic(cur_b, inst);
+                    } else if (!lower_alu_or_misc_inst(cur_b, inst)) {
+                        res_.error_message = std::string("Unsupported SPIR-V opcode ") +
+                                             spirv_parser::spv_op_name(inst.opcode);
+                        return false;
+                    }
+                    break;
+            }
+        }
+    }
+
+    for (const auto& p : local_phis) {
+        for (uint32_t lane = 0; lane < p.lane_phi_ids.size(); ++lane) {
+            auto& phi_node = res_.ssa.get_mut(p.lane_phi_ids[lane]);
+            phi_node.phi_incomings.clear();
+            for (const auto& [val_id, pred_lbl] : p.raw_incomings) {
+                auto bit = local_lbl_to_blk.find(pred_lbl);
+                if (bit == local_lbl_to_blk.end()) continue;
+                LoweredValue lv = get_value(bit->second, val_id);
+                SsaId sid = (lane < lv.lanes.size()) ? lv.lanes[lane] : sb_.emit_const_u32(bit->second, 0u);
+                phi_node.phi_incomings.push_back({bit->second, sid});
+            }
+        }
+    }
+
+    if (!is_entry_point && out_exit_blk) {
+        if (return_sites.size() == 1) {
+            *out_exit_blk = return_sites[0].first;
+            if (out_ret_val) *out_ret_val = return_sites[0].second;
+        } else if (return_sites.size() > 1) {
+            uint32_t merge_b = allocate_ssa_block();
+            for (const auto& [rb, _] : return_sites) {
+                res_.ssa.blocks[rb].is_unconditional_branch = true;
+                res_.ssa.blocks[rb].branch_target_block = static_cast<int32_t>(merge_b);
+                res_.ssa.blocks[merge_b].preds.push_back(rb);
+            }
+            SsaNode tphi{};
+            tphi.op = SsaOp::Phi;
+            tphi.type = ValType::Token;
+            tphi.aux_bool = true;
+            for (const auto& [rb, _] : return_sites) {
+                tphi.phi_incomings.push_back({rb, res_.ssa.block_out_token[rb]});
+            }
+            SsaId tpid = sb_.emit(merge_b, std::move(tphi));
+            res_.ssa.block_in_token[merge_b] = tpid;
+            res_.ssa.block_out_token[merge_b] = tpid;
+
+            if (out_ret_val && !return_sites[0].second.empty()) {
+                LoweredValue merged{};
+                merged.spv_type_id = return_sites[0].second.spv_type_id;
+                uint32_t nl = static_cast<uint32_t>(return_sites[0].second.lanes.size());
+                for (uint32_t l = 0; l < nl; ++l) {
+                    SsaNode rphi{};
+                    rphi.op = SsaOp::Phi;
+                    rphi.type = res_.ssa.get(return_sites[0].second.lanes[l]).type;
+                    for (const auto& [rb, rv] : return_sites) {
+                        rphi.phi_incomings.push_back({rb, (l < rv.lanes.size()) ? rv.lanes[l] : sb_.emit_const_u32(rb, 0u)});
+                    }
+                    merged.lanes.push_back(sb_.emit(merge_b, std::move(rphi)));
+                }
+                *out_ret_val = std::move(merged);
+            }
+            *out_exit_blk = merge_b;
+        }
+    }
+    return true;
+}
+
 bool SpirvLowerer::run() {
     res_.stage = execution_model_to_stage(mod_.entry_point.execution_model);
     res_.entry_point_name = mod_.entry_point.name;
@@ -252,272 +678,25 @@ bool SpirvLowerer::run() {
         return false;
     }
 
-    // Build label -> SpirvBasicBlock map and compute Reverse Post-Order (RPO) from entry block.
-    std::unordered_map<uint32_t, const SpirvBasicBlock*> lbl_map;
-    for (const auto& b : entry_fn->blocks) {
-        lbl_map[b.label_id] = &b;
-    }
-
-    std::set<uint32_t> visited;
-    std::vector<const SpirvBasicBlock*> postorder;
-    std::function<void(uint32_t)> dfs = [&](uint32_t lbl) {
-        if (!visited.insert(lbl).second) return;
-        auto it = lbl_map.find(lbl);
-        if (it == lbl_map.end()) return;
-        for (uint32_t succ : block_succ_labels(*it->second)) {
-            dfs(succ);
-        }
-        postorder.push_back(it->second);
-    };
-    dfs(entry_fn->blocks[0].label_id);
-    rpo_blocks_.assign(postorder.rbegin(), postorder.rend());
-
-    uint32_t num_blks = static_cast<uint32_t>(rpo_blocks_.size());
-    res_.ssa.blocks.resize(num_blks);
-    res_.ssa.block_in_token.assign(num_blks, compiler::kInvalidSsa);
-    res_.ssa.block_out_token.assign(num_blks, compiler::kInvalidSsa);
-    blk_slot_defs_.resize(num_blks);
-
-    for (uint32_t b = 0; b < num_blks; ++b) {
-        res_.ssa.blocks[b].id = b;
-        label_to_blk_[rpo_blocks_[b]->label_id] = b;
-    }
-
-    // Wire CFG edges and structured merge metadata before instruction lowering.
-    for (uint32_t b = 0; b < num_blks; ++b) {
-        const auto& spv_blk = *rpo_blocks_[b];
-        auto& ssa_blk = res_.ssa.blocks[b];
-        for (const auto& inst : spv_blk.insts) {
-            if (inst.opcode == kOpSelectionMerge && inst.words.size() >= 2) {
-                if (auto it = label_to_blk_.find(inst.words[1]); it != label_to_blk_.end()) {
-                    ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
-                }
-            } else if (inst.opcode == kOpLoopMerge && inst.words.size() >= 3) {
-                ssa_blk.is_loop_header = true;
-                if (auto it = label_to_blk_.find(inst.words[1]); it != label_to_blk_.end()) {
-                    ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
-                }
-                if (auto it = label_to_blk_.find(inst.words[2]); it != label_to_blk_.end()) {
-                    ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
-                }
-            }
-        }
-        if (spv_blk.insts.empty()) continue;
-        const auto& term = spv_blk.insts.back();
-        if (term.opcode == kOpBranch && term.words.size() >= 2) {
-            if (auto it = label_to_blk_.find(term.words[1]); it != label_to_blk_.end()) {
-                ssa_blk.is_unconditional_branch = true;
-                ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
-                res_.ssa.blocks[it->second].preds.push_back(b);
-            }
-        } else if (term.opcode == kOpBranchConditional && term.words.size() >= 4) {
-            auto it_t = label_to_blk_.find(term.words[2]);
-            auto it_f = label_to_blk_.find(term.words[3]);
-            ssa_blk.is_conditional_branch = true;
-            if (it_t != label_to_blk_.end()) {
-                ssa_blk.branch_target_block = static_cast<int32_t>(it_t->second);
-                res_.ssa.blocks[it_t->second].preds.push_back(b);
-            }
-            if (it_f != label_to_blk_.end()) {
-                ssa_blk.fallthrough_block = static_cast<int32_t>(it_f->second);
-                if (it_t == label_to_blk_.end() || it_f->second != it_t->second) {
-                    res_.ssa.blocks[it_f->second].preds.push_back(b);
-                }
-            }
-        } else if (term.opcode == kOpReturn || term.opcode == kOpReturnValue) {
-            ssa_blk.is_terminated_by_end = true;
-        } else if (term.opcode == kOpKill || term.opcode == kOpUnreachable) {
-            ssa_blk.is_terminated_by_discard = (term.opcode == kOpKill);
-            ssa_blk.is_terminated_by_end = (term.opcode == kOpUnreachable);
-        }
-    }
-
-    // Initialize entry block token and global resource bindings.
+    uint32_t entry_blk = allocate_ssa_block();
     SsaNode init_tok{};
     init_tok.op = SsaOp::Nop;
     init_tok.type = ValType::Token;
-    SsaId tok0 = sb_.emit(0, std::move(init_tok));
-    res_.ssa.block_in_token[0] = tok0;
-    res_.ssa.block_out_token[0] = tok0;
-    init_global_resources(0);
+    SsaId tok0 = sb_.emit(entry_blk, std::move(init_tok));
+    res_.ssa.block_in_token[entry_blk] = tok0;
+    res_.ssa.block_out_token[entry_blk] = tok0;
+    init_global_resources(entry_blk);
 
-    // Lower blocks in RPO order.
-    for (uint32_t b = 0; b < num_blks; ++b) {
-        if (b > 0) {
-            const auto& blk = res_.ssa.blocks[b];
-            if (blk.preds.size() == 1 && blk.preds[0] < b) {
-                res_.ssa.block_in_token[b] = res_.ssa.block_out_token[blk.preds[0]];
-                res_.ssa.block_out_token[b] = res_.ssa.block_out_token[blk.preds[0]];
-            } else {
-                SsaNode tphi{};
-                tphi.op = SsaOp::Phi;
-                tphi.type = ValType::Token;
-                tphi.aux_bool = true;
-                SsaId tpid = sb_.emit(b, std::move(tphi));
-                res_.ssa.block_in_token[b] = tpid;
-                res_.ssa.block_out_token[b] = tpid;
-            }
-        }
-
-        const auto& spv_blk = *rpo_blocks_[b];
-        for (const auto& inst : spv_blk.insts) {
-            switch (inst.opcode) {
-                case kOpNop:
-                case kOpSelectionMerge:
-                case kOpLoopMerge:
-                case kOpMemoryBarrier:
-                    break;
-
-                case kOpVariable:
-                    if (inst.words.size() >= 4) {
-                        uint32_t init_id = (inst.words.size() >= 5) ? inst.words[4] : 0u;
-                        register_local_variable(b, inst.words[2], inst.words[1], init_id);
-                    }
-                    break;
-
-                case kOpPhi: {
-                    if (inst.words.size() < 3) break;
-                    uint32_t res_type = inst.words[1];
-                    uint32_t res_id = inst.words[2];
-                    uint32_t nlanes = flat_lane_count(res_type);
-                    ValType lane_vt = to_val_type(scalar_elem_type(res_type));
-                    PendingSpvPhi p{};
-                    p.blk_id = b;
-                    p.result_id = res_id;
-                    p.type_id = res_type;
-                    LoweredValue lv{};
-                    lv.spv_type_id = res_type;
-                    for (uint32_t i = 0; i < nlanes; ++i) {
-                        SsaNode phi{};
-                        phi.op = SsaOp::Phi;
-                        phi.type = lane_vt;
-                        SsaId pid = sb_.emit(b, std::move(phi));
-                        p.lane_phi_ids.push_back(pid);
-                        lv.lanes.push_back(pid);
-                    }
-                    for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
-                        p.raw_incomings.push_back({inst.words[k], inst.words[k + 1]});
-                    }
-                    values_[res_id] = std::move(lv);
-                    pending_spv_phis_.push_back(std::move(p));
-                    break;
-                }
-
-                case kOpAccessChain:
-                case kOpInBoundsAccessChain:
-                    if (inst.words.size() >= 4) {
-                        pointers_[inst.words[2]] = lower_access_chain(b, inst);
-                    }
-                    break;
-
-                case kOpLoad:
-                    if (inst.words.size() >= 4) {
-                        values_[inst.words[2]] = lower_load(b, inst);
-                    }
-                    break;
-
-                case kOpStore:
-                    lower_store(b, inst);
-                    break;
-
-                case kOpImageSampleImplicitLod:
-                case kOpImageSampleExplicitLod:
-                case kOpImageFetch:
-                case kOpImageGather:
-                    if (inst.words.size() >= 5) {
-                        values_[inst.words[2]] = lower_image_sample(b, inst);
-                    }
-                    break;
-
-                case kOpControlBarrier: {
-                    SsaNode cb{};
-                    cb.op = SsaOp::ControlBarrier;
-                    cb.type = ValType::Token;
-                    cb.args = {sb_.current_token(b)};
-                    cb.is_barrier_or_cf = true;
-                    cb.is_side_effect = true;
-                    sb_.set_token(b, sb_.emit(b, std::move(cb)));
-                    break;
-                }
-
-                case kOpExtInst:
-                    if (!lower_glsl450_ext_inst(b, inst)) {
-                        res_.error_message = "Unsupported GLSL.std.450 instruction";
-                        return false;
-                    }
-                    break;
-
-                case kOpBranch:
-                    break;
-
-                case kOpBranchConditional:
-                    if (inst.words.size() >= 4) {
-                        LoweredValue cond = get_value(b, inst.words[1]);
-                        res_.ssa.blocks[b].branch_cond = cond.scalar();
-                    }
-                    break;
-
-                case kOpSwitch:
-                    // Record unsupported for multi-way switch (handled conservatively if tolerant)
-                    record_unsupported("OpSwitch");
-                    break;
-
-                case kOpKill:
-                case kOpDemoteToHelperInvocation: {
-                    SsaNode k{};
-                    k.op = SsaOp::Kill;
-                    k.type = ValType::Void;
-                    k.aux_bool = true;
-                    k.args = {sb_.emit_const_bool(b, true), sb_.current_token(b)};
-                    k.is_barrier_or_cf = true;
-                    k.is_side_effect = true;
-                    sb_.emit(b, std::move(k));
-                    break;
-                }
-
-                case kOpReturn:
-                case kOpReturnValue:
-                    flush_stage_outputs(b);
-                    break;
-
-                case kOpUnreachable:
-                    break;
-
-                default:
-                    if ((inst.opcode >= kOpAtomicExchange && inst.opcode <= kOpAtomicXor) &&
-                        inst.opcode != 231 && inst.opcode != 232 && inst.opcode != 233) {
-                        values_[inst.words[2]] = lower_atomic(b, inst);
-                    } else if (!lower_alu_or_misc_inst(b, inst)) {
-                        res_.error_message = "Unsupported SPIR-V opcode " + std::to_string(inst.opcode);
-                        return false;
-                    }
-                    break;
-            }
-        }
+    if (!lower_function_body(*entry_fn, entry_blk, /*is_entry_point=*/true, nullptr, nullptr)) {
+        return false;
     }
 
-    // Patch deferred SPIR-V OpPhi incoming operands.
-    for (const auto& p : pending_spv_phis_) {
-        for (uint32_t lane = 0; lane < p.lane_phi_ids.size(); ++lane) {
-            auto& phi_node = res_.ssa.get_mut(p.lane_phi_ids[lane]);
-            phi_node.phi_incomings.clear();
-            for (const auto& [val_id, pred_lbl] : p.raw_incomings) {
-                auto bit = label_to_blk_.find(pred_lbl);
-                if (bit == label_to_blk_.end()) continue;
-                LoweredValue lv = get_value(bit->second, val_id);
-                SsaId sid = (lane < lv.lanes.size()) ? lv.lanes[lane] : sb_.emit_const_u32(bit->second, 0u);
-                phi_node.phi_incomings.push_back({bit->second, sid});
-            }
-        }
-    }
-
-    // Patch token Phis and mem2reg Phis.
-    for (uint32_t b = 1; b < num_blks; ++b) {
+    for (uint32_t b = 1; b < res_.ssa.blocks.size(); ++b) {
         const auto& blk = res_.ssa.blocks[b];
         SsaId tpid = res_.ssa.block_in_token[b];
-        if (tpid != compiler::kInvalidSsa && res_.ssa.get(tpid).op == SsaOp::Phi && res_.ssa.get(tpid).aux_bool) {
+        if (tpid != compiler::kInvalidSsa && res_.ssa.get(tpid).op == SsaOp::Phi &&
+            res_.ssa.get(tpid).aux_bool && res_.ssa.get(tpid).phi_incomings.empty()) {
             auto& tphi = res_.ssa.get_mut(tpid);
-            tphi.phi_incomings.clear();
             for (uint32_t pred : blk.preds) {
                 tphi.phi_incomings.push_back({pred, res_.ssa.block_out_token[pred]});
             }

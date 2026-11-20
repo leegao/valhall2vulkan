@@ -2,6 +2,7 @@
 
 #include "spirv2ssa.h"
 #include "spirv_module.h"
+#include "valhall_spirv_parser_generated.h"
 
 #include <cstdint>
 #include <map>
@@ -25,7 +26,7 @@ struct LoweredValue {
 enum class PtrKind : uint8_t {
     Unknown = 0,
     LocalVar,   // Function or Private OpVariable (promoted via mem2reg)
-    Buffer,     // Uniform (UBO), StorageBuffer (SSBO), PushConstant, PhysicalStorageBuffer
+    Buffer,     // Uniform (UBO), StorageBuffer (SSBO), PushConstant, PhysicalStorageBuffer, Workgroup
     InputVar,   // Stage input (BuiltIn, Vertex attribute, Fragment varying)
     OutputVar,  // Stage output (BuiltIn, Fragment color, Vertex varying)
     ImageVar,   // UniformConstant image/sampler/sampled-image
@@ -50,7 +51,7 @@ struct PointerRef {
     uint32_t component = 0;
     bool is_flat = false;
     std::vector<uint32_t> const_path;
-    compiler::SsaId dynamic_index = compiler::kInvalidSsa; // Optional dynamic index for local arrays
+    compiler::SsaId dynamic_index = compiler::kInvalidSsa;
 };
 
 /// Pending SPIR-V OpPhi whose incoming operands are patched after all blocks are lowered.
@@ -84,6 +85,7 @@ public:
     LoweredValue make_zero_value(uint32_t blk_id, uint32_t spv_type_id);
     compiler::SsaId pack_to_vec4_f32(uint32_t blk_id, const LoweredValue& val, bool fill_alpha_one);
     compiler::SsaId pack_to_vec2_f32(uint32_t blk_id, const LoweredValue& val);
+    uint32_t allocate_ssa_block();
 
     compiler::SsaId emit_op(
         uint32_t blk_id,
@@ -101,6 +103,7 @@ public:
     void lower_store(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_atomic(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_image_sample(uint32_t blk_id, const SpirvInst& inst);
+    void lower_image_write(uint32_t blk_id, const SpirvInst& inst);
     void flush_stage_outputs(uint32_t blk_id);
 
     // Mutable slot SSA promotion (mem2reg)
@@ -108,6 +111,17 @@ public:
     void write_slot(uint32_t blk_id, uint64_t slot_key, compiler::SsaId val);
     compiler::SsaId read_slot(uint32_t blk_id, uint64_t slot_key, compiler::ValType vt);
     void seal_mem_phis();
+
+    // Function inlining & switch desugaring (spirv2ssa.cpp)
+    bool lower_function_call(uint32_t* io_blk_id, const SpirvInst& inst);
+    void lower_switch(uint32_t blk_id, const SpirvInst& inst,
+                      const std::unordered_map<uint32_t, uint32_t>& lbl_map);
+    bool lower_function_body(
+        const SpirvFunction& fn,
+        uint32_t entry_blk,
+        bool is_entry_point,
+        uint32_t* out_exit_blk,
+        LoweredValue* out_ret_val);
 
     // ALU / comparison / conversion / composite / GLSL.std.450 lowering (spirv2ssa_ops.cpp)
     bool lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst);
@@ -120,26 +134,21 @@ public:
     Spirv2SsaResult& res_;
     compiler::SsaBuilder sb_;
 
-    // Block mapping
-    std::unordered_map<uint32_t, uint32_t> label_to_blk_;
-    std::vector<const SpirvBasicBlock*> rpo_blocks_;
-
     // Lowered SSA values & pointers keyed by SPIR-V result ID
     std::unordered_map<uint32_t, LoweredValue> values_;
     std::unordered_map<uint32_t, PointerRef> pointers_;
-    std::unordered_map<uint32_t, PointerRef> sampled_images_; // OpSampledImage -> underlying image ptr
+    std::unordered_map<uint32_t, PointerRef> sampled_images_;
 
     // Global resource tracking
-    uint32_t next_sideband_slot_ = 16; // Avoid collision with ValhallSidebandData slots 0..5
+    uint32_t next_sideband_slot_ = 16;
+    uint32_t inline_depth_ = 0;
     std::vector<uint32_t> output_var_ids_;
     std::set<uint32_t> written_output_vars_;
 
     // Per-block mem2reg state: block_id -> (slot_key -> SsaId)
     std::vector<std::unordered_map<uint64_t, compiler::SsaId>> blk_slot_defs_;
     std::vector<PendingMemPhi> pending_mem_phis_;
-    std::vector<PendingSpvPhi> pending_spv_phis_;
 
-    // Track visited blocks for mem2reg recursion
     std::unordered_map<uint32_t, uint32_t> local_var_types_;
     std::set<std::string> seen_unsupported_;
 };

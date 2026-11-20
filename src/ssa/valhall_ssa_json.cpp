@@ -1,5 +1,6 @@
 #include "valhall_ssa_json.h"
 
+#include <cstdio>
 #include <sstream>
 
 namespace valhall::compiler {
@@ -55,147 +56,6 @@ const char* val_type_name(ValType vt) {
     return "Void";
 }
 
-const char* ssa_op_name(tables::SsaOp op) {
-    using tables::SsaOp;
-    switch (op) {
-        case SsaOp::Atan: return "Atan";
-        case SsaOp::AtomicCmpXchg: return "AtomicCmpXchg";
-        case SsaOp::AtomicExchange: return "AtomicExchange";
-        case SsaOp::AtomicRmw: return "AtomicRmw";
-        case SsaOp::BfeS: return "BfeS";
-        case SsaOp::BfeU: return "BfeU";
-        case SsaOp::Bfi: return "Bfi";
-        case SsaOp::BitAnd: return "BitAnd";
-        case SsaOp::BitAnd64: return "BitAnd64";
-        case SsaOp::BitCount: return "BitCount";
-        case SsaOp::BitNot: return "BitNot";
-        case SsaOp::BitNot64: return "BitNot64";
-        case SsaOp::BitOr: return "BitOr";
-        case SsaOp::BitOr64: return "BitOr64";
-        case SsaOp::BitReverse: return "BitReverse";
-        case SsaOp::BitXor: return "BitXor";
-        case SsaOp::BitXor64: return "BitXor64";
-        case SsaOp::Bitcast: return "Bitcast";
-        case SsaOp::Branch: return "Branch";
-        case SsaOp::BranchCond: return "BranchCond";
-        case SsaOp::Ceil: return "Ceil";
-        case SsaOp::Clz: return "Clz";
-        case SsaOp::ConstBool: return "ConstBool";
-        case SsaOp::ConstF32: return "ConstF32";
-        case SsaOp::ConstS32: return "ConstS32";
-        case SsaOp::ConstU32: return "ConstU32";
-        case SsaOp::ConstU64: return "ConstU64";
-        case SsaOp::ControlBarrier: return "ControlBarrier";
-        case SsaOp::ConvertFToS: return "ConvertFToS";
-        case SsaOp::ConvertFToU: return "ConvertFToU";
-        case SsaOp::ConvertSToF: return "ConvertSToF";
-        case SsaOp::ConvertUToF: return "ConvertUToF";
-        case SsaOp::Copy: return "Copy";
-        case SsaOp::Cos: return "Cos";
-        case SsaOp::Exp: return "Exp";
-        case SsaOp::Exp2: return "Exp2";
-        case SsaOp::FAbs: return "FAbs";
-        case SsaOp::FAdd: return "FAdd";
-        case SsaOp::FClamp: return "FClamp";
-        case SsaOp::FCmpOrdEq: return "FCmpOrdEq";
-        case SsaOp::FCmpOrdGe: return "FCmpOrdGe";
-        case SsaOp::FCmpOrdGt: return "FCmpOrdGt";
-        case SsaOp::FCmpOrdLe: return "FCmpOrdLe";
-        case SsaOp::FCmpOrdLt: return "FCmpOrdLt";
-        case SsaOp::FCmpOrdNe: return "FCmpOrdNe";
-        case SsaOp::FCmpTotal: return "FCmpTotal";
-        case SsaOp::FCmpUnordNe: return "FCmpUnordNe";
-        case SsaOp::FDiv: return "FDiv";
-        case SsaOp::FMax: return "FMax";
-        case SsaOp::FMin: return "FMin";
-        case SsaOp::FMul: return "FMul";
-        case SsaOp::FNeg: return "FNeg";
-        case SsaOp::FSub: return "FSub";
-        case SsaOp::Floor: return "Floor";
-        case SsaOp::Fma: return "Fma";
-        case SsaOp::FrexpExp: return "FrexpExp";
-        case SsaOp::FrexpSignificand: return "FrexpSignificand";
-        case SsaOp::IAdd: return "IAdd";
-        case SsaOp::IAdd64: return "IAdd64";
-        case SsaOp::ICmpEq: return "ICmpEq";
-        case SsaOp::ICmpNe: return "ICmpNe";
-        case SsaOp::ICmpSGe: return "ICmpSGe";
-        case SsaOp::ICmpSGt: return "ICmpSGt";
-        case SsaOp::ICmpSLe: return "ICmpSLe";
-        case SsaOp::ICmpSLt: return "ICmpSLt";
-        case SsaOp::ICmpUGe: return "ICmpUGe";
-        case SsaOp::ICmpUGt: return "ICmpUGt";
-        case SsaOp::ICmpULe: return "ICmpULe";
-        case SsaOp::ICmpULt: return "ICmpULt";
-        case SsaOp::IDot4S: return "IDot4S";
-        case SsaOp::IDot4SU: return "IDot4SU";
-        case SsaOp::IDot4U: return "IDot4U";
-        case SsaOp::IMul: return "IMul";
-        case SsaOp::IMul64: return "IMul64";
-        case SsaOp::ISub: return "ISub";
-        case SsaOp::ISub64: return "ISub64";
-        case SsaOp::InverseSqrt: return "InverseSqrt";
-        case SsaOp::IsInf: return "IsInf";
-        case SsaOp::IsNan: return "IsNan";
-        case SsaOp::Kill: return "Kill";
-        case SsaOp::Ldexp: return "Ldexp";
-        case SsaOp::LoadBuiltinInput: return "LoadBuiltinInput";
-        case SsaOp::LoadFau: return "LoadFau";
-        case SsaOp::LoadFragVarying: return "LoadFragVarying";
-        case SsaOp::LoadSidebandU32: return "LoadSidebandU32";
-        case SsaOp::LoadSidebandU64: return "LoadSidebandU64";
-        case SsaOp::LoadVertAttr: return "LoadVertAttr";
-        case SsaOp::Log: return "Log";
-        case SsaOp::Log2: return "Log2";
-        case SsaOp::LogicalAnd: return "LogicalAnd";
-        case SsaOp::LogicalNot: return "LogicalNot";
-        case SsaOp::LogicalOr: return "LogicalOr";
-        case SsaOp::NMax: return "NMax";
-        case SsaOp::NMin: return "NMin";
-        case SsaOp::Nop: return "Nop";
-        case SsaOp::Pack64: return "Pack64";
-        case SsaOp::PackHalf2x16: return "PackHalf2x16";
-        case SsaOp::Phi: return "Phi";
-        case SsaOp::Pow: return "Pow";
-        case SsaOp::PsbLoad: return "PsbLoad";
-        case SsaOp::PsbStore: return "PsbStore";
-        case SsaOp::Return: return "Return";
-        case SsaOp::RotL: return "RotL";
-        case SsaOp::RotR: return "RotR";
-        case SsaOp::RoundEven: return "RoundEven";
-        case SsaOp::SAbs: return "SAbs";
-        case SsaOp::SConvert32To64: return "SConvert32To64";
-        case SsaOp::SNeg: return "SNeg";
-        case SsaOp::Select: return "Select";
-        case SsaOp::Shl: return "Shl";
-        case SsaOp::Shl64: return "Shl64";
-        case SsaOp::ShrS: return "ShrS";
-        case SsaOp::ShrS64: return "ShrS64";
-        case SsaOp::ShrU: return "ShrU";
-        case SsaOp::ShrU64: return "ShrU64";
-        case SsaOp::Sin: return "Sin";
-        case SsaOp::Split64: return "Split64";
-        case SsaOp::Sqrt: return "Sqrt";
-        case SsaOp::StoreBuiltinOutput: return "StoreBuiltinOutput";
-        case SsaOp::StoreFragColor: return "StoreFragColor";
-        case SsaOp::StoreVertVarying: return "StoreVertVarying";
-        case SsaOp::SubgroupBallot: return "SubgroupBallot";
-        case SsaOp::SubgroupShuffle: return "SubgroupShuffle";
-        case SsaOp::TexSample: return "TexSample";
-        case SsaOp::Trunc: return "Trunc";
-        case SsaOp::TupleExtract: return "TupleExtract";
-        case SsaOp::UConvert32To64: return "UConvert32To64";
-        case SsaOp::UConvert64To32: return "UConvert64To32";
-        case SsaOp::UnpackHalf2x16: return "UnpackHalf2x16";
-        case SsaOp::VecConstruct2: return "VecConstruct2";
-        case SsaOp::VecConstruct3: return "VecConstruct3";
-        case SsaOp::VecConstruct4: return "VecConstruct4";
-        case SsaOp::VecExtract: return "VecExtract";
-        case SsaOp::VecShuffle: return "VecShuffle";
-    }
-    return "Nop";
-}
-
 std::string serialize_ssa_module_json(const ValhallSsaModule& mod) {
     std::ostringstream os;
     os << "{\"blocks\":[";
@@ -236,7 +96,7 @@ std::string serialize_ssa_module_json(const ValhallSsaModule& mod) {
         const auto& n = mod.nodes[i];
         if (i > 1) os << ',';
         os << "{\"id\":" << n.id
-           << ",\"op\":\"" << ssa_op_name(n.op) << '"'
+           << ",\"op\":\"" << tables::ssa_op_to_string(n.op) << '"'
            << ",\"type\":\"" << val_type_name(n.type) << '"'
            << ",\"blk\":" << n.block_id
            << ",\"args\":[";

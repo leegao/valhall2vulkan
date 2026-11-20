@@ -850,6 +850,18 @@
       "args": [
         "uint32_t"
       ]
+    },
+    "src_is_fau_tls": {
+      "ret": "bool",
+      "args": [
+        "uint32_t"
+      ]
+    },
+    "src_is_fau_wls": {
+      "ret": "bool",
+      "args": [
+        "uint32_t"
+      ]
     }
   },
   "lookup_tables": {
@@ -1151,6 +1163,10 @@
         "} else if (@src_is_fau_pc(%src_idx)) {",
         "  %pc_base : u64 = @load_sideband_u64(1);",
         "  return IAdd64(%pc_base, @ins_pc_u64());",
+        "} else if (@src_is_fau_tls(%src_idx)) {",
+        "  return @load_sideband_u64(6);",
+        "} else if (@src_is_fau_wls(%src_idx)) {",
+        "  return @load_sideband_u64(7);",
         "} else {",
         "  %base : uint32_t = @src_reg_base(%src_idx);",
         "  return @emit_pack_u64(@load_fau(%base), @load_fau(@add_u32(%base, 1)));",

@@ -1,67 +1,11 @@
 #include "spirv_module.h"
+#include "valhall_spirv_parser_generated.h"
 
 #include <algorithm>
 
 namespace valhall::spirv2ssa {
 
 namespace {
-
-constexpr uint32_t kSpirvMagic = 0x07230203u;
-
-// Core SPIR-V opcodes used during module parsing.
-constexpr uint16_t kOpUndef = 1;
-constexpr uint16_t kOpName = 5;
-constexpr uint16_t kOpExtInstImport = 11;
-constexpr uint16_t kOpEntryPoint = 15;
-constexpr uint16_t kOpExecutionMode = 16;
-constexpr uint16_t kOpTypeVoid = 19;
-constexpr uint16_t kOpTypeBool = 20;
-constexpr uint16_t kOpTypeInt = 21;
-constexpr uint16_t kOpTypeFloat = 22;
-constexpr uint16_t kOpTypeVector = 23;
-constexpr uint16_t kOpTypeMatrix = 24;
-constexpr uint16_t kOpTypeImage = 25;
-constexpr uint16_t kOpTypeSampler = 26;
-constexpr uint16_t kOpTypeSampledImage = 27;
-constexpr uint16_t kOpTypeArray = 28;
-constexpr uint16_t kOpTypeRuntimeArray = 29;
-constexpr uint16_t kOpTypeStruct = 30;
-constexpr uint16_t kOpTypePointer = 32;
-constexpr uint16_t kOpTypeFunction = 33;
-constexpr uint16_t kOpConstantTrue = 41;
-constexpr uint16_t kOpConstantFalse = 42;
-constexpr uint16_t kOpConstant = 43;
-constexpr uint16_t kOpConstantComposite = 44;
-constexpr uint16_t kOpConstantNull = 46;
-constexpr uint16_t kOpSpecConstantTrue = 48;
-constexpr uint16_t kOpSpecConstantFalse = 49;
-constexpr uint16_t kOpSpecConstant = 50;
-constexpr uint16_t kOpSpecConstantComposite = 51;
-constexpr uint16_t kOpFunction = 54;
-constexpr uint16_t kOpFunctionParameter = 55;
-constexpr uint16_t kOpFunctionEnd = 56;
-constexpr uint16_t kOpVariable = 59;
-constexpr uint16_t kOpDecorate = 71;
-constexpr uint16_t kOpMemberDecorate = 72;
-constexpr uint16_t kOpLabel = 248;
-
-// Decoration codes
-constexpr uint32_t kDecSpecId = 1;
-constexpr uint32_t kDecBlock = 2;
-constexpr uint32_t kDecBufferBlock = 3;
-constexpr uint32_t kDecRowMajor = 4;
-constexpr uint32_t kDecArrayStride = 6;
-constexpr uint32_t kDecMatrixStride = 7;
-constexpr uint32_t kDecBuiltIn = 11;
-constexpr uint32_t kDecFlat = 14;
-constexpr uint32_t kDecNonWritable = 24;
-constexpr uint32_t kDecLocation = 30;
-constexpr uint32_t kDecComponent = 31;
-constexpr uint32_t kDecBinding = 33;
-constexpr uint32_t kDecDescriptorSet = 34;
-constexpr uint32_t kDecOffset = 35;
-
-constexpr uint32_t kExecModeLocalSize = 17;
 
 std::string decode_literal_string(const uint32_t* words, size_t max_words, size_t* out_consumed = nullptr) {
     std::string s;
@@ -81,41 +25,41 @@ std::string decode_literal_string(const uint32_t* words, size_t max_words, size_
 }
 
 void apply_decoration(SpirvDecorationInfo& info, uint32_t dec, const uint32_t* args, size_t nargs) {
-    switch (dec) {
-        case kDecSpecId:
+    switch (static_cast<SpvDecoration>(dec)) {
+        case SpvDecorationSpecId:
             if (nargs >= 1) info.spec_id = static_cast<int32_t>(args[0]);
             break;
-        case kDecBlock:
+        case SpvDecorationBlock:
             info.block = true;
             break;
-        case kDecBufferBlock:
+        case SpvDecorationBufferBlock:
             info.buffer_block = true;
             break;
-        case kDecArrayStride:
+        case SpvDecorationArrayStride:
             if (nargs >= 1) info.array_stride = args[0];
             break;
-        case kDecBuiltIn:
+        case SpvDecorationBuiltIn:
             if (nargs >= 1) info.builtin = static_cast<int32_t>(args[0]);
             break;
-        case kDecFlat:
+        case SpvDecorationFlat:
             info.flat = true;
             break;
-        case kDecNonWritable:
+        case SpvDecorationNonWritable:
             info.non_writable = true;
             break;
-        case kDecLocation:
+        case SpvDecorationLocation:
             if (nargs >= 1) info.location = static_cast<int32_t>(args[0]);
             break;
-        case kDecComponent:
+        case SpvDecorationComponent:
             if (nargs >= 1) info.component = args[0];
             break;
-        case kDecBinding:
+        case SpvDecorationBinding:
             if (nargs >= 1) info.binding = static_cast<int32_t>(args[0]);
             break;
-        case kDecDescriptorSet:
+        case SpvDecorationDescriptorSet:
             if (nargs >= 1) info.descriptor_set = static_cast<int32_t>(args[0]);
             break;
-        case kDecOffset:
+        case SpvDecorationOffset:
             if (nargs >= 1) info.offset = args[0];
             break;
         default:
@@ -195,7 +139,7 @@ bool parse_spirv_module(
     }
     *out = SpirvModule{};
 
-    if (words.size() < 5 || words[0] != kSpirvMagic) {
+    if (words.size() < 5 || words[0] != SpvMagicNumber) {
         if (err) *err = "Invalid SPIR-V header or magic number";
         return false;
     }
@@ -208,28 +152,27 @@ bool parse_spirv_module(
 
     size_t idx = 5;
     while (idx < words.size()) {
-        uint32_t header = words[idx];
-        uint16_t wc = static_cast<uint16_t>(header >> 16);
-        uint16_t op = static_cast<uint16_t>(header & 0xFFFFu);
-        if (wc == 0 || idx + wc > words.size()) {
+        spirv_parser::DecodedSpvInst dec{};
+        if (!spirv_parser::decode_spv_instruction(&words[idx], words.size() - idx, &dec)) {
             if (err) *err = "Truncated or malformed SPIR-V instruction at word " + std::to_string(idx);
             return false;
         }
-        const uint32_t* w = &words[idx];
+        const uint32_t* w = dec.words;
+        const uint16_t wc = dec.word_count;
 
         if (cur_func != nullptr) {
-            if (op == kOpFunctionEnd) {
+            if (dec.opcode == SpvOpFunctionEnd) {
                 cur_func = nullptr;
                 cur_blk = nullptr;
-            } else if (op == kOpFunctionParameter && wc >= 3) {
-                cur_func->params.push_back({w[2], w[1]});
-            } else if (op == kOpLabel && wc >= 2) {
+            } else if (dec.opcode == SpvOpFunctionParameter && wc >= 3) {
+                cur_func->params.push_back({dec.result_id, dec.result_type});
+            } else if (dec.opcode == SpvOpLabel && wc >= 2) {
                 cur_func->blocks.emplace_back();
                 cur_blk = &cur_func->blocks.back();
                 cur_blk->label_id = w[1];
             } else if (cur_blk != nullptr) {
                 SpirvInst inst;
-                inst.opcode = op;
+                inst.opcode = static_cast<uint16_t>(dec.opcode);
                 inst.words.assign(w, w + wc);
                 cur_blk->insts.push_back(std::move(inst));
             }
@@ -237,20 +180,20 @@ bool parse_spirv_module(
             continue;
         }
 
-        switch (op) {
-            case kOpName:
+        switch (dec.opcode) {
+            case SpvOpName:
                 if (wc >= 3) {
                     out->names[w[1]] = decode_literal_string(w + 2, wc - 2);
                 }
                 break;
 
-            case kOpExtInstImport:
+            case SpvOpExtInstImport:
                 if (wc >= 3) {
                     out->ext_inst_imports[w[1]] = decode_literal_string(w + 2, wc - 2);
                 }
                 break;
 
-            case kOpEntryPoint:
+            case SpvOpEntryPoint:
                 if (wc >= 4) {
                     out->entry_point.execution_model = w[1];
                     out->entry_point.func_id = w[2];
@@ -262,26 +205,27 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpExecutionMode:
-                if (wc >= 6 && w[1] == out->entry_point.func_id && w[2] == kExecModeLocalSize) {
+            case SpvOpExecutionMode:
+                if (wc >= 6 && w[1] == out->entry_point.func_id &&
+                    static_cast<SpvExecutionMode>(w[2]) == SpvExecutionModeLocalSize) {
                     out->entry_point.local_size_x = std::max(1u, w[3]);
                     out->entry_point.local_size_y = std::max(1u, w[4]);
                     out->entry_point.local_size_z = std::max(1u, w[5]);
                 }
                 break;
 
-            case kOpDecorate:
+            case SpvOpDecorate:
                 if (wc >= 3) {
                     apply_decoration(out->decorations[w[1]], w[2], w + 3, wc - 3);
                 }
                 break;
 
-            case kOpMemberDecorate:
+            case SpvOpMemberDecorate:
                 if (wc >= 4) {
                     auto& md = out->member_decorations[{w[1], w[2]}];
-                    if (w[3] == kDecRowMajor) {
-                        md.flat = true; // reuse flag temporarily; transferred cleanly below
-                    } else if (w[3] == kDecMatrixStride && wc >= 5) {
+                    if (static_cast<SpvDecoration>(w[3]) == SpvDecorationRowMajor) {
+                        md.flat = true;
+                    } else if (static_cast<SpvDecoration>(w[3]) == SpvDecorationMatrixStride && wc >= 5) {
                         md.array_stride = w[4];
                     } else {
                         apply_decoration(md, w[3], w + 4, wc - 4);
@@ -289,7 +233,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeVoid:
+            case SpvOpTypeVoid:
                 if (wc >= 2) {
                     SpirvType t{};
                     t.id = w[1];
@@ -298,7 +242,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeBool:
+            case SpvOpTypeBool:
                 if (wc >= 2) {
                     SpirvType t{};
                     t.id = w[1];
@@ -308,7 +252,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeInt:
+            case SpvOpTypeInt:
                 if (wc >= 4) {
                     SpirvType t{};
                     t.id = w[1];
@@ -319,7 +263,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeFloat:
+            case SpvOpTypeFloat:
                 if (wc >= 3) {
                     SpirvType t{};
                     t.id = w[1];
@@ -329,7 +273,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeVector:
+            case SpvOpTypeVector:
                 if (wc >= 4) {
                     SpirvType t{};
                     t.id = w[1];
@@ -340,7 +284,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeMatrix:
+            case SpvOpTypeMatrix:
                 if (wc >= 4) {
                     SpirvType t{};
                     t.id = w[1];
@@ -351,7 +295,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeImage:
+            case SpvOpTypeImage:
                 if (wc >= 7) {
                     SpirvType t{};
                     t.id = w[1];
@@ -365,7 +309,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeSampler:
+            case SpvOpTypeSampler:
                 if (wc >= 2) {
                     SpirvType t{};
                     t.id = w[1];
@@ -374,7 +318,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeSampledImage:
+            case SpvOpTypeSampledImage:
                 if (wc >= 3) {
                     SpirvType t{};
                     t.id = w[1];
@@ -384,7 +328,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeArray:
+            case SpvOpTypeArray:
                 if (wc >= 4) {
                     SpirvType t{};
                     t.id = w[1];
@@ -395,7 +339,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeRuntimeArray:
+            case SpvOpTypeRuntimeArray:
                 if (wc >= 3) {
                     SpirvType t{};
                     t.id = w[1];
@@ -405,7 +349,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeStruct:
+            case SpvOpTypeStruct:
                 if (wc >= 2) {
                     SpirvType t{};
                     t.id = w[1];
@@ -417,7 +361,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypePointer:
+            case SpvOpTypePointer:
                 if (wc >= 4) {
                     SpirvType t{};
                     t.id = w[1];
@@ -428,7 +372,7 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpTypeFunction:
+            case SpvOpTypeFunction:
                 if (wc >= 3) {
                     SpirvType t{};
                     t.id = w[1];
@@ -441,39 +385,39 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpConstantTrue:
-            case kOpSpecConstantTrue:
+            case SpvOpConstantTrue:
+            case SpvOpSpecConstantTrue:
                 if (wc >= 3) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
                     c.kind = SpirvConstKind::Bool;
                     c.scalar_bits = 1;
-                    c.is_spec_const = (op == kOpSpecConstantTrue);
+                    c.is_spec_const = (dec.opcode == SpvOpSpecConstantTrue);
                     out->constants[c.id] = c;
                 }
                 break;
 
-            case kOpConstantFalse:
-            case kOpSpecConstantFalse:
+            case SpvOpConstantFalse:
+            case SpvOpSpecConstantFalse:
                 if (wc >= 3) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
                     c.kind = SpirvConstKind::Bool;
                     c.scalar_bits = 0;
-                    c.is_spec_const = (op == kOpSpecConstantFalse);
+                    c.is_spec_const = (dec.opcode == SpvOpSpecConstantFalse);
                     out->constants[c.id] = c;
                 }
                 break;
 
-            case kOpConstant:
-            case kOpSpecConstant:
+            case SpvOpConstant:
+            case SpvOpSpecConstant:
                 if (wc >= 4) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
-                    c.is_spec_const = (op == kOpSpecConstant);
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
+                    c.is_spec_const = (dec.opcode == SpvOpSpecConstant);
                     if (wc >= 5) {
                         c.kind = SpirvConstKind::Scalar64;
                         c.scalar_bits = uint64_t(w[3]) | (uint64_t(w[4]) << 32);
@@ -485,14 +429,14 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpConstantComposite:
-            case kOpSpecConstantComposite:
+            case SpvOpConstantComposite:
+            case SpvOpSpecConstantComposite:
                 if (wc >= 3) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
                     c.kind = SpirvConstKind::Composite;
-                    c.is_spec_const = (op == kOpSpecConstantComposite);
+                    c.is_spec_const = (dec.opcode == SpvOpSpecConstantComposite);
                     for (uint16_t k = 3; k < wc; ++k) {
                         c.constituents.push_back(w[k]);
                     }
@@ -500,42 +444,42 @@ bool parse_spirv_module(
                 }
                 break;
 
-            case kOpConstantNull:
+            case SpvOpConstantNull:
                 if (wc >= 3) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
                     c.kind = SpirvConstKind::Null;
                     out->constants[c.id] = c;
                 }
                 break;
 
-            case kOpUndef:
+            case SpvOpUndef:
                 if (wc >= 3) {
                     SpirvConstant c{};
-                    c.id = w[2];
-                    c.type_id = w[1];
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
                     c.kind = SpirvConstKind::Undef;
                     out->constants[c.id] = c;
                 }
                 break;
 
-            case kOpVariable:
+            case SpvOpVariable:
                 if (wc >= 4) {
                     SpirvVariable v{};
-                    v.id = w[2];
-                    v.ptr_type_id = w[1];
+                    v.id = dec.result_id;
+                    v.ptr_type_id = dec.result_type;
                     v.storage_class = w[3];
                     if (wc >= 5) v.initializer_id = w[4];
                     out->global_vars[v.id] = v;
                 }
                 break;
 
-            case kOpFunction:
+            case SpvOpFunction:
                 if (wc >= 5) {
                     SpirvFunction f{};
-                    f.id = w[2];
-                    f.return_type_id = w[1];
+                    f.id = dec.result_id;
+                    f.return_type_id = dec.result_type;
                     f.func_type_id = w[4];
                     auto [it, _] = out->functions.emplace(f.id, std::move(f));
                     cur_func = &it->second;
@@ -549,7 +493,6 @@ bool parse_spirv_module(
         idx += wc;
     }
 
-    // Resolve decorations onto types, constants, and global variables.
     for (auto& [tid, t] : out->types) {
         if (auto it = out->decorations.find(tid); it != out->decorations.end()) {
             t.array_stride = it->second.array_stride;

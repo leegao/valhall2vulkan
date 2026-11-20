@@ -173,6 +173,31 @@ def _try_const_u64(e: z3.ExprRef) -> Optional[int]:
     return None
 
 
+
+def _vec_len(vt: str) -> int:
+    if vt.startswith("V2"):
+        return 2
+    if vt.startswith("V3"):
+        return 3
+    if vt.startswith("V4"):
+        return 4
+    return 1
+
+
+def _eval_elementwise(vt: str, args: List[Z3Val], fn: Any) -> Z3Val:
+    vlen = _vec_len(vt)
+    is_vec = vlen > 1 or any(isinstance(a, tuple) for a in args)
+    if not is_vec:
+        return fn(*args)
+    if vlen == 1:
+        vlen = max(len(a) for a in args if isinstance(a, tuple))
+    lanes = []
+    for i in range(vlen):
+        lane_args = [a[i] if isinstance(a, tuple) and i < len(a) else a for a in args]
+        lanes.append(fn(*lane_args))
+    return tuple(lanes)
+
+
 class SharedShaderEnv:
     """Shared symbolic input & disjoint buffer address environment for both SSA modules."""
 
@@ -539,9 +564,12 @@ class DagSsaZ3Evaluator:
             return (f16_bv_to_f32_bv(z3.Extract(15, 0, u)), f16_bv_to_f32_bv(z3.Extract(31, 16, u)))
         if op == "PackHalf2x16":
             v2 = args[0]
-            f0 = f32_bv_to_f16_bv(_as_bv32(v2[0]))
-            f1 = f32_bv_to_f16_bv(_as_bv32(v2[1]))
-            return z3.Concat(f1, f0)
+            if isinstance(v2, tuple) and len(v2) >= 2:
+                f0 = f32_bv_to_f16_bv(_as_bv32(v2[0]))
+                f1 = f32_bv_to_f16_bv(_as_bv32(v2[1]))
+                return z3.Concat(f1, f0)
+            s = f32_bv_to_f16_bv(_as_bv32(v2))
+            return z3.Concat(s, s)
 
         # 32-bit Integer & Bitwise
         if op == "BitNot":
@@ -648,22 +676,26 @@ class DagSsaZ3Evaluator:
         if op == "Select":
             return _z3_if(_as_bool(args[0]), args[1], args[2])
 
-        # Floating-point operations
+        # Floating-point operations (lifted elementwise for V2F32 / v2f16 vectors)
         if op in ("FAbs", "FNeg", "Floor", "Ceil", "Trunc", "RoundEven", "Sqrt", "InverseSqrt",
                   "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "FrexpExp", "FrexpSignificand"):
-            return self._fp_unary(op, _as_bv32(args[0]))
+            return _eval_elementwise(vt, args, lambda x: self._fp_unary(op, _as_bv32(x)))
         if op in ("FAdd", "FSub", "FMul", "FDiv", "FMin", "FMax", "NMin", "NMax", "Pow", "Ldexp"):
-            return self._fp_binary(op, _as_bv32(args[0]), _as_bv32(args[1]))
+            return _eval_elementwise(vt, args, lambda x, y: self._fp_binary(op, _as_bv32(x), _as_bv32(y)))
         if op == "FClamp":
-            x, lo, hi = _as_bv32(args[0]), _as_bv32(args[1]), _as_bv32(args[2])
-            if self.fp_mode == "uf":
-                return _hw_uf("fp_FClamp", BV32, BV32, BV32, BV32)(x, lo, hi)
-            return fp32_to_bv32(z3.fpMin(z3.fpMax(bv32_to_fp32(x), bv32_to_fp32(lo)), bv32_to_fp32(hi)))
+            def _fclamp(x: Z3Val, lo: Z3Val, hi: Z3Val) -> z3.BitVecRef:
+                bx, blo, bhi = _as_bv32(x), _as_bv32(lo), _as_bv32(hi)
+                if self.fp_mode == "uf":
+                    return _hw_uf("fp_FClamp", BV32, BV32, BV32, BV32)(bx, blo, bhi)
+                return fp32_to_bv32(z3.fpMin(z3.fpMax(bv32_to_fp32(bx), bv32_to_fp32(blo)), bv32_to_fp32(bhi)))
+            return _eval_elementwise(vt, args, _fclamp)
         if op == "Fma":
-            a, b, c = _as_bv32(args[0]), _as_bv32(args[1]), _as_bv32(args[2])
-            if self.fp_mode == "uf":
-                return _hw_uf("fp_Fma", BV32, BV32, BV32, BV32)(a, b, c)
-            return fp32_to_bv32(z3.fpFMA(z3.RNE(), bv32_to_fp32(a), bv32_to_fp32(b), bv32_to_fp32(c)))
+            def _ffma(a: Z3Val, b: Z3Val, c: Z3Val) -> z3.BitVecRef:
+                ba, bb, bc = _as_bv32(a), _as_bv32(b), _as_bv32(c)
+                if self.fp_mode == "uf":
+                    return _hw_uf("fp_Fma", BV32, BV32, BV32, BV32)(ba, bb, bc)
+                return fp32_to_bv32(z3.fpFMA(z3.RNE(), bv32_to_fp32(ba), bv32_to_fp32(bb), bv32_to_fp32(bc)))
+            return _eval_elementwise(vt, args, _ffma)
         if op == "IsNan":
             x = _as_bv32(args[0])
             return z3.fpIsNaN(bv32_to_fp32(x)) if self.fp_mode == "exact" else _hw_uf("fp_IsNan", BV32, z3.BoolSort())(x)
@@ -699,6 +731,10 @@ class DagSsaZ3Evaluator:
         if op == "LoadSidebandU64":
             if aux_str and (aux_str.startswith("ssbo:") or aux_str.startswith("ubo:") or aux_str == "push_const" or aux_str.startswith("workgroup:")):
                 return bv64(self.env.get_buf_base(aux_str))
+            if imm_u32 == 6:
+                return bv64(self.env.get_buf_base("tls_private"))
+            if imm_u32 == 7:
+                return bv64(self.env.get_buf_base("wls_shared"))
             return _hw_uf(f"sideband_u64_{imm_u32}", BV32, BV64)(bv32(imm_u32))
         if op == "LoadSidebandU32":
             return _hw_uf(f"sideband_u32_{imm_u32}", BV32, BV32)(bv32(imm_u32_2))
@@ -1039,9 +1075,11 @@ def verify_equivalence_bundle(
         for c in range(4):
             checks.append((f"vert_var[{loc}][{c}]", dv[c], vv[c], None, f"vert_var[{loc}]"))
 
-    # 5. Constant-offset buffer stores (SSBO writes)
+    # 5. Constant-offset buffer stores (SSBO writes; skip private thread-local scratch spills)
     all_cs = sorted(set(d_st.const_stores.keys()) | set(v_st.const_stores.keys()))
     for bkey, off in all_cs:
+        if bkey in ("tls_private", "wls_shared"):
+            continue
         dw, dv = d_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
         vw, vv = v_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
         tag = f"{bkey}+0x{off:x}"

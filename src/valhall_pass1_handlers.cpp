@@ -706,6 +706,18 @@ bool src_swz_eq(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, 
            ins.srcs[src_idx].symbolic_name == "pc";
 }
 
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'thread_local_pointer'")]] bool src_is_fau_tls(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    return src_idx < ins.srcs.size() &&
+           ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
+           ins.srcs[src_idx].symbolic_name == "thread_local_pointer";
+}
+
+[[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'workgroup_local_pointer'")]] bool src_is_fau_wls(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
+    return src_idx < ins.srcs.size() &&
+           ins.srcs[src_idx].kind == SourceKind::FauSpecial &&
+           ins.srcs[src_idx].symbolic_name == "workgroup_local_pointer";
+}
+
 [[verifier::z3("InstLoweringContext", "args[0] < len(this.srcs) and this.srcs[args[0]].kind == 'FauSpecial' and this.srcs[args[0]].symbolic_name == 'lane_id'")]] bool src_is_fau_lane_id(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     return src_idx < ins.srcs.size() &&
            ins.srcs[src_idx].kind == SourceKind::FauSpecial &&

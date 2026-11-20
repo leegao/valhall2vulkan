@@ -284,5 +284,39 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertEqual(res.status, "UNSAT")
 
 
+    def test_v2f32_pack_half2x16_no_crash(self) -> None:
+        """Regression test for astc_enc.raw.spv: V2F32 FAdd -> PackHalf2x16 must not crash."""
+        ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadFragVarying", "type": "V4F32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 3, "op": "VecExtract", "type": "U32", "blk": 0, "args": [2], "imm_u32": 0},
+                {"id": 4, "op": "UnpackHalf2x16", "type": "V2F32", "blk": 0, "args": [3]},
+                {"id": 5, "op": "FAdd", "type": "V2F32", "blk": 0, "args": [4, 4]},
+                {"id": 6, "op": "PackHalf2x16", "type": "U32", "blk": 0, "args": [5]},
+                {"id": 7, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [6, 1], "imm_u32": 0},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_v2f16_pack.spv",
+            "stage": "Fragment",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": ssa,
+            "valhall_ssa": copy.deepcopy(ssa),
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+
 if __name__ == "__main__":
     unittest.main()

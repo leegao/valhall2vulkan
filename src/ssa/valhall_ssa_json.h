@@ -6,9 +6,6 @@
 
 namespace valhall::compiler {
 
-/// Return the canonical string name of an SsaOp enum value.
-const char* ssa_op_name(tables::SsaOp op);
-
 /// Return the canonical string name of a ValType enum value.
 const char* val_type_name(ValType vt);
 
