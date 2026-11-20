@@ -161,23 +161,57 @@ target_link_libraries(valhall2spirv PUBLIC
     "${VULKAN_LIBRARY}"
 )
 
-foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler)
-    add_executable(${test_name} "tests/${test_name}.cpp")
-    target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
-    target_link_libraries(${test_name} PRIVATE valhall2spirv)
-    add_test(NAME ${test_name}
-        COMMAND ${test_name}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-endforeach()
-
 add_library(moc_hook SHARED
     tools/moc_hook/moc_hook.c
 )
 set_target_properties(moc_hook PROPERTIES OUTPUT_NAME moc_hook)
 target_compile_options(moc_hook PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(moc_hook PRIVATE ${CMAKE_DL_LIBS})
+
+add_library(spirv2valhall_lib STATIC
+    tools/spirv2valhall/spirv2valhall.cpp
+)
+target_include_directories(spirv2valhall_lib PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
+)
+target_compile_options(spirv2valhall_lib PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_definitions(spirv2valhall_lib PRIVATE
+    SPIRV2VALHALL_DEFAULT_MOC_HOOK_PATH="$<TARGET_FILE:moc_hook>"
+)
+target_link_libraries(spirv2valhall_lib PUBLIC valhall2spirv)
+add_dependencies(spirv2valhall_lib moc_hook)
+
+add_executable(spirv2valhall
+    tools/spirv2valhall/main.cpp
+)
+target_compile_options(spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(spirv2valhall PRIVATE spirv2valhall_lib)
+add_dependencies(spirv2valhall moc_hook)
+
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler)
+    add_executable(${test_name} "tests/${test_name}.cpp")
+    target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(${test_name} PRIVATE valhall2spirv spirv2valhall_lib)
+    add_test(NAME ${test_name}
+        COMMAND ${test_name}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+endforeach()
+
+add_executable(test_spirv2valhall tests/test_spirv2valhall.cpp)
+target_include_directories(test_spirv2valhall PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
+target_compile_options(test_spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_definitions(test_spirv2valhall PRIVATE
+    TEST_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    SPIRV2VALHALL_BIN_PATH="$<TARGET_FILE:spirv2valhall>"
+)
+target_link_libraries(test_spirv2valhall PRIVATE spirv2valhall_lib)
+add_dependencies(test_spirv2valhall spirv2valhall moc_hook)
+add_test(NAME test_spirv2valhall
+    COMMAND test_spirv2valhall
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 add_executable(test_moc_roundtrip_compute tests/test_moc_roundtrip_compute.cpp)
 target_include_directories(test_moc_roundtrip_compute PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
@@ -186,8 +220,8 @@ target_compile_definitions(test_moc_roundtrip_compute PRIVATE
     TEST_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     MOC_HOOK_PATH="$<TARGET_FILE:moc_hook>"
 )
-target_link_libraries(test_moc_roundtrip_compute PRIVATE valhall2spirv)
-add_dependencies(test_moc_roundtrip_compute moc_hook)
+target_link_libraries(test_moc_roundtrip_compute PRIVATE valhall2spirv spirv2valhall_lib)
+add_dependencies(test_moc_roundtrip_compute moc_hook spirv2valhall)
 add_test(NAME test_moc_roundtrip_compute
     COMMAND test_moc_roundtrip_compute
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -196,7 +230,7 @@ add_test(NAME test_moc_roundtrip_compute
 add_executable(test_moc_roundtrip_graphics tests/test_moc_roundtrip_graphics.cpp)
 target_include_directories(test_moc_roundtrip_graphics PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 target_compile_options(test_moc_roundtrip_graphics PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_link_libraries(test_moc_roundtrip_graphics PRIVATE valhall2spirv)
+target_link_libraries(test_moc_roundtrip_graphics PRIVATE valhall2spirv spirv2valhall_lib)
 add_test(NAME test_moc_roundtrip_graphics
     COMMAND test_moc_roundtrip_graphics
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

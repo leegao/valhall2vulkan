@@ -7408,6 +7408,7 @@ Adds floating-point operands \texttt{src0} and \texttt{src1} independently for e
 \par\textbf{Notes:}
 \begin{tightitemize}
   \item Clamp suppresses NaN (\texttt{x.ieee\_max(lo).ieee\_min(hi)}, \texttt{ops.rs:1136-1143}).
+  \item \texttt{sticky} (\texttt{fadd\_sticky\_m}) enables IEEE-754 round-to-odd (jamming LSB to 1 on inexact sums; \texttt{\_mali\_sf64\_to\_sf32\_sticky} \texttt{0x2e297a0}).
   \item \texttt{dest\_width\_narrow} narrows f32-\textgreater{}f16 using \texttt{round} (\texttt{dst\_mod\_prop.rs:226-229}, \texttt{builder.rs:50-65}).
   \item \textbf{Source references:} \texttt{kraid/ops.rs:1267-1302}, \texttt{encode\_v9.rs:1271-1315}, \texttt{dst\_mod\_prop.rs:199-236}, \texttt{hw\_tests.rs:1486-1519}.
 \end{tightitemize}
@@ -8023,7 +8024,7 @@ Field Name & Bits & Type / Fixed Value \\
 \subsection*{FMAX}
 \addcontentsline{toc}{subsection}{FMAX}
 Computes IEEE-754 maximum independently for each floating-point element $i \in \{0, \dots, N-1\}$ ($N=1$ \texttt{f32}, $N=2$ \texttt{v2f16}) with deterministic \texttt{-0.0 \textless{} +0.0}. Under \texttt{nan\_suppress} (default), a non-NaN wins over NaN; under \texttt{nan\_propagate}, returns the quietened winning NaN preserving sign and payload (\texttt{\textbar{} qbit}). Optional \texttt{clamp} runs after \texttt{sem}.
-\par\textbf{Note:} Verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_max*\_sf32} (\texttt{0x2e28300, 0x2e28590}) and \texttt{kraid/ops.rs:1862-1902}.
+\par\textbf{Note:} Verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_max*\_sf32} (\texttt{0x2e28300, 0x2e28590}) / \texttt{\_mali\_max\_sf16} (\texttt{0x2e28450}) and \texttt{kraid/ops.rs:1862-1902}: when both inputs are NaN, both \texttt{nan\_suppress} and \texttt{nan\_propagate} quieten both (\texttt{\textbar{} qbit}) and pick the larger NaN under unsigned total-order key.
 \codebox{\mnem{FMAX}\imod{\{.flow\}}\imod{\{.sem\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.widen0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.widen1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}\\\mnem{FMAX}\imod{\{.flow\}}\imod{\{.sem\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.swz0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.swz1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}}
 \textbf{Operands:}
 \begin{tightitemize}\footnotesize
@@ -8114,7 +8115,7 @@ Field Name & Bits & Type / Fixed Value \\
 \subsection*{FMIN}
 \addcontentsline{toc}{subsection}{FMIN}
 Computes IEEE-754 minimum independently for each floating-point element $i \in \{0, \dots, N-1\}$ ($N=1$ \texttt{f32}, $N=2$ \texttt{v2f16}) with deterministic \texttt{-0.0 \textless{} +0.0}. Under \texttt{nan\_suppress} (default), a non-NaN wins over NaN; under \texttt{nan\_propagate}, returns the quietened winning NaN preserving sign and payload (\texttt{\textbar{} qbit}). Optional \texttt{clamp} runs after \texttt{sem}.
-\par\textbf{Note:} Verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_min\_sf32} (\texttt{0x2e28500}) and \texttt{kraid/ops.rs:1907-1947}.
+\par\textbf{Note:} Verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_min\_sf32} (\texttt{0x2e28500}) / \texttt{\_mali\_min\_sf16} (\texttt{0x2e283a0}) and \texttt{kraid/ops.rs:1907-1947}: when both inputs are NaN, even \texttt{nan\_suppress} quietens both (\texttt{\textbar{} qbit}) and picks the larger NaN under unsigned total-order key.
 \codebox{\mnem{FMIN}\imod{\{.flow\}}\imod{\{.sem\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.widen0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.widen1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}\\\mnem{FMIN}\imod{\{.flow\}}\imod{\{.sem\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.swz0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.swz1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}}
 \textbf{Operands:}
 \begin{tightitemize}\footnotesize
@@ -8207,8 +8208,8 @@ Field Name & Bits & Type / Fixed Value \\
 Multiplies floating-point \texttt{src0} and \texttt{src1} independently for each SIMD element $i \in \{0, \dots, N-1\}$ ($N=1$ \texttt{f32}, $N=2$ \texttt{v2f16}): \texttt{dest[i] = clamp(round\_rm(src0[i] * src1[i]))} (hardware alias of \texttt{FMA(src0, src1, -0.0)} so \texttt{(+0.0)*(-0.0)} preserves \texttt{-0.0}).
 \par\textbf{Notes:}
 \begin{tightitemize}
-  \item In \texttt{kraid/nir.rs:896-904}, \texttt{nir\_op\_fmul} lowers to \texttt{OpFma(a, b, -0.0)}.
-  \item \texttt{a*b + (-0.0)} preserves \texttt{-0.0} sign for \texttt{(+0)*(-0)}.
+  \item In \texttt{kraid/nir.rs:896-904} and \texttt{malioc} v10 (\texttt{neg2=neg}), \texttt{FMUL} encodes \texttt{FMA(a, b, -0.0)} so \texttt{a*b + (-0.0)} preserves \texttt{-0.0} under RNE/RTP/RTZ.
+  \item Explicit \texttt{neg2=none} adds \texttt{+0.0}, flushing \texttt{-0.0} to \texttt{+0.0}.
   \item \textbf{Source references:} \texttt{kraid/nir.rs:896-904}, \texttt{isa-v9-v14.xml}.
 \end{tightitemize}
 \codebox{\mnem{FMUL}\imod{\{.flow\}}\imod{\{.round\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\_narrow\}}, \src{src0}\imod{\{.widen0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.widen1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}\\\mnem{FMUL}\imod{\{.flow\}}\imod{\{.round\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.swz0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}, \src{src1}\imod{\{.swz1\}}\imod{\{.abs1\}}\imod{\{.neg1\}}}
@@ -9083,6 +9084,7 @@ Reduces normal FP32 \texttt{src1} into the logarithm mantissa interval $[0.75, 1
 \par\textbf{Notes:}
 \begin{tightitemize}
   \item Used in \texttt{flog2\_32\_to} with \texttt{src0 = -1.0} (\texttt{builder.rs:410-415}).
+  \item Supports \texttt{sticky} round-to-odd (\texttt{fadd\_sticky\_m}).
   \item Verified in \texttt{hw\_tests.rs:1522-1550}.
   \item \textbf{Source references:} \texttt{kraid/ops.rs:1308-1354}, \texttt{encode\_v9.rs:1317-1339}, \texttt{builder.rs:409-415}, \texttt{hw\_tests.rs:1522-1550}.
 \end{tightitemize}
@@ -10561,7 +10563,7 @@ Field Name & Bits & Type / Fixed Value \\
 Extracts the signed integer exponent $E$ of each floating-point element $i \in \{0, \dots, N-1\}$ of \texttt{src0} ($N=1$ \texttt{f32}, $N=2$ \texttt{v2f16}), returning \texttt{0} for \texttt{$\pm$0}, \texttt{$\pm$Inf}, and \texttt{NaN}: \texttt{none} gives \texttt{e - 126} (\texttt{[0.5, 1.0)}), \texttt{sqrt} gives \texttt{(e - 125) \textgreater{}\textgreater{} 1} (\texttt{[0.25, 1.0)}), and \texttt{log} gives \texttt{(e - 127) + top\_mant\_bit} (\texttt{[0.75, 1.5)}). Negates the result when \texttt{neg\_result=neg}.
 \par\textbf{Notes:}
 \begin{tightitemize}
-  \item Bit-exact verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_frexpe\_*} (\texttt{0x2e291d0..0x2e293c8}).
+  \item Bit-exact verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_frexpe\_*} (\texttt{0x2e291d0..0x2e293c8}, \texttt{\_mali\_frexpe\_sf16} \texttt{0x2e294b0}).
   \item \texttt{v2f16} arch v9--v10 only.
 \end{tightitemize}
 \codebox{\mnem{FREXPE}\imod{\{.flow\}}\imod{\{.special\}}\imod{\{.neg\_result\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.widen0\}}\\\mnem{FREXPE}\imod{\{.flow\}}\imod{\{.special\}}\imod{\{.neg\_result\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.swz0\}}}
@@ -10645,7 +10647,7 @@ Field Name & Bits & Type / Fixed Value \\
 Extracts the normalized significand $M$ of each floating-point element $i \in \{0, \dots, N-1\}$ of \texttt{src0} ($N=1$ \texttt{f32}, $N=2$ \texttt{v2f16}): passes \texttt{$\pm$0} unchanged and quietens \texttt{NaN}; maps finite values into \texttt{[0.5, 1.0)} (\texttt{none}), \texttt{[0.25, 1.0)} (\texttt{sqrt}), or \texttt{[0.75, 1.5)} (\texttt{log}). On \texttt{$\pm$Inf}, \texttt{none}/\texttt{sqrt} return \texttt{$\pm$Inf} whereas \texttt{log} returns \texttt{$\pm$1.0} (\texttt{x \& 0xbf800000}).
 \par\textbf{Notes:}
 \begin{tightitemize}
-  \item Bit-exact verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_frexpm\_*} (\texttt{0x2e28fb0..0x2e2914c}).
+  \item Bit-exact verified in \texttt{libGLES\_mali.so} \texttt{\_mali\_frexpm\_*} (\texttt{0x2e28fb0..0x2e2914c}, \texttt{\_mali\_frexpm\_sf16} \texttt{0x2e293d0}).
   \item \texttt{v2f16} arch v9--v10 only.
 \end{tightitemize}
 \codebox{\mnem{FREXPM}\imod{\{.flow\}}\imod{\{.special\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.widen0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}\\\mnem{FREXPM}\imod{\{.flow\}}\imod{\{.special\}} \dst{dest}\imod{\{.dest\_width\}}, \src{src0}\imod{\{.swz0\}}\imod{\{.abs0\}}\imod{\{.neg0\}}}
@@ -12561,7 +12563,7 @@ Narrows FP32 \texttt{src0} to IEEE-754 FP16 after applying optional \texttt{clam
 \par\textbf{Notes:}
 \begin{tightitemize}
   \item Arch v11-v14 only (v9-v10 uses \texttt{V2F32\_TO\_V2F16} or \texttt{FADD.f32.hf0/hf1}).
-  \item Single source (\texttt{src1} fixed to \texttt{-0.0}).
+  \item Single source (\texttt{src1} fixed to \texttt{0.0} with \texttt{neg1=neg} in \texttt{malioc} v12 to preserve \texttt{-0.0}; explicit \texttt{neg1=none} adds \texttt{+0.0} flushing \texttt{-0.0 -\textgreater{} +0.0}).
   \item \textbf{Source references:} \texttt{kraid/builder.rs:50-65}, \texttt{nir.rs:642-663}, \texttt{isa-v9-v14.xml}.
 \end{tightitemize}
 \codebox{\mnem{F32\_TO\_F16}\imod{\{.flow\}}\imod{\{.round\}}\imod{\{.clamp\}} \dst{dest}\imod{\{.dest\_width\_narrow\}}, \src{src0}\imod{\{.abs0\}}\imod{\{.neg0\}}}
@@ -15694,7 +15696,7 @@ Field Name & Bits & Type / Fixed Value \\
 Bounds-checked memory load (v12+) at 64-bit base address \texttt{src0} plus immediate unsigned byte offset \texttt{\#offset} (\texttt{offset\_lo} + \texttt{offset\_hi}): if \texttt{\#offset + access\_bytes \textless{}= src2}, loads into \texttt{@sw}; otherwise returns \texttt{0} (or leaves \texttt{@sw} unchanged when \texttt{.oob\_ignore} is set on v14).
 \par\textbf{Notes:}
 \begin{tightitemize}
-  \item Robust buffer access with immediate offset.
+  \item Robust buffer access with 12-bit unsigned split immediate offset \texttt{((offset\_hi \& 0xF) \textless{}\textless{} 8) \textbar{} (offset\_lo \& 0xFF)} and full-width bounds check \texttt{offset + access\_bytes \textless{}= bound}.
   \item \textbf{Source references:} \texttt{isa-v9-v14.xml}.
 \end{tightitemize}
 \codebox{\mnem{LD\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.access\}} \dst{@sw}, \src{src0}, \imm{\#offset}, \src{src2}\\\mnem{LD\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.oob\_mode\}}\imod{\{.access\}} \dst{@sw}, \src{src0}, \imm{\#offset}, \src{src2}\\\mnem{LD\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.access\}}\imod{\{.lane\}} \dst{@sw}, \src{src0}, \imm{\#offset}, \src{src2}\\\mnem{LD\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.oob\_mode\}}\imod{\{.access\}}\imod{\{.lane\}} \dst{@sw}, \src{src0}, \imm{\#offset}, \src{src2}}
@@ -16970,7 +16972,7 @@ Field Name & Bits & Type / Fixed Value \\
 Bounds-checked memory store (v12+) at 64-bit base address \texttt{src0} plus immediate unsigned byte offset \texttt{\#offset} (\texttt{offset\_lo} + \texttt{offset\_hi}): if \texttt{\#offset + access\_bytes \textless{}= src2}, writes \texttt{@sr} to memory; out-of-bounds stores are silently dropped.
 \par\textbf{Notes:}
 \begin{tightitemize}
-  \item Robust buffer access store with immediate offset.
+  \item Robust buffer access store with 12-bit unsigned split immediate offset \texttt{((offset\_hi \& 0xF) \textless{}\textless{} 8) \textbar{} (offset\_lo \& 0xFF)} and full-width bounds check \texttt{offset + access\_bytes \textless{}= bound}.
   \item \textbf{Source references:} \texttt{isa-v9-v14.xml}.
 \end{tightitemize}
 \codebox{\mnem{ST\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.access\}} \src{@sr}, \src{src0}, \imm{\#offset}, \src{src2}\\\mnem{ST\_CHECKED\_IMM}\imod{\{.message\_slot\_index\}}\imod{\{.flow\}}\imod{\{.access\}}\imod{\{.lane\}} \src{@sr}, \src{src0}, \imm{\#offset}, \src{src2}}

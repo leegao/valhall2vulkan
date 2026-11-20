@@ -260,7 +260,7 @@ ISA_SEMANTICS = {
     'FADD': {
         "category": 'Floating-Point ALU & Canonicalization',
         "behavior": 'Adds floating-point operands `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ for `f32`, $N=2$ for packed `v2f16`), rounding via `round` and applying optional post-op `clamp`: `dest[i] = clamp(round_rm(src0[i] + src1[i]))`.',
-        "notes": 'Clamp suppresses NaN (`x.ieee_max(lo).ieee_min(hi)`, `ops.rs:1136-1143`). `dest_width_narrow` narrows f32->f16 using `round` (`dst_mod_prop.rs:226-229`, `builder.rs:50-65`). (`kraid/ops.rs:1267-1302`, `encode_v9.rs:1271-1315`, `dst_mod_prop.rs:199-236`, `hw_tests.rs:1486-1519`)',
+        "notes": 'Clamp suppresses NaN (`x.ieee_max(lo).ieee_min(hi)`, `ops.rs:1136-1143`). `sticky` (`fadd_sticky_m`) enables IEEE-754 round-to-odd (jamming LSB to 1 on inexact sums; `_mali_sf64_to_sf32_sticky` `0x2e297a0`). `dest_width_narrow` narrows f32->f16 using `round` (`dst_mod_prop.rs:226-229`, `builder.rs:50-65`). (`kraid/ops.rs:1267-1302`, `encode_v9.rs:1271-1315`, `dst_mod_prop.rs:199-236`, `hw_tests.rs:1486-1519`)',
     },
     'FADD_IMM': {
         "category": 'Floating-Point ALU & Canonicalization',
@@ -295,17 +295,17 @@ ISA_SEMANTICS = {
     'FMAX': {
         "category": 'Floating-Point ALU & Canonicalization',
         "behavior": 'Computes IEEE-754 maximum independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`) with deterministic `-0.0 < +0.0`. Under `nan_suppress` (default), a non-NaN wins over NaN; under `nan_propagate`, returns the quietened winning NaN preserving sign and payload (`| qbit`). Optional `clamp` runs after `sem`.',
-        "notes": 'Verified in `libGLES_mali.so` `_mali_max*_sf32` (`0x2e28300, 0x2e28590`) and `kraid/ops.rs:1862-1902`.',
+        "notes": 'Verified in `libGLES_mali.so` `_mali_max*_sf32` (`0x2e28300, 0x2e28590`) / `_mali_max_sf16` (`0x2e28450`) and `kraid/ops.rs:1862-1902`: when both inputs are NaN, both `nan_suppress` and `nan_propagate` quieten both (`| qbit`) and pick the larger NaN under unsigned total-order key.',
     },
     'FMIN': {
         "category": 'Floating-Point ALU & Canonicalization',
         "behavior": 'Computes IEEE-754 minimum independently for each floating-point element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`) with deterministic `-0.0 < +0.0`. Under `nan_suppress` (default), a non-NaN wins over NaN; under `nan_propagate`, returns the quietened winning NaN preserving sign and payload (`| qbit`). Optional `clamp` runs after `sem`.',
-        "notes": 'Verified in `libGLES_mali.so` `_mali_min_sf32` (`0x2e28500`) and `kraid/ops.rs:1907-1947`.',
+        "notes": 'Verified in `libGLES_mali.so` `_mali_min_sf32` (`0x2e28500`) / `_mali_min_sf16` (`0x2e283a0`) and `kraid/ops.rs:1907-1947`: when both inputs are NaN, even `nan_suppress` quietens both (`| qbit`) and picks the larger NaN under unsigned total-order key.',
     },
     'FMUL': {
         "category": 'Floating-Point ALU & Canonicalization',
         "behavior": 'Multiplies floating-point `src0` and `src1` independently for each SIMD element $i \\in \\{0, \\dots, N-1\\}$ ($N=1$ `f32`, $N=2$ `v2f16`): `dest[i] = clamp(round_rm(src0[i] * src1[i]))` (hardware alias of `FMA(src0, src1, -0.0)` so `(+0.0)*(-0.0)` preserves `-0.0`).',
-        "notes": 'In `kraid/nir.rs:896-904`, `nir_op_fmul` lowers to `OpFma(a, b, -0.0)`. `a*b + (-0.0)` preserves `-0.0` sign for `(+0)*(-0)`. (`kraid/nir.rs:896-904`, `isa-v9-v14.xml`)',
+        "notes": 'In `kraid/nir.rs:896-904` and `malioc` v10 (`neg2=neg`), `FMUL` encodes `FMA(a, b, -0.0)` so `a*b + (-0.0)` preserves `-0.0` under RNE/RTP/RTZ; explicit `neg2=none` adds `+0.0`, flushing `-0.0` to `+0.0`. (`kraid/nir.rs:896-904`, `isa-v9-v14.xml`)',
     },
     'FNEG': {
         "category": 'Floating-Point ALU & Canonicalization',
@@ -355,7 +355,7 @@ ISA_SEMANTICS = {
     'FADD_LSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
         "behavior": 'Reduces normal FP32 `src1` into the logarithm mantissa interval $[0.75, 1.5)$ (forcing exponent to 0 so $m \\in [1.0, 2.0)$, then halving $m$ if $|m| \\ge 1.5$; non-normals pass unchanged) and computes `dest = clamp(round_rm(src0 + reduce_log(src1)))`. Paired with `src0 = -1.0` to compute $m - 1$ for `log2`.',
-        "notes": 'Used in `flog2_32_to` with `src0 = -1.0` (`builder.rs:410-415`). Verified in `hw_tests.rs:1522-1550`. (`kraid/ops.rs:1308-1354`, `encode_v9.rs:1317-1339`, `builder.rs:409-415`, `hw_tests.rs:1522-1550`)',
+        "notes": 'Used in `flog2_32_to` with `src0 = -1.0` (`builder.rs:410-415`). Supports `sticky` round-to-odd (`fadd_sticky_m`). Verified in `hw_tests.rs:1522-1550`. (`kraid/ops.rs:1308-1354`, `encode_v9.rs:1317-1339`, `builder.rs:409-415`, `hw_tests.rs:1522-1550`)',
     },
     'FADD_RSCALE': {
         "category": 'SFU Range-Reduction & Helpers',
@@ -445,12 +445,12 @@ ISA_SEMANTICS = {
     'FREXPE': {
         "category": 'SFU Range-Reduction & Helpers',
         "behavior": 'Extracts the signed integer exponent $E$ of each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`), returning `0` for `±0`, `±Inf`, and `NaN`: `none` gives `e - 126` (`[0.5, 1.0)`), `sqrt` gives `(e - 125) >> 1` (`[0.25, 1.0)`), and `log` gives `(e - 127) + top_mant_bit` (`[0.75, 1.5)`). Negates the result when `neg_result=neg`.',
-        "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpe_*` (`0x2e291d0..0x2e293c8`). `v2f16` arch v9--v10 only.',
+        "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpe_*` (`0x2e291d0..0x2e293c8`, `_mali_frexpe_sf16` `0x2e294b0`). `v2f16` arch v9--v10 only.',
     },
     'FREXPM': {
         "category": 'SFU Range-Reduction & Helpers',
         "behavior": 'Extracts the normalized significand $M$ of each floating-point element $i \\in \\{0, \\dots, N-1\\}$ of `src0` ($N=1$ `f32`, $N=2$ `v2f16`): passes `±0` unchanged and quietens `NaN`; maps finite values into `[0.5, 1.0)` (`none`), `[0.25, 1.0)` (`sqrt`), or `[0.75, 1.5)` (`log`). On `±Inf`, `none`/`sqrt` return `±Inf` whereas `log` returns `±1.0` (`x & 0xbf800000`).',
-        "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpm_*` (`0x2e28fb0..0x2e2914c`). `v2f16` arch v9--v10 only.',
+        "notes": 'Bit-exact verified in `libGLES_mali.so` `_mali_frexpm_*` (`0x2e28fb0..0x2e2914c`, `_mali_frexpm_sf16` `0x2e293d0`). `v2f16` arch v9--v10 only.',
     },
     'FRSQ_APPROX': {
         "category": 'SFU Range-Reduction & Helpers',
@@ -560,7 +560,7 @@ ISA_SEMANTICS = {
     'F32_TO_F16': {
         "category": 'Conversions',
         "behavior": 'Narrows FP32 `src0` to IEEE-754 FP16 after applying optional `clamp` and `round` modifiers, and writes the 16-bit result into `dest.h0`, `dest.h1` (preserving the other halfword), or replicated into both halves (`dest.h01`) per `dest_width_narrow` (v11--v14 alias of `FADD.f32(src0, -0.0)`).',
-        "notes": 'Arch v11-v14 only (v9-v10 uses `V2F32_TO_V2F16` or `FADD.f32.hf0/hf1`). Single source (`src1` fixed to `-0.0`). (`kraid/builder.rs:50-65`, `nir.rs:642-663`, `isa-v9-v14.xml`)',
+        "notes": 'Arch v11-v14 only (v9-v10 uses `V2F32_TO_V2F16` or `FADD.f32.hf0/hf1`). Single source (`src1` fixed to `0.0` with `neg1=neg` in `malioc` v12 to preserve `-0.0`; explicit `neg1=none` adds `+0.0` flushing `-0.0 -> +0.0`). (`kraid/builder.rs:50-65`, `nir.rs:642-663`, `isa-v9-v14.xml`)',
     },
     'F32_TO_S32': {
         "category": 'Conversions',
@@ -760,7 +760,7 @@ ISA_SEMANTICS = {
     'LD_CHECKED_IMM': {
         "category": 'Memory Load / Store & LEA',
         "behavior": 'Bounds-checked memory load (v12+) at 64-bit base address `src0` plus immediate unsigned byte offset `#offset` (`offset_lo` + `offset_hi`): if `#offset + access_bytes <= src2`, loads into `@sw`; otherwise returns `0` (or leaves `@sw` unchanged when `.oob_ignore` is set on v14).',
-        "notes": 'Robust buffer access with immediate offset. (`isa-v9-v14.xml`)',
+        "notes": 'Robust buffer access with 12-bit unsigned split immediate offset `((offset_hi & 0xF) << 8) | (offset_lo & 0xFF)` and full-width bounds check `offset + access_bytes <= bound`. (`isa-v9-v14.xml`)',
     },
     'LD_CVT': {
         "category": 'Memory Load / Store & LEA',
@@ -835,7 +835,7 @@ ISA_SEMANTICS = {
     'ST_CHECKED_IMM': {
         "category": 'Memory Load / Store & LEA',
         "behavior": 'Bounds-checked memory store (v12+) at 64-bit base address `src0` plus immediate unsigned byte offset `#offset` (`offset_lo` + `offset_hi`): if `#offset + access_bytes <= src2`, writes `@sr` to memory; out-of-bounds stores are silently dropped.',
-        "notes": 'Robust buffer access store with immediate offset. (`isa-v9-v14.xml`)',
+        "notes": 'Robust buffer access store with 12-bit unsigned split immediate offset `((offset_hi & 0xF) << 8) | (offset_lo & 0xFF)` and full-width bounds check `offset + access_bytes <= bound`. (`isa-v9-v14.xml`)',
     },
     'ST_CVT': {
         "category": 'Memory Load / Store & LEA',

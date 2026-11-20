@@ -3,6 +3,7 @@
 #include "valhall_to_spirv.h"
 #include "valhall_csf_pipeline.h"
 #include "cmpbe_chunks.h"
+#include "spirv2valhall.h"
 #include "spirv_reflect.h"
 
 #include <cassert>
@@ -79,14 +80,27 @@ int main() {
         int rc1 = std::system(cmd1.c_str());
         assert(rc1 == 0);
 
-        std::string cmd2 = "MOC_DUMP_PATH=" + live_dump_h + " LD_PRELOAD=" + hook_so + " " +
-                           malioc_bin + " -c Mali-G615 --vulkan " + sample_comp_path + " > /dev/null";
-        int rc2 = std::system(cmd2.c_str());
-        assert(rc2 == 0);
+        valhall::spirv2valhall::ExtractOptions s2v_opts;
+        s2v_opts.core = "Mali-G615";
+        s2v_opts.malioc_path = malioc_bin;
+        s2v_opts.moc_hook_path = hook_so;
+        s2v_opts.dump_header_path = live_dump_h;
+
+        valhall::spirv2valhall::ExtractResult s2v_res;
+        std::string s2v_err;
+        bool ok = valhall::spirv2valhall::extract_valhall_from_spirv(ref_spv_path, s2v_opts, &s2v_res, &s2v_err);
+        if (!ok) {
+            std::cerr << "[FAIL] spirv2valhall extraction failed: " << s2v_err << "\n";
+            std::abort();
+        }
+        assert(s2v_res.stage_info.stage == valhall::spirv2valhall::ShaderStage::Compute);
+        assert(!s2v_res.ebins.empty());
+        assert(s2v_res.ebins[0].invalid_count == 0);
 
         std::ifstream f_live(live_dump_h);
         assert(f_live.good());
-        std::cout << "[PASS] Compiled sample.comp to reference SPIR-V and extracted live MSB2 via malioc + libmoc_hook.so\n";
+        std::cout << "[PASS] Compiled sample.comp to reference SPIR-V and extracted live MBS2 via tools/spirv2valhall ("
+                  << s2v_res.ebins.size() << " EBINs, " << s2v_res.ebins[0].instructions.size() << " insts)\n";
     }
 
     auto ref_spirv = read_spirv_file(ref_spv_path);

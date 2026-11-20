@@ -541,5 +541,132 @@ class TestPanfrostZ3Model(unittest.TestCase):
         self.assertIn("hw_trap(KABOOM)", tr_kab.side_effects)
 
 
+    def test_reg_v21_round3_audit_fixes(self) -> None:
+        def eval_u(expr: z3.ExprRef) -> int:
+            s = z3.Solver()
+            self.assertEqual(s.check(), z3.sat)
+            return s.model().eval(expr, model_completion=True).as_long()
+
+        # A3-01: LD_CHECKED_IMM split offset_lo + offset_hi & full-width bounds check
+        st0 = ValhallZ3State.symbolic("mem_a301")
+        _, st1, _ = eval_panfrost_instruction(
+            "STORE", "i32", [bv64(0x1000), bv32(0xCAFEBABE)], modifiers={"offset": 0x120}, state=st0
+        )
+        ld_hi, _, _ = eval_panfrost_instruction(
+            "LD_CHECKED_IMM", "i32", [bv64(0x1000), bv32(0x124)],
+            modifiers={"offset_lo": 0x20, "offset_hi": 0x1}, state=st1
+        )
+        self.assertEqual(eval_u(ld_hi), 0xCAFEBABE)
+        # Partial tail OOB: offset=0x120 + width=4 = 0x124 > bound=0x122 -> 0
+        ld_tail_oob, _, _ = eval_panfrost_instruction(
+            "LD_CHECKED_IMM", "i32", [bv64(0x1000), bv32(0x122)],
+            modifiers={"offset_lo": 0x20, "offset_hi": 0x1}, state=st1
+        )
+        self.assertEqual(eval_u(ld_tail_oob), 0)
+        # Partial tail OOB on ST_CHECKED.i32: idx=14, bound=16 (14+4=18 > 16) -> memory unchanged
+        _, st2, _ = eval_panfrost_instruction(
+            "ST_CHECKED", "i32", [bv64(0x1000), bv32(14), bv32(16), bv32(0xDEADBEEF)], state=st1
+        )
+        orig_b = z3.Select(st1.mem_global, bv64(0x100E))
+        after_b = z3.Select(st2.mem_global, bv64(0x100E))
+        s_mem = z3.Solver()
+        s_mem.add(orig_b != after_b)
+        self.assertEqual(s_mem.check(), z3.unsat)
+
+        # A3-02: v2i16 / v4i8 shift broadcast swizzles (lanes1=b0..b3) replicate to all lanes
+        sh_v2, _, tr_sh = eval_panfrost_instruction(
+            "LSHIFT", "v2i16", [bv32(0x00030002), bv32(0x00000400)], modifiers={"lanes1": "b1"}
+        )
+        self.assertEqual(eval_u(sh_v2), 0x00300020)
+        self.assertEqual(tr_sh.stage_a_srcs[1]["lane_bits"], 16)
+        sh_v4, _, _ = eval_panfrost_instruction(
+            "LSHIFT", "v4i8", [bv32(0x04030201), bv32(0x00020000)], modifiers={"lanes1": "b2"}
+        )
+        self.assertEqual(eval_u(sh_v4), 0x100C0804)
+
+        # A3-03: FMIN/FMAX sem="nan_suppress" two-NaN quieted total-order tie-break
+        fmin_2nan, _, _ = eval_panfrost_instruction(
+            "FMIN", "f32", [bv32(0x7FC00001), bv32(0x7FC00005)], modifiers={"sem": "nan_suppress"}
+        )
+        self.assertEqual(eval_u(fmin_2nan), 0x7FC00005)
+        fmax_2nan_sign, _, _ = eval_panfrost_instruction(
+            "FMAX", "f32", [bv32(0xFFC00009), bv32(0x7FC00001)], modifiers={"sem": "nan_suppress"}
+        )
+        self.assertEqual(eval_u(fmax_2nan_sign), 0x7FC00001)
+        fmin_v2_2nan, _, _ = eval_panfrost_instruction(
+            "FMIN", "v2f16", [bv32(0x7E017E05), bv32(0x7E037E02)], modifiers={"sem": "nan_suppress"}
+        )
+        self.assertEqual(eval_u(fmin_v2_2nan), 0x7E037E05)
+
+        # A3-04: FMUL neg2 & F32_TO_F16 neg1 signed-zero preservation
+        fmul_neg2, _, _ = eval_panfrost_instruction(
+            "FMUL", "f32", [bv32(0x80000000), bv32(0x3F800000)], modifiers={"neg2": "neg"}
+        )
+        self.assertEqual(eval_u(fmul_neg2), 0x80000000)
+        fmul_pos2, _, _ = eval_panfrost_instruction(
+            "FMUL", "f32", [bv32(0x80000000), bv32(0x3F800000)], modifiers={"neg2": "none"}
+        )
+        self.assertEqual(eval_u(fmul_pos2), 0x00000000)
+        f32_f16_neg1, _, _ = eval_panfrost_instruction(
+            "F32_TO_F16", "", [bv32(0x80000000)], modifiers={"neg1": "neg", "dest_width_narrow": "h0"}
+        )
+        self.assertEqual(eval_u(f32_f16_neg1) & 0xFFFF, 0x8000)
+        f32_f16_pos1, _, _ = eval_panfrost_instruction(
+            "F32_TO_F16", "", [bv32(0x80000000)], modifiers={"neg1": "none", "dest_width_narrow": "h0"}
+        )
+        self.assertEqual(eval_u(f32_f16_pos1) & 0xFFFF, 0x0000)
+
+        # A3-05: FADD.sticky round-to-odd (jamming)
+        # 1.0f (0x3F800000) + 2^-25 (0x33000000) is inexact -> RNE gives 0x3F800000, sticky jams LSB to 0x3F800001
+        fadd_sticky, _, _ = eval_panfrost_instruction(
+            "FADD", "f32", [bv32(0x3F800000), bv32(0x33000000)], modifiers={"sticky": "sticky"}
+        )
+        self.assertEqual(eval_u(fadd_sticky), 0x3F800001)
+        fadd_exact, _, _ = eval_panfrost_instruction(
+            "FADD", "f32", [bv32(0x3F800000), bv32(0x40000000)], modifiers={"sticky": "sticky"}
+        )
+        self.assertEqual(eval_u(fadd_exact), 0x40400000)
+        fadd_zero_cancel, _, _ = eval_panfrost_instruction(
+            "FADD", "f32", [bv32(0x80000000), bv32(0x00000000)], modifiers={"sticky": "sticky"}
+        )
+        self.assertEqual(eval_u(fadd_zero_cancel), 0x00000000)
+
+        # A3-06: Bit-exact LDEXP.f32 & LDEXP.v2f16 (normal, .inf, .inf0)
+        ld_std, _, _ = eval_panfrost_instruction("LDEXP", "f32", [bv32(0x3FC00000), bv32(3)])  # 1.5 * 8 = 12.0
+        self.assertEqual(eval_u(ld_std), 0x41400000)
+        ld_inf_clamp, _, _ = eval_panfrost_instruction(
+            "LDEXP", "f32", [bv32(0x7F800000), bv32(-16385)], modifiers={"inf": "inf"}
+        )
+        self.assertEqual(eval_u(ld_inf_clamp), 0x3F800000)  # +Inf -> +1.0
+        ld_inf0_zero, _, _ = eval_panfrost_instruction(
+            "LDEXP", "f32", [bv32(0x00000000), bv32(16384)], modifiers={"inf": "inf0"}
+        )
+        self.assertEqual(eval_u(ld_inf0_zero), 0x3F800000)  # +0.0 -> +1.0
+        ld_v2, _, _ = eval_panfrost_instruction("LDEXP", "v2f16", [bv32(0x3C003E00), bv32(0x00020001)])
+        self.assertEqual(eval_u(ld_v2), 0x44004200)  # [1.5*2=3.0 (0x4200), 1.0*4=4.0 (0x4400)]
+
+        # A3-07: Bit-exact FREXPE.v2f16 & FREXPM.v2f16
+        fe_v2, _, _ = eval_panfrost_instruction("FREXPE", "v2f16", [bv32(0xB8004200)])  # [3.0 -> 2, -0.5 -> 0]
+        self.assertEqual(eval_u(fe_v2), 0x00000002)
+        fm_v2, _, _ = eval_panfrost_instruction("FREXPM", "v2f16", [bv32(0xB8004200)])  # [3.0 -> 0.75 (0x3A00), -0.5 -> -0.5 (0xB800)]
+        self.assertEqual(eval_u(fm_v2), 0xB8003A00)
+
+        # A3-08: Exact 64-entry LUT FSIN_TABLE.u6 & FCOS_TABLE.u6 (offset=False)
+        sin_16, _, _ = eval_panfrost_instruction("FSIN_TABLE", "u6", [bv32(0x49000010)])  # sin(16*pi/32) = 1.0
+        self.assertEqual(eval_u(sin_16), 0x3F800000)
+        sin_0, _, _ = eval_panfrost_instruction("FSIN_TABLE", "u6", [bv32(0x49000000)])   # sin(0) = -0.0
+        self.assertEqual(eval_u(sin_0), 0x80000000)
+        cos_0, _, _ = eval_panfrost_instruction("FCOS_TABLE", "u6", [bv32(0x49000000)])   # cos(0) = 1.0
+        self.assertEqual(eval_u(cos_0), 0x3F800000)
+        cos_48, _, _ = eval_panfrost_instruction("FCOS_TABLE", "u6", [bv32(0x49000030)])  # cos(48*pi/32) = -0.0
+        self.assertEqual(eval_u(cos_48), 0x80000000)
+        sin_bad_exp, _, _ = eval_panfrost_instruction("FSIN_TABLE", "u6", [bv32(0x3F800000)])  # exp != 146 -> -0.0
+        self.assertEqual(eval_u(sin_bad_exp), 0x80000000)
+
+        # A3-09: Enhanced ModelTrace summary
+        summary = tr_sh.format_summary()
+        self.assertIn("lanes1=b1", summary)
+        self.assertIn("lane_bits=16", summary)
+
 if __name__ == "__main__":
     unittest.main()

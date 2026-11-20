@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import math
+import struct
 import xml.etree.ElementTree as ET
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -211,6 +213,21 @@ def _fp_ieee_max_bv(bits: int, a_bv: z3.BitVecRef, b_bv: z3.BitVecRef) -> z3.Bit
     return z3.If(both_zero, zero_res, z3.fpToIEEEBV(z3.fpMax(fa, fb)))
 
 
+def _fp_add_sticky_bv(bits: int, fa: z3.FPRef, fb: z3.FPRef) -> z3.BitVecRef:
+    """Exact IEEE-754 round-to-odd (jamming) for Valhall fadd_sticky_m='sticky' (_mali_sf64_to_sf32_sticky)."""
+    lo_fp = z3.fpAdd(z3.RTN(), fa, fb)
+    hi_fp = z3.fpAdd(z3.RTP(), fa, fb)
+    lo_bv = z3.fpToIEEEBV(lo_fp)
+    hi_bv = z3.fpToIEEEBV(hi_fp)
+    rtz_bv = z3.fpToIEEEBV(z3.fpAdd(z3.RTZ(), fa, fb))
+    both_zero = z3.And(z3.fpIsZero(lo_fp), z3.fpIsZero(hi_fp))
+    return z3.If(
+        both_zero,
+        z3.BitVecVal(0, bits),
+        z3.If(lo_bv == hi_bv, lo_bv, rtz_bv | z3.BitVecVal(1, bits)),
+    )
+
+
 def _fp_to_int_sat(
     f: z3.FPRef, bits: int, signed: bool, rm: Any, src_bits: int = 32
 ) -> z3.BitVecRef:
@@ -248,6 +265,7 @@ def _fp_to_int_sat(
 class ModelTrace:
     mnemonic: str
     variant: str
+    modifiers: Dict[str, Any] = dataclasses.field(default_factory=dict)
     stage_a_srcs: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     stage_b_note: str = ""
     stage_c_note: str = ""
@@ -255,11 +273,14 @@ class ModelTrace:
     side_effects: List[str] = dataclasses.field(default_factory=list)
 
     def format_summary(self) -> str:
-        lines = [f"[Psi_pan] {self.mnemonic}.{self.variant or '<none>'}"]
+        mod_str = ", ".join(f"{k}={v}" for k, v in sorted(self.modifiers.items())) if self.modifiers else "none"
+        lines = [f"[Psi_pan] {self.mnemonic}.{self.variant or '<none>'} (mods: {mod_str})"]
         for s in self.stage_a_srcs:
+            lb = s.get("lane_bits", 32)
+            sw = s.get("signed_widen", False)
             lines.append(
-                f"  StageA src{s['idx']}: swz={s['swz'] or 'none'} "
-                f"abs={s['abs']} neg={s['neg']} not={s['not']}"
+                f"  StageA src{s['idx']}(m{s.get('mod_idx', s['idx'])}): swz={s['swz'] or 'none'} "
+                f"lane_bits={lb} sext={sw} abs={s['abs']} neg={s['neg']} not={s['not']}"
             )
         if self.stage_b_note:
             lines.append(f"  StageB: {self.stage_b_note}")
@@ -302,10 +323,17 @@ class VerificationLogger:
                 bits = val.size()
                 width = bits // 4
                 if bits == 32:
-                    import struct
                     s = u - (1 << 32) if (u & (1 << 31)) else u
                     f_str = f"{struct.unpack('<f', struct.pack('<I', u))[0]!r}"
-                    return f"0x{u:0{width}x} (i32={s}, f32={f_str})"
+                    h0_f = struct.unpack('<e', struct.pack('<H', u & 0xFFFF))[0]
+                    h1_f = struct.unpack('<e', struct.pack('<H', (u >> 16) & 0xFFFF))[0]
+                    return f"0x{u:0{width}x} (i32={s}, f32={f_str}, v2f16=[{h0_f!r}, {h1_f!r}])"
+                if bits == 64:
+                    s = u - (1 << 64) if (u & (1 << 63)) else u
+                    return f"0x{u:0{width}x} (i64={s})"
+                if bits == 16:
+                    h_f = struct.unpack('<e', struct.pack('<H', u))[0]
+                    return f"0x{u:0{width}x} (f16={h_f!r})"
                 return f"0x{u:0{width}x}"
             return str(val)
 
@@ -1061,23 +1089,30 @@ def _sem_fp_alu(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
             rhs = z3.fpBVToFP(z3.Extract(bits - 1, 0, imm), sort)
             out = z3.fpAdd(rm, fxs[0], rhs)
         elif mnem == "FADD":
+            if _mod_bool(mods, "sticky", False):
+                return _fp_add_sticky_bv(bits, fxs[0], fxs[1])
             out = z3.fpAdd(rm, fxs[0], fxs[1])
         elif mnem == "FMUL":
-            out = z3.fpMul(rm, fxs[0], fxs[1])
+            if "neg2" in mods:
+                addend_bv = z3.BitVecVal(1 << (bits - 1), bits) if _mod_bool(mods, "neg2", True) else z3.BitVecVal(0, bits)
+                out = z3.fpFMA(rm, fxs[0], fxs[1], z3.fpBVToFP(addend_bv, sort))
+            else:
+                out = z3.fpMul(rm, fxs[0], fxs[1])
         elif mnem == "FMA":
             out = z3.fpFMA(rm, fxs[0], fxs[1], fxs[2])
         elif mnem in ("FMIN", "FMAX"):
             core_bv = _fp_ieee_min_bv(bits, xs[0], xs[1]) if mnem == "FMIN" else _fp_ieee_max_bv(bits, xs[0], xs[1])
+            qbit = z3.BitVecVal(0x0200 if bits == 16 else 0x00400000, bits)
+            n0, n1 = z3.fpIsNaN(fxs[0]), z3.fpIsNaN(fxs[1])
+            q0, q1 = xs[0] | qbit, xs[1] | qbit
+            both_nan_pick = z3.If(_fp_total_le_bv(bits, q0, q1), q1, q0)
             if propagate_nan:
-                qbit = z3.BitVecVal(0x0200 if bits == 16 else 0x00400000, bits)
-                n0, n1 = z3.fpIsNaN(fxs[0]), z3.fpIsNaN(fxs[1])
-                both_nan_pick = z3.If(_fp_total_le_bv(bits, xs[0], xs[1]), xs[1] | qbit, xs[0] | qbit)
                 return z3.If(
                     z3.And(n0, n1),
                     both_nan_pick,
-                    z3.If(n0, xs[0] | qbit, z3.If(n1, xs[1] | qbit, core_bv)),
+                    z3.If(n0, q0, z3.If(n1, q1, core_bv)),
                 )
-            return core_bv
+            return z3.If(z3.And(n0, n1), both_nan_pick, core_bv)
         elif mnem == "FABS":
             out = z3.fpAbs(fxs[0])
         elif mnem == "FNEG":
@@ -1127,13 +1162,52 @@ def _sem_fpclass(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, 
     return _hw_uf("FPCLASS_f32", BV32, BV32)(srcs[0]), st
 
 
+def _ldexp_lane_bv(bits: int, x_bv: z3.BitVecRef, exp_bv: z3.BitVecRef, rm: Any, inf_mode: str) -> z3.BitVecRef:
+    """Bit-exact LDEXP lane matching _mali_ldexp_{sf32,sf16,inf_sf32,inf0_sf32} (0x2e28740..0x2e28b60)."""
+    sort = FP16_SORT if bits == 16 else FP32_SORT
+    fx = z3.fpBVToFP(x_bv, sort)
+    exp32 = z3.SignExt(16, exp_bv) if bits == 16 else exp_bv
+    sign_mask = z3.BitVecVal(1 << (bits - 1), bits)
+    sign_x = x_bv & sign_mask
+    qbit = z3.BitVecVal(0x0200 if bits == 16 else 0x00400000, bits)
+    one_bits = z3.BitVecVal(0x3C00 if bits == 16 else 0x3F800000, bits)
+    inf_bits = z3.BitVecVal(0x7C00 if bits == 16 else 0x7F800000, bits)
+
+    # Exact FP64 scaling by 2^clamp(exp32, -512, 512), then single-round to target sort
+    fx64 = z3.fpFPToFP(z3.RNE(), fx, FP64_SORT)
+    scaled64 = z3.fpMul(z3.RNE(), fx64, _fp64_pow2_clamped(exp32))
+    std_bv = z3.fpToIEEEBV(z3.fpFPToFP(rm, scaled64, sort))
+    std_bv = z3.If(z3.fpIsNaN(fx), x_bv | qbit, z3.If(z3.Or(z3.fpIsZero(fx), z3.fpIsInf(fx)), x_bv, std_bv))
+
+    if inf_mode in ("inf", "inf0"):
+        lo_res = z3.If(
+            z3.fpIsNaN(fx),
+            x_bv | qbit,
+            z3.If(z3.fpIsInf(fx), sign_x | one_bits, sign_x),
+        )
+        res = z3.If(exp32 < bv32(-16384), lo_res, std_bv)
+        if inf_mode == "inf0":
+            hi_res = z3.If(
+                z3.fpIsNaN(fx),
+                x_bv | qbit,
+                z3.If(z3.fpIsZero(fx), sign_x | one_bits, sign_x | inf_bits),
+            )
+            res = z3.If(exp32 >= bv32(16384), hi_res, res)
+        return res
+    return std_bv
+
+
 def _sem_ldexp(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any], st: ValhallZ3State, tr: ModelTrace):
-    """LDEXP.f32 / LDEXP.v2f16 with round & inf (none/inf/inf0) modifiers (no clamp)."""
+    """Bit-exact LDEXP.f32 / LDEXP.v2f16 with round & inf (none/inf/inf0) modifiers (no clamp)."""
     is_v2f16 = "v2f16" in (var or "").lower()
     rm_name = str(mods.get("round", "rte")).lower()
+    rm = _z3_rm(rm_name)
     inf_mode = str(mods.get("inf", "none")).lower()
-    uf_name = f"LDEXP_{'v2f16' if is_v2f16 else 'f32'}_{rm_name}_{inf_mode}"
-    res = _hw_uf(uf_name, BV32, BV32, BV32)(srcs[0], srcs[1])
+    res = _eval_per_comp_32(
+        "v2f16" if is_v2f16 else "f32",
+        [srcs[0], srcs[1]],
+        lambda b, xs: _ldexp_lane_bv(b, xs[0], xs[1], rm, inf_mode),
+    )
     tr.stage_b_note = f"LDEXP.{var} rm={rm_name} inf={inf_mode}"
     return res, st
 
@@ -1150,9 +1224,10 @@ def _sem_fadd_lscale(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[s
     m_abs = z3.fpAbs(m)
     reduced_m = z3.If(z3.fpGEQ(m_abs, z3.FPVal(1.5, FP32_SORT)), z3.fpMul(z3.RNE(), m, z3.FPVal(0.5, FP32_SORT)), m)
     reduced_b = z3.If(z3.fpIsNormal(cb), reduced_m, cb)
-    sum_fp = z3.fpAdd(rm, ca, reduced_b)
-    res = apply_clamp_f32(fp32_to_bv32(sum_fp), clamp)
-    tr.stage_b_note = f"FADD_LSCALE.f32 rm={mods.get('round','rte')} clamp={clamp}"
+    sticky = _mod_bool(mods, "sticky", False)
+    sum_bv = _fp_add_sticky_bv(32, ca, reduced_b) if sticky else fp32_to_bv32(z3.fpAdd(rm, ca, reduced_b))
+    res = apply_clamp_f32(sum_bv, clamp)
+    tr.stage_b_note = f"FADD_LSCALE.f32 rm={mods.get('round','rte')} sticky={sticky} clamp={clamp}"
     return res, st
 
 
@@ -1263,18 +1338,65 @@ def _frexp_lane_f32(x: z3.BitVecRef, is_exp: bool, special: str, neg_result: boo
     return z3.If(is_nan, qnan, z3.If(z3.Or(is_zero, is_inf), x, normal_m))
 
 
+def _f32_bits(val: float) -> int:
+    return struct.unpack("<I", struct.pack("<f", val))[0]
+
+
+_FSIN_TABLE_64: Tuple[int, ...] = tuple(
+    0x80000000 if i == 0 else (0x00000000 if i == 32 else _f32_bits(math.sin(i * math.pi / 32.0)))
+    for i in range(64)
+)
+_FCOS_TABLE_64: Tuple[int, ...] = tuple(
+    0x00000000 if i == 16 else (0x80000000 if i == 48 else _f32_bits(math.cos(i * math.pi / 32.0)))
+    for i in range(64)
+)
+
+
+def _eval_fsincos_table_u6(x: z3.BitVecRef, is_sin: bool) -> z3.BitVecRef:
+    """Exact OpFSinTable / OpFCosTable (kraid/ops.rs:1570-1584, 2133-2147; offset=False)."""
+    f = bv32_to_fp32(x)
+    idx = x & bv32(0x3F)
+    lut = _FSIN_TABLE_64 if is_sin else _FCOS_TABLE_64
+    tbl_val = bv32(lut[63])
+    for i in range(62, -1, -1):
+        tbl_val = z3.If(idx == bv32(i), bv32(lut[i]), tbl_val)
+    sign_exp = z3.Extract(31, 23, x)
+    # Only (sign=0, exp=127+19=146 -> 0x092) performs table lookup; others return -0.0
+    non_special = z3.If(sign_exp == z3.BitVecVal(146, 9), tbl_val, bv32(0x80000000))
+    return z3.If(z3.fpIsNaN(f), x, z3.If(z3.fpIsInf(f), bv32(0x7FC00000), non_special))
+
+
+def _frexp_lane_f16(x16: z3.BitVecRef, is_exp: bool, special: str, neg_result: bool) -> z3.BitVecRef:
+    """Bit-exact FREXPE/FREXPM.v2f16 lane matching _mali_frexp{e,m}_sf16 (0x2e293d0..0x2e29548)."""
+    x32 = f16_bv_to_f32_bv(x16)
+    res32 = _frexp_lane_f32(x32, is_exp, special, neg_result)
+    if is_exp:
+        return z3.Extract(15, 0, res32)
+    f16 = bv16_to_fp16(x16)
+    return z3.If(z3.fpIsNaN(f16), x16 | bv16(0x0200), f32_bv_to_f16_bv(res32, z3.RNE()))
+
+
 def _sem_sfu_helper(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any], st: ValhallZ3State, tr: ModelTrace):
     if mnem in ("FREXPE", "FREXPM"):
         special = str(mods.get("special", "log" if _mod_bool(mods, "log") else ("sqrt" if _mod_bool(mods, "sqrt") else "none"))).lower()
         neg_res = _mod_bool(mods, "neg_result", False)
         is_exp = mnem == "FREXPE"
-        if (var or "f32").lower() == "f32":
+        v = (var or "f32").lower()
+        if v == "f32":
             res = _frexp_lane_f32(srcs[0], is_exp, special, neg_res)
             tr.stage_b_note = f"{mnem}.f32 special={special} neg_result={neg_res}"
+            return res, st
+        if v == "v2f16":
+            res = _eval_per_comp_32("v2f16", [srcs[0]], lambda b, xs: _frexp_lane_f16(xs[0], is_exp, special, neg_res))
+            tr.stage_b_note = f"{mnem}.v2f16 special={special} neg_result={neg_res}"
             return res, st
         sorts = [BV32] * len(srcs) + [BV32]
         res = _hw_uf(f"{mnem}_{var}_{special}_n{int(neg_res)}", *sorts)(*srcs)
         tr.stage_b_note = f"{mnem}.{var} special={special} neg_result={neg_res}"
+        return res, st
+    if mnem in ("FSIN_TABLE", "FCOS_TABLE") and not _mod_bool(mods, "offset", False):
+        res = _eval_fsincos_table_u6(srcs[0], is_sin=(mnem == "FSIN_TABLE"))
+        tr.stage_b_note = f"{mnem}.u6 offset=False (exact 64-entry LUT)"
         return res, st
     # Include distinguishing semantic modifiers in UF names to avoid collisions
     mod_parts = []
@@ -1496,6 +1618,9 @@ def _sem_conv(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, Any
     if mnem == "F16_TO_F32":
         return apply_clamp_f32(f16_bv_to_f32_bv(z3.Extract(15, 0, x)), clamp), st
     if mnem == "F32_TO_F16":
+        if "neg1" in mods:
+            addend_bv = bv32(0x80000000) if _mod_bool(mods, "neg1", True) else bv32(0x00000000)
+            x = fp32_to_bv32(z3.fpAdd(rm, bv32_to_fp32(x), bv32_to_fp32(addend_bv)))
         c0 = apply_clamp_f32(x, clamp)
         lo = f32_bv_to_f16_bv(c0, rm)
         return z3.Concat(bv16(0), lo), st
@@ -1676,7 +1801,12 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
     _var_widths = {"i8": 1, "i16": 2, "i24": 3, "i32": 4, "i48": 6, "i64": 8, "i96": 12, "i128": 16}
     mw = str(mods.get("memory_width", var or "")).lower()
     width_bytes = int(mods["width_bytes"]) if "width_bytes" in mods else _var_widths.get(mw, 4)
-    offset_int = _mod_int(mods, "offset", "offset_lo", default=0)
+    if "offset" in mods and mods["offset"] is not None:
+        offset_int = int(mods["offset"])
+    else:
+        off_lo = _mod_int(mods, "offset_lo", default=0) & 0xFF
+        off_hi = _mod_int(mods, "offset_hi", default=0) & 0xF
+        offset_int = (off_hi << 8) | off_lo
     offset = bv64(offset_int)
     base_addr = (srcs[0] if srcs[0].size() == 64 else z3.ZeroExt(32, srcs[0])) if srcs else bv64(0)
     lane = str(mods.get("lane", "")).lower()
@@ -1691,12 +1821,12 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
             addr = base_addr + z3.ZeroExt(32, idx32) + offset
             if len(srcs) > 2 and not oob_ignore:
                 bound32 = z3.Extract(31, 0, srcs[2])
-                in_bounds = z3.ULT(idx32, bound32)
+                in_bounds = z3.ULE(z3.ZeroExt(32, idx32) + bv64(width_bytes), z3.ZeroExt(32, bound32))
         elif mnem == "LD_CHECKED_IMM":
             addr = base_addr + offset
             if len(srcs) > 1 and not oob_ignore:
                 bound32 = z3.Extract(31, 0, srcs[1])
-                in_bounds = z3.ULT(bv32(offset_int & 0xFFFFFFFF), bound32)
+                in_bounds = z3.ULE(bv64((offset_int & 0xFFFFFFFF) + width_bytes), z3.ZeroExt(32, bound32))
         else:
             addr = base_addr + offset
 
@@ -1723,13 +1853,13 @@ def _sem_memory(mnem: str, var: str, srcs: List[z3.BitVecRef], mods: Dict[str, A
             data = srcs[3] if len(srcs) > 3 else (srcs[2] if len(srcs) > 2 else bv32(0))
             if len(srcs) > 2 and not oob_ignore:
                 bound32 = z3.Extract(31, 0, srcs[2])
-                in_bounds = z3.ULT(idx32, bound32)
+                in_bounds = z3.ULE(z3.ZeroExt(32, idx32) + bv64(width_bytes), z3.ZeroExt(32, bound32))
         elif mnem == "ST_CHECKED_IMM":
             addr = base_addr + offset
             data = srcs[2] if len(srcs) > 2 else (srcs[1] if len(srcs) > 1 else bv32(0))
             if len(srcs) > 1 and not oob_ignore:
                 bound32 = z3.Extract(31, 0, srcs[1])
-                in_bounds = z3.ULT(bv32(offset_int & 0xFFFFFFFF), bound32)
+                in_bounds = z3.ULE(bv64((offset_int & 0xFFFFFFFF) + width_bytes), z3.ZeroExt(32, bound32))
         else:
             addr = base_addr + offset
             data = srcs[1] if len(srcs) > 1 else bv32(0)
@@ -2024,7 +2154,7 @@ def eval_panfrost_instruction(
     if mnem not in PANFROST_SEMANTICS:
         raise KeyError(f"Mnemonic '{mnem}' missing from PANFROST_SEMANTICS")
 
-    trace = ModelTrace(mnemonic=mnem, variant=variant)
+    trace = ModelTrace(mnemonic=mnem, variant=variant, modifiers=dict(mods))
 
     # Stage A: Swizzle / Widen -> Source Modifiers
     eval_srcs: List[z3.BitVecRef] = []
@@ -2070,10 +2200,11 @@ def eval_panfrost_instruction(
         else:
             not_f = _mod_bool(mods, f"not{mod_idx}", _mod_bool(mods, "not", False) if idx == 0 else False)
 
-        # Shift amounts are unsigned lane counts (never sign-extended by b0/b02)
+        # Shift amounts are unsigned lane counts (never sign-extended by b0/b02),
+        # but retain src_lane_bits so b0..b3 broadcasts replicate across v2i16/v4i8 lanes (kraid/swizzle.rs:618)
         is_shift_amt = idx == 1 and mnem.startswith(("LSHIFT", "RSHIFT", "ARSHIFT", "LROT", "RROT"))
         eff_signed_widen = False if is_shift_amt else signed_widen
-        eff_lane_bits = 32 if is_shift_amt else src_lane_bits
+        eff_lane_bits = src_lane_bits
 
         if raw.size() == 64:
             s_val = apply_swizzle_u64(raw, swz, signed_widen=eff_signed_widen)
@@ -2089,7 +2220,11 @@ def eval_panfrost_instruction(
                 m_val = z3.SignExt(32, m_val) if eff_signed_widen else z3.ZeroExt(32, m_val)
 
         eval_srcs.append(m_val)
-        trace.stage_a_srcs.append({"idx": idx, "mod_idx": mod_idx, "swz": swz, "abs": abs_f, "neg": neg_f, "not": not_f})
+        trace.stage_a_srcs.append({
+            "idx": idx, "mod_idx": mod_idx, "swz": swz,
+            "lane_bits": eff_lane_bits, "signed_widen": eff_signed_widen,
+            "abs": abs_f, "neg": neg_f, "not": not_f,
+        })
 
     # Stage B: Core Operation
     core_res, new_st = PANFROST_SEMANTICS[mnem](mnem, variant, eval_srcs, mods, st, trace)
