@@ -87,6 +87,7 @@ struct ValhallTranslateOptions {
 
     // Optional debug/reflection symbol names for OpName emission (empty = default generated names)
     ValhallSymbolBindings symbol_bindings;
+    bool tolerant_ssa = false;
 };
 
 struct ValhallTranslationResult {

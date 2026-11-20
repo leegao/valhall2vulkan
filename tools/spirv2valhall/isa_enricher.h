@@ -1,6 +1,5 @@
 #pragma once
 
-#include "mbs2_ast_parser.h"
 #include "mbs2_types.h"
 #include "spirv_inspect.h"
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "valhall_isa_generated.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -383,6 +385,19 @@ struct Mbs2Module {
     Mbs2Momd momd;
 
     size_t ast_global_count = 0;
+};
+
+/// A single decoded shader binary extracted from cmpbe_chunk_MBS2.
+struct ExtractedEbin {
+    uint32_t index = 0;
+    EbinRole role = EbinRole::Unknown;
+    uint32_t variant_flags = 0;
+    uint32_t code_size = 0;
+    std::vector<uint8_t> bytecode;      // Executable Valhall ISA bytes (code_size)
+    std::vector<uint8_t> data_section;  // Optional embedded constant/LUT section after data_section_offset
+    Mbs2EbinMeta meta;
+    std::vector<valhall::DecodedValhallInst> instructions;
+    size_t invalid_count = 0;
 };
 
 /// Format an Mbs2Type into a concise GLSL-like type string (e.g. "ivec2", "uint[]", "UBO{...}").

@@ -82,8 +82,6 @@ int main() {
 
         valhall::spirv2valhall::ExtractOptions s2v_opts;
         s2v_opts.core = "Mali-G615";
-        s2v_opts.malioc_path = malioc_bin;
-        s2v_opts.moc_hook_path = hook_so;
         s2v_opts.dump_header_path = live_dump_h;
 
         valhall::spirv2valhall::ExtractResult s2v_res;

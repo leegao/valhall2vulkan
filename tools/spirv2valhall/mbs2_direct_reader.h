@@ -1,7 +1,6 @@
 #pragma once
 
 #include "cmpbe_chunks.h"
-#include "mbs2_ast_parser.h"
 #include "mbs2_types.h"
 
 #include <cstdint>

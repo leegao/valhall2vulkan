@@ -141,7 +141,12 @@ int hooked_compile_multi(
 
 bool ensure_loaded_locked(const std::string& lib_path, std::string* err) {
     if (g_rt.ready) return true;
-    void* h = dlopen(lib_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    int dl_flags = RTLD_NOW | RTLD_LOCAL;
+#ifdef RTLD_DEEPBIND
+    // Prevent ELF symbol interposition (e.g. host libLLVM.so colliding with libMali-Gxx's bundled LLVM)
+    dl_flags |= RTLD_DEEPBIND;
+#endif
+    void* h = dlopen(lib_path.c_str(), dl_flags);
     if (!h) {
         if (err) *err = std::string("dlopen(") + lib_path + ") failed: " + (dlerror() ? dlerror() : "unknown");
         return false;

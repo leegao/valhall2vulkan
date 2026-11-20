@@ -63,6 +63,10 @@ struct SsaNode {
 
     // Effect contribution from lowering
     tables::EffectMask effects{};
+
+    // Originating Valhall ISA instruction metadata (kept at end for aggregate-init compatibility)
+    int32_t orig_inst_idx = -1;
+    uint32_t orig_pc = 0;
 };
 
 struct SsaBlock {
@@ -167,11 +171,17 @@ public:
     [[verifier::z3("SymbolicSsaModule", "this.emit_bitcast(args[1], args[2])")]]
     SsaId emit_bitcast(uint32_t blk_id, ValType target_t, SsaId val);
 
+    // Track originating Valhall ISA instruction for emitted SSA nodes
+    void set_origin(int32_t inst_idx, uint32_t pc) { cur_orig_inst_idx_ = inst_idx; cur_orig_pc_ = pc; }
+    void clear_origin() { cur_orig_inst_idx_ = -1; cur_orig_pc_ = 0; }
+
     // Finalize Phi nodes across all blocks using iterative dominance-frontier / Braun-style resolution
     void seal_all_phis();
 
 private:
     ValhallSsaModule& mod_;
+    int32_t cur_orig_inst_idx_ = -1;
+    uint32_t cur_orig_pc_ = 0;
 };
 
 } // namespace valhall::compiler

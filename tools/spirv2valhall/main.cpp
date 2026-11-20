@@ -8,10 +8,10 @@
 static void print_usage(const char* argv0) {
     std::cerr
         << "Usage: " << argv0 << " <input.spv> [options]\n"
-        << "  Automatically infers SPIR-V shader stage, compiles via direct in-process\n"
-        << "  libMali-Gxx (or malioc + clang_ast_dumper_lib), dumps the CSF Execution\n"
-        << "  Context & Descriptor Graph, and prints MBS2-enriched Valhall disassembly\n"
-        << "  (including Pilot Shaders for compute shaders).\n\n"
+        << "  Automatically infers SPIR-V shader stage, compiles in-process via\n"
+        << "  libMali-Gxx (reading the live cmpbe_chunk_MBS2* directly), dumps the\n"
+        << "  CSF Execution Context & Descriptor Graph, and prints MBS2-enriched\n"
+        << "  Valhall disassembly (including Pilot Shaders for compute shaders).\n\n"
         << "Options:\n"
         << "  -c, --core <CORE>           Mali GPU core (default: Mali-G710)\n"
         << "  -a, --arch <N>              Valhall arch version (default: inferred from core)\n"
@@ -22,16 +22,11 @@ static void print_usage(const char* argv0) {
         << "  --no-context                Omit the CSF Execution Context & Descriptor Graph header\n"
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
-        << "  --use-inproc                Require direct in-process libMali-Gxx (no clang_ast_dumper)\n"
-        << "  --use-ast                   Force malioc subprocess + in-process clang_ast_dumper_lib\n"
         << "  --mali-lib <PATH>           Path to libMali-Gxx_r55p0-00rel0.so\n"
-        << "  --malioc <PATH>             Path to malioc binary (default: mali_offline_compiler/malioc)\n"
-        << "  --moc-hook <PATH>           Path to libmoc_hook.so\n"
-        << "  --clang-ast-dumper <PATH>   Path to external clang_ast_dumper CLI binary\n"
         << "  --no-strip-caps             Do not strip unused Float64/Interlock capabilities\n"
         << "  --mods                      Include decoded modifier key=value pairs\n"
         << "  --quiet                     Do not print text output to stdout\n"
-        << "  -v, --verbose               Print stage inference, backend, and AST diagnostics\n"
+        << "  -v, --verbose               Print stage inference and compilation diagnostics\n"
         << "  -h, --help                  Show this help message\n";
 }
 
@@ -73,19 +68,8 @@ int main(int argc, char** argv) {
             show_context = true;
         } else if (arg == "--no-enrich") {
             enrich = false;
-        } else if (arg == "--use-inproc") {
-            opts.backend = valhall::spirv2valhall::ExtractBackend::InProcDirect;
-        } else if (arg == "--use-ast") {
-            opts.backend = valhall::spirv2valhall::ExtractBackend::SubprocessAst;
         } else if (arg == "--mali-lib" && i + 1 < argc) {
             opts.mali_lib_path = argv[++i];
-        } else if (arg == "--malioc" && i + 1 < argc) {
-            opts.malioc_path = argv[++i];
-        } else if (arg == "--moc-hook" && i + 1 < argc) {
-            opts.moc_hook_path = argv[++i];
-        } else if (arg == "--clang-ast-dumper" && i + 1 < argc) {
-            opts.clang_ast_dumper_path = argv[++i];
-            opts.backend = valhall::spirv2valhall::ExtractBackend::SubprocessAst;
         } else if (arg == "--no-strip-caps") {
             opts.strip_unused_caps = false;
         } else if (arg == "--mods") {

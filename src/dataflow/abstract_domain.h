@@ -1,71 +1,85 @@
 #pragma once
 
-#include <array>
+#include "valhall_ssa.h"
+
 #include <cstdint>
 #include <map>
 #include <string>
-#include <utility>
+#include <vector>
 
 namespace valhall::dataflow {
 
-/// Generic abstract machine state over a lattice domain `DomainT`:
-///   - `DomainT::Value` : abstract value type
-///   - `DomainT::bottom()`, `DomainT::top()`
-///   - `DomainT::join(a, b)`, `DomainT::meet(a, b)`
-///   - `DomainT::leq(a, b)`, `DomainT::equals(a, b)`
+/// Generic abstract state parameterized by a lattice domain `DomainT`.
 ///
-/// Encapsulates Valhall's 64x32-bit GPR file (`r0..r63`), ISA live-range kill
-/// markers (from `^` discard-last-use annotations), FAU uniform memory, and
-/// symbolic buffer/scratch memory.
+/// `DomainT` must provide:
+///   using Value = ...;
+///   static Value bottom();
+///   static Value top();
+///   static Value join(const Value& a, const Value& b);
+///   static Value meet(const Value& a, const Value& b);
+///   static bool  leq(const Value& a, const Value& b);
+///   static bool  equals(const Value& a, const Value& b);
+///
+/// Optionally, `DomainT` may provide:
+///   static bool try_as_const_u64(const Value& v, uint64_t* out);
+///   static Value make_const_u64(uint64_t v);
+///
+/// In SSA form, every `SsaId` has a single static definition, so the register
+/// file is represented by an indexed environment `ssa_vals[SsaId] -> Value`.
+/// Mutable side-channel state (such as Pilot FAU uniform memory written via
+/// `PsbStore` and symbolic memory cells) is tracked in `fau_mem` and `sym_mem`.
 template <typename DomainT>
 struct AbstractState {
     using Value = typename DomainT::Value;
 
-    std::array<Value, 64> regs{};
-    std::array<bool, 64> reg_killed{};
-    std::map<uint32_t, Value> fau_mem;                         // FAU byte offset -> abstract value
-    std::map<std::pair<std::string, int64_t>, Value> sym_mem;  // (base_symbol, byte_offset) -> abstract value
+    /// Abstract value of every SSA value (1-indexed; index 0 is kInvalidSsa).
+    std::vector<Value> ssa_vals;
 
-    AbstractState() {
-        regs.fill(DomainT::bottom());
-        reg_killed.fill(false);
-    }
+    /// Abstract FAU uniform memory (byte offset -> abstract value).
+    std::map<uint32_t, Value> fau_mem;
 
-    static AbstractState bottom() {
-        return AbstractState{};
-    }
+    /// Abstract symbolic memory locations (e.g. "SRT[4]+0x00" -> abstract value).
+    std::map<std::string, Value> sym_mem;
 
-    const Value& get_reg(uint8_t r) const {
-        return regs[r & 63u];
-    }
+    explicit AbstractState(size_t num_ssa_nodes = 1)
+        : ssa_vals(num_ssa_nodes > 0 ? num_ssa_nodes : 1, DomainT::bottom()) {}
 
-    void set_reg(uint8_t r, const Value& v) {
-        uint8_t idx = r & 63u;
-        regs[idx] = v;
-        reg_killed[idx] = false;
-    }
-
-    void set_reg_pair(uint8_t base, const Value& v) {
-        set_reg(base, v);
-        if (base + 1u < 64u) set_reg(static_cast<uint8_t>(base + 1u), v);
-    }
-
-    void set_reg_range(uint8_t base, uint8_t count, const Value& v) {
-        for (uint8_t i = 0; i < count; ++i) {
-            if (base + i < 64u) set_reg(static_cast<uint8_t>(base + i), v);
+    void ensure_size(size_t num_ssa_nodes) {
+        if (ssa_vals.size() < num_ssa_nodes) {
+            ssa_vals.resize(num_ssa_nodes, DomainT::bottom());
         }
     }
 
-    void kill_reg(uint8_t r) {
-        uint8_t idx = r & 63u;
-        reg_killed[idx] = true;
+    Value val(compiler::SsaId id) const {
+        if (id == compiler::kInvalidSsa || id >= ssa_vals.size()) {
+            return DomainT::bottom();
+        }
+        return ssa_vals[id];
     }
 
-    bool is_reg_killed(uint8_t r) const {
-        return reg_killed[r & 63u];
+    void set_val(compiler::SsaId id, const Value& v) {
+        if (id == compiler::kInvalidSsa) return;
+        if (id >= ssa_vals.size()) {
+            ssa_vals.resize(static_cast<size_t>(id) + 1, DomainT::bottom());
+        }
+        ssa_vals[id] = v;
     }
 
-    Value get_fau(uint32_t byte_off) const {
+    /// Monotone update: `ssa_vals[id] = join(ssa_vals[id], v)`. Returns true if changed.
+    bool join_val(compiler::SsaId id, const Value& v) {
+        if (id == compiler::kInvalidSsa) return false;
+        if (id >= ssa_vals.size()) {
+            ssa_vals.resize(static_cast<size_t>(id) + 1, DomainT::bottom());
+        }
+        Value joined = DomainT::join(ssa_vals[id], v);
+        if (!DomainT::equals(joined, ssa_vals[id])) {
+            ssa_vals[id] = std::move(joined);
+            return true;
+        }
+        return false;
+    }
+
+    Value fau(uint32_t byte_off) const {
         auto it = fau_mem.find(byte_off);
         return (it != fau_mem.end()) ? it->second : DomainT::bottom();
     }
@@ -74,48 +88,55 @@ struct AbstractState {
         fau_mem[byte_off] = v;
     }
 
-    Value get_sym_mem(const std::string& base, int64_t off) const {
-        auto it = sym_mem.find({base, off});
+    bool join_fau(uint32_t byte_off, const Value& v) {
+        auto it = fau_mem.find(byte_off);
+        if (it == fau_mem.end()) {
+            if (!DomainT::equals(v, DomainT::bottom())) {
+                fau_mem[byte_off] = v;
+                return true;
+            }
+            return false;
+        }
+        Value joined = DomainT::join(it->second, v);
+        if (!DomainT::equals(joined, it->second)) {
+            it->second = std::move(joined);
+            return true;
+        }
+        return false;
+    }
+
+    Value sym(const std::string& key) const {
+        auto it = sym_mem.find(key);
         return (it != sym_mem.end()) ? it->second : DomainT::bottom();
     }
 
-    void set_sym_mem(const std::string& base, int64_t off, const Value& v) {
-        sym_mem[{base, off}] = v;
+    void set_sym(const std::string& key, const Value& v) {
+        sym_mem[key] = v;
     }
 
-    /// Pointwise lattice join (`this = this ⊔ other`). Returns true if state changed.
+    /// Pointwise lattice join: `this = this ⊔ other`. Returns true if state changed.
     bool join_with(const AbstractState& other) {
         bool changed = false;
-        for (size_t i = 0; i < 64; ++i) {
-            Value joined = DomainT::join(regs[i], other.regs[i]);
-            if (!DomainT::equals(joined, regs[i])) {
-                regs[i] = std::move(joined);
-                changed = true;
-            }
-            bool k = reg_killed[i] && other.reg_killed[i];
-            if (k != reg_killed[i]) {
-                reg_killed[i] = k;
+        if (other.ssa_vals.size() > ssa_vals.size()) {
+            ssa_vals.resize(other.ssa_vals.size(), DomainT::bottom());
+        }
+        for (size_t i = 1; i < other.ssa_vals.size(); ++i) {
+            Value joined = DomainT::join(ssa_vals[i], other.ssa_vals[i]);
+            if (!DomainT::equals(joined, ssa_vals[i])) {
+                ssa_vals[i] = std::move(joined);
                 changed = true;
             }
         }
         for (const auto& kv : other.fau_mem) {
-            auto it = fau_mem.find(kv.first);
-            if (it == fau_mem.end()) {
-                fau_mem[kv.first] = kv.second;
-                changed = true;
-            } else {
-                Value joined = DomainT::join(it->second, kv.second);
-                if (!DomainT::equals(joined, it->second)) {
-                    it->second = std::move(joined);
-                    changed = true;
-                }
-            }
+            if (join_fau(kv.first, kv.second)) changed = true;
         }
         for (const auto& kv : other.sym_mem) {
             auto it = sym_mem.find(kv.first);
             if (it == sym_mem.end()) {
-                sym_mem[kv.first] = kv.second;
-                changed = true;
+                if (!DomainT::equals(kv.second, DomainT::bottom())) {
+                    sym_mem[kv.first] = kv.second;
+                    changed = true;
+                }
             } else {
                 Value joined = DomainT::join(it->second, kv.second);
                 if (!DomainT::equals(joined, it->second)) {
@@ -127,18 +148,34 @@ struct AbstractState {
         return changed;
     }
 
-    /// Pointwise lattice meet (`this = this ⊓ other`).
-    void meet_with(const AbstractState& other) {
-        for (size_t i = 0; i < 64; ++i) {
-            regs[i] = DomainT::meet(regs[i], other.regs[i]);
-            reg_killed[i] = reg_killed[i] || other.reg_killed[i];
+    /// Pointwise lattice meet: `this = this ⊓ other`. Returns true if state changed.
+    bool meet_with(const AbstractState& other) {
+        bool changed = false;
+        size_t n = std::min(ssa_vals.size(), other.ssa_vals.size());
+        for (size_t i = 1; i < n; ++i) {
+            Value met = DomainT::meet(ssa_vals[i], other.ssa_vals[i]);
+            if (!DomainT::equals(met, ssa_vals[i])) {
+                ssa_vals[i] = std::move(met);
+                changed = true;
+            }
+        }
+        for (size_t i = n; i < ssa_vals.size(); ++i) {
+            if (!DomainT::equals(ssa_vals[i], DomainT::bottom())) {
+                ssa_vals[i] = DomainT::bottom();
+                changed = true;
+            }
         }
         for (auto it = fau_mem.begin(); it != fau_mem.end(); ) {
             auto oit = other.fau_mem.find(it->first);
             if (oit == other.fau_mem.end()) {
                 it = fau_mem.erase(it);
+                changed = true;
             } else {
-                it->second = DomainT::meet(it->second, oit->second);
+                Value met = DomainT::meet(it->second, oit->second);
+                if (!DomainT::equals(met, it->second)) {
+                    it->second = std::move(met);
+                    changed = true;
+                }
                 ++it;
             }
         }
@@ -146,27 +183,35 @@ struct AbstractState {
             auto oit = other.sym_mem.find(it->first);
             if (oit == other.sym_mem.end()) {
                 it = sym_mem.erase(it);
+                changed = true;
             } else {
-                it->second = DomainT::meet(it->second, oit->second);
+                Value met = DomainT::meet(it->second, oit->second);
+                if (!DomainT::equals(met, it->second)) {
+                    it->second = std::move(met);
+                    changed = true;
+                }
                 ++it;
             }
         }
+        return changed;
     }
 
     bool equals(const AbstractState& other) const {
-        for (size_t i = 0; i < 64; ++i) {
-            if (!DomainT::equals(regs[i], other.regs[i])) return false;
-            if (reg_killed[i] != other.reg_killed[i]) return false;
+        size_t max_n = std::max(ssa_vals.size(), other.ssa_vals.size());
+        for (size_t i = 1; i < max_n; ++i) {
+            Value a = (i < ssa_vals.size()) ? ssa_vals[i] : DomainT::bottom();
+            Value b = (i < other.ssa_vals.size()) ? other.ssa_vals[i] : DomainT::bottom();
+            if (!DomainT::equals(a, b)) return false;
         }
         if (fau_mem.size() != other.fau_mem.size()) return false;
         for (const auto& kv : fau_mem) {
-            auto it = other.fau_mem.find(kv.first);
-            if (it == other.fau_mem.end() || !DomainT::equals(kv.second, it->second)) return false;
+            auto oit = other.fau_mem.find(kv.first);
+            if (oit == other.fau_mem.end() || !DomainT::equals(kv.second, oit->second)) return false;
         }
         if (sym_mem.size() != other.sym_mem.size()) return false;
         for (const auto& kv : sym_mem) {
-            auto it = other.sym_mem.find(kv.first);
-            if (it == other.sym_mem.end() || !DomainT::equals(kv.second, it->second)) return false;
+            auto oit = other.sym_mem.find(kv.first);
+            if (oit == other.sym_mem.end() || !DomainT::equals(kv.second, oit->second)) return false;
         }
         return true;
     }

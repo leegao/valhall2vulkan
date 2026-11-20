@@ -136,13 +136,14 @@ add_library(valhall2spirv STATIC
     src/generated/valhall_csf_descriptors_generated.cpp
     src/generated/valhall_spirv_builder_generated.cpp
     src/generated/valhall_tables_generated.cpp
-    src/valhall_ssa.cpp
+    src/ssa/valhall_ssa.cpp
     src/generated/valhall_operands_generated.cpp
     src/valhall_pass1.cpp
     src/valhall_pass1_handlers.cpp
     src/valhall_tiler.cpp
     src/valhall_spirv_builder.cpp
     src/valhall_cfg.cpp
+    src/dataflow/liveness.cpp
     src/dataflow/transfer.cpp
     src/dataflow/pointer_analysis.cpp
     src/valhall_to_spirv.cpp
@@ -150,6 +151,7 @@ add_library(valhall2spirv STATIC
 )
 target_include_directories(valhall2spirv PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ssa"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/dataflow"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     "${VULKAN_INCLUDE_DIR}"
@@ -185,9 +187,6 @@ endif()
 
 add_library(spirv2valhall_lib STATIC
     tools/spirv2valhall/spirv_inspect.cpp
-    tools/spirv2valhall/json_lite.cpp
-    tools/spirv2valhall/moc_runner.cpp
-    tools/spirv2valhall/mbs2_ast_parser.cpp
     tools/spirv2valhall/mbs2_direct_reader.cpp
     tools/spirv2valhall/mbs2_context_dumper.cpp
     tools/spirv2valhall/isa_enricher.cpp
@@ -198,23 +197,16 @@ target_include_directories(spirv2valhall_lib PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
 )
 target_compile_options(spirv2valhall_lib PRIVATE -Wall -Wextra -Wno-unused-parameter)
-target_compile_definitions(spirv2valhall_lib PRIVATE
-    SPIRV2VALHALL_DEFAULT_MOC_HOOK_PATH="$<TARGET_FILE:moc_hook>"
-    SPIRV2VALHALL_DEFAULT_CMPBE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
-)
 target_link_libraries(spirv2valhall_lib PUBLIC valhall2spirv)
 if(TARGET malioc_inproc)
     target_link_libraries(spirv2valhall_lib PUBLIC malioc_inproc)
-    target_compile_definitions(spirv2valhall_lib PRIVATE HAVE_MALIOC_INPROC=1)
 endif()
-add_dependencies(spirv2valhall_lib moc_hook)
 
 add_executable(spirv2valhall
     tools/spirv2valhall/main.cpp
 )
 target_compile_options(spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(spirv2valhall PRIVATE spirv2valhall_lib)
-add_dependencies(spirv2valhall moc_hook)
 
 foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow)
     add_executable(${test_name} "tests/${test_name}.cpp")
@@ -494,13 +486,14 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
             -Wno-unknown-attributes
             ${_DUMPER_RESOURCE_ARGS}
             "-I${CMAKE_CURRENT_SOURCE_DIR}/src/include"
+            "-I${CMAKE_CURRENT_SOURCE_DIR}/src/ssa"
             "-I${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
             "-I${VULKAN_INCLUDE_DIR}"
         DEPENDS
             clang_ast_dumper
             "${CMAKE_CURRENT_SOURCE_DIR}/src/valhall_pass1_handlers.cpp"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/include/valhall_pass1_handlers.h"
-            "${CMAKE_CURRENT_SOURCE_DIR}/src/include/valhall_ssa.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ssa/valhall_ssa.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/include/valhall_operands.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/valhall_tables_generated.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/valhall_isa_generated.h"
@@ -516,14 +509,6 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_clang_ast_dumper.py
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
-    target_link_libraries(spirv2valhall_lib PRIVATE clang_ast_dumper_lib)
-    target_compile_definitions(spirv2valhall_lib PRIVATE
-        HAVE_CLANG_AST_DUMPER_LIB=1
-        SPIRV2VALHALL_DEFAULT_CLANG_AST_DUMPER_PATH="$<TARGET_FILE:clang_ast_dumper>"
-        SPIRV2VALHALL_DEFAULT_CLANG_RESOURCE_DIR="${_TEST_RES_DIR}"
-    )
-    add_dependencies(spirv2valhall_lib clang_ast_dumper)
-    add_dependencies(spirv2valhall clang_ast_dumper)
 
     set_tests_properties(test_clang_ast_dumper PROPERTIES
         ENVIRONMENT "CLANG_AST_DUMPER_BIN=$<TARGET_FILE:clang_ast_dumper>;VALHALL_HOST_HANDLERS_AST_JSON=${VALHALL_HOST_HANDLERS_AST_JSON};CLANG_RESOURCE_DIR=${_TEST_RES_DIR};VULKAN_INCLUDE_DIR=${VULKAN_INCLUDE_DIR}"

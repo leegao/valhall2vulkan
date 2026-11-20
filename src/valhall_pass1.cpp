@@ -44,6 +44,13 @@ void lower_instruction(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
         break;
     }
     if (!rule) {
+        if (ctx.opts.tolerant_ssa) {
+            SsaNode nop{};
+            nop.op = tables::SsaOp::Nop;
+            nop.type = ValType::Void;
+            ctx.sb.emit(blk, std::move(nop));
+            return;
+        }
         std::cerr << "[VALHALL_PASS1][ERROR] Missing matching lowering rule for spec_index=" << ins.spec_index
                   << " arch=v" << static_cast<unsigned>(ctx.opts.arch)
                   << " pc=0x" << std::hex << ins.pc << std::dec << "\n";
@@ -62,6 +69,13 @@ void lower_instruction(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
     }
 
     if (!lower_rule_generated(ctx, blk, ins, rule)) {
+        if (ctx.opts.tolerant_ssa) {
+            SsaNode nop{};
+            nop.op = tables::SsaOp::Nop;
+            nop.type = ValType::Void;
+            ctx.sb.emit(blk, std::move(nop));
+            return;
+        }
         std::cerr << "[VALHALL_PASS1][ERROR] Unhandled rule_index=" << rule->rule_index
                   << " mnemonic=" << rule->mnemonic
                   << " pc=0x" << std::hex << ins.pc << std::dec << "\n";
@@ -198,7 +212,9 @@ Pass1Result run_pass1_lowering(
         }
 
         for (const auto& ins : all_insts[b]) {
+            ctx.sb.set_origin(static_cast<int32_t>(ins.pc / 8u), ins.pc);
             lower_instruction(ctx, b, ins);
+            ctx.sb.clear_origin();
             if (!res.error_message.empty()) {
                 return res;
             }

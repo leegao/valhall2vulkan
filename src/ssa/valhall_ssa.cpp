@@ -149,6 +149,10 @@ void SsaBuilder::set_token(uint32_t blk_id, SsaId tok) {
 
 SsaId SsaBuilder::emit(uint32_t blk_id, SsaNode n) {
     n.block_id = blk_id;
+    if (n.orig_inst_idx < 0 && cur_orig_inst_idx_ >= 0) {
+        n.orig_inst_idx = cur_orig_inst_idx_;
+        n.orig_pc = cur_orig_pc_;
+    }
     SsaId id = mod_.add_node(std::move(n));
     if (mod_.get(id).op == tables::SsaOp::Phi) {
         mod_.blocks[blk_id].phis.push_back(id);

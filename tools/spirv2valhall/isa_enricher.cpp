@@ -1,5 +1,9 @@
 #include "isa_enricher.h"
+#include "liveness.h"
 #include "pointer_analysis.h"
+#include "valhall_cfg.h"
+#include "valhall_pass1.h"
+#include "valhall_to_spirv.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -116,6 +120,87 @@ dataflow::PointerAnalysisEnv::StageRole to_df_role(EbinRole role) {
     }
 }
 
+valhall::ShaderStage to_valhall_stage(dataflow::PointerAnalysisEnv::StageRole role) {
+    switch (role) {
+        case dataflow::PointerAnalysisEnv::StageRole::Pilot: return valhall::ShaderStage::Pilot;
+        case dataflow::PointerAnalysisEnv::StageRole::MainCompute: return valhall::ShaderStage::Compute;
+        case dataflow::PointerAnalysisEnv::StageRole::Vertex: return valhall::ShaderStage::Vertex;
+        case dataflow::PointerAnalysisEnv::StageRole::Fragment: return valhall::ShaderStage::Fragment;
+        default: return valhall::ShaderStage::Compute;
+    }
+}
+
+void append_unique_note(std::vector<std::string>& notes, const std::string& s) {
+    if (s.empty()) return;
+    if (std::find(notes.begin(), notes.end(), s) == notes.end()) {
+        notes.push_back(s);
+    }
+}
+
+struct IsaProjectedAnalysis {
+    dataflow::PointerAnalysisResult df;
+    std::vector<std::vector<std::string>> inst_notes;
+};
+
+/// Explicitly lower decoded Valhall ISA -> CFG -> SSA (`run_pass1_lowering` with `tolerant_ssa = true`),
+/// run backwards SSA liveness + forward SSA pointer analysis (`src/dataflow`), and project SSA findings
+/// back onto each originating ISA instruction index (`orig_inst_idx`).
+IsaProjectedAnalysis lower_and_run_ssa_pointer_analysis(
+    const std::vector<DecodedValhallInst>& instructions,
+    const dataflow::PointerAnalysisEnv& env) {
+    IsaProjectedAnalysis res;
+    res.inst_notes.resize(instructions.size());
+    if (instructions.empty()) {
+        res.df.converged = true;
+        return res;
+    }
+
+    // 1. Explicitly lower ISA -> CFG -> SSA here in isa_enricher
+    cfg::ControlFlowGraph primary_cfg = cfg::build_cfg(instructions);
+    cfg::ControlFlowGraph empty_cfg;
+
+    ValhallTranslateOptions topts;
+    topts.stage = to_valhall_stage(env.role);
+    topts.arch = (env.arch != 0) ? env.arch : 10;
+    topts.tolerant_ssa = true;
+
+    compiler::Pass1Result p1 = compiler::run_pass1_lowering(primary_cfg, empty_cfg, topts);
+    if (!p1.ok) {
+        return res;
+    }
+
+    // 2. Run pure SSA backwards liveness + forward SSA pointer analysis
+    dataflow::SsaLivenessResult liveness = dataflow::run_ssa_liveness(p1.ssa);
+    res.df = dataflow::run_ssa_pointer_analysis(p1.ssa, env, &liveness);
+
+    // 3. Project SSA-level findings back onto originating Valhall ISA instruction indices
+    for (size_t id = 1; id < p1.ssa.nodes.size(); ++id) {
+        const auto& node = p1.ssa.nodes[id];
+        if (node.orig_inst_idx < 0 || static_cast<size_t>(node.orig_inst_idx) >= instructions.size()) {
+            continue;
+        }
+        const size_t idx = static_cast<size_t>(node.orig_inst_idx);
+
+        for (compiler::SsaId arg : node.args) {
+            dataflow::TrackedVal av = res.df.final_state.val(arg);
+            if (av.kind == dataflow::TrackedVal::Kind::AbiPreload) {
+                append_unique_note(res.inst_notes[idx], "ABI: " + av.label);
+            } else if (av.kind == dataflow::TrackedVal::Kind::FauDstBase ||
+                       av.kind == dataflow::TrackedVal::Kind::SrtBase) {
+                append_unique_note(res.inst_notes[idx], av.label);
+            }
+        }
+
+        if (id < res.df.ssa_notes.size()) {
+            for (const auto& note : res.df.ssa_notes[id]) {
+                append_unique_note(res.inst_notes[idx], note);
+            }
+        }
+    }
+
+    return res;
+}
+
 dataflow::PointerAnalysisEnv build_df_env(
     const Mbs2SymbolIndex& sym_idx,
     const ExtractedEbin& ebin,
@@ -210,9 +295,9 @@ PilotAnalysisResult analyze_pilot_shaders(
         res.pilot_ebin_index = eb.index;
 
         dataflow::PointerAnalysisEnv env = build_df_env(sym_idx, eb, nullptr);
-        dataflow::PointerAnalysisResult df = dataflow::run_pointer_analysis(eb.instructions, env);
+        IsaProjectedAnalysis proj = lower_and_run_ssa_pointer_analysis(eb.instructions, env);
 
-        for (const auto& kv : df.pilot_fau_writes) {
+        for (const auto& kv : proj.df.pilot_fau_writes) {
             const auto& pw = kv.second;
             PilotFauEntry entry;
             entry.fau_offset = pw.fau_offset;
@@ -235,9 +320,9 @@ std::vector<std::string> enrich_ebin_instructions(
     std::vector<std::string> notes(ebin.instructions.size());
     Mbs2SymbolIndex sym_idx = build_symbol_index(mod, &ebin);
 
-    // Run decoupled pointer & ABI dataflow analysis as its own initial pass!
+    // Explicitly lower ISA -> SSA here, run pure SSA liveness + pointer analysis, and project back
     dataflow::PointerAnalysisEnv env = build_df_env(sym_idx, ebin, &pilot_info);
-    dataflow::PointerAnalysisResult df = dataflow::run_pointer_analysis(ebin.instructions, env);
+    IsaProjectedAnalysis proj = lower_and_run_ssa_pointer_analysis(ebin.instructions, env);
 
     for (size_t idx = 0; idx < ebin.instructions.size(); ++idx) {
         const auto& ins = ebin.instructions[idx];
@@ -249,22 +334,9 @@ std::vector<std::string> enrich_ebin_instructions(
             if (!t.empty() && seen.insert(t).second) tags.push_back(t);
         };
 
-        const auto& pre = df.pre_states[idx];
-
-        // 1. Tag live ABI entry registers & Pilot base pointers directly from pre-state
+        // 1. Tag FAU uniform operands directly from Pilot + MBS2 RLOC/FCST metadata
         for (const auto& s : ins.srcs) {
-            if (s.kind == SourceKind::Register) {
-                const auto& tv = pre.get_reg(s.reg_num);
-                if (tv.kind == dataflow::TrackedVal::Kind::AbiPreload) {
-                    add_tag("r" + std::to_string(s.reg_num) + " = " + tv.label);
-                } else if (tv.kind == dataflow::TrackedVal::Kind::FauDstBase ||
-                           tv.kind == dataflow::TrackedVal::Kind::SrtBase) {
-                    std::string rname = s.is_64bit
-                                            ? ("r" + std::to_string(s.reg_num) + ":r" + std::to_string(s.reg_num + 1))
-                                            : ("r" + std::to_string(s.reg_num));
-                    add_tag(rname + " = " + tv.label);
-                }
-            } else if (s.kind == SourceKind::FauUniform) {
+            if (s.kind == SourceKind::FauUniform) {
                 uint32_t fau_off = static_cast<uint32_t>(s.fau_index64) * 8u + (s.word_select ? 4u : 0u);
                 std::string fau_label = lookup_fau_annotation(fau_off, s.is_64bit, sym_idx, pilot_info);
                 if (!fau_label.empty()) {
@@ -276,9 +348,9 @@ std::vector<std::string> enrich_ebin_instructions(
             }
         }
 
-        // 2. Append semantic dataflow events discovered by PointerAnalysis pass
-        if (idx < df.inst_notes.size()) {
-            for (const auto& ev : df.inst_notes[idx]) {
+        // 2. Append semantic dataflow annotations projected from SSA-level PointerAnalysis
+        if (idx < proj.inst_notes.size()) {
+            for (const auto& ev : proj.inst_notes[idx]) {
                 add_tag(ev);
             }
         }

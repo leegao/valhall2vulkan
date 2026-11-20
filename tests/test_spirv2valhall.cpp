@@ -1,5 +1,4 @@
 #include "spirv2valhall.h"
-#include "json_lite.h"
 #include "cmpbe_chunks.h"
 
 #include <cassert>
@@ -73,26 +72,9 @@ static std::string read_text_file(const std::string& path) {
 }
 
 int main() {
-    std::cout << "=== [Test] tools/spirv2valhall Modular, AST, Context, Enrichment, Pilot & --dump-spirv Tests ===\n";
+    std::cout << "=== [Test] tools/spirv2valhall In-Process Direct, SSA Enrichment, Pilot & --dump-spirv Tests ===\n";
 
-    // 1. json_lite unit tests
-    {
-        JsonValue jv;
-        std::string jerr;
-        assert(parse_json(R"({"a": 42, "b": [true, null, "hi\n"], "c": {"k": -7}})", &jv, &jerr));
-        assert(jv.is_object());
-        assert(jv.get_int("a") == 42);
-        assert(jv.get("b")->arr_val.size() == 3);
-        assert(jv.get("b")->arr_val[2].str_val == "hi\n");
-        assert(jv.get("c")->get_int("k") == -7);
-
-        JsonValue bad;
-        assert(!parse_json("{unterminated", &bad, &jerr));
-        assert(!jerr.empty());
-    }
-    std::cout << "[PASS] json_lite parser verified\n";
-
-    // 2. Arch inference, stage auto-inference, and unused-capability stripping
+    // 1. Arch inference, stage auto-inference, and unused-capability stripping
     assert(infer_arch_from_core("Mali-G78") == 9);
     assert(infer_arch_from_core("Mali-G710") == 10);
     assert(infer_arch_from_core("Mali-G615") == 11);
@@ -130,73 +112,7 @@ int main() {
     }
     std::cout << "[PASS] Stage auto-inference, arch inference, and unused-capability stripping verified\n";
 
-    // 3. Direct clang_ast_dumper MBS2 parsing, Pilot pointer chasing, Context dump & Enrichment on fixture
-    {
-        std::string fixture_hdr = read_text_file("tests/fixtures/sample_mbs2_shader.h");
-        Mbs2Module mod;
-        std::vector<ExtractedEbin> ebins;
-        Mbs2AstParseOptions aopts;
-        aopts.disassemble = true;
-        std::string err;
-        bool ok = parse_mbs2_header_with_clang_ast(fixture_hdr, 11, aopts, &mod, &ebins, &err);
-        if (!ok) {
-            std::cerr << "[FAIL] parse_mbs2_header_with_clang_ast: " << err << "\n";
-            std::abort();
-        }
-        assert(mod.version == 48);
-        assert(mod.stage_chunk == "CCOM");
-        assert(mod.has_kern && mod.kern.name == "main");
-        assert(mod.kern.wg_x == 8 && mod.kern.wg_y == 8 && mod.kern.wg_z == 1);
-        assert(mod.cmmn.suni.size() == 1);
-        assert(mod.cmmn.s3bo.size() == 3);
-        assert(mod.cmmn.fcsts.size() == 1);
-        assert(ebins.size() == 2);
-        assert(ebins[0].role == EbinRole::MainCompute);
-        assert(ebins[0].code_size == 216);
-        assert(ebins[0].data_section.size() == 288);
-        assert(ebins[1].role == EbinRole::Pilot);
-        assert(ebins[1].code_size == 152);
-
-        // Pilot SRT -> Resource -> Buffer -> FAU pointer chasing
-        PilotAnalysisResult pilot = analyze_pilot_shaders(mod, ebins);
-        assert(pilot.found_pilot);
-        assert(pilot.pilot_ebin_index == 1);
-        assert(pilot.fau_map.count(0x00) && pilot.fau_map[0x00].symbol_name == "_12__DEBUG_LINE_BUFFER_0");
-        assert(pilot.fau_map.count(0x08) && pilot.fau_map[0x08].symbol_name == "_83_input_0");
-        assert(pilot.fau_map.count(0x10) && pilot.fau_map[0x10].symbol_name == "_77_output_0");
-        assert(pilot.fau_map.count(0x18) && pilot.fau_map[0x18].expression.find("u_TextureDimensions_0.x") != std::string::npos);
-
-        // Context dump (everything minus raw EBIN bytecode)
-        std::string ctx = format_csf_execution_context(mod, pilot);
-        assert(ctx.find("CSF Execution Context & Descriptor Graph") != std::string::npos);
-        assert(ctx.find("WG_SIZE=(8, 8, 1)") != std::string::npos);
-        assert(ctx.find("_43_pushConstants_0") != std::string::npos);
-        assert(ctx.find("_83_input_0") != std::string::npos);
-        assert(ctx.find("SRT_0 + 0x40") != std::string::npos);
-        assert(ctx.find("0x40501062") != std::string::npos);
-
-        // Enriched disassembly + ABI clobber check
-        auto main_notes = enrich_ebin_instructions(mod, ebins[0], pilot);
-        assert(main_notes.size() == ebins[0].instructions.size());
-        // PC 0x0018 (idx 3) reads r60 before clobber -> tagged GlobalInvocationID.x
-        assert(main_notes[3].find("r60 = GlobalInvocationID.x") != std::string::npos);
-        // PC 0x0068 (idx 13) is ADR r60, 0x100 -> tagged data_section+0x28 and clobbers r60!
-        assert(main_notes[13].find("data_section+0x28") != std::string::npos);
-        // PC 0x0088 (idx 17) reads clobbered r60 -> MUST NOT be tagged GlobalInvocationID.x, MUST be tagged data_section!
-        assert(main_notes[17].find("GlobalInvocationID") == std::string::npos);
-        assert(main_notes[17].find("data_section+0x28") != std::string::npos);
-        // PC 0x00a0 (idx 20) reads u4.w1 -> tagged FCST 0x40501062
-        assert(main_notes[20].find("0x40501062") != std::string::npos);
-
-        SpirvStageInfo sinfo{ShaderStage::Compute, 5, "main", "--compute"};
-        std::string dis = format_enriched_disassembly(sinfo, 11, mod, ebins, pilot, false, true);
-        assert(dis.find("[MAIN COMPUTE SHADER]") != std::string::npos);
-        assert(dis.find("[PILOT SHADER]") != std::string::npos);
-        assert(dis.find("chase SRT[4]->Buf[0].address (_83_input_0)") != std::string::npos);
-    }
-    std::cout << "[PASS] clang_ast_dumper MBS2 parsing, Pilot chasing, CSF context dump, and ABI-clobber enrichment verified\n";
-
-    // 4. End-to-end live extraction + --dump-spirv roundtrip on Compute, Vertex, and Fragment SPIR-V
+    // 2. End-to-end live in-process extraction + SSA enrichment + --dump-spirv on Compute, Vertex, Fragment
     const std::string comp_glsl = R"(
 #version 450
 layout(local_size_x = 1) in;
@@ -253,6 +169,7 @@ void main() {
         assert(total_insts > 0);
         if (expected_stage == ShaderStage::Compute) {
             assert(res.pilot_analysis.found_pilot);
+            assert(!res.pilot_analysis.fau_map.empty());
             assert(res.lifted_spirv.size() >= 2);  // Main Compute + Pilot
         } else {
             assert(!res.lifted_spirv.empty());
@@ -263,12 +180,20 @@ void main() {
             assert(lsh.disassembly.find("OpEntryPoint") != std::string::npos);
             assert(lsh.disassembly.find("OpFunctionEnd") != std::string::npos);
         }
-        assert(res.used_inproc_direct);  // Default Auto uses direct in-process libMali-Gxx!
         if (expected_stage == ShaderStage::Fragment) {
             assert(res.lifted_spirv[0].disassembly.find("_11_v_col") != std::string::npos);
         }
         if (expected_stage == ShaderStage::Vertex) {
             assert(res.lifted_spirv[0].disassembly.find("_17_in_pos") != std::string::npos);
+        }
+
+        // Verify enriched disassembly runs cleanly via SSA-level pointer analysis
+        std::string dis = format_disassembly(res, false, true);
+        assert(!dis.empty());
+        if (expected_stage == ShaderStage::Compute) {
+            assert(dis.find("[MAIN COMPUTE SHADER]") != std::string::npos);
+            assert(dis.find("[PILOT SHADER]") != std::string::npos);
+            assert(dis.find("gl_GlobalInvocationID") != std::string::npos);
         }
         std::cout << "[PASS] In-process direct extracted & lifted " << expected_flag << " (" << res.ebins.size()
                   << " EBINs, " << total_insts << " Valhall insts, "
@@ -279,31 +204,27 @@ void main() {
     check_live(vert_spv, ShaderStage::Vertex, "--vertex");
     check_live(frag_spv, ShaderStage::Fragment, "--fragment");
 
-    // 4b. Verify in-process C header emission + SubprocessAst (in-process libclang_ast_dumper_lib.a)
+    // 3. Verify optional in-process MBS2 C header emission & clean bailout when libMali-Gxx is missing
     {
-        ExtractOptions inproc_c_opts;
-        inproc_c_opts.core = "Mali-G710";
-        inproc_c_opts.backend = ExtractBackend::InProcDirect;
-        inproc_c_opts.dump_header_path = std::string(TEST_BUILD_DIR) + "/s2v_inproc_emit.h";
+        ExtractOptions c_opts;
+        c_opts.core = "Mali-G710";
+        c_opts.dump_header_path = std::string(TEST_BUILD_DIR) + "/s2v_inproc_emit.h";
         ExtractResult r1;
         std::string err;
-        assert(extract_valhall_from_spirv(comp_spv, inproc_c_opts, &r1, &err));
-        assert(r1.used_inproc_direct);
+        assert(extract_valhall_from_spirv(comp_spv, c_opts, &r1, &err));
         assert(r1.dump_header_text.find("cmpbe_chunk_MBS2 MBS2") != std::string::npos);
 
-        ExtractOptions ast_opts;
-        ast_opts.core = "Mali-G710";
-        ast_opts.backend = ExtractBackend::SubprocessAst;
-        ExtractResult r2;
-        assert(extract_valhall_from_spirv(frag_spv, ast_opts, &r2, &err));
-        assert(!r2.used_inproc_direct);
-        assert(r2.mbs2.ast_global_count >= 20);
-        assert(r2.ebins.size() == 1);
-        std::cout << "[PASS] Verified both InProcDirect (live cmpbe_chunk_MBS2* + C header) and in-process clang_ast_dumper_lib\n";
+        ExtractOptions bad_opts;
+        bad_opts.mali_lib_path = "/nonexistent/libMali-Gxx_missing.so";
+        ExtractResult r_bad;
+        std::string bad_err;
+        assert(!extract_valhall_from_spirv(comp_spv, bad_opts, &r_bad, &bad_err));
+        assert(bad_err.find("not readable") != std::string::npos);
+        std::cout << "[PASS] Verified in-process MBS2 C header emission & clean bailout on missing libMali-Gxx\n";
     }
 
-    // 5. Verify spirv2valhall CLI executable end-to-end with --dump-spirv & --out-spirv
-    const std::string cli_hdr = std::string(TEST_BUILD_DIR) + "/s2v_cli_frag.h";
+    // 4. Verify spirv2valhall CLI executable end-to-end with --dump-spirv & --out-spirv
+    const std::string cli_hdr = std::string(TEST_BUILD_DIR) + "/s2v_cli_comp.h";
     const std::string cli_spv_pfx = std::string(TEST_BUILD_DIR) + "/s2v_cli_lifted";
     const std::string cli_out_txt = std::string(TEST_BUILD_DIR) + "/s2v_cli_comp_out.txt";
     std::string cli_cmd = std::string(SPIRV2VALHALL_BIN_PATH) + " " + comp_spv +

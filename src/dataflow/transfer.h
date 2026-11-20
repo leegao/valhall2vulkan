@@ -1,401 +1,501 @@
 #pragma once
 
 #include "abstract_domain.h"
-#include "valhall_cfg.h"
-#include "valhall_isa_generated.h"
+#include "liveness.h"
+#include "valhall_ssa.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <deque>
-#include <map>
-#include <string>
+#include <type_traits>
 #include <vector>
 
 namespace valhall::dataflow {
 
-/// Normalized operand passed to grouped Valhall transfer functions.
-struct AbstractOperand {
-    enum class Kind : uint8_t {
-        None = 0,
-        Register,
-        FauUniform,
-        SmallConstant,
-        FauSpecial,
-        Immediate,
-    };
-
-    Kind kind = Kind::None;
-    bool is_64bit = false;
-    uint8_t reg_num = 0;
-    bool discard_last_use = false;
-    uint8_t fau_page = 0;
-    uint32_t fau_byte_offset = 0;
-    uint64_t imm_u64 = 0;
-    int64_t imm_s64 = 0;
-    std::string symbolic_name;
-    std::string swizzle_mod;
-    bool abs = false;
-    bool neg = false;
-    bool not_mod = false;
-
-    static AbstractOperand from_decoded(const DecodedSource& s);
-    static AbstractOperand from_imm(uint64_t u64, int64_t s64);
-    static AbstractOperand from_reg(uint8_t reg, bool is64 = false);
-
-    bool is_valid() const { return kind != Kind::None; }
-    bool is_reg() const { return kind == Kind::Register; }
-    bool is_const() const { return kind == Kind::Immediate || kind == Kind::SmallConstant; }
-    bool is_const_zero() const { return is_const() && imm_u64 == 0u; }
-    bool is_const_all_ones() const {
-        return is_const() && (imm_u64 == 0xFFFFFFFFULL || imm_u64 == 0xFFFFFFFFFFFFFFFFULL);
-    }
-    bool same_reg(const AbstractOperand& other) const {
-        return kind == Kind::Register && other.kind == Kind::Register &&
-               reg_num == other.reg_num && is_64bit == other.is_64bit &&
-               swizzle_mod == other.swizzle_mod && !not_mod && !other.not_mod &&
-               !neg && !other.neg && !abs && !other.abs;
-    }
-};
-
-/// Normalized destination (covers both ALU dest_reg and Load/Message staging registers).
-struct AbstractDest {
-    bool present = false;
-    uint8_t base_reg = 0;
-    uint8_t reg_count = 1;  // 1 for 32-bit, 2 for 64-bit, 1..4 for staging vectors
-    bool is_64bit = false;
-
-    static AbstractDest from_alu(const DecodedValhallInst& insn);
-    static AbstractDest from_staging(const DecodedStaging& sr);
-};
-
+/// Shift / rotate direction for normalized `on_shift` dispatch.
 enum class ShiftKind : uint8_t {
-    LogicalLeft = 0,
-    LogicalRight = 1,
-    ArithmeticRight = 2,
-    Rotate = 3,
+    Shl = 0,
+    ShrU,
+    ShrS,
+    RotL,
+    RotR,
 };
 
-/// Abstract interpretation visitor interface for grouped Valhall ISA operations.
-/// Every Valhall mnemonic is normalized into a clean semantic group while still
-/// passing `const DecodedValhallInst& insn` for concrete field/modifier inspection.
-class TransferVisitorBase {
+/// Abstract SSA transfer-function visitor base class.
+///
+/// Groups the 134 `tables::SsaOp` enum values into normalized semantic transfer
+/// hooks (e.g. `BitAnd` + `BitAnd64` -> `on_and(dst, lhs, rhs, is_64bit, node)`,
+/// `IAdd` + `IAdd64` -> `on_iadd(dst, lhs, rhs, is_64bit, node)`, `Copy` +
+/// `Bitcast` -> `on_copy(dst, src, node)`). Every hook receives the full
+/// `const compiler::SsaNode&` so specialized analyses can still inspect
+/// op-specific metadata (`imm_u32`, `imm_u64`, `aux_index`, `aux_str`, `type`).
+class SsaTransferVisitorBase {
 public:
-    virtual ~TransferVisitorBase() = default;
+    virtual ~SsaTransferVisitorBase() = default;
 
-    // Called before/after each instruction dispatch
-    virtual void on_inst_begin(const DecodedValhallInst& /*insn*/) {}
-    virtual void on_inst_end(const DecodedValhallInst& /*insn*/) {}
-
-    // Live-range kill hook (driven directly by ISA `^` discard_last_use bits)
-    virtual void on_reg_killed(uint8_t /*reg*/, const DecodedValhallInst& /*insn*/) {}
-
-    // Bitwise (AND/AND_IMM/LSHIFT_AND..., OR/OR_IMM/..., XOR/XOR_IMM/..., NOT, shifts)
-    virtual void on_and(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_or(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_xor(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_not(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& insn) = 0;
-    virtual void on_shift(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& amount, ShiftKind kind, const DecodedValhallInst& insn) = 0;
+    // Constants & moves / aliases
+    virtual void on_const(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_copy(compiler::SsaId dst, compiler::SsaId src, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_phi(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_select(compiler::SsaId dst, compiler::SsaId cond,
+                           compiler::SsaId true_val, compiler::SsaId false_val,
+                           const compiler::SsaNode& node) { on_other(dst, node); }
 
     // Integer arithmetic
-    virtual void on_iadd(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_isub(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_imul(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_shadd(const AbstractDest& dst, const AbstractOperand& base, const AbstractOperand& index, uint32_t shift, const DecodedValhallInst& insn) = 0;
-    virtual void on_iunary(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& insn) = 0;
+    virtual void on_iadd(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                         bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_isub(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                         bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_imul(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                         bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
 
-    // Floating-point & SFU
-    virtual void on_fadd(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_fmul(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_fma(const AbstractDest& dst, const AbstractOperand& a, const AbstractOperand& b, const AbstractOperand& c, const DecodedValhallInst& insn) = 0;
-    virtual void on_fminmax(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_funary(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& insn) = 0;
+    // Bitwise logic & shifts
+    virtual void on_and(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                        bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_or(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                       bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_xor(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                        bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_not(compiler::SsaId dst, compiler::SsaId src,
+                        bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_shift(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                          ShiftKind kind, bool is_64bit, const compiler::SsaNode& node) { on_other(dst, node); }
 
-    // Move, Convert, Compare, Select
-    virtual void on_mov(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& insn) = 0;
-    virtual void on_convert(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& insn) = 0;
-    virtual void on_cmp(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& insn) = 0;
-    virtual void on_csel(const AbstractDest& dst, const AbstractOperand& cond0, const AbstractOperand& cond1,
-                         const AbstractOperand& true_val, const AbstractOperand& false_val, const DecodedValhallInst& insn) = 0;
+    // 64-bit packing / splitting / tuples / conversions / vectors
+    virtual void on_pack64(compiler::SsaId dst, compiler::SsaId lo, compiler::SsaId hi,
+                           const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_split64(compiler::SsaId dst, compiler::SsaId src64,
+                            const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_tuple_extract(compiler::SsaId dst, compiler::SsaId tuple_val, uint32_t elem_idx,
+                                  const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_convert(compiler::SsaId dst, compiler::SsaId src,
+                            const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_vec(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
 
-    // PC-relative & Descriptor Address Calculation
-    virtual void on_adr(const AbstractDest& dst, int64_t target_pc, const DecodedValhallInst& insn) = 0;
-    virtual void on_lea(const AbstractDest& dst, const AbstractOperand& idx, uint32_t index, uint32_t table, const DecodedValhallInst& insn) = 0;
+    // Shader inputs, FAU uniforms, sideband, memory, textures, outputs, atomics
+    virtual void on_load_fau(compiler::SsaId dst, uint32_t fau_word_idx,
+                             const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_load_builtin(compiler::SsaId dst, uint32_t builtin_id,
+                                 const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_load_sideband(compiler::SsaId dst, uint32_t member_idx, bool is_64bit,
+                                  const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_psb_load(compiler::SsaId dst, compiler::SsaId addr, uint32_t elem_bytes,
+                             const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_psb_store(compiler::SsaId addr, compiler::SsaId val, uint32_t elem_bytes,
+                              const compiler::SsaNode& node) { on_other(node.id, node); }
+    virtual void on_load_vert_attr(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_load_frag_varying(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_tex_sample(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
+    virtual void on_store_output(const compiler::SsaNode& node) { on_other(node.id, node); }
+    virtual void on_atomic(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
 
-    // Memory & Atomics
-    virtual void on_load(const AbstractDest& dst, const AbstractOperand& base, int64_t offset, const DecodedValhallInst& insn) = 0;
-    virtual void on_store(const DecodedStaging& src, const AbstractOperand& base, int64_t offset, const DecodedValhallInst& insn) = 0;
-    virtual void on_atomic(const AbstractDest& dst, const DecodedStaging& src, const AbstractOperand& base, int64_t offset, const DecodedValhallInst& insn) = 0;
+    // Fallback for all other ops (FP math, comparisons, barriers, branches, Nop, etc.)
+    virtual void on_other(compiler::SsaId /*dst*/, const compiler::SsaNode& /*node*/) {}
 
-    // Graphics, Texture & Fragment Output
-    virtual void on_ld_attr(const AbstractDest& dst, uint32_t index, uint32_t table, const DecodedValhallInst& insn) = 0;
-    virtual void on_ld_var(const AbstractDest& dst, uint32_t index, uint32_t table, const DecodedValhallInst& insn) = 0;
-    virtual void on_tex(const AbstractDest& dst, uint32_t tex_idx, uint32_t smp_idx, const DecodedValhallInst& insn) = 0;
-    virtual void on_blend(const DecodedStaging& src, int32_t rt_idx, const DecodedValhallInst& insn) = 0;
-
-    // Control flow & fallback
-    virtual void on_branch(const AbstractOperand& cond, int64_t target_pc, const DecodedValhallInst& insn) = 0;
-    virtual void on_nop_or_barrier(const DecodedValhallInst& insn) = 0;
-    virtual void on_unhandled(const AbstractDest& dst, const DecodedValhallInst& insn) = 0;
+    // Optional liveness hook: fired after an SSA node when liveness reports `killed_id` is last-used
+    virtual void on_ssa_killed(compiler::SsaId /*killed_id*/, const compiler::SsaNode& /*at_node*/) {}
 };
 
-/// Dispatch a decoded Valhall instruction into the normalized transfer visitor,
-/// automatically normalizing mnemonic variants and firing `on_reg_killed` for `^` operands.
-void dispatch_valhall_transfer(const DecodedValhallInst& insn, TransferVisitorBase& visitor);
+/// Normalized dispatcher from any `compiler::SsaNode` into `SsaTransferVisitorBase`.
+void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor);
 
-/// Generic domain-backed transfer visitor providing sensible extensional-equality defaults:
-///   - `on_mov(dst, src)` copies/aliases `eval_operand(src)` into `dst`
-///   - `x + 0`, `x - 0`, `x | 0`, `x ^ 0`, `x & ~0`, `x & x`, `x | x` copy `x`
-///   - `on_csel(dst, ..., t, f)` joins `eval_operand(t)` and `eval_operand(f)`
-///   - `on_reg_killed(r)` marks `state_.kill_reg(r)`
-///   - All other writes default to `DomainT::top()` so subclasses only override what they refine.
+namespace detail {
+
+template <typename T, typename = void>
+struct has_const_helpers : std::false_type {};
+
+template <typename T>
+struct has_const_helpers<
+    T,
+    std::void_t<
+        decltype(T::try_as_const_u64(std::declval<const typename T::Value&>(), std::declval<uint64_t*>())),
+        decltype(T::make_const_u64(std::declval<uint64_t>()))>> : std::true_type {};
+
+}  // namespace detail
+
+/// Domain-aware SSA transfer visitor providing built-in **extensional equalities**:
+///
+/// 1. `Copy` / `Bitcast`: `dst = state.val(src)` (default state copy/alias).
+/// 2. `Phi`: `dst = ⊔ { state.val(v) | (_, v) ∈ phi_incomings }`.
+/// 3. `Select(c, a, b)`: if `a == b`, exact copy; otherwise `val(a) ⊔ val(b)`.
+/// 4. Algebraic identities (when `DomainT` exposes `try_as_const_u64`/`make_const_u64`):
+///      - `x + 0 == 0 + x == x`
+///      - `x - 0 == x`, `x - x == 0`
+///      - `x * 1 == 1 * x == x`, `x * 0 == 0 * x == 0`
+///      - `x | 0 == 0 | x == x`, `x | x == x`
+///      - `x ^ 0 == 0 ^ x == x`, `x ^ x == 0`
+///      - `x & ~0 == ~0 & x == x`, `x & x == x`, `x & 0 == 0 & x == 0`
+///      - `x << 0 == x >> 0 == x`
+///
+/// Subclasses override whichever semantic hooks they want to refine and can fall
+/// back to `SsaDomainTransferVisitor<DomainT>::on_*` to inherit these equalities.
 template <typename DomainT>
-class DomainTransferVisitor : public TransferVisitorBase {
+class SsaDomainTransferVisitor : public SsaTransferVisitorBase {
 public:
-    using State = AbstractState<DomainT>;
     using Value = typename DomainT::Value;
+    using State = AbstractState<DomainT>;
 
-    explicit DomainTransferVisitor(State* state) : state_(state) {}
+    explicit SsaDomainTransferVisitor(State* st = nullptr) : state_(st) {}
 
-    void set_state(State* state) { state_ = state; }
-    State& state() { return *state_; }
-    const State& state() const { return *state_; }
+    void set_state(State* st) { state_ = st; }
+    State* state() const { return state_; }
 
-    /// Resolve an AbstractOperand to its abstract value in the current state.
-    virtual Value eval_operand(const AbstractOperand& op) const {
-        if (!state_) return DomainT::top();
-        switch (op.kind) {
-            case AbstractOperand::Kind::Register:
-                return state_->get_reg(op.reg_num);
-            case AbstractOperand::Kind::FauUniform:
-                return state_->get_fau(op.fau_byte_offset);
-            default:
-                return DomainT::top();
+    Value eval(compiler::SsaId id) const {
+        return state_ ? state_->val(id) : DomainT::bottom();
+    }
+
+    void assign(compiler::SsaId dst, const Value& v) {
+        if (state_ && dst != compiler::kInvalidSsa) {
+            state_->set_val(dst, v);
         }
     }
 
-    void write_dest(const AbstractDest& dst, const Value& v) {
-        if (!state_ || !dst.present) return;
-        state_->set_reg_range(dst.base_reg, dst.reg_count, v);
+    static bool try_const(const Value& v, uint64_t* out) {
+        if constexpr (detail::has_const_helpers<DomainT>::value) {
+            return DomainT::try_as_const_u64(v, out);
+        }
+        (void)v;
+        (void)out;
+        return false;
     }
 
-    void on_reg_killed(uint8_t reg, const DecodedValhallInst& /*insn*/) override {
-        if (state_) state_->kill_reg(reg);
+    static Value make_const(uint64_t c) {
+        if constexpr (detail::has_const_helpers<DomainT>::value) {
+            return DomainT::make_const_u64(c);
+        }
+        (void)c;
+        return DomainT::top();
     }
 
-    // --- Extensional equalities ---
-    void on_mov(const AbstractDest& dst, const AbstractOperand& src, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, eval_operand(src));
+    // --- Built-in extensional equalities ---
+
+    void on_copy(compiler::SsaId dst, compiler::SsaId src, const compiler::SsaNode&) override {
+        assign(dst, eval(src));
     }
 
-    void on_and(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& /*insn*/) override {
-        if (rhs.is_const_all_ones() || lhs.same_reg(rhs)) {
-            write_dest(dst, eval_operand(lhs));
-        } else if (lhs.is_const_all_ones()) {
-            write_dest(dst, eval_operand(rhs));
+    void on_phi(compiler::SsaId dst, const compiler::SsaNode& node) override {
+        Value acc = DomainT::bottom();
+        for (const auto& inc : node.phi_incomings) {
+            if (inc.value == dst) continue; // ignore self-loop backedge
+            acc = DomainT::join(acc, eval(inc.value));
+        }
+        assign(dst, acc);
+    }
+
+    void on_select(compiler::SsaId dst, compiler::SsaId /*cond*/,
+                   compiler::SsaId true_val, compiler::SsaId false_val,
+                   const compiler::SsaNode&) override {
+        if (true_val == false_val) {
+            assign(dst, eval(true_val));
         } else {
-            write_dest(dst, DomainT::top());
+            assign(dst, DomainT::join(eval(true_val), eval(false_val)));
         }
     }
 
-    void on_or(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& /*insn*/) override {
-        if (rhs.is_const_zero() || lhs.same_reg(rhs)) {
-            write_dest(dst, eval_operand(lhs));
-        } else if (lhs.is_const_zero()) {
-            write_dest(dst, eval_operand(rhs));
-        } else {
-            write_dest(dst, DomainT::top());
+    void on_iadd(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (ha && hb) { assign(dst, make_const(ca + cb)); return; }
+        if (hb && cb == 0) { assign(dst, a); return; }
+        if (ha && ca == 0) { assign(dst, b); return; }
+        assign(dst, DomainT::top());
+    }
+
+    void on_isub(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+        if (lhs != compiler::kInvalidSsa && lhs == rhs) {
+            assign(dst, make_const(0));
+            return;
         }
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (ha && hb) { assign(dst, make_const(ca - cb)); return; }
+        if (hb && cb == 0) { assign(dst, a); return; }
+        assign(dst, DomainT::top());
     }
 
-    void on_xor(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& /*insn*/) override {
-        if (rhs.is_const_zero()) {
-            write_dest(dst, eval_operand(lhs));
-        } else if (lhs.is_const_zero()) {
-            write_dest(dst, eval_operand(rhs));
-        } else {
-            write_dest(dst, DomainT::top());
+    void on_imul(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (ha && hb) { assign(dst, make_const(ca * cb)); return; }
+        if ((ha && ca == 0) || (hb && cb == 0)) { assign(dst, make_const(0)); return; }
+        if (hb && cb == 1) { assign(dst, a); return; }
+        if (ha && ca == 1) { assign(dst, b); return; }
+        assign(dst, DomainT::top());
+    }
+
+    void on_and(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                bool is_64bit, const compiler::SsaNode&) override {
+        if (lhs != compiler::kInvalidSsa && lhs == rhs) {
+            assign(dst, eval(lhs));
+            return;
         }
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        const uint64_t all_ones = is_64bit ? ~0ULL : 0xFFFFFFFFULL;
+        if (ha && hb) { assign(dst, make_const(ca & cb)); return; }
+        if ((ha && ca == 0) || (hb && cb == 0)) { assign(dst, make_const(0)); return; }
+        if (hb && (cb & all_ones) == all_ones) { assign(dst, a); return; }
+        if (ha && (ca & all_ones) == all_ones) { assign(dst, b); return; }
+        assign(dst, DomainT::top());
     }
 
-    void on_not(const AbstractDest& dst, const AbstractOperand& /*src*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
+    void on_or(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+               bool /*is_64bit*/, const compiler::SsaNode&) override {
+        if (lhs != compiler::kInvalidSsa && lhs == rhs) {
+            assign(dst, eval(lhs));
+            return;
+        }
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (ha && hb) { assign(dst, make_const(ca | cb)); return; }
+        if (hb && cb == 0) { assign(dst, a); return; }
+        if (ha && ca == 0) { assign(dst, b); return; }
+        assign(dst, DomainT::top());
     }
 
-    void on_shift(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& amount, ShiftKind /*kind*/, const DecodedValhallInst& /*insn*/) override {
-        if (amount.is_const_zero()) write_dest(dst, eval_operand(lhs));
-        else write_dest(dst, DomainT::top());
+    void on_xor(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                bool /*is_64bit*/, const compiler::SsaNode&) override {
+        if (lhs != compiler::kInvalidSsa && lhs == rhs) {
+            assign(dst, make_const(0));
+            return;
+        }
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (ha && hb) { assign(dst, make_const(ca ^ cb)); return; }
+        if (hb && cb == 0) { assign(dst, a); return; }
+        if (ha && ca == 0) { assign(dst, b); return; }
+        assign(dst, DomainT::top());
     }
 
-    void on_iadd(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& /*insn*/) override {
-        if (rhs.is_const_zero()) write_dest(dst, eval_operand(lhs));
-        else if (lhs.is_const_zero()) write_dest(dst, eval_operand(rhs));
-        else write_dest(dst, DomainT::top());
+    void on_not(compiler::SsaId dst, compiler::SsaId src,
+                bool is_64bit, const compiler::SsaNode&) override {
+        uint64_t c = 0;
+        if (try_const(eval(src), &c)) {
+            uint64_t mask = is_64bit ? ~0ULL : 0xFFFFFFFFULL;
+            assign(dst, make_const((~c) & mask));
+            return;
+        }
+        assign(dst, DomainT::top());
     }
 
-    void on_isub(const AbstractDest& dst, const AbstractOperand& lhs, const AbstractOperand& rhs, const DecodedValhallInst& /*insn*/) override {
-        if (rhs.is_const_zero()) write_dest(dst, eval_operand(lhs));
-        else write_dest(dst, DomainT::top());
+    void on_shift(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
+                  ShiftKind kind, bool is_64bit, const compiler::SsaNode&) override {
+        Value a = eval(lhs), b = eval(rhs);
+        uint64_t ca = 0, cb = 0;
+        bool ha = try_const(a, &ca), hb = try_const(b, &cb);
+        if (hb && cb == 0) { assign(dst, a); return; }
+        if (ha && hb) {
+            uint32_t sh = static_cast<uint32_t>(cb & (is_64bit ? 63u : 31u));
+            uint64_t mask = is_64bit ? ~0ULL : 0xFFFFFFFFULL;
+            uint64_t res = 0;
+            switch (kind) {
+                case ShiftKind::Shl:  res = (ca << sh) & mask; break;
+                case ShiftKind::ShrU: res = (ca & mask) >> sh; break;
+                case ShiftKind::ShrS:
+                    if (is_64bit) res = static_cast<uint64_t>(static_cast<int64_t>(ca) >> sh);
+                    else res = static_cast<uint64_t>(static_cast<uint32_t>(static_cast<int32_t>(ca) >> sh));
+                    break;
+                case ShiftKind::RotL: {
+                    uint32_t w = is_64bit ? 64u : 32u;
+                    res = (sh == 0) ? (ca & mask) : (((ca << sh) | ((ca & mask) >> (w - sh))) & mask);
+                    break;
+                }
+                case ShiftKind::RotR: {
+                    uint32_t w = is_64bit ? 64u : 32u;
+                    res = (sh == 0) ? (ca & mask) : ((((ca & mask) >> sh) | (ca << (w - sh))) & mask);
+                    break;
+                }
+            }
+            assign(dst, make_const(res));
+            return;
+        }
+        assign(dst, DomainT::top());
     }
 
-    void on_imul(const AbstractDest& dst, const AbstractOperand& /*lhs*/, const AbstractOperand& /*rhs*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-
-    void on_shadd(const AbstractDest& dst, const AbstractOperand& base, const AbstractOperand& index, uint32_t /*shift*/, const DecodedValhallInst& /*insn*/) override {
-        if (index.is_const_zero()) write_dest(dst, eval_operand(base));
-        else write_dest(dst, DomainT::top());
-    }
-
-    void on_iunary(const AbstractDest& dst, const AbstractOperand& /*src*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-
-    void on_fadd(const AbstractDest& dst, const AbstractOperand& /*lhs*/, const AbstractOperand& /*rhs*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_fmul(const AbstractDest& dst, const AbstractOperand& /*lhs*/, const AbstractOperand& /*rhs*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_fma(const AbstractDest& dst, const AbstractOperand& /*a*/, const AbstractOperand& /*b*/, const AbstractOperand& /*c*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_fminmax(const AbstractDest& dst, const AbstractOperand& /*lhs*/, const AbstractOperand& /*rhs*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_funary(const AbstractDest& dst, const AbstractOperand& /*src*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_convert(const AbstractDest& dst, const AbstractOperand& /*src*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_cmp(const AbstractDest& dst, const AbstractOperand& /*lhs*/, const AbstractOperand& /*rhs*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-
-    void on_csel(const AbstractDest& dst, const AbstractOperand& /*cond0*/, const AbstractOperand& /*cond1*/,
-                 const AbstractOperand& true_val, const AbstractOperand& false_val, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::join(eval_operand(true_val), eval_operand(false_val)));
-    }
-
-    void on_adr(const AbstractDest& dst, int64_t /*target_pc*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_lea(const AbstractDest& dst, const AbstractOperand& /*idx*/, uint32_t /*index*/, uint32_t /*table*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_load(const AbstractDest& dst, const AbstractOperand& /*base*/, int64_t /*offset*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_store(const DecodedStaging& /*src*/, const AbstractOperand& /*base*/, int64_t /*offset*/, const DecodedValhallInst& /*insn*/) override {}
-    void on_atomic(const AbstractDest& dst, const DecodedStaging& /*src*/, const AbstractOperand& /*base*/, int64_t /*offset*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_ld_attr(const AbstractDest& dst, uint32_t /*index*/, uint32_t /*table*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_ld_var(const AbstractDest& dst, uint32_t /*index*/, uint32_t /*table*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_tex(const AbstractDest& dst, uint32_t /*tex_idx*/, uint32_t /*smp_idx*/, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
-    }
-    void on_blend(const DecodedStaging& /*src*/, int32_t /*rt_idx*/, const DecodedValhallInst& /*insn*/) override {}
-    void on_branch(const AbstractOperand& /*cond*/, int64_t /*target_pc*/, const DecodedValhallInst& /*insn*/) override {}
-    void on_nop_or_barrier(const DecodedValhallInst& /*insn*/) override {}
-    void on_unhandled(const AbstractDest& dst, const DecodedValhallInst& /*insn*/) override {
-        write_dest(dst, DomainT::top());
+    void on_other(compiler::SsaId dst, const compiler::SsaNode& node) override {
+        if (dst != compiler::kInvalidSsa && node.type != compiler::ValType::Void &&
+            node.type != compiler::ValType::Token) {
+            assign(dst, DomainT::top());
+        }
     }
 
 protected:
     State* state_ = nullptr;
 };
 
-/// Result of running forward worklist abstract interpretation over a decoded shader.
+/// Result of forward SSA CFG worklist dataflow analysis.
 template <typename DomainT>
-struct DataflowFixpointResult {
-    using State = AbstractState<DomainT>;
-    std::vector<State> pre_states;   // Abstract state immediately BEFORE instruction[i]
-    std::vector<State> post_states;  // Abstract state immediately AFTER instruction[i]
-    size_t iterations = 0;
+struct SsaDataflowResult {
+    bool converged = false;
+    uint32_t iterations = 0;
+
+    /// Unified converged abstract state across the entire SSA module
+    /// (since every SsaId has a unique definition, `final_state.val(id)` gives
+    /// its fixpoint abstract value).
+    AbstractState<DomainT> final_state;
 };
 
-/// CFG-aware forward worklist abstract interpretation driver.
-/// Joins incoming states at basic-block merge points until fixpoint (bounded by max_iters).
-template <typename DomainT, typename VisitorT>
-DataflowFixpointResult<DomainT> run_forward_dataflow(
-    const std::vector<DecodedValhallInst>& instructions,
+/// Forward chaotic-iteration worklist fixpoint solver over a `ValhallSsaModule`.
+///
+/// Exploits SSA single-static-assignment: `ssa_vals` is stored ONCE in O(|V|)
+/// space (never replicated per block), while mutable side-channel maps
+/// (`fau_mem`, `sym_mem`) are joined per basic block. This scales smoothly to
+/// 100KB+ shaders with tens of thousands of SSA nodes and hundreds of blocks.
+template <typename DomainT>
+SsaDataflowResult<DomainT> run_ssa_forward_dataflow(
+    const compiler::ValhallSsaModule& mod,
     const AbstractState<DomainT>& entry_state,
-    VisitorT& visitor,
-    size_t max_iters = 64) {
-    using State = AbstractState<DomainT>;
-    DataflowFixpointResult<DomainT> res;
-    res.pre_states.resize(instructions.size(), State::bottom());
-    res.post_states.resize(instructions.size(), State::bottom());
-    if (instructions.empty()) return res;
+    SsaDomainTransferVisitor<DomainT>& visitor,
+    const SsaLivenessResult* liveness = nullptr,
+    uint32_t max_iterations = 64) {
+    using Value = typename DomainT::Value;
+    SsaDataflowResult<DomainT> res;
+    const size_t num_blocks = mod.blocks.size();
+    const size_t num_nodes = mod.nodes.size();
 
-    cfg::ControlFlowGraph g = cfg::build_cfg(instructions);
-    if (g.blocks.empty()) return res;
+    res.final_state = entry_state;
+    res.final_state.ensure_size(num_nodes);
 
-    // Map PC -> original instruction index
-    std::map<uint64_t, size_t> pc_to_idx;
-    for (size_t i = 0; i < instructions.size(); ++i) {
-        pc_to_idx[instructions[i].pc] = i;
+    if (num_blocks == 0) {
+        res.converged = true;
+        return res;
     }
 
-    const size_t nblk = g.blocks.size();
-    std::vector<State> blk_in(nblk, State::bottom());
-    std::vector<bool> visited(nblk, false);
-    std::vector<bool> in_queue(nblk, false);
-    std::deque<size_t> worklist;
+    // Per-block exit side-channel maps only (small: typically 0..20 FAU entries)
+    std::vector<std::map<uint32_t, Value>> block_out_fau(num_blocks);
+    std::vector<std::map<std::string, Value>> block_out_sym(num_blocks);
+    std::vector<bool> visited(num_blocks, false);
 
-    blk_in[0] = entry_state;
-    visited[0] = true;
-    worklist.push_back(0);
-    in_queue[0] = true;
+    auto map_equals = [](const auto& a, const auto& b) -> bool {
+        if (a.size() != b.size()) return false;
+        for (const auto& kv : a) {
+            auto it = b.find(kv.first);
+            if (it == b.end() || !DomainT::equals(kv.second, it->second)) return false;
+        }
+        return true;
+    };
 
-    while (!worklist.empty() && res.iterations < max_iters * nblk) {
-        size_t bidx = worklist.front();
+    auto join_map = [](auto& dst, const auto& src) {
+        for (const auto& kv : src) {
+            auto it = dst.find(kv.first);
+            if (it == dst.end()) {
+                if (!DomainT::equals(kv.second, DomainT::bottom())) dst[kv.first] = kv.second;
+            } else {
+                it->second = DomainT::join(it->second, kv.second);
+            }
+        }
+    };
+
+    std::deque<uint32_t> worklist;
+    std::vector<bool> in_worklist(num_blocks, false);
+    for (uint32_t b = 0; b < num_blocks; ++b) {
+        worklist.push_back(b);
+        in_worklist[b] = true;
+    }
+
+    const size_t max_visits = static_cast<size_t>(max_iterations) * std::max<size_t>(1, num_blocks);
+    size_t visits = 0;
+
+    while (!worklist.empty() && visits < max_visits) {
+        uint32_t b = worklist.front();
         worklist.pop_front();
-        in_queue[bidx] = false;
-        ++res.iterations;
+        in_worklist[b] = false;
+        ++visits;
 
-        State cur = blk_in[bidx];
-        const auto& blk = g.blocks[bidx];
-        for (size_t gi : blk.inst_indices) {
-            if (gi >= g.instructions.size()) continue;
-            const auto& insn = g.instructions[gi];
-            auto it = pc_to_idx.find(insn.pc);
-            size_t orig_idx = (it != pc_to_idx.end()) ? it->second : gi;
-            if (orig_idx < res.pre_states.size()) {
-                res.pre_states[orig_idx] = cur;
-            }
-            visitor.set_state(&cur);
-            dispatch_valhall_transfer(insn, visitor);
-            if (orig_idx < res.post_states.size()) {
-                res.post_states[orig_idx] = cur;
+        const auto& blk = mod.blocks[b];
+
+        // Join mutable side-channel maps from visited predecessors
+        res.final_state.fau_mem.clear();
+        res.final_state.sym_mem.clear();
+        if (b == 0) {
+            res.final_state.fau_mem = entry_state.fau_mem;
+            res.final_state.sym_mem = entry_state.sym_mem;
+        }
+        for (uint32_t pred : blk.preds) {
+            if (pred < num_blocks && visited[pred]) {
+                join_map(res.final_state.fau_mem, block_out_fau[pred]);
+                join_map(res.final_state.sym_mem, block_out_sym[pred]);
             }
         }
 
-        int32_t succs_arr[2] = { blk.fallthrough_block, blk.branch_target_block };
-        for (int32_t succ_i : succs_arr) {
-            if (succ_i < 0) continue;
-            uint32_t succ = static_cast<uint32_t>(succ_i);
-            if (succ >= nblk) continue;
-            if (!visited[succ]) {
-                blk_in[succ] = cur;
-                visited[succ] = true;
-                if (!in_queue[succ]) {
-                    worklist.push_back(succ);
-                    in_queue[succ] = true;
+        visitor.set_state(&res.final_state);
+        bool ssa_changed = false;
+
+        // 1. Evaluate Phi nodes at block entry (monotone join into shared ssa_vals)
+        for (compiler::SsaId pid : blk.phis) {
+            if (pid == compiler::kInvalidSsa || pid >= num_nodes) continue;
+            Value prev = res.final_state.val(pid);
+            dispatch_ssa_transfer(mod.get(pid), visitor);
+            Value next = DomainT::join(prev, res.final_state.val(pid));
+            if (!DomainT::equals(next, prev)) {
+                res.final_state.set_val(pid, next);
+                ssa_changed = true;
+            } else {
+                res.final_state.set_val(pid, prev);
+            }
+        }
+
+        // 2. Evaluate body nodes in topological/program order
+        for (compiler::SsaId nid : blk.nodes) {
+            if (nid == compiler::kInvalidSsa || nid >= num_nodes) continue;
+            Value prev = res.final_state.val(nid);
+            const auto& node = mod.get(nid);
+            dispatch_ssa_transfer(node, visitor);
+            Value next = DomainT::join(prev, res.final_state.val(nid));
+            if (!DomainT::equals(next, prev)) {
+                res.final_state.set_val(nid, next);
+                ssa_changed = true;
+            } else {
+                res.final_state.set_val(nid, prev);
+            }
+            if (liveness && nid < liveness->killed_after_node.size()) {
+                for (compiler::SsaId kid : liveness->killed_after_node[nid]) {
+                    visitor.on_ssa_killed(kid, node);
                 }
-            } else if (blk_in[succ].join_with(cur)) {
-                if (!in_queue[succ]) {
-                    worklist.push_back(succ);
-                    in_queue[succ] = true;
+            }
+        }
+
+        bool mem_changed = !visited[b] ||
+                           !map_equals(res.final_state.fau_mem, block_out_fau[b]) ||
+                           !map_equals(res.final_state.sym_mem, block_out_sym[b]);
+        visited[b] = true;
+        if (ssa_changed || mem_changed) {
+            block_out_fau[b] = res.final_state.fau_mem;
+            block_out_sym[b] = res.final_state.sym_mem;
+            auto enqueue = [&](int32_t succ) {
+                if (succ >= 0 && static_cast<size_t>(succ) < num_blocks && !in_worklist[succ]) {
+                    worklist.push_back(static_cast<uint32_t>(succ));
+                    in_worklist[succ] = true;
                 }
+            };
+            enqueue(blk.fallthrough_block);
+            if (blk.branch_target_block != blk.fallthrough_block) {
+                enqueue(blk.branch_target_block);
             }
         }
     }
 
+    res.converged = worklist.empty();
+    res.iterations = static_cast<uint32_t>((visits + num_blocks - 1) / std::max<size_t>(1, num_blocks));
+
+    // Merge all visited block exit side-channel maps into final_state
+    res.final_state.fau_mem = entry_state.fau_mem;
+    res.final_state.sym_mem = entry_state.sym_mem;
+    for (size_t b = 0; b < num_blocks; ++b) {
+        if (visited[b]) {
+            join_map(res.final_state.fau_mem, block_out_fau[b]);
+            join_map(res.final_state.sym_mem, block_out_sym[b]);
+        }
+    }
     return res;
 }
 

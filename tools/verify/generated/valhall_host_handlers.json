@@ -242,6 +242,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -958,6 +993,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -1625,6 +1695,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -2335,6 +2440,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -2981,6 +3121,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -3563,6 +3738,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -4037,6 +4247,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -5088,6 +5333,41 @@
                                   "line": 65
                                 },
                                 "type": "tables::EffectMask"
+                              },
+                              {
+                                "canonical_type": "int",
+                                "kind": "unary",
+                                "loc": {
+                                  "col": 29,
+                                  "line": 68
+                                },
+                                "op": "-",
+                                "operand": {
+                                  "canonical_type": "int",
+                                  "int_value": 1,
+                                  "kind": "literal",
+                                  "lit_kind": "int",
+                                  "loc": {
+                                    "col": 30,
+                                    "line": 68
+                                  },
+                                  "type": "int",
+                                  "value": "1"
+                                },
+                                "postfix": false,
+                                "type": "int"
+                              },
+                              {
+                                "canonical_type": "int",
+                                "int_value": 0,
+                                "kind": "literal",
+                                "lit_kind": "int",
+                                "loc": {
+                                  "col": 24,
+                                  "line": 69
+                                },
+                                "type": "int",
+                                "value": "0"
                               }
                             ],
                             "kind": "init_list",
@@ -6765,6 +7045,41 @@
                               "line": 65
                             },
                             "type": "tables::EffectMask"
+                          },
+                          {
+                            "canonical_type": "int",
+                            "kind": "unary",
+                            "loc": {
+                              "col": 29,
+                              "line": 68
+                            },
+                            "op": "-",
+                            "operand": {
+                              "canonical_type": "int",
+                              "int_value": 1,
+                              "kind": "literal",
+                              "lit_kind": "int",
+                              "loc": {
+                                "col": 30,
+                                "line": 68
+                              },
+                              "type": "int",
+                              "value": "1"
+                            },
+                            "postfix": false,
+                            "type": "int"
+                          },
+                          {
+                            "canonical_type": "int",
+                            "int_value": 0,
+                            "kind": "literal",
+                            "lit_kind": "int",
+                            "loc": {
+                              "col": 24,
+                              "line": 69
+                            },
+                            "type": "int",
+                            "value": "0"
                           }
                         ],
                         "kind": "init_list",
@@ -7689,6 +8004,41 @@
                               "line": 65
                             },
                             "type": "tables::EffectMask"
+                          },
+                          {
+                            "canonical_type": "int",
+                            "kind": "unary",
+                            "loc": {
+                              "col": 29,
+                              "line": 68
+                            },
+                            "op": "-",
+                            "operand": {
+                              "canonical_type": "int",
+                              "int_value": 1,
+                              "kind": "literal",
+                              "lit_kind": "int",
+                              "loc": {
+                                "col": 30,
+                                "line": 68
+                              },
+                              "type": "int",
+                              "value": "1"
+                            },
+                            "postfix": false,
+                            "type": "int"
+                          },
+                          {
+                            "canonical_type": "int",
+                            "int_value": 0,
+                            "kind": "literal",
+                            "lit_kind": "int",
+                            "loc": {
+                              "col": 24,
+                              "line": 69
+                            },
+                            "type": "int",
+                            "value": "0"
                           }
                         ],
                         "kind": "init_list",
@@ -21593,6 +21943,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -22211,6 +22596,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -22897,6 +23317,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -24450,6 +24905,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -25065,6 +25555,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -25681,6 +26206,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -26525,6 +27085,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -27572,6 +28167,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -28426,6 +29056,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -29281,6 +29946,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -30034,6 +30734,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -31033,6 +31768,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -31885,6 +32655,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -32537,6 +33342,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -33468,6 +34308,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -34424,6 +35299,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -35217,6 +36127,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -36175,6 +37120,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -37344,6 +38324,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -38071,6 +39086,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -40359,6 +41409,41 @@
                       "line": 65
                     },
                     "type": "tables::EffectMask"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "kind": "unary",
+                    "loc": {
+                      "col": 29,
+                      "line": 68
+                    },
+                    "op": "-",
+                    "operand": {
+                      "canonical_type": "int",
+                      "int_value": 1,
+                      "kind": "literal",
+                      "lit_kind": "int",
+                      "loc": {
+                        "col": 30,
+                        "line": 68
+                      },
+                      "type": "int",
+                      "value": "1"
+                    },
+                    "postfix": false,
+                    "type": "int"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 24,
+                      "line": 69
+                    },
+                    "type": "int",
+                    "value": "0"
                   }
                 ],
                 "kind": "init_list",
@@ -40825,6 +41910,41 @@
                       "line": 65
                     },
                     "type": "tables::EffectMask"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "kind": "unary",
+                    "loc": {
+                      "col": 29,
+                      "line": 68
+                    },
+                    "op": "-",
+                    "operand": {
+                      "canonical_type": "int",
+                      "int_value": 1,
+                      "kind": "literal",
+                      "lit_kind": "int",
+                      "loc": {
+                        "col": 30,
+                        "line": 68
+                      },
+                      "type": "int",
+                      "value": "1"
+                    },
+                    "postfix": false,
+                    "type": "int"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 24,
+                      "line": 69
+                    },
+                    "type": "int",
+                    "value": "0"
                   }
                 ],
                 "kind": "init_list",
@@ -48215,6 +49335,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",
@@ -48880,6 +50035,41 @@
                   "line": 65
                 },
                 "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 68
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 68
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 69
+                },
+                "type": "int",
+                "value": "0"
               }
             ],
             "kind": "init_list",

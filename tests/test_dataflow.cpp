@@ -1,202 +1,289 @@
 #include "abstract_domain.h"
+#include "liveness.h"
 #include "pointer_analysis.h"
 #include "transfer.h"
-#include "valhall_isa_generated.h"
-#include "valhall_to_spirv.h"
-#include "spirv_reflect.h"
+#include "valhall_ssa.h"
 
 #include <cassert>
-#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
 
-using namespace valhall;
 using namespace valhall::dataflow;
+using namespace valhall::compiler;
+using namespace valhall::tables;
 
 namespace {
 
-// Custom recording visitor verifying grouped dispatch (AND + AND_IMM -> on_and, etc.)
-struct DispatchRecorder : public TransferVisitorBase {
-    int and_calls = 0;
-    int or_calls = 0;
-    int iadd_calls = 0;
-    int shadd_calls = 0;
-    int mov_calls = 0;
-    int adr_calls = 0;
-    int load_calls = 0;
-    int store_calls = 0;
-    int kill_calls = 0;
+SsaId emit_op(ValhallSsaModule& mod, uint32_t blk, SsaOp op, ValType ty,
+              std::vector<SsaId> args = {}, uint32_t imm32 = 0, uint64_t imm64 = 0,
+              std::string aux_str = "") {
+    SsaNode n{};
+    n.op = op;
+    n.type = ty;
+    n.block_id = blk;
+    n.args = std::move(args);
+    n.imm_u32 = imm32;
+    n.imm_u64 = imm64;
+    n.aux_str = std::move(aux_str);
+    SsaId id = mod.add_node(std::move(n));
+    if (op == SsaOp::Phi) {
+        mod.blocks[blk].phis.push_back(id);
+    } else {
+        mod.blocks[blk].nodes.push_back(id);
+    }
+    return id;
+}
 
-    void on_reg_killed(uint8_t, const DecodedValhallInst&) override { ++kill_calls; }
-    void on_and(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override { ++and_calls; }
-    void on_or(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override { ++or_calls; }
-    void on_xor(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_not(const AbstractDest&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_shift(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, ShiftKind, const DecodedValhallInst&) override {}
-    void on_iadd(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override { ++iadd_calls; }
-    void on_isub(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_imul(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_shadd(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, uint32_t, const DecodedValhallInst&) override { ++shadd_calls; }
-    void on_iunary(const AbstractDest&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_fadd(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_fmul(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_fma(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_fminmax(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_funary(const AbstractDest&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_mov(const AbstractDest&, const AbstractOperand&, const DecodedValhallInst&) override { ++mov_calls; }
-    void on_convert(const AbstractDest&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_cmp(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_csel(const AbstractDest&, const AbstractOperand&, const AbstractOperand&, const AbstractOperand&, const AbstractOperand&, const DecodedValhallInst&) override {}
-    void on_adr(const AbstractDest&, int64_t, const DecodedValhallInst&) override { ++adr_calls; }
-    void on_lea(const AbstractDest&, const AbstractOperand&, uint32_t, uint32_t, const DecodedValhallInst&) override {}
-    void on_load(const AbstractDest&, const AbstractOperand&, int64_t, const DecodedValhallInst&) override { ++load_calls; }
-    void on_store(const DecodedStaging&, const AbstractOperand&, int64_t, const DecodedValhallInst&) override { ++store_calls; }
-    void on_atomic(const AbstractDest&, const DecodedStaging&, const AbstractOperand&, int64_t, const DecodedValhallInst&) override {}
-    void on_ld_attr(const AbstractDest&, uint32_t, uint32_t, const DecodedValhallInst&) override {}
-    void on_ld_var(const AbstractDest&, uint32_t, uint32_t, const DecodedValhallInst&) override {}
-    void on_tex(const AbstractDest&, uint32_t, uint32_t, const DecodedValhallInst&) override {}
-    void on_blend(const DecodedStaging&, int32_t, const DecodedValhallInst&) override {}
-    void on_branch(const AbstractOperand&, int64_t, const DecodedValhallInst&) override {}
-    void on_nop_or_barrier(const DecodedValhallInst&) override {}
-    void on_unhandled(const AbstractDest&, const DecodedValhallInst&) override {}
-};
+void test_tracked_val_lattice_laws() {
+    auto bot = TrackedValDomain::bottom();
+    auto top = TrackedValDomain::top();
+    auto c42 = TrackedVal::make_const(42);
+    auto c99 = TrackedVal::make_const(99);
+    auto b0 = TrackedVal::make_buffer_addr(4, 0, "bufA", 0, false, true);
+    auto b16 = TrackedVal::make_buffer_addr(4, 0, "bufA", 16, false, true);
+    auto b_unk = TrackedVal::make_buffer_addr(4, 0, "bufA", 0, false, false);
+    auto b_other = TrackedVal::make_buffer_addr(4, 1, "bufB", 0, false, true);
+
+    // Bottom / Top identities
+    assert(TrackedValDomain::equals(TrackedValDomain::join(bot, c42), c42));
+    assert(TrackedValDomain::equals(TrackedValDomain::join(c42, bot), c42));
+    assert(TrackedValDomain::equals(TrackedValDomain::join(top, c42), top));
+    assert(TrackedValDomain::equals(TrackedValDomain::meet(top, c42), c42));
+    assert(TrackedValDomain::equals(TrackedValDomain::meet(bot, c42), bot));
+
+    // Partial order & widening on same base pointer
+    assert(TrackedValDomain::leq(bot, b0));
+    assert(TrackedValDomain::leq(b0, b_unk));
+    assert(TrackedValDomain::leq(b_unk, top));
+    assert(!TrackedValDomain::leq(b_unk, b0));
+
+    auto j_same_base = TrackedValDomain::join(b0, b16);
+    assert(j_same_base.kind == TrackedVal::Kind::BufferAddr);
+    assert(j_same_base.symbol_name == "bufA");
+    assert(!j_same_base.offset_known);
+    assert(TrackedValDomain::equals(j_same_base, b_unk));
+
+    // Distinct constants / distinct bases join to Top and meet to Bottom
+    assert(TrackedValDomain::join(c42, c99).is_top());
+    assert(TrackedValDomain::join(b0, b_other).is_top());
+    assert(TrackedValDomain::meet(c42, c99).is_bottom());
+    assert(TrackedValDomain::meet(b0, b_unk).offset_known);
+    assert(TrackedValDomain::meet(b0, b_unk).byte_offset == 0);
+
+    std::cout << "[PASS] test_tracked_val_lattice_laws\n";
+}
+
+void test_ssa_grouped_dispatch_and_extensional_equalities() {
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
+    mod.blocks.push_back(b0);
+
+    SsaId c0 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 0);
+    SsaId c1 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 1);
+    SsaId call1 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, ~0ULL);
+    SsaId srt = emit_op(mod, 0, SsaOp::LoadSidebandU64, ValType::U64, {}, 2); // SrtBase
+
+    // Extensional equalities:
+    SsaId cp = emit_op(mod, 0, SsaOp::Copy, ValType::U64, {srt});
+    SsaId add0 = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {cp, c0});
+    SsaId or0 = emit_op(mod, 0, SsaOp::BitOr64, ValType::U64, {add0, c0});
+    SsaId xor0 = emit_op(mod, 0, SsaOp::BitXor64, ValType::U64, {or0, c0});
+    SsaId and_all1 = emit_op(mod, 0, SsaOp::BitAnd64, ValType::U64, {xor0, call1});
+    SsaId and_self = emit_op(mod, 0, SsaOp::BitAnd64, ValType::U64, {and_all1, and_all1});
+    SsaId or_self = emit_op(mod, 0, SsaOp::BitOr64, ValType::U64, {and_self, and_self});
+    SsaId shl0 = emit_op(mod, 0, SsaOp::Shl64, ValType::U64, {or_self, c0});
+    SsaId mul1 = emit_op(mod, 0, SsaOp::IMul64, ValType::U64, {shl0, c1});
+    SsaId sel_same = emit_op(mod, 0, SsaOp::Select, ValType::U64, {c1, mul1, mul1});
+
+    // Zero identities:
+    SsaId sub_self = emit_op(mod, 0, SsaOp::ISub64, ValType::U64, {srt, srt});
+    SsaId xor_self = emit_op(mod, 0, SsaOp::BitXor64, ValType::U64, {srt, srt});
+    SsaId and0 = emit_op(mod, 0, SsaOp::BitAnd64, ValType::U64, {srt, c0});
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::Pilot;
+    auto res = run_ssa_pointer_analysis(mod, env);
+    assert(res.converged);
+
+    for (SsaId id : {cp, add0, or0, xor0, and_all1, and_self, or_self, shl0, mul1, sel_same}) {
+        auto v = res.final_state.val(id);
+        assert(v.kind == TrackedVal::Kind::SrtBase);
+        assert(v.offset_known && v.byte_offset == 0);
+    }
+    for (SsaId z : {sub_self, xor_self, and0}) {
+        auto v = res.final_state.val(z);
+        assert(v.kind == TrackedVal::Kind::ConstInt && v.const_val == 0);
+    }
+
+    std::cout << "[PASS] test_ssa_grouped_dispatch_and_extensional_equalities\n";
+}
+
+void test_ssa_diamond_cfg_phi_and_liveness() {
+    // Diamond CFG: B0 -> {B1, B2} -> B3
+    // B0: srt = SrtBase, off16 = 16, off32 = 32, cond = ConstBool(1)
+    // B1: p1 = IAdd64(srt, off16) -> SrtBase+0x10
+    // B2: p2 = IAdd64(srt, off32) -> SrtBase+0x20
+    // B3: pm = Phi((B1, p1), (B2, p2)) -> SrtBase+? (same base, offset widened!)
+    ValhallSsaModule mod;
+    mod.blocks.resize(4);
+    for (uint32_t i = 0; i < 4; ++i) mod.blocks[i].id = i;
+
+    mod.blocks[0].fallthrough_block = 1;
+    mod.blocks[0].branch_target_block = 2;
+    mod.blocks[0].is_conditional_branch = true;
+    mod.blocks[1].preds = {0};
+    mod.blocks[1].fallthrough_block = 3;
+    mod.blocks[2].preds = {0};
+    mod.blocks[2].fallthrough_block = 3;
+    mod.blocks[3].preds = {1, 2};
+    mod.blocks[3].is_terminated_by_end = true;
+
+    SsaId cond = emit_op(mod, 0, SsaOp::ConstBool, ValType::Bool, {}, 1);
+    SsaId srt = emit_op(mod, 0, SsaOp::LoadSidebandU64, ValType::U64, {}, 2);
+    SsaId off16 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 16);
+    SsaId off32 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 32);
+    mod.blocks[0].branch_cond = cond;
+
+    SsaId p1 = emit_op(mod, 1, SsaOp::IAdd64, ValType::U64, {srt, off16});
+    SsaId p2 = emit_op(mod, 2, SsaOp::IAdd64, ValType::U64, {srt, off32});
+
+    SsaId pm = emit_op(mod, 3, SsaOp::Phi, ValType::U64);
+    mod.get_mut(pm).phi_incomings = {{1, p1}, {2, p2}};
+    SsaId zero = emit_op(mod, 3, SsaOp::ConstU64, ValType::U64, {}, 0, 0);
+    SsaId use_pm = emit_op(mod, 3, SsaOp::IAdd64, ValType::U64, {pm, zero});
+
+    // 1. Verify backwards SSA liveness with Phi edge-use semantics
+    SsaLivenessResult live = run_ssa_liveness(mod);
+    assert(live.converged);
+    // p1 is live-out of B1 (for Phi in B3), NOT live-in of B3 (because Phi defines pm, not uses p1 inside B3!)
+    assert(live.is_live_out(1, p1));
+    assert(!live.is_live_out(2, p1));
+    assert(live.is_live_out(2, p2));
+    assert(!live.is_live_out(1, p2));
+    assert(!live.is_live_in(3, p1));
+    assert(!live.is_live_in(3, p2));
+    // srt is live-out of B0 and live-in of both B1 and B2, and killed at p1 in B1 and p2 in B2
+    assert(live.is_live_out(0, srt));
+    assert(live.is_live_in(1, srt));
+    assert(live.is_live_in(2, srt));
+    assert(live.is_killed_at(p1, srt));
+    assert(live.is_killed_at(p2, srt));
+    assert(live.is_killed_at(use_pm, pm));
+
+    // 2. Verify forward SSA pointer analysis joins p1 (+0x10) and p2 (+0x20) at Phi pm -> SrtBase+?
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::Pilot;
+    auto df = run_ssa_pointer_analysis(mod, env, &live);
+    assert(df.converged);
+    assert(df.final_state.val(p1).kind == TrackedVal::Kind::SrtBase && df.final_state.val(p1).byte_offset == 16);
+    assert(df.final_state.val(p2).kind == TrackedVal::Kind::SrtBase && df.final_state.val(p2).byte_offset == 32);
+    auto vpm = df.final_state.val(pm);
+    assert(vpm.kind == TrackedVal::Kind::SrtBase);
+    assert(!vpm.offset_known);
+    assert(df.final_state.val(use_pm).kind == TrackedVal::Kind::SrtBase);
+
+    std::cout << "[PASS] test_ssa_diamond_cfg_phi_and_liveness\n";
+}
+
+void test_ssa_pilot_srt_chasing_and_fau_store() {
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
+    mod.blocks.push_back(b0);
+
+    SsaId tok = emit_op(mod, 0, SsaOp::Nop, ValType::Token);
+    SsaId fau_base = emit_op(mod, 0, SsaOp::LoadSidebandU64, ValType::U64, {}, 3);
+    SsaId srt_base = emit_op(mod, 0, SsaOp::LoadSidebandU64, ValType::U64, {}, 2);
+    SsaId c64 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 0x40); // rack 4
+    SsaId srt_r4 = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {srt_base, c64});
+    SsaId ld_rack = emit_op(mod, 0, SsaOp::PsbLoad, ValType::TupleValToken, {srt_r4, tok}, 8);
+    SsaId rack_ptr = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U64, {ld_rack}, 0);
+
+    // Load buffer VA at desc 0, field +0x08
+    SsaId c8 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 8);
+    SsaId desc0_va_addr = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {rack_ptr, c8});
+    SsaId ld_buf = emit_op(mod, 0, SsaOp::PsbLoad, ValType::TupleValToken, {desc0_va_addr, tok}, 8);
+    SsaId buf_va = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U64, {ld_buf}, 0);
+
+    // Load buffer size at desc 0, field +0x04
+    SsaId c4 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 4);
+    SsaId desc0_sz_addr = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {rack_ptr, c4});
+    SsaId ld_sz = emit_op(mod, 0, SsaOp::PsbLoad, ValType::TupleValToken, {desc0_sz_addr, tok}, 4);
+    SsaId buf_sz = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U32, {ld_sz}, 0);
+
+    // Store buffer VA into FAU_0 + 0x00 and buffer size into FAU_0 + 0x08
+    emit_op(mod, 0, SsaOp::PsbStore, ValType::Token, {fau_base, buf_va, tok}, 8);
+    SsaId fau_8 = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {fau_base, c8});
+    emit_op(mod, 0, SsaOp::PsbStore, ValType::Token, {fau_8, buf_sz, tok}, 4);
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::Pilot;
+    env.lookup_srt_symbol = [](uint8_t rack, uint32_t desc) -> std::string {
+        if (rack == 4 && desc == 0) return "my_ssbo";
+        return "";
+    };
+
+    auto df = run_ssa_pointer_analysis(mod, env);
+    assert(df.converged);
+    assert(df.final_state.val(rack_ptr).kind == TrackedVal::Kind::SrtRackPtr);
+    assert(df.final_state.val(rack_ptr).rack == 4);
+    assert(df.final_state.val(buf_va).kind == TrackedVal::Kind::BufferAddr);
+    assert(df.final_state.val(buf_va).symbol_name == "my_ssbo");
+    assert(df.final_state.val(buf_sz).kind == TrackedVal::Kind::BufferSize);
+    assert(df.final_state.val(buf_sz).symbol_name == "my_ssbo");
+
+    assert(df.pilot_fau_writes.count(0x00) == 1);
+    assert(df.pilot_fau_writes.at(0x00).value.kind == TrackedVal::Kind::BufferAddr);
+    assert(df.pilot_fau_writes.at(0x00).value.symbol_name == "my_ssbo");
+    assert(df.pilot_fau_writes.at(0x00).byte_size == 8);
+
+    assert(df.pilot_fau_writes.count(0x08) == 1);
+    assert(df.pilot_fau_writes.at(0x08).value.kind == TrackedVal::Kind::BufferSize);
+    assert(df.pilot_fau_writes.at(0x08).byte_size == 4);
+
+    std::cout << "[PASS] test_ssa_pilot_srt_chasing_and_fau_store\n";
+}
+
+void test_ssa_pack64_split64_and_fau_seed() {
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
+    mod.blocks.push_back(b0);
+
+    // Main compute shader loads 64-bit buffer VA from FAU u0 (words 0 and 1) and packs into 64-bit ptr
+    SsaId w0 = emit_op(mod, 0, SsaOp::LoadFau, ValType::U32, {}, 0);
+    SsaId w1 = emit_op(mod, 0, SsaOp::LoadFau, ValType::U32, {}, 1);
+    SsaId ptr = emit_op(mod, 0, SsaOp::Pack64, ValType::U64, {w0, w1});
+    SsaId off = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 16);
+    SsaId ptr16 = emit_op(mod, 0, SsaOp::IAdd64, ValType::U64, {ptr, off});
+    SsaId sp = emit_op(mod, 0, SsaOp::Split64, ValType::TupleU32x2, {ptr16});
+    SsaId lo = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U32, {sp}, 0);
+    SsaId hi = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U32, {sp}, 1);
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::MainCompute;
+    env.initial_fau[0x00] = TrackedVal::make_buffer_addr(4, 0, "input_buf", 0, false, true);
+
+    auto df = run_ssa_pointer_analysis(mod, env);
+    assert(df.converged);
+    auto vp = df.final_state.val(ptr16);
+    assert(vp.kind == TrackedVal::Kind::BufferAddr);
+    assert(vp.symbol_name == "input_buf");
+    assert(vp.offset_known && vp.byte_offset == 16);
+    assert(!df.final_state.val(lo).is_hi_half);
+    assert(df.final_state.val(hi).is_hi_half);
+
+    std::cout << "[PASS] test_ssa_pack64_split64_and_fau_seed\n";
+}
 
 }  // namespace
 
 int main() {
-    std::cout << "=== [Test] Valhall Abstract Interpretation & Pointer Dataflow Framework ===\n";
-
-    // 1. Verify TrackedValDomain lattice laws (bottom, top, join, meet, leq, idempotence, commutativity)
-    {
-        TrackedVal bot = TrackedValDomain::bottom();
-        TrackedVal top = TrackedValDomain::top();
-        TrackedVal c42 = TrackedVal::make_const(42);
-        TrackedVal c99 = TrackedVal::make_const(99);
-        TrackedVal buf_fixed = TrackedVal::make_buffer_addr(4, 0, "input_buf", 0, false);
-        TrackedVal buf_off8 = TrackedVal::make_buffer_addr(4, 0, "input_buf", 8, false);
-        TrackedVal buf_idx = TrackedVal::make_buffer_addr(4, 0, "input_buf", 0, true);
-        TrackedVal buf_other = TrackedVal::make_buffer_addr(4, 1, "output_buf", 0, false);
-
-        assert(TrackedValDomain::leq(bot, c42));
-        assert(TrackedValDomain::leq(c42, top));
-        assert(TrackedValDomain::equals(TrackedValDomain::join(bot, c42), c42));
-        assert(TrackedValDomain::equals(TrackedValDomain::join(c42, c42), c42));
-        assert(TrackedValDomain::equals(TrackedValDomain::join(c42, c99), top));
-        assert(TrackedValDomain::equals(TrackedValDomain::meet(top, c42), c42));
-        assert(TrackedValDomain::equals(TrackedValDomain::meet(c42, c99), bot));
-
-        // Same buffer at different offsets joins to dynamically indexed BufferAddr!
-        TrackedVal joined_buf = TrackedValDomain::join(buf_fixed, buf_off8);
-        assert(TrackedValDomain::equals(joined_buf, buf_idx));
-        assert(TrackedValDomain::leq(buf_fixed, buf_idx));
-        assert(TrackedValDomain::equals(TrackedValDomain::meet(buf_fixed, buf_idx), buf_fixed));
-        // Distinct buffers join to Top
-        assert(TrackedValDomain::equals(TrackedValDomain::join(buf_fixed, buf_other), top));
-
-        // SymbolValue direct <= derived
-        TrackedVal sym_direct = TrackedVal::make_symbol_value(0, 0, "u_Dims.x", false);
-        TrackedVal sym_derived = TrackedVal::make_symbol_value(0, 0, "u_Dims.x", true);
-        assert(TrackedValDomain::leq(sym_direct, sym_derived));
-        assert(TrackedValDomain::equals(TrackedValDomain::join(sym_direct, sym_derived), sym_derived));
-        assert(TrackedValDomain::equals(TrackedValDomain::meet(sym_direct, sym_derived), sym_direct));
-    }
-    std::cout << "[PASS] TrackedValDomain lattice laws (join, meet, leq, generalization) verified\n";
-
-    // 2. Verify grouped transfer dispatch: AND + AND_IMM -> on_and, MOV_IMM -> on_mov, ADR -> on_adr, kill `^`
-    {
-        // Real Valhall words from sample_ref.spv and s2v_test_comp.spv:
-        uint64_t w_and_imm = 0x0118fd00ffffff7dULL;  // AND_IMM.i32 r61, r61^, #0xffffff (v11)
-        uint64_t w_and     = 0x00b4c3011044c043ULL;  // AND.i32 r3, r3^, r4^ (v10)
-        uint64_t w_mov_imm = 0x0910ff00000003c0ULL;  // MOV_IMM.i32.wait0 r63, #0x3 (v11)
-        uint64_t w_adr     = 0x0710fc00000090feULL;  // ADR r60, 0x100 (v11, pc=0x68)
-        uint64_t w_load    = 0x006084f468004042ULL;  // LOAD.i64.slot1 @r4:r5, [r2^:r3^], #0x40 (v11)
-        uint64_t w_store   = 0x2061460468000000ULL;  // STORE.i64.slot1.wait2 @r6:r7, [r0:r1], #0x0 (v11)
-        uint64_t w_shadd   = 0x01a3c00020270282ULL;  // SHADD.u64 [r0:r1], u1, [r2:r3].w0, #0x2 (v11)
-
-        DispatchRecorder rec;
-        dispatch_valhall_transfer(decode_valhall_instruction(w_and_imm, 11, 0x18), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_and, 10, 0x10), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_mov_imm, 11, 0x10), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_adr, 11, 0x68), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_load, 11, 0x08), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_store, 11, 0x60), rec);
-        dispatch_valhall_transfer(decode_valhall_instruction(w_shadd, 11, 0x58), rec);
-
-        assert(rec.and_calls == 2);  // BOTH AND and AND_IMM dispatched to on_and!
-        assert(rec.mov_calls == 1);
-        assert(rec.adr_calls == 1);
-        assert(rec.load_calls == 1);
-        assert(rec.store_calls == 1);
-        assert(rec.shadd_calls == 1);
-        assert(rec.kill_calls >= 2); // r4^ on AND and r2^:r3^ on LOAD fired on_reg_killed!
-    }
-    std::cout << "[PASS] Grouped Valhall transfer dispatch (AND/AND_IMM, MOV_IMM, ADR, LOAD, STORE, SHADD, ^ kills) verified\n";
-
-    // 3. Verify extensional equalities in DomainTransferVisitor (MOV alias, IADD +0, AND ~0, CSEL join)
-    {
-        PointerState st;
-        TrackedVal ptr = TrackedVal::make_buffer_addr(4, 0, "my_ssbo", 0, false);
-        st.set_reg(10, ptr);
-
-        DomainTransferVisitor<TrackedValDomain> vis(&st);
-        DecodedValhallInst dummy{};
-        dummy.valid = true;
-
-        // MOV r11, r10 -> aliases ptr
-        vis.on_mov(AbstractDest{true, 11, 1, false}, AbstractOperand::from_reg(10), dummy);
-        assert(TrackedValDomain::equals(st.get_reg(11), ptr));
-
-        // IADD r12, r11, 0 -> identity copy
-        vis.on_iadd(AbstractDest{true, 12, 1, false}, AbstractOperand::from_reg(11), AbstractOperand::from_imm(0, 0), dummy);
-        assert(TrackedValDomain::equals(st.get_reg(12), ptr));
-
-        // AND r13, r12, 0xFFFFFFFF -> identity copy
-        vis.on_and(AbstractDest{true, 13, 1, false}, AbstractOperand::from_reg(12), AbstractOperand::from_imm(0xFFFFFFFFULL, -1), dummy);
-        assert(TrackedValDomain::equals(st.get_reg(13), ptr));
-
-        // CSEL r14, cond, 0, r10, r15 (where r15 is same buffer @ +16) -> joins to indexed BufferAddr!
-        st.set_reg(15, TrackedVal::make_buffer_addr(4, 0, "my_ssbo", 16, false));
-        vis.on_csel(AbstractDest{true, 14, 1, false}, AbstractOperand::from_reg(0), AbstractOperand::from_imm(0, 0),
-                    AbstractOperand::from_reg(10), AbstractOperand::from_reg(15), dummy);
-        assert(st.get_reg(14).kind == TrackedVal::Kind::BufferAddr && st.get_reg(14).is_indexed);
-    }
-    std::cout << "[PASS] Extensional equalities (MOV alias, +0, &~0, CSEL join) verified\n";
-
-    // 4. Verify optional ValhallSymbolBindings in valhall2spirv (OpName emission)
-    {
-        // Minimal 5-instruction compute shader (from s2v_test_comp.spv):
-        //   0x00: SHADD.u64 [r0:r1], u0, [r60^:r61^].w0, #0x2
-        //   0x08: LOAD.i32.slot0.wait0 @r2, [r0:r1], #0x0
-        //   0x10: FMA.f32 r2, r2^, k0f2f, k1f
-        //   0x18: STORE.i32.slot0.end @r2, [r0^:r1^], #0x0
-        const uint64_t code_words[4] = {
-            0x01a3c00020277c80ULL,
-            0x0860828218000000ULL,
-            0x00b2c20000d0dc42ULL,
-            0x7861420218000040ULL,
-        };
-        ValhallTranslateOptions topts;
-        topts.stage = ShaderStage::Compute;
-        topts.arch = 10;
-        topts.symbol_bindings.sideband_var_name = "my_custom_sideband";
-        topts.symbol_bindings.fau_word_names[0] = "fau_my_ssbo_lo";
-        topts.symbol_bindings.fau_word_names[4] = "fau_my_ssbo_hi";
-
-        auto tres = translate_valhall_to_spirv(
-            reinterpret_cast<const uint8_t*>(code_words), sizeof(code_words), topts);
-        assert(tres.ok);
-        SpvReflectShaderModule mod{};
-        assert(spvReflectCreateShaderModule(tres.spirv_words.size() * 4, tres.spirv_words.data(), &mod) == SPV_REFLECT_RESULT_SUCCESS);
-        spvReflectDestroyShaderModule(&mod);
-
-        // Verify OpName strings appear in the emitted SPIR-V words
-        std::string raw(reinterpret_cast<const char*>(tres.spirv_words.data()), tres.spirv_words.size() * 4);
-        assert(raw.find("my_custom_sideband") != std::string::npos);
-        assert(raw.find("fau_my_ssbo_lo") != std::string::npos);
-        assert(raw.find("fau_my_ssbo_hi") != std::string::npos);
-    }
-    std::cout << "[PASS] Optional ValhallSymbolBindings OpName emission in valhall2spirv verified\n";
-
+    std::cout << "=== [Test] SSA-Level Valhall Dataflow, Liveness & Pointer Analysis ===\n";
+    test_tracked_val_lattice_laws();
+    test_ssa_grouped_dispatch_and_extensional_equalities();
+    test_ssa_diamond_cfg_phi_and_liveness();
+    test_ssa_pilot_srt_chasing_and_fau_store();
+    test_ssa_pack64_split64_and_fau_seed();
+    std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }
