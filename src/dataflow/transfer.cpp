@@ -153,6 +153,21 @@ ShiftKind classify_ssa_shift_kind(tables::SsaOp op) {
     }
 }
 
+ConvertKind classify_ssa_convert_kind(tables::SsaOp op) {
+    using tables::SsaOp;
+    switch (op) {
+        case SsaOp::UConvert32To64: return ConvertKind::U32ToU64;
+        case SsaOp::SConvert32To64: return ConvertKind::S32ToS64;
+        case SsaOp::UConvert64To32: return ConvertKind::U64ToU32;
+        case SsaOp::ConvertFToS:    return ConvertKind::FloatToSInt;
+        case SsaOp::ConvertFToU:    return ConvertKind::FloatToUInt;
+        case SsaOp::ConvertSToF:    return ConvertKind::SIntToFloat;
+        case SsaOp::ConvertUToF:    return ConvertKind::UIntToFloat;
+        case SsaOp::Bitcast:        return ConvertKind::Bitcast;
+        default:                    return ConvertKind::Other;
+    }
+}
+
 void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor) {
     const compiler::SsaId dst = node.id;
     const SsaOpKind kind = classify_ssa_op(node.op);

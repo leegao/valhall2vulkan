@@ -179,9 +179,25 @@ A bounded finite powerset domain that tracks up to `MaxK` (default 4) distinct c
 - **Constant-Folding Forwarding:** When `ElemDomainT` provides `try_as_const_u64`/`make_const_u64`, `FiniteSetDomain` forwards them for singleton constant sets, so `SsaDomainTransferVisitor<FiniteSetDomain<TrackedValDomain, 4>>` inherits all extensional equalities automatically.
 
 
+
+### `FlatDomain<T>`, `IntegralDomain<IntT>` & `FloatDomain<FloatT>`
+
+`FlatDomain<T>` provides the standard height-2 flat lattice ($\bot \sqsubset \{T\} \sqsubset \top$) with NaN-safe bitwise equality for floating-point scalars and `lift_unary_known` / `lift_binary_known` helpers:
+
+- **`IntegralDomain<IntT = int64_t>`:** Inherits `FlatDomain<IntT>` with constant-folding hooks (`try_as_const_u64`/`make_const_u64`), full arithmetic/bitwise/shift ops, and `convert(v, ConvertKind)`.
+- **`FloatDomain<FloatT = double>`:** Inherits `FlatDomain<FloatT>` with IEEE-754 arithmetic (`add`, `sub`, `mul`, `div` widening divide-by-zero to `Top`) and `convert`.
+
+### Algebraic Action Mixins
+
+Reusable CRTP mixins in `domains.h` that express cross-domain algebraic laws and propagate automatically through `UnionDomain`, `LaneDomainWrapper`, and `FiniteSetDomain`:
+
+- **`IntegralAdditiveActionMixin<Derived, ValueT, IntDomainT>`:** Commutative & associative integer shifts (`ptr + z`, `z + ptr`, `ptr - z`) plus dynamic-offset widening ($\bot \sqsubset (\text{ptr} + \delta) \sqsubset (\text{ptr} + \top_{\mathbb{Z}}) \sqsubset \top$).
+- **`IntegralBitmaskActionMixin<Derived, ValueT, IntDomainT>`:** Commutative & associative bitwise AND masking (`ptr & mask`, `mask & ptr`).
+- **`IntegralCombinableMixin<Derived, ValueT, IntDomainT, ExcludedValues...>`:** Arbitrary scalar arithmetic combination (used by `SymbolValueDomain` to mark `derived(sym)` while excluding `PointerVal`).
+
 ### `PointwiseOpsMixin` — Automatic Point-Wise Lifting Across All Wrappers
 
-All single-base wrapper domains (`VectorDomain`, `MapDomain`, `FiniteSetDomain`, `LaneDomainWrapper`) inherit from `PointwiseOpsMixin<Derived, ValueT, BaseDomain>` (and `TupleDomain` provides the matching variadic fold). Whenever `BaseDomain` implements an optional operation (`add`, `sub`, `mul`, `div`, `iadd`, `isub`, `imul`, `idiv`, `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shift`, `pack64`, `split64`, `tuple_extract`) — including arbitrary trailing arguments such as `is64` or `SrtSymbolLookupFn` — the wrapper exposes the point-wise lifted operation automatically via variadic SFINAE traits (`detail::has_domain_*_v<D, Extra...>`).
+All single-base wrapper domains (`VectorDomain`, `MapDomain`, `FiniteSetDomain`, `LaneDomainWrapper`) inherit from `PointwiseOpsMixin<Derived, ValueT, BaseDomain>` (and `TupleDomain` provides the matching variadic fold). Whenever `BaseDomain` implements an optional operation (`add`, `sub`, `mul`, `div`, `iadd`, `isub`, `imul`, `idiv`, `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shift`, `pack64`, `split64`, `tuple_extract`, `convert`) — including arbitrary trailing arguments such as `is64` or `SrtSymbolLookupFn` — the wrapper exposes the point-wise lifted operation automatically via variadic SFINAE traits (`detail::has_domain_*_v<D, Extra...>`).
 
 ### `UnionDomain<Domains...>`
 
@@ -193,7 +209,7 @@ Tagged disjoint-sum lattice backed by `std::variant<UnionBottomTag, UnionTopTag,
 
 ### `LaneDomainWrapper<InnerDomainT>`
 
-Adds 64-bit split/pack lane tracking (`is_hi_half`, `pack64`, `split64`, `tuple_extract`) on top of any lattice domain while automatically inheriting all base domain arithmetic/logical operations via `PointwiseOpsMixin`. `TrackedValDomain` is composed directly as `LaneDomainWrapper<UnionDomain<ConstIntDomain, PointerDomain, SymbolValueDomain, ShaderAtomDomain>>`.
+Adds 64-bit split/pack lane tracking (`is_hi_half`, `pack64`, `split64`, `tuple_extract`, `convert`) on top of any lattice domain while automatically inheriting all base domain arithmetic/logical operations via `PointwiseOpsMixin`. `TrackedValDomain` is composed directly as `LaneDomainWrapper<UnionDomain<ConstIntDomain, PointerDomain, SymbolValueDomain, ShaderAtomDomain>>`.
 
 ## Symbolic Memory Domain
 

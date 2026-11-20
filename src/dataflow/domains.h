@@ -1,7 +1,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <sstream>
 #include <string>
@@ -20,6 +22,19 @@ enum class ShiftKind : uint8_t {
     ShrS,
     RotL,
     RotR,
+};
+
+/// Normalized scalar conversion kind for `convert` domain and visitor operations.
+enum class ConvertKind : uint8_t {
+    U32ToU64 = 0,
+    S32ToS64,
+    U64ToU32,
+    FloatToSInt,
+    FloatToUInt,
+    SIntToFloat,
+    UIntToFloat,
+    Bitcast,
+    Other,
 };
 
 // Compile-Time Lattice Interface Enforcement, Auto-Equals & Optional Op Traits
@@ -128,6 +143,7 @@ VALHALL_DEFINE_BINARY_OP_TRAIT(has_domain_pack64, pack64)
 VALHALL_DEFINE_UNARY_OP_TRAIT(has_domain_bit_not, bit_not)
 VALHALL_DEFINE_UNARY_OP_TRAIT(has_domain_split64, split64)
 VALHALL_DEFINE_UNARY_OP_TRAIT(has_domain_tuple_extract, tuple_extract)
+VALHALL_DEFINE_UNARY_OP_TRAIT(has_domain_convert, convert)
 
 #undef VALHALL_DEFINE_BINARY_OP_TRAIT
 #undef VALHALL_DEFINE_UNARY_OP_TRAIT
@@ -145,6 +161,7 @@ template <typename D> struct has_domain_shift : has_domain_shift_args<D, std::tu
 template <typename D> struct has_domain_pack64 : has_domain_pack64_args<D, std::tuple<>> {};
 template <typename D> struct has_domain_split64 : has_domain_split64_args<D, std::tuple<>> {};
 template <typename D> struct has_domain_tuple_extract : has_domain_tuple_extract_args<D, std::tuple<uint32_t>> {};
+template <typename D> struct has_domain_convert : has_domain_convert_args<D, std::tuple<ConvertKind>> {};
 
 }  // namespace detail
 
@@ -200,20 +217,458 @@ inline size_t next_power_of_two(size_t n) {
     return (p >= n) ? p : n;
 }
 
+// FlatDomain<T> — Standard Flat Lattice Mixin (Bottom < {T} < Top, height = 2)
+
+enum class FlatState : uint8_t {
+    Bottom = 0,
+    Known,
+    Top,
+};
+
+template <typename T>
+inline bool flat_payload_equals(const T& a, const T& b) {
+    if constexpr (std::is_floating_point_v<T>) {
+        // Bitwise comparison ensures NaN == NaN (lattice reflexivity) and distinguishes -0.0 / +0.0.
+        return std::memcmp(&a, &b, sizeof(T)) == 0;
+    } else {
+        return a == b;
+    }
+}
+
+template <typename T>
+struct FlatValue {
+    FlatState state = FlatState::Bottom;
+    T value{};
+
+    static FlatValue make_bottom() { return FlatValue{FlatState::Bottom, T{}}; }
+    static FlatValue make_top() { return FlatValue{FlatState::Top, T{}}; }
+    static FlatValue make(T v) { return FlatValue{FlatState::Known, std::move(v)}; }
+
+    bool is_bottom() const { return state == FlatState::Bottom; }
+    bool is_top() const { return state == FlatState::Top; }
+    bool is_known() const { return state == FlatState::Known; }
+};
+
+template <typename T>
+struct FlatDomain {
+    using Scalar = T;
+    using Value = FlatValue<T>;
+
+    static Value bottom() { return Value::make_bottom(); }
+    static Value top() { return Value::make_top(); }
+
+    static Value join(const Value& a, const Value& b) {
+        if (a.is_bottom()) return b;
+        if (b.is_bottom()) return a;
+        if (a.is_top() || b.is_top()) return top();
+        return flat_payload_equals(a.value, b.value) ? a : top();
+    }
+
+    static Value meet(const Value& a, const Value& b) {
+        if (a.is_top()) return b;
+        if (b.is_top()) return a;
+        if (a.is_bottom() || b.is_bottom()) return bottom();
+        return flat_payload_equals(a.value, b.value) ? a : bottom();
+    }
+
+    static bool leq(const Value& a, const Value& b) {
+        if (a.is_bottom() || b.is_top()) return true;
+        if (b.is_bottom() || a.is_top()) return false;
+        return flat_payload_equals(a.value, b.value);
+    }
+
+    static bool equals(const Value& a, const Value& b) {
+        if (a.state != b.state) return false;
+        return a.state != FlatState::Known || flat_payload_equals(a.value, b.value);
+    }
+
+    template <typename Fn>
+    static Value lift_unary_known(const Value& a, Fn&& fn) {
+        if (a.is_bottom()) return bottom();
+        if (a.is_top()) return top();
+        return Value::make(fn(a.value));
+    }
+
+    template <typename Fn>
+    static Value lift_binary_known(const Value& a, const Value& b, Fn&& fn) {
+        if (a.is_bottom() || b.is_bottom()) return bottom();
+        if (a.is_top() || b.is_top()) return top();
+        return Value::make(fn(a.value, b.value));
+    }
+};
+
+// Standard IntegralDomain<IntT> — Flat Integer Constant Lattice with Full Arithmetic/Bitwise/Convert
+
+template <typename IntT = int64_t>
+struct IntegralDomain : public FlatDomain<IntT> {
+    static_assert(std::is_integral_v<IntT>, "IntegralDomain requires an integral scalar type");
+    using Base = FlatDomain<IntT>;
+    using Scalar = IntT;
+    using Value = typename Base::Value;
+
+    static std::string format(const Value& v) {
+        if (v.is_bottom()) return "<bottom>";
+        if (v.is_top()) return "<top>";
+        std::ostringstream oss;
+        oss << "0x" << std::hex << static_cast<uint64_t>(v.value);
+        return oss.str();
+    }
+
+    static bool try_as_const_u64(const Value& v, uint64_t* out) {
+        if (v.is_known()) {
+            if (out) *out = static_cast<uint64_t>(v.value);
+            return true;
+        }
+        return false;
+    }
+
+    static Value make_const_u64(uint64_t c) {
+        return Value::make(static_cast<IntT>(c));
+    }
+
+    static Value add(const Value& a, const Value& b) {
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) + static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value sub(const Value& a, const Value& b) {
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) - static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value mul(const Value& a, const Value& b) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if ((a.is_known() && a.value == 0) || (b.is_known() && b.value == 0)) return Value::make(0);
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) * static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value div(const Value& a, const Value& b) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if (a.is_known() && b.is_known() && b.value != 0) {
+            return Value::make(static_cast<IntT>(a.value / b.value));
+        }
+        return Base::top();
+    }
+
+    static Value iadd(const Value& a, const Value& b, bool /*is64*/ = true) { return add(a, b); }
+    static Value isub(const Value& a, const Value& b, bool /*is64*/ = true) { return sub(a, b); }
+    static Value imul(const Value& a, const Value& b, bool /*is64*/ = true) { return mul(a, b); }
+    static Value idiv(const Value& a, const Value& b, bool /*is64*/ = true) { return div(a, b); }
+
+    static Value bit_and(const Value& a, const Value& b, bool is64 = true) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if ((a.is_known() && a.value == 0) || (b.is_known() && b.value == 0)) return Value::make(0);
+        const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
+        if (b.is_known() && (static_cast<uint64_t>(b.value) & all_ones) == all_ones) return a;
+        if (a.is_known() && (static_cast<uint64_t>(a.value) & all_ones) == all_ones) return b;
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) & static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value bit_or(const Value& a, const Value& b, bool /*is64*/ = true) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if (b.is_known() && b.value == 0) return a;
+        if (a.is_known() && a.value == 0) return b;
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) | static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value bit_xor(const Value& a, const Value& b, bool /*is64*/ = true) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if (b.is_known() && b.value == 0) return a;
+        if (a.is_known() && a.value == 0) return b;
+        return Base::lift_binary_known(a, b, [](IntT x, IntT y) {
+            return static_cast<IntT>(static_cast<uint64_t>(x) ^ static_cast<uint64_t>(y));
+        });
+    }
+
+    static Value bit_not(const Value& a, bool is64 = true) {
+        const uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
+        return Base::lift_unary_known(a, [mask](IntT x) {
+            return static_cast<IntT>((~static_cast<uint64_t>(x)) & mask);
+        });
+    }
+
+    static Value shift(const Value& a, const Value& b, ShiftKind kind, bool is64 = true) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if (b.is_known() && b.value == 0) return a;
+        return Base::lift_binary_known(a, b, [kind, is64](IntT x, IntT y) {
+            uint64_t ca = static_cast<uint64_t>(x);
+            uint32_t sh = static_cast<uint32_t>(static_cast<uint64_t>(y) & (is64 ? 63u : 31u));
+            uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
+            uint64_t res = 0;
+            switch (kind) {
+                case ShiftKind::Shl:  res = (ca << sh) & mask; break;
+                case ShiftKind::ShrU: res = (ca & mask) >> sh; break;
+                case ShiftKind::ShrS:
+                    if (is64) res = static_cast<uint64_t>(static_cast<int64_t>(ca) >> sh);
+                    else res = static_cast<uint64_t>(static_cast<uint32_t>(static_cast<int32_t>(ca) >> sh));
+                    break;
+                case ShiftKind::RotL: {
+                    uint32_t w = is64 ? 64u : 32u;
+                    res = (sh == 0) ? (ca & mask) : (((ca << sh) | ((ca & mask) >> (w - sh))) & mask);
+                    break;
+                }
+                case ShiftKind::RotR: {
+                    uint32_t w = is64 ? 64u : 32u;
+                    res = (sh == 0) ? (ca & mask) : ((((ca & mask) >> sh) | (ca << (w - sh))) & mask);
+                    break;
+                }
+            }
+            return static_cast<IntT>(res);
+        });
+    }
+
+    static Value convert(const Value& a, ConvertKind kind) {
+        if (a.is_bottom()) return Base::bottom();
+        if (a.is_top()) return Base::top();
+        switch (kind) {
+            case ConvertKind::S32ToS64:
+                return Value::make(static_cast<IntT>(static_cast<int32_t>(a.value)));
+            case ConvertKind::U32ToU64:
+            case ConvertKind::U64ToU32:
+                return Value::make(static_cast<IntT>(static_cast<uint32_t>(a.value)));
+            case ConvertKind::Bitcast:
+                return a;
+            default:
+                return Base::top();
+        }
+    }
+};
+
+// Standard FloatDomain<FloatT> — Flat Floating-Point Constant Lattice
+
+template <typename FloatT = double>
+struct FloatDomain : public FlatDomain<FloatT> {
+    static_assert(std::is_floating_point_v<FloatT>, "FloatDomain requires a floating-point scalar type");
+    using Base = FlatDomain<FloatT>;
+    using Scalar = FloatT;
+    using Value = typename Base::Value;
+
+    static std::string format(const Value& v) {
+        if (v.is_bottom()) return "<bottom>";
+        if (v.is_top()) return "<top>";
+        std::ostringstream oss;
+        oss << v.value;
+        return oss.str();
+    }
+
+    static Value add(const Value& a, const Value& b) {
+        return Base::lift_binary_known(a, b, [](FloatT x, FloatT y) { return x + y; });
+    }
+
+    static Value sub(const Value& a, const Value& b) {
+        return Base::lift_binary_known(a, b, [](FloatT x, FloatT y) { return x - y; });
+    }
+
+    static Value mul(const Value& a, const Value& b) {
+        return Base::lift_binary_known(a, b, [](FloatT x, FloatT y) { return x * y; });
+    }
+
+    static Value div(const Value& a, const Value& b) {
+        if (a.is_bottom() || b.is_bottom()) return Base::bottom();
+        if (a.is_known() && b.is_known() && b.value != FloatT(0)) {
+            return Value::make(a.value / b.value);
+        }
+        return Base::top();
+    }
+
+    static Value convert(const Value& a, ConvertKind kind) {
+        if (a.is_bottom()) return Base::bottom();
+        if (a.is_top()) return Base::top();
+        if (kind == ConvertKind::Bitcast) return a;
+        return Base::top();
+    }
+};
+
+// Algebraic Action Mixins for Domain Composition
+
+/// CRTP mixin expressing that `Derived` supports commutative & associative
+/// additive shifts with `IntDomainT` (`base + z`, `z + base`, `base - z`), plus
+/// dynamic-offset widening (`base + dynamic -> base + Top_Z`) for non-`ValueT`
+/// operands. `Derived` implements `apply_int_delta(base, scalar, extra...)` and
+/// `widen_unknown_offset(base)`.
+template <typename Derived, typename ValueT, typename IntDomainT>
+struct IntegralAdditiveActionMixin {
+    using IntValue = typename IntDomainT::Value;
+    using IntScalar = typename IntDomainT::Scalar;
+
+    template <typename... Extra>
+    static ValueT add(const ValueT& base, const IntValue& delta, Extra&&... extra) {
+        if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
+        if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
+        if (delta.is_known()) {
+            if (delta.value == 0) return base;
+            return Derived::apply_int_delta(base, delta.value, std::forward<Extra>(extra)...);
+        }
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename... Extra>
+    static ValueT add(const IntValue& delta, const ValueT& base, Extra&&... extra) {
+        return add(base, delta, std::forward<Extra>(extra)...);
+    }
+
+    template <typename... Extra>
+    static ValueT sub(const ValueT& base, const IntValue& delta, Extra&&... extra) {
+        if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
+        if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
+        if (delta.is_known()) {
+            if (delta.value == 0) return base;
+            return Derived::apply_int_delta(base, static_cast<IntScalar>(-delta.value),
+                                            std::forward<Extra>(extra)...);
+        }
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT add(const ValueT& base, const OtherVal&) {
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT add(const OtherVal&, const ValueT& base) {
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT sub(const ValueT& base, const OtherVal&) {
+        return Derived::widen_unknown_offset(base);
+    }
+
+    static ValueT iadd(const ValueT& base, const IntValue& delta, bool /*is64*/ = true) {
+        return add(base, delta);
+    }
+    static ValueT iadd(const IntValue& delta, const ValueT& base, bool /*is64*/ = true) {
+        return add(delta, base);
+    }
+    static ValueT isub(const ValueT& base, const IntValue& delta, bool /*is64*/ = true) {
+        return sub(base, delta);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT iadd(const ValueT& base, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT iadd(const OtherVal&, const ValueT& base, bool /*is64*/ = true) {
+        return Derived::widen_unknown_offset(base);
+    }
+
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
+                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
+    static ValueT isub(const ValueT& base, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::widen_unknown_offset(base);
+    }
+};
+
+/// CRTP mixin expressing that `Derived` supports commutative & associative
+/// bitwise AND masking with `IntDomainT` (`base & mask`, `mask & base`).
+/// `Derived` implements `apply_int_mask(base, scalar_mask)`.
+template <typename Derived, typename ValueT, typename IntDomainT>
+struct IntegralBitmaskActionMixin {
+    using IntValue = typename IntDomainT::Value;
+
+    static ValueT bit_and(const ValueT& base, const IntValue& mask, bool is64 = true) {
+        if (domain_equals<Derived>(base, Derived::bottom()) || mask.is_bottom()) return Derived::bottom();
+        if (domain_equals<Derived>(base, Derived::top()) || !mask.is_known()) return Derived::top();
+        const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
+        if ((static_cast<uint64_t>(mask.value) & all_ones) == all_ones) return base;
+        if (mask.value == 0) return Derived::top();
+        return Derived::apply_int_mask(base, mask.value);
+    }
+
+    static ValueT bit_and(const IntValue& mask, const ValueT& base, bool is64 = true) {
+        return bit_and(base, mask, is64);
+    }
+};
+
+/// CRTP mixin expressing that `Derived` can be arbitrarily combined under
+/// integer arithmetic (`add`, `sub`, `mul`, `div`, `iadd`, `isub`, `imul`,
+/// `idiv`) with `IntDomainT` and any other non-excluded domain value,
+/// transforming the value via `Derived::combine_with_scalar(v)`.
+/// Automatically propagates through `UnionDomain` via SFINAE dispatch.
+template <typename Derived, typename ValueT, typename IntDomainT, typename... ExcludedValues>
+struct IntegralCombinableMixin {
+    template <typename OtherVal>
+    static constexpr bool is_excluded_v = (std::is_same_v<std::decay_t<OtherVal>, ExcludedValues> || ...);
+
+    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
+    static ValueT add(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
+    template <typename OtherVal,
+              std::enable_if_t<!is_excluded_v<OtherVal> && !std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
+    static ValueT add(const OtherVal&, const ValueT& s) { return Derived::combine_with_scalar(s); }
+
+    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
+    static ValueT sub(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
+
+    template <typename OtherVal>
+    static ValueT mul(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
+    static ValueT mul(const OtherVal&, const ValueT& s) { return Derived::combine_with_scalar(s); }
+
+    template <typename OtherVal>
+    static ValueT div(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
+
+    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
+    static ValueT iadd(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+    template <typename OtherVal,
+              std::enable_if_t<!is_excluded_v<OtherVal> && !std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
+    static ValueT iadd(const OtherVal&, const ValueT& s, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+
+    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
+    static ValueT isub(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+
+    template <typename OtherVal>
+    static ValueT imul(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+    template <typename OtherVal,
+              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
+    static ValueT imul(const OtherVal&, const ValueT& s, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+
+    template <typename OtherVal>
+    static ValueT idiv(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
+        return Derived::combine_with_scalar(s);
+    }
+};
+
 // CRTP Point-Wise Lifting Mixin for Single-Base Wrapper Domains
-//
-// Any wrapper domain (VectorDomain, MapDomain, FiniteSetDomain, LaneDomainWrapper)
-// that provides `lift_unary_op(a, fn)` and `lift_binary_op(a, b, fn)` inherits
-// automatic SFINAE-constrained point-wise lifts for every optional operation
-// implemented by `BaseDomain` (forwarding arbitrary extra arguments like `is64`
-// or `lookup_srt`).
+
 template <typename Derived, typename ValueT, typename BaseDomain>
 struct PointwiseOpsMixin {
 #define VALHALL_LIFT_BINARY_OP(op_name, trait_name)                                                         \
     template <typename... Extra, typename D = BaseDomain,                                                   \
               std::enable_if_t<detail::trait_name##_v<D, Extra...>, int> = 0>                               \
     static ValueT op_name(const ValueT& a, const ValueT& b,                                                 \
-                          Extra&&... extra) {                                      \
+                          Extra&&... extra) {                                                               \
         return Derived::lift_binary_op(a, b, [&](const auto& x, const auto& y) {                            \
             return D::op_name(x, y, std::forward<Extra>(extra)...);                                         \
         });                                                                                                 \
@@ -223,7 +678,7 @@ struct PointwiseOpsMixin {
     template <typename... Extra, typename D = BaseDomain,                                                   \
               std::enable_if_t<detail::trait_name##_v<D, Extra...>, int> = 0>                               \
     static ValueT op_name(const ValueT& a,                                                                  \
-                          Extra&&... extra) {                                      \
+                          Extra&&... extra) {                                                               \
         return Derived::lift_unary_op(a, [&](const auto& x) {                                               \
             return D::op_name(x, std::forward<Extra>(extra)...);                                            \
         });                                                                                                 \
@@ -246,6 +701,7 @@ struct PointwiseOpsMixin {
     VALHALL_LIFT_UNARY_OP(bit_not, has_domain_bit_not)
     VALHALL_LIFT_UNARY_OP(split64, has_domain_split64)
     VALHALL_LIFT_UNARY_OP(tuple_extract, has_domain_tuple_extract)
+    VALHALL_LIFT_UNARY_OP(convert, has_domain_convert)
 
 #undef VALHALL_LIFT_BINARY_OP
 #undef VALHALL_LIFT_UNARY_OP
@@ -294,7 +750,8 @@ struct VectorDomainValue {
 };
 
 template <typename ElemDomainT>
-struct VectorDomain : public PointwiseOpsMixin<VectorDomain<ElemDomainT>, VectorDomainValue<ElemDomainT>, ElemDomainT> {
+struct VectorDomain
+    : public PointwiseOpsMixin<VectorDomain<ElemDomainT>, VectorDomainValue<ElemDomainT>, ElemDomainT> {
     static_assert(ValidateLatticeDomain<ElemDomainT>::valid, "");
     using Value = VectorDomainValue<ElemDomainT>;
 
@@ -455,7 +912,8 @@ struct MapDomainValue {
 };
 
 template <typename KeyT, typename ValDomainT>
-struct MapDomain : public PointwiseOpsMixin<MapDomain<KeyT, ValDomainT>, MapDomainValue<KeyT, ValDomainT>, ValDomainT> {
+struct MapDomain
+    : public PointwiseOpsMixin<MapDomain<KeyT, ValDomainT>, MapDomainValue<KeyT, ValDomainT>, ValDomainT> {
     static_assert(ValidateLatticeDomain<ValDomainT>::valid, "");
     using Value = MapDomainValue<KeyT, ValDomainT>;
 
@@ -612,6 +1070,7 @@ struct TupleDomain {
     VALHALL_TUPLE_UNARY_OP(bit_not, has_domain_bit_not)
     VALHALL_TUPLE_UNARY_OP(split64, has_domain_split64)
     VALHALL_TUPLE_UNARY_OP(tuple_extract, has_domain_tuple_extract)
+    VALHALL_TUPLE_UNARY_OP(convert, has_domain_convert)
 
 #undef VALHALL_TUPLE_BINARY_OP
 #undef VALHALL_TUPLE_UNARY_OP
@@ -673,6 +1132,7 @@ private:
     VALHALL_TUPLE_UNARY_IMPL(bit_not)
     VALHALL_TUPLE_UNARY_IMPL(split64)
     VALHALL_TUPLE_UNARY_IMPL(tuple_extract)
+    VALHALL_TUPLE_UNARY_IMPL(convert)
 
 #undef VALHALL_TUPLE_BINARY_IMPL
 #undef VALHALL_TUPLE_UNARY_IMPL
@@ -846,7 +1306,10 @@ struct FiniteSetValue {
 };
 
 template <typename ElemDomainT, size_t MaxK = 4>
-struct FiniteSetDomain : public PointwiseOpsMixin<FiniteSetDomain<ElemDomainT, MaxK>, FiniteSetValue<ElemDomainT, MaxK>, ElemDomainT> {
+struct FiniteSetDomain
+    : public PointwiseOpsMixin<FiniteSetDomain<ElemDomainT, MaxK>,
+                               FiniteSetValue<ElemDomainT, MaxK>,
+                               ElemDomainT> {
     static_assert(ValidateLatticeDomain<ElemDomainT>::valid, "");
     using ElemValue = typename ElemDomainT::Value;
     using Value = FiniteSetValue<ElemDomainT, MaxK>;
@@ -1020,7 +1483,6 @@ struct UnionTopTag {
 
 namespace detail {
 
-// Map a component value type T back to its owning Domain in Domains... (or void for Bottom/Top tags).
 template <typename T, typename... Domains>
 struct domain_for_value {
     using type = void;
@@ -1040,11 +1502,9 @@ using domain_for_value_t = typename domain_for_value<std::decay_t<T>, Domains...
 template <typename T, typename... Domains>
 inline constexpr bool is_union_member_value_v = (std::is_same_v<std::decay_t<T>, typename Domains::Value> || ...);
 
-// Optional external customization point for cross-domain binary operations.
 template <typename OpTag, typename DomainA, typename DomainB, typename = void>
 struct CrossDomainOp {};
 
-// Helper to detect and invoke `Domain::op(a, b, extra...)` for arbitrary argument types A, B.
 #define VALHALL_DEFINE_UNION_BINARY_OP_TAG(TagName, method_name)                                            \
     struct TagName {                                                                                        \
         template <typename D, typename A, typename B, typename ArgsTuple, typename = void>                  \
@@ -1090,6 +1550,7 @@ VALHALL_DEFINE_UNION_BINARY_OP_TAG(OpPack64, pack64)
 VALHALL_DEFINE_UNION_UNARY_OP_TAG(OpBitNot, bit_not)
 VALHALL_DEFINE_UNION_UNARY_OP_TAG(OpSplit64, split64)
 VALHALL_DEFINE_UNION_UNARY_OP_TAG(OpTupleExtract, tuple_extract)
+VALHALL_DEFINE_UNION_UNARY_OP_TAG(OpConvert, convert)
 
 #undef VALHALL_DEFINE_UNION_BINARY_OP_TAG
 #undef VALHALL_DEFINE_UNION_UNARY_OP_TAG
@@ -1324,10 +1785,9 @@ struct UnionDomain {
         }, a.storage);
     }
 
-    // SFINAE-enabled algebraic & logical operations with universal lattice-agnostic
-    // identity short-circuits (e.g. x + 0 == x, x * 1 == x, x & 0 == 0).
     template <typename... Extra,
-              bool En = ((detail::has_domain_add_v<Domains, Extra...> || ...) || (detail::has_domain_add_v<Domains> || ...)),
+              bool En = ((detail::has_domain_add_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_add_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value add(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1338,7 +1798,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_sub_v<Domains, Extra...> || ...) || (detail::has_domain_sub_v<Domains> || ...)),
+              bool En = ((detail::has_domain_sub_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_sub_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value sub(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1348,7 +1809,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_mul_v<Domains, Extra...> || ...) || (detail::has_domain_mul_v<Domains> || ...)),
+              bool En = ((detail::has_domain_mul_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_mul_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value mul(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1361,7 +1823,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_div_v<Domains, Extra...> || ...) || (detail::has_domain_div_v<Domains> || ...)),
+              bool En = ((detail::has_domain_div_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_div_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value div(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1371,7 +1834,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_iadd_v<Domains, Extra...> || ...) || (detail::has_domain_iadd_v<Domains, bool> || ...)),
+              bool En = ((detail::has_domain_iadd_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_iadd_v<Domains, bool> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value iadd(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1382,7 +1846,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_isub_v<Domains, Extra...> || ...) || (detail::has_domain_isub_v<Domains, bool> || ...)),
+              bool En = ((detail::has_domain_isub_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_isub_v<Domains, bool> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value isub(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1392,7 +1857,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_imul_v<Domains, Extra...> || ...) || (detail::has_domain_imul_v<Domains, bool> || ...)),
+              bool En = ((detail::has_domain_imul_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_imul_v<Domains, bool> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value imul(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1405,7 +1871,8 @@ struct UnionDomain {
     }
 
     template <typename... Extra,
-              bool En = ((detail::has_domain_idiv_v<Domains, Extra...> || ...) || (detail::has_domain_idiv_v<Domains, bool> || ...)),
+              bool En = ((detail::has_domain_idiv_v<Domains, Extra...> || ...) ||
+                         (detail::has_domain_idiv_v<Domains, bool> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value idiv(const Value& a, const Value& b, Extra&&... extra) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1414,7 +1881,8 @@ struct UnionDomain {
         return dispatch_binary<detail::OpIDiv>(a, b, std::forward<Extra>(extra)...);
     }
 
-    template <bool En = ((detail::has_domain_bit_and_v<Domains, bool> || ...) || (detail::has_domain_bit_and_v<Domains> || ...)),
+    template <bool En = ((detail::has_domain_bit_and_v<Domains, bool> || ...) ||
+                         (detail::has_domain_bit_and_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value bit_and(const Value& a, const Value& b, bool is64 = true) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1427,7 +1895,8 @@ struct UnionDomain {
         return dispatch_binary<detail::OpBitAnd>(a, b, is64);
     }
 
-    template <bool En = ((detail::has_domain_bit_or_v<Domains, bool> || ...) || (detail::has_domain_bit_or_v<Domains> || ...)),
+    template <bool En = ((detail::has_domain_bit_or_v<Domains, bool> || ...) ||
+                         (detail::has_domain_bit_or_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value bit_or(const Value& a, const Value& b, bool is64 = true) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1437,7 +1906,8 @@ struct UnionDomain {
         return dispatch_binary<detail::OpBitOr>(a, b, is64);
     }
 
-    template <bool En = ((detail::has_domain_bit_xor_v<Domains, bool> || ...) || (detail::has_domain_bit_xor_v<Domains> || ...)),
+    template <bool En = ((detail::has_domain_bit_xor_v<Domains, bool> || ...) ||
+                         (detail::has_domain_bit_xor_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value bit_xor(const Value& a, const Value& b, bool is64 = true) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -1447,7 +1917,8 @@ struct UnionDomain {
         return dispatch_binary<detail::OpBitXor>(a, b, is64);
     }
 
-    template <bool En = ((detail::has_domain_bit_not_v<Domains, bool> || ...) || (detail::has_domain_bit_not_v<Domains> || ...)),
+    template <bool En = ((detail::has_domain_bit_not_v<Domains, bool> || ...) ||
+                         (detail::has_domain_bit_not_v<Domains> || ...)),
               std::enable_if_t<En, int> = 0>
     static Value bit_not(const Value& a, bool is64 = true) {
         return dispatch_unary<detail::OpBitNot>(a, is64);
@@ -1480,6 +1951,12 @@ struct UnionDomain {
         return dispatch_unary<detail::OpTupleExtract>(tup, elem_idx);
     }
 
+    template <bool En = (detail::has_domain_convert_v<Domains, ConvertKind> || ...),
+              std::enable_if_t<En, int> = 0>
+    static Value convert(const Value& a, ConvertKind kind) {
+        return dispatch_unary<detail::OpConvert>(a, kind);
+    }
+
 private:
     template <typename T>
     struct type_tag { using type = T; };
@@ -1504,7 +1981,8 @@ struct LaneValue {
 };
 
 template <typename InnerDomainT>
-struct LaneDomainWrapper : public PointwiseOpsMixin<LaneDomainWrapper<InnerDomainT>, LaneValue<InnerDomainT>, InnerDomainT> {
+struct LaneDomainWrapper
+    : public PointwiseOpsMixin<LaneDomainWrapper<InnerDomainT>, LaneValue<InnerDomainT>, InnerDomainT> {
     static_assert(ValidateLatticeDomain<InnerDomainT>::valid, "");
     using InnerValue = typename InnerDomainT::Value;
     using Value = LaneValue<InnerDomainT>;
@@ -1565,7 +2043,6 @@ struct LaneDomainWrapper : public PointwiseOpsMixin<LaneDomainWrapper<InnerDomai
         return top();
     }
 
-    // Point-wise lifting hooks for PointwiseOpsMixin
     template <typename Fn>
     static Value lift_unary_op(const Value& a, Fn&& fn) {
         if (a.is_bottom()) return bottom();

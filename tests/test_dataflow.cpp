@@ -98,6 +98,16 @@ void test_domain_combinators_and_memory_disjointness() {
     static_assert(detail::has_domain_pack64<TrackedValDomain>::value, "");
     static_assert(detail::has_domain_pack64<TrackedValSetDomain>::value, "");
     static_assert(detail::has_domain_tuple_extract<TrackedValSetDomain>::value, "");
+    static_assert(ValidateLatticeDomain<IntegralDomain<int32_t>>::valid, "");
+    static_assert(ValidateLatticeDomain<FloatDomain<double>>::valid, "");
+    static_assert(ValidateLatticeDomain<FloatDomain<float>>::valid, "");
+    static_assert(!detail::has_domain_convert<SignDomain>::value, "");
+    static_assert(!detail::has_domain_convert<FiniteSetDomain<SignDomain, 4>>::value, "");
+    static_assert(detail::has_domain_convert<IntegralDomain<int64_t>>::value, "");
+    static_assert(detail::has_domain_convert<FloatDomain<double>>::value, "");
+    static_assert(detail::has_domain_convert<TrackedValUnionDomain>::value, "");
+    static_assert(detail::has_domain_convert<TrackedValDomain>::value, "");
+    static_assert(detail::has_domain_convert<TrackedValSetDomain>::value, "");
 
     CHECK(domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Pos));
     CHECK(!domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Neg));
@@ -190,7 +200,8 @@ void test_domain_combinators_and_memory_disjointness() {
     TrackedValSet c4 = TrackedValDomain::make_const(4);
     TrackedValSet c20 = TrackedValDomain::make_const(20);
     auto sb_add0 = collapse_tracked_val_set(TrackedValSetDomain::add(sb, c0));
-    CHECK(sb_add0.inner.get_if<ShaderAtomDomain>()->kind == ShaderAtomVal::Kind::SidebandValue);
+    CHECK(sb_add0.inner.get_if<ShaderAtomDomain>()->value.kind == ShaderAtomDomain::Kind::SidebandValue);
+    CHECK(format_tracked_val(sb_add0) == "sideband.local_size_xyz");
     CHECK(TrackedValSetDomain::add(sb, c4).is_top());
     CHECK(TrackedValDomain::equals(collapse_tracked_val_set(TrackedValSetDomain::div(c20, c4)), TrackedValDomain::make_const(5)));
     CHECK(TrackedValDomain::equals(collapse_tracked_val_set(TrackedValSetDomain::mul(c4, c20)), TrackedValDomain::make_const(80)));
@@ -447,11 +458,11 @@ void test_ssa_pilot_srt_chasing_and_fau_store() {
     CHECK(bv && bv->kind == PointerVal::Kind::BufferAddr && bv->symbol_name == "my_ssbo");
     auto v_sz = df.val(buf_sz);
     const auto* bs = v_sz.inner.get_if<ShaderAtomDomain>();
-    CHECK(bs && bs->kind == ShaderAtomVal::Kind::BufferSize && bs->symbol_name == "my_ssbo");
+    CHECK(bs && bs->is_known() && bs->value.kind == ShaderAtomDomain::Kind::BufferSize && bs->value.symbol_name == "my_ssbo");
     CHECK(df.pilot_fau_writes.count(0x00) == 1 &&
            df.pilot_fau_writes.at(0x00).value.inner.get_if<PointerDomain>()->symbol_name == "my_ssbo");
     CHECK(df.pilot_fau_writes.count(0x08) == 1 &&
-           df.pilot_fau_writes.at(0x08).value.inner.get_if<ShaderAtomDomain>()->kind == ShaderAtomVal::Kind::BufferSize);
+           df.pilot_fau_writes.at(0x08).value.inner.get_if<ShaderAtomDomain>()->value.kind == ShaderAtomDomain::Kind::BufferSize);
 
     std::cout << "[PASS] test_ssa_pilot_srt_chasing_and_fau_store\n";
 }
@@ -558,6 +569,62 @@ void test_compound_op_delegation_lane_wrapper_and_atomic_exchange() {
     std::cout << "[PASS] test_compound_op_delegation_lane_wrapper_and_atomic_exchange\n";
 }
 
+
+void test_flat_float_domains_algebraic_mixins_and_auto_convert() {
+    // FloatDomain<double> backed by FlatDomain<double> (including NaN-safe lattice reflexivity)
+    using FDom = FloatDomain<double>;
+    auto f2 = FDom::Value::make(2.5);
+    auto f4 = FDom::Value::make(4.0);
+    auto f0 = FDom::Value::make(0.0);
+    CHECK(FDom::equals(FDom::add(f2, f4), FDom::Value::make(6.5)));
+    CHECK(FDom::equals(FDom::sub(f4, f2), FDom::Value::make(1.5)));
+    CHECK(FDom::equals(FDom::mul(f2, f4), FDom::Value::make(10.0)));
+    CHECK(FDom::equals(FDom::div(f4, f2), FDom::Value::make(1.6)));
+    CHECK(FDom::div(f4, f0).is_top());
+    CHECK(FDom::join(f2, f4).is_top());
+    CHECK(FDom::meet(f2, f4).is_bottom());
+    auto fnan = FDom::Value::make(std::nan(""));
+    CHECK(FDom::equals(fnan, fnan));
+    CHECK(FDom::leq(fnan, fnan));
+
+    // UnionDomain<IntegralDomain<int64_t>, FloatDomain<double>> flows ops independently per variant
+    using NumUnion = UnionDomain<IntegralDomain<int64_t>, FloatDomain<double>>;
+    auto ni = NumUnion::add(NumUnion::Value(IntegralDomain<int64_t>::Value::make(10)),
+                            NumUnion::Value(IntegralDomain<int64_t>::Value::make(32)));
+    CHECK(ni.get_if<IntegralDomain<int64_t>>()->value == 42);
+    auto nf = NumUnion::mul(NumUnion::Value(FDom::Value::make(3.0)),
+                            NumUnion::Value(FDom::Value::make(2.5)));
+    CHECK(FDom::equals(*nf.get_if<FDom>(), FDom::Value::make(7.5)));
+    CHECK(NumUnion::add(ni, nf).is_top());
+
+    // Automatic on_convert delegation in SsaDomainTransferVisitor<TrackedValSetDomain>
+    // (SsaPointerTransferVisitor no longer overrides on_convert!)
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
+    mod.blocks.push_back(b0);
+
+    SsaId neg4_u32 = emit_op(mod, 0, SsaOp::ConstU32, ValType::U32, {}, 0xFFFFFFFCu);
+    SsaId big_u64 = emit_op(mod, 0, SsaOp::ConstU64, ValType::U64, {}, 0, 0x0000000200000010ULL);
+    SsaId s_ext = emit_op(mod, 0, SsaOp::SConvert32To64, ValType::U64, {neg4_u32});
+    SsaId u_ext = emit_op(mod, 0, SsaOp::UConvert32To64, ValType::U64, {neg4_u32});
+    SsaId trunc = emit_op(mod, 0, SsaOp::UConvert64To32, ValType::U32, {big_u64});
+    SsaId to_f = emit_op(mod, 0, SsaOp::ConvertSToF, ValType::F32, {neg4_u32});
+    SsaId srt = emit_op(mod, 0, SsaOp::LoadSidebandU64, ValType::U64, {}, 2);
+    SsaId srt_conv = emit_op(mod, 0, SsaOp::UConvert32To64, ValType::U64, {srt});
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::Pilot;
+    auto df = run_ssa_pointer_analysis(mod, env);
+    CHECK(df.converged);
+    CHECK(TrackedValDomain::equals(df.val(s_ext), TrackedValDomain::make_const(-4)));
+    CHECK(TrackedValDomain::equals(df.val(u_ext), TrackedValDomain::make_const(0x00000000FFFFFFFCLL)));
+    CHECK(TrackedValDomain::equals(df.val(trunc), TrackedValDomain::make_const(0x10)));
+    CHECK(df.val(to_f).is_top());
+    CHECK(TrackedValDomain::equals(df.val(srt_conv), TrackedValDomain::make_srt_base(0, true)));
+
+    std::cout << "[PASS] test_flat_float_domains_algebraic_mixins_and_auto_convert\n";
+}
+
 }  // namespace
 
 int main() {
@@ -569,6 +636,7 @@ int main() {
     test_ssa_pilot_srt_chasing_and_fau_store();
     test_ssa_pack64_split64_and_fau_seed();
     test_compound_op_delegation_lane_wrapper_and_atomic_exchange();
+    test_flat_float_domains_algebraic_mixins_and_auto_convert();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

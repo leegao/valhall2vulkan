@@ -77,7 +77,7 @@ void append_unique_note(std::vector<std::string>& notes, const std::string& s) {
 /// SSA Pointer Transfer Visitor operating over `TrackedValSetDomain`.
 ///
 /// `on_imul`, `on_and`, `on_or`, `on_xor`, `on_not`, `on_shift`, `on_pack64`,
-/// `on_split64`, and `on_tuple_extract` flow automatically through
+/// `on_split64`, `on_tuple_extract`, and `on_convert` flow automatically through
 /// `SsaDomainTransferVisitor<TrackedValSetDomain>` -> `FiniteSetDomain` ->
 /// `LaneDomainWrapper` -> `UnionDomain<ConstInt, Pointer, Symbol, ShaderAtom>`.
 class SsaPointerTransferVisitor : public SsaDomainTransferVisitor<TrackedValSetDomain> {
@@ -159,9 +159,9 @@ public:
             uint32_t comp = node.imm_u32;
             assign(dst, SetDom::lift_unary(eval(node.args[0]), [comp](const TrackedVal& base) {
                 if (const auto* atom = base.inner.get_if<ShaderAtomDomain>();
-                    atom && atom->kind == ShaderAtomVal::Kind::AbiPreload) {
+                    atom && atom->is_known() && atom->value.kind == ShaderAtomDomain::Kind::AbiPreload) {
                     static const char kComp[] = "xyzw";
-                    std::string lbl = atom->label;
+                    std::string lbl = atom->value.label;
                     if (comp < 4) {
                         lbl.push_back('.');
                         lbl.push_back(kComp[comp]);
@@ -169,25 +169,6 @@ public:
                     return TrackedValDomain::make_abi(std::move(lbl));
                 }
                 return base;
-            }));
-            return;
-        }
-        assign(dst, SetDom::top());
-    }
-
-    void on_convert(compiler::SsaId dst, compiler::SsaId src,
-                    const compiler::SsaNode& node) override {
-        if (node.op == tables::SsaOp::UConvert32To64 || node.op == tables::SsaOp::SConvert32To64 ||
-            node.op == tables::SsaOp::UConvert64To32) {
-            auto op = node.op;
-            assign(dst, SetDom::lift_unary(eval(src), [op](const TrackedVal& v) {
-                if (const auto* ci = v.inner.get_if<ConstIntDomain>(); ci && ci->is_known()) {
-                    if (op == tables::SsaOp::SConvert32To64) {
-                        return TrackedValDomain::make_const(static_cast<int64_t>(static_cast<int32_t>(ci->value)));
-                    }
-                    return TrackedValDomain::make_const(static_cast<int64_t>(static_cast<uint32_t>(ci->value)));
-                }
-                return v;
             }));
             return;
         }

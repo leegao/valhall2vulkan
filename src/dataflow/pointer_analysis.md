@@ -15,7 +15,8 @@ This document formalizes the `TrackedVal` domain (`src/dataflow/tracked_val.{h,c
   src/dataflow/ (100% Pure SSA — zero ISA/CFG-builder dependencies)
       ├── domains.h          ValidateLatticeDomain, PointwiseOpsMixin, VectorDomain,
       │                      MapDomain, TupleDomain, BitsetDomain, FiniteSetDomain<T, K>,
-      │                      UnionDomain<...>, LaneDomainWrapper<T>
+      │                      UnionDomain<...>, LaneDomainWrapper<T>, FlatDomain<T>,
+      │                      IntegralDomain<T>, FloatDomain<T>, Algebraic Action Mixins
       ├── memory_domain.h    MemoryRegionKind, SymbolicMemoryLoc, may_alias()
       ├── worklist.{h,cpp}   Directional run_cfg_worklist(Forward | Backward)
       ├── liveness.{h,cpp}   Backwards SSA liveness via BitsetDomain + worklist

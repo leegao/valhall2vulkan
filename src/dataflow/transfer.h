@@ -47,6 +47,7 @@ enum class SsaOpKind : uint8_t {
 SsaOpKind classify_ssa_op(tables::SsaOp op);
 bool is_ssa_op_64bit(tables::SsaOp op);
 ShiftKind classify_ssa_shift_kind(tables::SsaOp op);
+ConvertKind classify_ssa_convert_kind(tables::SsaOp op);
 
 /// Abstract SSA transfer-function visitor base class.
 class SsaTransferVisitorBase {
@@ -373,6 +374,29 @@ public:
         } else {
             assign(dst, DomainT::top());
         }
+    }
+
+    void on_convert(compiler::SsaId dst, compiler::SsaId src,
+                    const compiler::SsaNode& node) override {
+        ConvertKind ck = classify_ssa_convert_kind(node.op);
+        if constexpr (detail::has_domain_convert<DomainT>::value) {
+            assign(dst, DomainT::convert(eval(src), ck));
+            return;
+        }
+        if (ck == ConvertKind::U32ToU64 || ck == ConvertKind::S32ToS64 || ck == ConvertKind::U64ToU32) {
+            uint64_t c = 0;
+            if (try_const(eval(src), &c)) {
+                if (ck == ConvertKind::S32ToS64) {
+                    assign(dst, make_const(static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(c)))));
+                } else {
+                    assign(dst, make_const(static_cast<uint64_t>(static_cast<uint32_t>(c))));
+                }
+                return;
+            }
+            assign(dst, eval(src));
+            return;
+        }
+        assign(dst, DomainT::top());
     }
 
     /// Default atomic transfer: dispatches `AtomicExchange` to `on_atomic_exchange`,

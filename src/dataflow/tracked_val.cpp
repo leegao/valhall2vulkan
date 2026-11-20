@@ -17,160 +17,25 @@ std::string hex_off(int64_t off) {
     return buf;
 }
 
-PointerVal apply_pointer_delta(const PointerVal& base, int64_t delta, const SrtSymbolLookupFn& lookup_srt) {
-    if (!base.is_valid_pointer()) return PointerVal::make_top();
-    SymbolicMemoryLoc loc = base.to_memory_loc().with_added_offset(delta);
-    PointerVal out = base.with_memory_loc(loc);
-    if (out.kind == PointerVal::Kind::SrtRackPtr && loc.offset_known && loc.byte_offset >= 0 &&
-        (loc.byte_offset % 32) == 0 && out.rack >= 0) {
-        int32_t desc = static_cast<int32_t>(loc.byte_offset / 32);
-        std::string sym = lookup_srt
-                              ? lookup_srt(static_cast<uint8_t>(out.rack), static_cast<uint32_t>(desc))
-                              : "";
-        return PointerVal::make_descriptor(out.rack, desc, std::move(sym), 0, true);
+bool is_int_width_convert(ConvertKind kind) {
+    return kind == ConvertKind::U32ToU64 || kind == ConvertKind::S32ToS64 ||
+           kind == ConvertKind::U64ToU32 || kind == ConvertKind::Bitcast;
+}
+
+const char* sideband_member_name(uint32_t member_idx) {
+    switch (member_idx) {
+        case 0: return "fau_words";
+        case 1: return "shader_pc_base";
+        case 2: return "srt_base_va";
+        case 3: return "pilot_fau_dst_va";
+        case 4: return "blend_descs";
+        case 5: return "local_size_xyz";
+        case 6: return "fb_info";
+        default: return nullptr;
     }
-    return out;
 }
 
 }  // namespace
-
-// ConstIntDomain
-
-ConstIntVal ConstIntDomain::join(const Value& a, const Value& b) {
-    if (a.is_bottom()) return b;
-    if (b.is_bottom()) return a;
-    if (a.is_top() || b.is_top()) return top();
-    return (a.value == b.value) ? a : top();
-}
-
-ConstIntVal ConstIntDomain::meet(const Value& a, const Value& b) {
-    if (a.is_top()) return b;
-    if (b.is_top()) return a;
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    return (a.value == b.value) ? a : bottom();
-}
-
-bool ConstIntDomain::leq(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_top()) return true;
-    if (b.is_bottom() || a.is_top()) return false;
-    return a.value == b.value;
-}
-
-bool ConstIntDomain::equals(const Value& a, const Value& b) {
-    if (a.state != b.state) return false;
-    return a.state != Value::State::Known || a.value == b.value;
-}
-
-std::string ConstIntDomain::format(const Value& v) {
-    if (v.is_bottom()) return "<bottom>";
-    if (v.is_top()) return "<top>";
-    std::ostringstream oss;
-    oss << "0x" << std::hex << static_cast<uint64_t>(v.value);
-    return oss.str();
-}
-
-bool ConstIntDomain::try_as_const_u64(const Value& v, uint64_t* out) {
-    if (v.is_known()) {
-        if (out) *out = static_cast<uint64_t>(v.value);
-        return true;
-    }
-    return false;
-}
-
-ConstIntVal ConstIntDomain::make_const_u64(uint64_t v) {
-    return Value::make(static_cast<int64_t>(v));
-}
-
-ConstIntVal ConstIntDomain::add(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (a.is_known() && b.is_known()) return Value::make(a.value + b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::sub(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (a.is_known() && b.is_known()) return Value::make(a.value - b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::mul(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if ((a.is_known() && a.value == 0) || (b.is_known() && b.value == 0)) return Value::make(0);
-    if (a.is_known() && b.is_known()) return Value::make(a.value * b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::div(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (a.is_known() && b.is_known() && b.value != 0) return Value::make(a.value / b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::bit_and(const Value& a, const Value& b, bool is64) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if ((a.is_known() && a.value == 0) || (b.is_known() && b.value == 0)) return Value::make(0);
-    const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
-    if (b.is_known() && (static_cast<uint64_t>(b.value) & all_ones) == all_ones) return a;
-    if (a.is_known() && (static_cast<uint64_t>(a.value) & all_ones) == all_ones) return b;
-    if (a.is_known() && b.is_known()) return Value::make(a.value & b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::bit_or(const Value& a, const Value& b, bool /*is64*/) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (b.is_known() && b.value == 0) return a;
-    if (a.is_known() && a.value == 0) return b;
-    if (a.is_known() && b.is_known()) return Value::make(a.value | b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::bit_xor(const Value& a, const Value& b, bool /*is64*/) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (b.is_known() && b.value == 0) return a;
-    if (a.is_known() && a.value == 0) return b;
-    if (a.is_known() && b.is_known()) return Value::make(a.value ^ b.value);
-    return top();
-}
-
-ConstIntVal ConstIntDomain::bit_not(const Value& a, bool is64) {
-    if (a.is_bottom()) return bottom();
-    if (a.is_known()) {
-        uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
-        return Value::make(static_cast<int64_t>((~static_cast<uint64_t>(a.value)) & mask));
-    }
-    return top();
-}
-
-ConstIntVal ConstIntDomain::shift(const Value& a, const Value& b, ShiftKind kind, bool is64) {
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    if (b.is_known() && b.value == 0) return a;
-    if (a.is_known() && b.is_known()) {
-        uint64_t ca = static_cast<uint64_t>(a.value);
-        uint32_t sh = static_cast<uint32_t>(static_cast<uint64_t>(b.value) & (is64 ? 63u : 31u));
-        uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
-        uint64_t res = 0;
-        switch (kind) {
-            case ShiftKind::Shl:  res = (ca << sh) & mask; break;
-            case ShiftKind::ShrU: res = (ca & mask) >> sh; break;
-            case ShiftKind::ShrS:
-                if (is64) res = static_cast<uint64_t>(static_cast<int64_t>(ca) >> sh);
-                else res = static_cast<uint64_t>(static_cast<uint32_t>(static_cast<int32_t>(ca) >> sh));
-                break;
-            case ShiftKind::RotL: {
-                uint32_t w = is64 ? 64u : 32u;
-                res = (sh == 0) ? (ca & mask) : (((ca << sh) | ((ca & mask) >> (w - sh))) & mask);
-                break;
-            }
-            case ShiftKind::RotR: {
-                uint32_t w = is64 ? 64u : 32u;
-                res = (sh == 0) ? (ca & mask) : ((((ca & mask) >> sh) | (ca << (w - sh))) & mask);
-                break;
-            }
-        }
-        return Value::make(static_cast<int64_t>(res));
-    }
-    return top();
-}
 
 // PointerVal & PointerDomain
 
@@ -414,33 +279,30 @@ std::string PointerDomain::format(const Value& v) {
     return "<unknown-ptr>";
 }
 
-PointerVal PointerDomain::widen_dynamic_offset(const Value& ptr) {
+PointerVal PointerDomain::apply_int_delta(const Value& ptr, int64_t delta,
+                                          const SrtSymbolLookupFn& lookup_srt) {
+    if (!ptr.is_valid_pointer()) return top();
+    SymbolicMemoryLoc loc = ptr.to_memory_loc().with_added_offset(delta);
+    PointerVal out = ptr.with_memory_loc(loc);
+    if (out.kind == PointerVal::Kind::SrtRackPtr && loc.offset_known && loc.byte_offset >= 0 &&
+        (loc.byte_offset % 32) == 0 && out.rack >= 0) {
+        int32_t desc = static_cast<int32_t>(loc.byte_offset / 32);
+        std::string sym = lookup_srt
+                              ? lookup_srt(static_cast<uint8_t>(out.rack), static_cast<uint32_t>(desc))
+                              : "";
+        return PointerVal::make_descriptor(out.rack, desc, std::move(sym), 0, true);
+    }
+    return out;
+}
+
+PointerVal PointerDomain::widen_unknown_offset(const Value& ptr) {
     if (!ptr.is_valid_pointer()) return top();
     return ptr.with_memory_loc(ptr.to_memory_loc().with_unknown_offset());
 }
 
-PointerVal PointerDomain::add(const Value& ptr, const ConstIntVal& delta, const SrtSymbolLookupFn& lookup_srt) {
-    if (ptr.is_bottom() || delta.is_bottom()) return bottom();
+PointerVal PointerDomain::apply_int_mask(const Value& ptr, int64_t mask) {
     if (!ptr.is_valid_pointer()) return top();
-    if (delta.is_known()) {
-        if (delta.value == 0) return ptr;
-        return apply_pointer_delta(ptr, delta.value, lookup_srt);
-    }
-    return widen_dynamic_offset(ptr);
-}
-
-PointerVal PointerDomain::add(const ConstIntVal& delta, const Value& ptr, const SrtSymbolLookupFn& lookup_srt) {
-    return add(ptr, delta, lookup_srt);
-}
-
-PointerVal PointerDomain::sub(const Value& ptr, const ConstIntVal& delta, const SrtSymbolLookupFn& lookup_srt) {
-    if (ptr.is_bottom() || delta.is_bottom()) return bottom();
-    if (!ptr.is_valid_pointer()) return top();
-    if (delta.is_known()) {
-        if (delta.value == 0) return ptr;
-        return apply_pointer_delta(ptr, -delta.value, lookup_srt);
-    }
-    return widen_dynamic_offset(ptr);
+    return ptr.with_memory_loc(ptr.to_memory_loc().with_masked_offset(mask));
 }
 
 ConstIntVal PointerDomain::sub(const Value& a, const Value& b) {
@@ -452,17 +314,10 @@ ConstIntVal PointerDomain::sub(const Value& a, const Value& b) {
     return ConstIntVal::make_top();
 }
 
-PointerVal PointerDomain::bit_and(const Value& ptr, const ConstIntVal& mask, bool is64) {
-    if (ptr.is_bottom() || mask.is_bottom()) return bottom();
-    if (!ptr.is_valid_pointer() || !mask.is_known()) return top();
-    const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
-    if ((static_cast<uint64_t>(mask.value) & all_ones) == all_ones) return ptr;
-    if (mask.value == 0) return top();
-    return ptr.with_memory_loc(ptr.to_memory_loc().with_masked_offset(mask.value));
-}
-
-PointerVal PointerDomain::bit_and(const ConstIntVal& mask, const Value& ptr, bool is64) {
-    return bit_and(ptr, mask, is64);
+PointerVal PointerDomain::convert(const Value& v, ConvertKind kind) {
+    if (v.is_bottom()) return bottom();
+    if (v.is_top()) return top();
+    return is_int_width_convert(kind) ? v : top();
 }
 
 // SymbolValueDomain
@@ -513,152 +368,126 @@ std::string SymbolValueDomain::format(const Value& v) {
     return oss.str();
 }
 
-// ShaderAtomVal & ShaderAtomDomain
-
-ShaderAtomVal ShaderAtomVal::make_bottom() {
-    ShaderAtomVal v;
-    v.kind = Kind::Bottom;
-    return v;
+SymbolVal SymbolValueDomain::convert(const Value& v, ConvertKind kind) {
+    if (v.is_bottom()) return bottom();
+    if (v.is_top()) return top();
+    return is_int_width_convert(kind) ? v : top();
 }
 
-ShaderAtomVal ShaderAtomVal::make_top() {
-    ShaderAtomVal v;
-    v.kind = Kind::Top;
-    return v;
+// ShaderAtomDomain
+
+ShaderAtomVal ShaderAtomDomain::make_abi(std::string lbl) {
+    ShaderAtomPayload p;
+    p.kind = Kind::AbiPreload;
+    p.label = std::move(lbl);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_abi(std::string lbl) {
-    ShaderAtomVal v;
-    v.kind = Kind::AbiPreload;
-    v.label = std::move(lbl);
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_sideband(uint32_t member_idx) {
+    ShaderAtomPayload p;
+    p.kind = Kind::SidebandValue;
+    p.location = member_idx;
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_sideband(uint32_t member_idx) {
-    ShaderAtomVal v;
-    v.kind = Kind::SidebandValue;
-    v.location = member_idx;
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_buffer_size(int32_t r, int32_t d, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::BufferSize;
+    p.rack = r;
+    p.desc_idx = d;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_buffer_size(int32_t r, int32_t d, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::BufferSize;
-    v.rack = r;
-    v.desc_idx = d;
-    v.symbol_name = std::move(sym);
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_fau_uniform(uint32_t foff, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::FauUniformRef;
+    p.fau_offset = foff;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_fau_uniform(uint32_t foff, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::FauUniformRef;
-    v.fau_offset = foff;
-    v.symbol_name = std::move(sym);
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_vertex_attr(uint32_t loc, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::VertexAttrValue;
+    p.location = loc;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_vertex_attr(uint32_t loc, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::VertexAttrValue;
-    v.location = loc;
-    v.symbol_name = std::move(sym);
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_varying(uint32_t loc, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::VaryingValue;
+    p.location = loc;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_varying(uint32_t loc, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::VaryingValue;
-    v.location = loc;
-    v.symbol_name = std::move(sym);
-    return v;
+ShaderAtomVal ShaderAtomDomain::make_tex_sample(uint32_t img, uint32_t smp, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::TexSampleValue;
+    p.location = img;
+    p.sampler_idx = smp;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
-ShaderAtomVal ShaderAtomVal::make_tex_sample(uint32_t img, uint32_t smp, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::TexSampleValue;
-    v.location = img;
-    v.sampler_idx = smp;
-    v.symbol_name = std::move(sym);
-    return v;
-}
-
-ShaderAtomVal ShaderAtomVal::make_blend_desc(uint32_t loc, std::string sym) {
-    ShaderAtomVal v;
-    v.kind = Kind::BlendDescRef;
-    v.location = loc;
-    v.symbol_name = std::move(sym);
-    return v;
-}
-
-bool ShaderAtomDomain::equals(const Value& a, const Value& b) {
-    if (a.kind != b.kind) return false;
-    if (a.is_bottom() || a.is_top()) return true;
-    return a.rack == b.rack &&
-           a.desc_idx == b.desc_idx &&
-           a.fau_offset == b.fau_offset &&
-           a.location == b.location &&
-           a.sampler_idx == b.sampler_idx &&
-           a.symbol_name == b.symbol_name &&
-           a.label == b.label;
-}
-
-bool ShaderAtomDomain::leq(const Value& a, const Value& b) {
-    if (a.is_bottom() || b.is_top()) return true;
-    if (b.is_bottom() || a.is_top()) return false;
-    return equals(a, b);
-}
-
-ShaderAtomVal ShaderAtomDomain::join(const Value& a, const Value& b) {
-    if (a.is_bottom()) return b;
-    if (b.is_bottom()) return a;
-    if (a.is_top() || b.is_top()) return top();
-    return equals(a, b) ? a : top();
-}
-
-ShaderAtomVal ShaderAtomDomain::meet(const Value& a, const Value& b) {
-    if (a.is_top()) return b;
-    if (b.is_top()) return a;
-    if (a.is_bottom() || b.is_bottom()) return bottom();
-    return equals(a, b) ? a : bottom();
+ShaderAtomVal ShaderAtomDomain::make_blend_desc(uint32_t loc, std::string sym) {
+    ShaderAtomPayload p;
+    p.kind = Kind::BlendDescRef;
+    p.location = loc;
+    p.symbol_name = std::move(sym);
+    return Value::make(std::move(p));
 }
 
 std::string ShaderAtomDomain::format(const Value& v) {
+    if (v.is_bottom()) return "<bottom>";
+    if (v.is_top()) return "<top>";
+    const auto& p = v.value;
     std::ostringstream oss;
-    switch (v.kind) {
-        case ShaderAtomVal::Kind::Bottom: return "<bottom>";
-        case ShaderAtomVal::Kind::Top: return "<top>";
-        case ShaderAtomVal::Kind::AbiPreload:
-            return v.label.empty() ? "ABI" : v.label;
-        case ShaderAtomVal::Kind::SidebandValue:
-            oss << "sideband[" << v.location << "]";
+    switch (p.kind) {
+        case Kind::AbiPreload:
+            return p.label.empty() ? "ABI" : p.label;
+        case Kind::SidebandValue: {
+            if (const char* field = sideband_member_name(p.location)) {
+                oss << "sideband." << field;
+            } else {
+                oss << "sideband[" << p.location << "]";
+            }
             return oss.str();
-        case ShaderAtomVal::Kind::BufferSize:
-            if (!v.symbol_name.empty()) oss << "sizeof(" << v.symbol_name << ")";
-            else oss << "sizeof(SRT[" << v.rack << "]->Buf[" << v.desc_idx << "])";
+        }
+        case Kind::BufferSize:
+            if (!p.symbol_name.empty()) oss << "sizeof(" << p.symbol_name << ")";
+            else oss << "sizeof(SRT[" << p.rack << "]->Buf[" << p.desc_idx << "])";
             return oss.str();
-        case ShaderAtomVal::Kind::FauUniformRef:
-            if (!v.symbol_name.empty()) return v.symbol_name;
-            oss << "FAU+0x" << std::hex << v.fau_offset;
+        case Kind::FauUniformRef:
+            if (!p.symbol_name.empty()) return p.symbol_name;
+            oss << "FAU+0x" << std::hex << p.fau_offset;
             return oss.str();
-        case ShaderAtomVal::Kind::VertexAttrValue:
-            oss << "attr[" << v.location << "]";
-            if (!v.symbol_name.empty()) oss << " (" << v.symbol_name << ")";
+        case Kind::VertexAttrValue:
+            oss << "attr[" << p.location << "]";
+            if (!p.symbol_name.empty()) oss << " (" << p.symbol_name << ")";
             return oss.str();
-        case ShaderAtomVal::Kind::VaryingValue:
-            oss << "varying[" << v.location << "]";
-            if (!v.symbol_name.empty()) oss << " (" << v.symbol_name << ")";
+        case Kind::VaryingValue:
+            oss << "varying[" << p.location << "]";
+            if (!p.symbol_name.empty()) oss << " (" << p.symbol_name << ")";
             return oss.str();
-        case ShaderAtomVal::Kind::TexSampleValue:
-            oss << "tex(img=" << v.location << ",smp=" << v.sampler_idx << ")";
-            if (!v.symbol_name.empty()) oss << " (" << v.symbol_name << ")";
+        case Kind::TexSampleValue:
+            oss << "tex(img=" << p.location << ",smp=" << p.sampler_idx << ")";
+            if (!p.symbol_name.empty()) oss << " (" << p.symbol_name << ")";
             return oss.str();
-        case ShaderAtomVal::Kind::BlendDescRef:
-            oss << "color_out[" << v.location << "]";
-            if (!v.symbol_name.empty()) oss << " (" << v.symbol_name << ")";
+        case Kind::BlendDescRef:
+            oss << "color_out[" << p.location << "]";
+            if (!p.symbol_name.empty()) oss << " (" << p.symbol_name << ")";
             return oss.str();
     }
     return "<unknown-atom>";
+}
+
+ShaderAtomVal ShaderAtomDomain::convert(const Value& v, ConvertKind kind) {
+    if (v.is_bottom()) return bottom();
+    if (v.is_top()) return top();
+    return is_int_width_convert(kind) ? v : top();
 }
 
 // Formatting & Set Collapse Helpers

@@ -184,8 +184,8 @@ IsaProjectedAnalysis lower_and_run_ssa_pointer_analysis(
         for (compiler::SsaId arg : node.args) {
             dataflow::TrackedVal av = res.df.val(arg);
             if (const auto* atom = av.inner.get_if<dataflow::ShaderAtomDomain>();
-                atom && atom->kind == dataflow::ShaderAtomVal::Kind::AbiPreload) {
-                append_unique_note(res.inst_notes[idx], "ABI: " + atom->label);
+                atom && atom->is_known() && atom->value.kind == dataflow::ShaderAtomDomain::Kind::AbiPreload) {
+                append_unique_note(res.inst_notes[idx], "ABI: " + atom->value.label);
             } else if (const auto* ptr = av.inner.get_if<dataflow::PointerDomain>();
                        ptr && (ptr->kind == dataflow::PointerVal::Kind::FauDstBase ||
                                ptr->kind == dataflow::PointerVal::Kind::SrtBase)) {
@@ -313,10 +313,11 @@ PilotAnalysisResult analyze_pilot_shaders(
                 entry.symbol_name = sym->symbol_name;
                 entry.srt_rack = sym->rack;
                 entry.desc_index = sym->desc_idx;
-            } else if (const auto* atom = pw.value.inner.get_if<dataflow::ShaderAtomDomain>()) {
-                entry.symbol_name = atom->symbol_name;
-                entry.srt_rack = atom->rack;
-                entry.desc_index = atom->desc_idx;
+            } else if (const auto* atom = pw.value.inner.get_if<dataflow::ShaderAtomDomain>();
+                       atom && atom->is_known()) {
+                entry.symbol_name = atom->value.symbol_name;
+                entry.srt_rack = atom->value.rack;
+                entry.desc_index = atom->value.desc_idx;
             }
             res.fau_map[entry.fau_offset] = std::move(entry);
         }
