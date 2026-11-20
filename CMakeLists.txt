@@ -143,7 +143,9 @@ add_library(valhall2spirv STATIC
     src/valhall_tiler.cpp
     src/valhall_spirv_builder.cpp
     src/valhall_cfg.cpp
+    src/dataflow/worklist.cpp
     src/dataflow/liveness.cpp
+    src/dataflow/tracked_val.cpp
     src/dataflow/transfer.cpp
     src/dataflow/pointer_analysis.cpp
     src/valhall_to_spirv.cpp

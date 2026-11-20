@@ -1,37 +1,49 @@
-# Formal Specification: Valhall SSA Dataflow & Pointer Analysis (`src/dataflow/`)
+# Formal Specification: Valhall SSA Pointer & Resource Analysis (`src/dataflow/pointer_analysis.{h,cpp}`)
 
-This document formalizes the abstract domain, complete lattice, CFG dataflow equations (forward pointer/resource analysis and backwards SSA liveness), and SSA transfer functions implemented in `src/dataflow/`.
-
----
-
-## 1. SSA Program Representation (`src/ssa/valhall_ssa.h`)
-
-A Valhall shader is lowered by Pass 1 (`valhall_pass1.cpp`) into a `ValhallSsaModule` $M = (B, V, E)$:
-- $B = \{B_0, B_1, \dots, B_{k-1}\}$ is the set of basic blocks (`SsaBlock`), with entry block $B_0$ and directed CFG edges $E \subseteq B \times B$ given by `fallthrough_block` and `branch_target_block`.
-- $V = \{1, 2, \dots, N\}$ is the set of SSA value identifiers (`SsaId`), where every $v \in V$ has a unique defining `SsaNode` $n_v$ in some block $B(v) \in B$.
-- Each block $B_i$ consists of:
-  1. A sequence of $\phi$-nodes $\Phi(B_i) \subseteq V$ at block entry, where each $\phi$-node $p \in \Phi(B_i)$ has incoming pairs $\{(P_1, v_1), \dots, (P_m, v_m)\}$ with $P_j \in \text{pred}(B_i)$.
-  2. A sequence of body nodes $\text{Nodes}(B_i) \subseteq V$ in program order.
-  3. An optional branch condition $\text{cond}(B_i) \in V \cup \{0\}$.
-- Every lowered `SsaNode` carries `(orig_inst_idx, orig_pc)` mapping it back to its originating Valhall ISA instruction so SSA-level analysis results project cleanly onto source ISA disassembly.
+This document formalizes the `TrackedVal` domain (`src/dataflow/tracked_val.{h,cpp}`), its bounded finite-set lifting `TrackedValSetDomain` (`FiniteSetDomain<TrackedValDomain, 4>`), the disjoint symbolic memory model (`src/dataflow/memory_domain.h`), and the SSA transfer functions implemented in `src/dataflow/pointer_analysis.cpp`. For the complete framework design and implementation guide covering all domain combinators, worklist solvers, and transfer visitors, see [`dataflow.md`](./dataflow.md).
 
 ---
 
-## 2. Abstract Domain & Complete Lattice $(\mathcal{L}, \sqsubseteq, \sqcup, \sqcap, \bot, \top)$
+## 1. Module Architecture & Separation of Concerns
 
-### 2.1 Value Lattice $\mathcal{L}$ (`TrackedValDomain`)
+```text
+  tools/spirv2valhall/isa_enricher.cpp
+      │  1. Explicitly lowers ISA -> CFG -> ValhallSsaModule (tolerant_ssa = true)
+      │  2. Calls run_ssa_liveness(mod) & run_ssa_pointer_analysis(mod, env, &live)
+      │  3. Projects SSA findings back onto orig_inst_idx
+      ▼
+  src/dataflow/ (100% Pure SSA — zero ISA/CFG-builder dependencies)
+      ├── domains.h          ValidateLatticeDomain, VectorDomain, MapDomain,
+      │                      TupleDomain, BitsetDomain, FiniteSetDomain<T, K>
+      ├── memory_domain.h    MemoryRegionKind, SymbolicMemoryLoc, may_alias()
+      ├── worklist.{h,cpp}   Directional run_cfg_worklist(Forward | Backward)
+      ├── liveness.{h,cpp}   Backwards SSA liveness via BitsetDomain + worklist
+      ├── abstract_domain.h  AbstractState<DomainT> (VectorDomain + MapDomains)
+      ├── transfer.{h,cpp}   SsaOpKind, SsaTransferVisitorBase,
+      │                      SsaDomainTransferVisitor<D>, run_ssa_dataflow<D>
+      ├── tracked_val.{h,cpp} TrackedVal, TrackedValDomain, TrackedValSetDomain
+      └── pointer_analysis.{h,cpp}  SsaPointerTransferVisitor, run_ssa_pointer_analysis
+```
 
-Every SSA value is abstracted to an element of the bounded lattice $\mathcal{L}$ (`TrackedVal`):
+---
 
-$$\mathcal{L} = \{\bot, \top\} \;\cup\; \text{ConstInt}(\mathbb{Z}_{64}) \;\cup\; \text{Abi}(\text{Label}) \;\cup\; \mathcal{P} \;\cup\; \mathcal{R}$$
+## 2. Base Domain: `TrackedVal` Complete Lattice (`src/dataflow/tracked_val.{h,cpp}`)
 
-where:
-- **Pointer-like kinds ($\mathcal{P}$)** carry a base identity $\beta$, a byte offset $\delta \in \mathbb{Z} \cup \{?\}$, a `derived` flag $d \in \{\text{false}, \text{true}\}$, and a split-half tag $h \in \{\text{lo}, \text{hi}\}$:
-  $$\mathcal{P} = \{\text{FauDstBase}, \text{SrtBase}, \text{SrtRackPtr}(r), \text{DescriptorAddr}(r, i, s), \text{BufferAddr}(r, i, s), \text{DataSectionPtr}, \text{TlsPtr}, \text{WlsPtr}\}$$
-- **Resource/value kinds ($\mathcal{R}$)** represent non-pointer shader resources:
-  $$\mathcal{R} = \{\text{BufferSize}(r, i, s), \text{FauUniformRef}(o, s), \text{SymbolValue}(r, i, s, d), \text{VertexAttrValue}(\ell, s), \text{VaryingValue}(\ell, s), \text{TexSampleValue}(\text{img}, \text{smp}, s), \text{BlendDescRef}(\ell, s)\}$$
+### 2.1 Value Universe $\mathcal{L}$
 
-### 2.2 Partial Order $\sqsubseteq$ (`TrackedValDomain::leq`)
+A single abstract value $v \in \mathcal{L}$ (`TrackedVal`) belongs to one of 19 kinds:
+
+$$\mathcal{L} = \{\bot, \top\} \;\cup\; \text{ConstInt}(\mathbb{Z}_{64}) \;\cup\; \text{AbiPreload}(\text{Label}) \;\cup\; \mathcal{P} \;\cup\; \mathcal{R}$$
+
+- **Pointer-like kinds ($\mathcal{P}$, `has_offset() == true`):** carry a base identity $\beta$, a byte offset $\delta \in \mathbb{Z} \cup \{?\}$, a `derived` bit $d \in \{\text{false}, \text{true}\}$, and a 64-bit split half $h \in \{\text{lo}, \text{hi}\}$:
+  - Singleton per-invocation base regions (`same_base_identity` unconditionally true for same kind & half):
+    `FauDstBase`, `SrtBase`, `DataSectionPtr`, `TlsPtr`, `WlsPtr`.
+  - Indexed resource pointers (`same_base_identity` compares indices & symbol name):
+    `SrtRackPtr(rack)`, `DescriptorAddr(rack, desc, sym)`, `BufferAddr(rack, desc, sym)`.
+- **Non-pointer resource/value kinds ($\mathcal{R}$):**
+  `BufferSize(rack, desc, sym)`, `FauUniformRef(fau_off, sym)`, `SymbolValue(rack, desc, sym, d)`, `VertexAttrValue(loc, sym)`, `VaryingValue(loc, sym)`, `TexSampleValue(img, smp, sym)`, `BlendDescRef(loc, sym)`.
+
+### 2.2 Partial Order $\sqsubseteq$, Join $\sqcup$, Meet $\sqcap$
 
 ```text
                              ⊤ (Top)
@@ -43,137 +55,87 @@ where:
                              ⊥ (Bottom)
 ```
 
-Formally, $a \sqsubseteq b$ holds iff any of the following hold:
-1. $a = \bot$ or $b = \top$ or $a = b$.
-2. $a, b \in \mathcal{P}$ share the same base identity $\beta(a) = \beta(b)$ and split half $h(a) = h(b)$, and:
-   - $a$ has a known offset ($\delta_a \in \mathbb{Z}$) while $b$ has an unknown offset ($\delta_b = ?$), with $d_a \implies d_b$; OR
-   - $\delta_a = \delta_b$ and $d_a = \text{false}, d_b = \text{true}$.
-3. $a, b \in \text{SymbolValue}$ share the same $(r, i, s)$ with $d_a = \text{false}, d_b = \text{true}$.
-
-### 2.3 Join ($\sqcup$) and Meet ($\sqcap$)
-
-$$a \sqcup b = \begin{cases}
-b & \text{if } a = \bot \\
-a & \text{if } b = \bot \\
-\top & \text{if } a = \top \lor b = \top \\
-a & \text{if } a = b \\
-P(\beta, \delta_a \sqcup_\delta \delta_b, d_a \lor d_b) & \text{if } a, b \in \mathcal{P} \land \beta(a) = \beta(b) \land h(a) = h(b) \\
-\text{SymbolValue}(r, i, s, d_a \lor d_b) & \text{if } a, b \in \text{SymbolValue} \land \text{same\_id}(a, b) \\
-\top & \text{otherwise}
-\end{cases}$$
-
-where $\delta_a \sqcup_\delta \delta_b = \delta_a$ if $\delta_a = \delta_b \in \mathbb{Z}$, else $?$.
-
-Dually, $a \sqcap b$ returns $b$ if $a = \top$, $a$ if $b = \top$, $\bot$ if either is $\bot$, $a$ if $a \sqsubseteq b$, $b$ if $b \sqsubseteq a$, and $\bot$ otherwise.
-
-**Termination Guarantee:** Because every chain in $\mathcal{L}$ has length at most $h(\mathcal{L}) = 3$ ($\bot \sqsubset P(\beta, \delta, \text{false}) \sqsubset P(\beta, ?, \text{true}) \sqsubset \top$), the product lattice over $|V|$ SSA values and finite FAU offsets has finite height, so chaotic iteration of monotone transfer functions is guaranteed to converge to the least fixpoint.
+- $a \sqsubseteq b$ iff $a = \bot$, $b = \top$, $a = b$, or both share `same_base_identity` with concrete offset $\sqsubseteq$ unknown offset (and $d_a \implies d_b$).
+- $a \sqcup b$ preserves the shared base with `offset_known = false` when two pointers to the same base have differing offsets; incompatible kinds widen to $\top$.
+- $a \sqcap b$ is the exact dual (`Top` is identity; incompatible elements narrow to $\bot$).
+- **Finite Height:** $h(\mathcal{L}) = 3$.
 
 ---
 
-## 3. Abstract State $\sigma$ (`AbstractState<DomainT>`)
+## 3. Bounded Finite-Set Lifting: `TrackedValSetDomain`
 
-$$\sigma = (\rho, \mu_{\text{FAU}}, \mu_{\text{sym}})$$
+Pointer analysis runs over the lifted domain:
 
-- $\rho : V \to \mathcal{L}$ maps each `SsaId` to its abstract value (initially $\lambda v.\,\bot$).
-- $\mu_{\text{FAU}} : \mathbb{N} \to \mathcal{L}$ maps FAU uniform byte offsets to abstract values (seeded from `env.initial_fau` and updated by Pilot `PsbStore`s to `FauDstBase`).
-- $\mu_{\text{sym}} : \text{String} \to \mathcal{L}$ maps symbolic memory locations to abstract values.
+$$\mathcal{S}_4 = \text{FiniteSetDomain}\langle \text{TrackedValDomain}, 4 \rangle$$
 
-State join $\sigma_1 \sqcup \sigma_2$ and meet $\sigma_1 \sqcap \sigma_2$ are defined pointwise on $\rho$, $\mu_{\text{FAU}}$, and $\mu_{\text{sym}}$.
+An element $S \in \mathcal{S}_4$ is either:
+- $\bot_{\mathcal{S}} = \emptyset$ (`is_bottom()`),
+- a deduplicated finite set $\{v_1, \dots, v_k\} \subseteq \mathcal{L} \setminus \{\bot, \top\}$ with $1 \le k \le 4$, or
+- $\top_{\mathcal{S}}$ (`is_top()`, reached whenever any element is $\top$ or cardinality exceeds $4$).
 
----
+**Free Lift & Lower:**
+- `lift_value(v)` / `singleton(v)`: promotes $v \in \mathcal{L}$ into $\{v\} \in \mathcal{S}_4$.
+- `try_as_singleton(&out)`: extracts the unique element when $|S| = 1$.
+- `collapse_tracked_val_set(S)`: folds $S$ to a single summary `TrackedVal` via $\bigsqcup_{v \in S} v$.
 
-## 4. Forward CFG Dataflow Equations (`run_ssa_forward_dataflow`)
+**Pointwise Transfer Lifting:**
+- `lift_unary(S, f)`: $\{f(v) \mid v \in S\}$ (widening to $\top_{\mathcal{S}}$ if $|S'|>4$ or any $f(v)=\top$).
+- `lift_binary(A, B, g)`: $\{g(a, b) \mid (a, b) \in A \times B\}$.
 
-For every basic block $B \in \text{blocks}(M)$:
-
-$$\text{IN}[B] = \begin{cases}
-\sigma_{\text{entry}} \sqcup \bigsqcup_{P \in \text{pred}(B)} \text{OUT}[P] & \text{if } B = B_0 \\
-\bigsqcup_{P \in \text{pred}(B)} \text{OUT}[P] & \text{if } B \neq B_0
-\end{cases}$$
-
-$$\text{OUT}[B] = \mathcal{F}_B(\text{IN}[B]), \qquad \mathcal{F}_B = \llbracket n_k \rrbracket^\# \circ \dots \circ \llbracket n_1 \rrbracket^\# \circ \llbracket \Phi(B) \rrbracket^\#$$
-
-After fixpoint convergence ($\text{OUT}[B]^{(t+1)} = \text{OUT}[B]^{(t)}$ for all $B$), the unified module-wide SSA environment is:
-
-$$\sigma_{\text{final}} = \bigsqcup_{B \in \text{blocks}(M)} \text{OUT}[B]$$
+**Height of $\mathcal{S}_4$:** Each ascending chain adds at most 4 elements before reaching $\top_{\mathcal{S}}$, so $h(\mathcal{S}_4) \le 5$, preserving guaranteed termination.
 
 ---
 
-## 5. Backwards SSA Liveness Equations (`src/dataflow/liveness.{h,cpp}`)
+## 4. Abstract State & Disjoint Memory Model (`AbstractState<TrackedValSetDomain>`)
 
-SSA $\phi$-nodes evaluate their incoming operands along incoming CFG edges rather than inside the target block. For each block $B$:
-- $\text{PHI\_DEFS}[B] = \{ p \mid p \in \Phi(B) \}$
-- $\text{PHI\_USES}(B \to S) = \{ v \mid p \in \Phi(S),\; (B, v) \in \text{incomings}(p) \}$
-- $\text{DEF}[B] = \{ n \mid n \in \text{Nodes}(B) \}$
-- $\text{UE\_USE}[B]$ = operands used in $\text{Nodes}(B)$ or $\text{cond}(B)$ prior to any definition in $B$.
+$$\sigma = (\rho : \text{SsaId} \to \mathcal{S}_4,\quad \mu_{\text{FAU}} : \mathbb{N} \to \mathcal{S}_4,\quad \mu_{\text{sym}} : \text{SymbolicMemoryLoc} \to \mathcal{S}_4)$$
 
-The backwards fixpoint equations are:
-
-$$\text{LIVE\_OUT}[B] = \bigcup_{S \in \text{succ}(B)} \Big( \big(\text{LIVE\_IN}[S] \setminus \text{PHI\_DEFS}[S]\big) \cup \text{PHI\_USES}(B \to S) \Big)$$
-
-$$\text{LIVE\_IN}[B] = \text{UE\_USE}[B] \cup \big(\text{LIVE\_OUT}[B] \setminus \text{DEF}[B]\big)$$
-
-Walking $\text{Nodes}(B)$ in reverse from $\text{live} = \text{LIVE\_OUT}[B] \cup \{\text{cond}(B)\}$, an operand $u \in \text{args}(n)$ is **killed** at node $n$ iff $u \notin \text{live}_{\text{after}}(n)$:
-
-$$\text{KILLED\_AFTER}[n] = \{ u \in \text{args}(n) \mid u \notin \text{live}_{\text{after}}(n) \}$$
+- **`ssa_vals` (`VectorDomain<TrackedValSetDomain>`):** Stored once in $O(|V|)$ space with power-of-2 growth (`next_power_of_two`).
+- **`fau_mem` (`MapDomain<uint32_t, TrackedValSetDomain>`):** Read-only (RO) in Main shaders (seeded from `env.initial_fau`); written in Pilot shaders via `PsbStore` to `FauDstBase + off`.
+- **`sym_mem` (`MapDomain<SymbolicMemoryLoc, TrackedValSetDomain>`):** Structured region keys (`FauUniform`, `SrtTable`, `Buffer`, `DataSection`, `Tls`, `Wls`, `Other`) with disjointness enforced by `SymbolicMemoryLoc::may_alias()`.
 
 ---
 
-## 6. SSA Transfer Functions $\llbracket \text{node} \rrbracket^\#(\sigma)$
+## 5. Directional CFG Dataflow Equations (`run_cfg_worklist`)
 
-### 6.1 Extensional Equalities (`SsaDomainTransferVisitor<DomainT>`)
+Both forward pointer analysis and backwards liveness run on the shared `run_cfg_worklist(mod, dir, transfer_block)` engine (`src/dataflow/worklist.cpp`):
 
-| SSA Op Group | Transfer Equation $\rho'[d]$ |
+- **Backwards SSA Liveness (`liveness.cpp`, `BitsetDomain`, `DataflowDirection::Backward`):**
+  $$\text{LIVE\_OUT}[B] = \bigcup_{S \in \text{succ}(B)} \Big( (\text{LIVE\_IN}[S] \setminus \text{PHI\_DEFS}[S]) \cup \text{PHI\_USES}(B \to S) \Big)$$
+  $$\text{LIVE\_IN}[B] = \text{UE\_USE}[B] \cup (\text{LIVE\_OUT}[B] \setminus \text{DEF}[B])$$
+
+- **Forward SSA Pointer Analysis (`pointer_analysis.cpp`, `TrackedValSetDomain`, `DataflowDirection::Forward`):**
+  - Per-block incoming side-channel memory: $\mu_{\text{in}}[B] = \bigsqcup_{P \in \text{pred}(B)} \mu_{\text{out}}[P]$ (seeded with $\mu_{\text{entry}}$ at $B_0$).
+  - For every `Phi` and body `SsaNode` $n$ in $B$, $\rho'[n] = \rho[n] \sqcup \llbracket n \rrbracket^\#(\rho, \mu)$.
+  - Re-enqueue successors of $B$ iff any $\rho[n]$ or $\mu_{\text{out}}[B]$ changed.
+
+---
+
+## 6. SSA Transfer Functions $\llbracket n \rrbracket^\#(\sigma)$
+
+### 6.1 Inherited Extensional Equalities (`SsaDomainTransferVisitor<TrackedValSetDomain>`)
+
+Automatically handled via `try_as_const_u64` / `make_const_u64` forwarding on singleton constant sets:
+- `Copy(x)` / `Bitcast(x)` $\to \rho(x)$
+- `Phi((P_i, v_i))` $\to \bigsqcup_{v_i \neq d} \rho(v_i)$ (preserving up to 4 distinct incoming values!)
+- `Select(c, a, b)` $\to \rho(a)$ if $a = b$, else $\rho(a) \sqcup \rho(b)$
+- `x + 0`, `x - 0`, `x * 1`, `x | 0`, `x ^ 0`, `x & ~0`, `x & x`, `x | x`, `x << 0`, `x >> 0` $\to \rho(x)$
+- `x - x`, `x ^ x`, `x & 0`, `x * 0` $\to \{\text{ConstInt}(0)\}$
+
+### 6.2 Pointer, Resource & Memory Transfer Functions (`SsaPointerTransferVisitor`)
+
+| SSA Op (`SsaOpKind`) | Transfer Rule |
 |---|---|
-| `Copy(x)`, `Bitcast(x)` | $\rho(x)$ |
-| `Phi((P_1, v_1), \dots, (P_m, v_m))` | $\bigsqcup_{v_i \neq d} \rho(v_i)$ |
-| `Select(c, a, b)` | $\rho(a)$ if $a = b$, else $\rho(a) \sqcup \rho(b)$ |
-| `IAdd(x, y)` / `IAdd64(x, y)` | $\rho(x)$ if $\rho(y) = \text{Const}(0)$; $\rho(y)$ if $\rho(x) = \text{Const}(0)$; $\text{Const}(c_x + c_y)$ if both const |
-| `ISub(x, y)` / `ISub64(x, y)` | $\text{Const}(0)$ if $x = y$; $\rho(x)$ if $\rho(y) = \text{Const}(0)$; $\text{Const}(c_x - c_y)$ if both const |
-| `IMul(x, y)` / `IMul64(x, y)` | $\text{Const}(0)$ if either $0$; $\rho(x)$ if $\rho(y) = 1$; $\rho(y)$ if $\rho(x) = 1$ |
-| `BitAnd(x, y)` / `BitAnd64(x, y)` | $\rho(x)$ if $x = y$ or $\rho(y) = \sim 0$; $\text{Const}(0)$ if either $0$ |
-| `BitOr(x, y)` / `BitOr64(x, y)` | $\rho(x)$ if $x = y$ or $\rho(y) = 0$; $\rho(y)$ if $\rho(x) = 0$ |
-| `BitXor(x, y)` / `BitXor64(x, y)` | $\text{Const}(0)$ if $x = y$; $\rho(x)$ if $\rho(y) = 0$; $\rho(y)$ if $\rho(x) = 0$ |
-| `Shl`/`ShrU`/`ShrS`/`RotL`/`RotR(x, s)` | $\rho(x)$ if $\rho(s) = \text{Const}(0)$; constant-folded if both const |
-
-### 6.2 Pointer, Resource & ABI Transfer Functions (`SsaPointerTransferVisitor`)
-
-| SSA Op | Transfer Equation |
-|---|---|
-| `ConstU32/S32/U64/Bool/F32(c)` | $\rho'[d] = \text{ConstInt}(c)$ |
-| `LoadSidebandU64(idx)` (Pilot) | $\rho'[d] = \text{FauDstBase}(0)$ if $\text{idx}=3$; $\text{SrtBase}(0)$ if $\text{idx}=2$ |
-| `LoadBuiltinInput(bi, name)` | $\rho'[d] = \text{AbiPreload}(\text{name})$ |
-| `VecExtract(v, c)` | If $\rho(v) = \text{AbiPreload}(\text{lbl})$, $\rho'[d] = \text{AbiPreload}(\text{lbl}.\text{comp}(c))$ |
-| `LoadFau(w)` | $\rho'[d] = \mu_{\text{FAU}}(4w)$ if present; else $\mu_{\text{FAU}}(4w \land \sim 7)_{\text{hi}}$ if $4w \equiv 4 \pmod 8$; else $\text{FauUniformRef}(4w)$ |
-| `Split64(x)` | $\rho'[d] = \rho(x)$ |
-| `TupleExtract(t, i)` | $\rho'[d] = \rho(t)_{\text{lo}}$ ($i=0$); $\rho(t)_{\text{hi}}$ ($i=1$, or $\text{Const}(c \gg 32)$) |
-| `Pack64(lo, hi)` | Reconstructs 64-bit pointer from $\rho(\text{lo})$ (clearing `is_hi_half`), or folds $\text{Const}((c_{\text{hi}} \ll 32) \mid c_{\text{lo}})$ |
-| `IAdd/IAdd64(p, k)` ($p \in \mathcal{P}$) | If $\rho(k) = \text{Const}(\Delta)$: $p$ with offset $\delta + \Delta$ (promoting `SrtRackPtr(r, 32j)` $\to$ `DescriptorAddr(r, j)`). Otherwise: $p$ with $\delta = ?$. |
-| `BitAnd/BitAnd64(p, m)` ($p \in \mathcal{P}$) | If $\rho(m) = \text{Const}(M \neq 0)$: preserves pointer base $p$ with $\delta' = \delta \land M$. |
-| `PsbLoad(addr, sz)` | Dereferences $\rho(\text{addr})$:<br>• $\text{SrtBase}(16r) \to \text{SrtRackPtr}(r, 0)$<br>• $\text{SrtRackPtr}(r, 32j + f) \to \text{BufferSize}(r, j)$ ($f=4, \text{sz}=4$) or $\text{BufferAddr}(r, j, 0)$ ($f=8 \lor \text{sz}=8$)<br>• $\text{DescriptorAddr}(r, j, f) \to \text{BufferSize}$ ($f=4$) or $\text{BufferAddr}(r, j, 0)$<br>• $\text{BufferAddr}(r, j, \delta) \to \text{SymbolValue}(r, j, \text{member}(r, j, \delta))$<br>• $\text{FauDstBase}(\delta) \to \text{FauUniformRef}(\delta)$ |
-| `PsbStore(addr, val, sz)` | If $\rho(\text{addr}) = \text{FauDstBase}(\delta)$ with known $\delta \ge 0$: updates $\mu'_{\text{FAU}}(\delta) = \mu_{\text{FAU}}(\delta) \sqcup \rho(\text{val})$ and records `PilotFauWrite{delta, sz, val}`. |
-| `LoadVertAttr(loc)` | $\rho'[d] = \text{VertexAttrValue}(\text{loc}, \text{sym}(\text{loc}))$ |
-| `LoadFragVarying(loc)` | $\rho'[d] = \text{VaryingValue}(\text{loc}, \text{sym}(\text{loc}))$ |
-| `TexSample(img, smp)` | $\rho'[d] = \text{TexSampleValue}(\text{img}, \text{smp}, \text{sym}(\text{img}))$ |
-
----
-
-## 7. Worked Example: Pilot Shader SRT Pointer Chasing in SSA
-
-Consider a Mali Compute Pilot Shader loading SSBO binding 0 (`_7163_input_rgba8_buffer`, located at `SRT[4]`, descriptor `0`) and storing its 64-bit GPU VA to `FAU_0 + 0x00`:
-
-```text
-  %1 = LoadSidebandU64(3)              => ρ(%1) = FauDstBase(+0x0)
-  %2 = LoadSidebandU64(2)              => ρ(%2) = SrtBase(+0x0)
-  %3 = ConstU64(0x40)                  => ρ(%3) = ConstInt(0x40)
-  %4 = IAdd64(%2, %3)                  => ρ(%4) = SrtBase(+0x40)          [rack = 0x40 / 16 = 4]
-  %5 = PsbLoad(%4, 8)                  => ρ(%5) = SrtRackPtr(rack=4, +0)
-  %6 = TupleExtract(%5, 0)             => ρ(%6) = SrtRackPtr(rack=4, +0)
-  %7 = ConstU64(0x08)                  => ρ(%7) = ConstInt(0x08)
-  %8 = IAdd64(%6, %7)                  => ρ(%8) = SrtRackPtr(rack=4, +8)  [desc=0, field=8]
-  %9 = PsbLoad(%8, 8)                  => ρ(%9) = BufferAddr(rack=4, desc=0, "_7163_input_rgba8_buffer")
- %10 = TupleExtract(%9, 0)             => ρ(%10) = BufferAddr(rack=4, desc=0, "_7163_input_rgba8_buffer")
- %11 = PsbStore(%1, %10, 8)            => μ_FAU[0x00] = BufferAddr(4, 0, "_7163_input_rgba8_buffer")
-```
-
-The main compute shader then seeds `env.initial_fau[0x00] = BufferAddr(4, 0, "_7163_input_rgba8_buffer")`, so every `LoadFau(0)` + `LoadFau(1)` + `Pack64` immediately resolves to `&_7163_input_rgba8_buffer (SRT[4]->Buf[0].addr)` across the entire main shader CFG!
+| `Const` (`ConstU32/S32/U64/Bool/F32`) | $\{\text{ConstInt}(c)\}$ (for `ConstF32`, raw IEEE-754 bits in `imm_u32`) |
+| `LoadSideband(idx)` | $\{\text{FauDstBase}(0)\}$ if `env.is_fau_dst_va(idx)`; $\{\text{SrtBase}(0)\}$ if `env.is_srt_base_va(idx)`; else $\top$ |
+| `LoadBuiltin(bi, name)` | $\{\text{AbiPreload}(\text{name})\}$ |
+| `Vec` (`VecExtract(v, c)`) | Lifts `AbiPreload(lbl)` $\to$ `AbiPreload(lbl.comp(c))` |
+| `LoadFau(w)` | $\mu_{\text{FAU}}(4w)$ if non-bottom; else high-half of $\mu_{\text{FAU}}(4w \land \sim 7)$ if $4w \equiv 4 \pmod 8$; else $\{\text{FauUniformRef}(4w)\}$ |
+| `Split64(x)` | $\rho(x)$ (carries 64-bit abstract set on the `TupleU32x2` node) |
+| `TupleExtract(t, i)` | Lifts `i=0` $\to$ `lo` (`is_hi_half=false`); `i=1` $\to$ `hi` (`is_hi_half=true`, or `c >> 32` for `ConstInt`) |
+| `Pack64(lo, hi)` | Lifts `(lo, hi)`: folds 64-bit `ConstInt` if both const; otherwise recovers pointer/FAU/symbol from `lo` (clearing `is_hi_half`) even if `hi` is $\top$ |
+| `IntAdd(a, b)` / `IntSub(a, b)` | Lifts pointer + `ConstInt(Δ)` $\to$ offset $\delta \pm \Delta$ (promoting `SrtRackPtr(r, 32j)` $\to$ `DescriptorAddr(r, j)`); pointer + non-const/$\top$ $\to$ offset $?$ |
+| `BitAnd(a, b)` | `a == b` $\to \rho(a)$; lifts pointer `& ConstInt(M != 0)` $\to$ preserves pointer base (e.g. Mali 48-bit VA mask `& 0xffffff`) |
+| `PsbLoad(addr, sz)` | **Singleton check:** if `addr` is NOT a singleton set, returns $\top_{\mathcal{S}}$ (or $\bot_{\mathcal{S}}$ if `addr` is $\bot_{\mathcal{S}}$). Otherwise dereferences `single_addr`:<br>• `SrtBase(16r)` $\to$ `SrtRackPtr(r, 0)`<br>• `SrtRackPtr(r, 32j+f)` $\to$ `BufferSize` ($f=4, \text{sz}=4$) or `BufferAddr` ($f=8 \lor \text{sz}=8$)<br>• `DescriptorAddr(r, j, f)` $\to$ `BufferSize` ($f=4$) or `BufferAddr`<br>• `BufferAddr(r, j, δ)` $\to$ `SymbolValue(r, j, member(r, j, δ))`<br>• `FauDstBase(δ)` $\to$ `FauUniformRef(δ)` |
+| `PsbStore(addr, val, sz)` | For singleton `FauDstBase(δ)`: joins `val` into $\mu_{\text{FAU}}(\delta)$ and records `PilotFauWrite`. For other singleton pointers: joins `val` into $\mu_{\text{sym}}(\text{addr.to\_memory\_loc()})$. |
+| `LoadVertAttr` / `LoadFragVarying` / `TexSample` | Produces singleton `VertexAttrValue`, `VaryingValue`, or `TexSampleValue` resolved via `env` callbacks |

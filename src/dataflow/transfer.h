@@ -1,16 +1,50 @@
 #pragma once
 
 #include "abstract_domain.h"
+#include "domains.h"
 #include "liveness.h"
 #include "valhall_ssa.h"
+#include "worklist.h"
 
 #include <algorithm>
 #include <cstdint>
-#include <deque>
-#include <type_traits>
 #include <vector>
 
 namespace valhall::dataflow {
+
+/// High-level semantic classification of `tables::SsaOp`.
+/// Decouples op categorization from transfer dispatch so `dispatch_ssa_transfer`
+/// switches on self-contained semantic kinds rather than 134 raw opcodes.
+enum class SsaOpKind : uint8_t {
+    Const = 0,
+    Copy,
+    Phi,
+    Select,
+    IntAdd,
+    IntSub,
+    IntMul,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
+    Shift,
+    Pack64,
+    Split64,
+    TupleExtract,
+    Convert,
+    Vec,
+    LoadFau,
+    LoadBuiltin,
+    LoadSideband,
+    PsbLoad,
+    PsbStore,
+    LoadVertAttr,
+    LoadFragVarying,
+    TexSample,
+    StoreOutput,
+    Atomic,
+    Other,
+};
 
 /// Shift / rotate direction for normalized `on_shift` dispatch.
 enum class ShiftKind : uint8_t {
@@ -21,14 +55,16 @@ enum class ShiftKind : uint8_t {
     RotR,
 };
 
+/// Classify any `tables::SsaOp` into its semantic `SsaOpKind`.
+SsaOpKind classify_ssa_op(tables::SsaOp op);
+
+/// Returns true if `op` is a 64-bit integer / bitwise / shift / sideband op.
+bool is_ssa_op_64bit(tables::SsaOp op);
+
+/// Returns the `ShiftKind` for shift/rotate ops (defaults to `ShiftKind::Shl`).
+ShiftKind classify_ssa_shift_kind(tables::SsaOp op);
+
 /// Abstract SSA transfer-function visitor base class.
-///
-/// Groups the 134 `tables::SsaOp` enum values into normalized semantic transfer
-/// hooks (e.g. `BitAnd` + `BitAnd64` -> `on_and(dst, lhs, rhs, is_64bit, node)`,
-/// `IAdd` + `IAdd64` -> `on_iadd(dst, lhs, rhs, is_64bit, node)`, `Copy` +
-/// `Bitcast` -> `on_copy(dst, src, node)`). Every hook receives the full
-/// `const compiler::SsaNode&` so specialized analyses can still inspect
-/// op-specific metadata (`imm_u32`, `imm_u64`, `aux_index`, `aux_str`, `type`).
 class SsaTransferVisitorBase {
 public:
     virtual ~SsaTransferVisitorBase() = default;
@@ -99,39 +135,11 @@ public:
 /// Normalized dispatcher from any `compiler::SsaNode` into `SsaTransferVisitorBase`.
 void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor);
 
-namespace detail {
-
-template <typename T, typename = void>
-struct has_const_helpers : std::false_type {};
-
-template <typename T>
-struct has_const_helpers<
-    T,
-    std::void_t<
-        decltype(T::try_as_const_u64(std::declval<const typename T::Value&>(), std::declval<uint64_t*>())),
-        decltype(T::make_const_u64(std::declval<uint64_t>()))>> : std::true_type {};
-
-}  // namespace detail
-
-/// Domain-aware SSA transfer visitor providing built-in **extensional equalities**:
-///
-/// 1. `Copy` / `Bitcast`: `dst = state.val(src)` (default state copy/alias).
-/// 2. `Phi`: `dst = ⊔ { state.val(v) | (_, v) ∈ phi_incomings }`.
-/// 3. `Select(c, a, b)`: if `a == b`, exact copy; otherwise `val(a) ⊔ val(b)`.
-/// 4. Algebraic identities (when `DomainT` exposes `try_as_const_u64`/`make_const_u64`):
-///      - `x + 0 == 0 + x == x`
-///      - `x - 0 == x`, `x - x == 0`
-///      - `x * 1 == 1 * x == x`, `x * 0 == 0 * x == 0`
-///      - `x | 0 == 0 | x == x`, `x | x == x`
-///      - `x ^ 0 == 0 ^ x == x`, `x ^ x == 0`
-///      - `x & ~0 == ~0 & x == x`, `x & x == x`, `x & 0 == 0 & x == 0`
-///      - `x << 0 == x >> 0 == x`
-///
-/// Subclasses override whichever semantic hooks they want to refine and can fall
-/// back to `SsaDomainTransferVisitor<DomainT>::on_*` to inherit these equalities.
+/// Domain-aware SSA transfer visitor providing built-in **extensional equalities**.
 template <typename DomainT>
 class SsaDomainTransferVisitor : public SsaTransferVisitorBase {
 public:
+    static_assert(ValidateLatticeDomain<DomainT>::valid, "");
     using Value = typename DomainT::Value;
     using State = AbstractState<DomainT>;
 
@@ -176,7 +184,7 @@ public:
     void on_phi(compiler::SsaId dst, const compiler::SsaNode& node) override {
         Value acc = DomainT::bottom();
         for (const auto& inc : node.phi_incomings) {
-            if (inc.value == dst) continue; // ignore self-loop backedge
+            if (inc.value == dst) continue;
             acc = DomainT::join(acc, eval(inc.value));
         }
         assign(dst, acc);
@@ -332,32 +340,34 @@ protected:
     State* state_ = nullptr;
 };
 
-/// Result of forward SSA CFG worklist dataflow analysis.
+/// Result of directional SSA CFG worklist dataflow analysis.
 template <typename DomainT>
 struct SsaDataflowResult {
+    static_assert(ValidateLatticeDomain<DomainT>::valid, "");
     bool converged = false;
     uint32_t iterations = 0;
-
-    /// Unified converged abstract state across the entire SSA module
-    /// (since every SsaId has a unique definition, `final_state.val(id)` gives
-    /// its fixpoint abstract value).
     AbstractState<DomainT> final_state;
 };
 
-/// Forward chaotic-iteration worklist fixpoint solver over a `ValhallSsaModule`.
+/// Directional chaotic-iteration fixpoint solver over a `ValhallSsaModule`,
+/// backed by the domain-independent `run_cfg_worklist()` in `worklist.cpp`.
 ///
 /// Exploits SSA single-static-assignment: `ssa_vals` is stored ONCE in O(|V|)
-/// space (never replicated per block), while mutable side-channel maps
-/// (`fau_mem`, `sym_mem`) are joined per basic block. This scales smoothly to
-/// 100KB+ shaders with tens of thousands of SSA nodes and hundreds of blocks.
+/// space, while mutable side-channel maps (`fau_mem`, `sym_mem`) are joined per
+/// basic block (`O(|V| + |B| * |mu|)` memory).
 template <typename DomainT>
-SsaDataflowResult<DomainT> run_ssa_forward_dataflow(
+SsaDataflowResult<DomainT> run_ssa_dataflow(
     const compiler::ValhallSsaModule& mod,
+    DataflowDirection dir,
     const AbstractState<DomainT>& entry_state,
     SsaDomainTransferVisitor<DomainT>& visitor,
     const SsaLivenessResult* liveness = nullptr,
     uint32_t max_iterations = 64) {
+    static_assert(ValidateLatticeDomain<DomainT>::valid, "");
     using Value = typename DomainT::Value;
+    using FauMemDomain = typename AbstractState<DomainT>::FauMemDomain;
+    using SymMemDomain = typename AbstractState<DomainT>::SymMemDomain;
+
     SsaDataflowResult<DomainT> res;
     const size_t num_blocks = mod.blocks.size();
     const size_t num_nodes = mod.nodes.size();
@@ -370,133 +380,121 @@ SsaDataflowResult<DomainT> run_ssa_forward_dataflow(
         return res;
     }
 
-    // Per-block exit side-channel maps only (small: typically 0..20 FAU entries)
-    std::vector<std::map<uint32_t, Value>> block_out_fau(num_blocks);
-    std::vector<std::map<std::string, Value>> block_out_sym(num_blocks);
+    std::vector<typename FauMemDomain::Value> block_out_fau(num_blocks);
+    std::vector<typename SymMemDomain::Value> block_out_sym(num_blocks);
     std::vector<bool> visited(num_blocks, false);
 
-    auto map_equals = [](const auto& a, const auto& b) -> bool {
-        if (a.size() != b.size()) return false;
-        for (const auto& kv : a) {
-            auto it = b.find(kv.first);
-            if (it == b.end() || !DomainT::equals(kv.second, it->second)) return false;
+    auto eval_node = [&](compiler::SsaId id) -> bool {
+        if (id == compiler::kInvalidSsa || id >= num_nodes) return false;
+        Value prev = res.final_state.val(id);
+        const auto& node = mod.get(id);
+        dispatch_ssa_transfer(node, visitor);
+        Value next = DomainT::join(prev, res.final_state.val(id));
+        if (!domain_equals<DomainT>(next, prev)) {
+            res.final_state.set_val(id, next);
+            return true;
         }
-        return true;
+        res.final_state.set_val(id, prev);
+        return false;
     };
 
-    auto join_map = [](auto& dst, const auto& src) {
-        for (const auto& kv : src) {
-            auto it = dst.find(kv.first);
-            if (it == dst.end()) {
-                if (!DomainT::equals(kv.second, DomainT::bottom())) dst[kv.first] = kv.second;
+    WorklistResult wr = run_cfg_worklist(
+        mod,
+        dir,
+        [&](uint32_t b) -> bool {
+            const auto& blk = mod.blocks[b];
+
+            // Join side-channel memory maps from incoming edges
+            res.final_state.fau_mem.clear();
+            res.final_state.sym_mem.clear();
+            if (dir == DataflowDirection::Forward) {
+                if (b == 0) {
+                    res.final_state.fau_mem = entry_state.fau_mem;
+                    res.final_state.sym_mem = entry_state.sym_mem;
+                }
+                for (uint32_t pred : blk.preds) {
+                    if (pred < num_blocks && visited[pred]) {
+                        FauMemDomain::join_into(res.final_state.fau_mem, block_out_fau[pred]);
+                        SymMemDomain::join_into(res.final_state.sym_mem, block_out_sym[pred]);
+                    }
+                }
             } else {
-                it->second = DomainT::join(it->second, kv.second);
-            }
-        }
-    };
-
-    std::deque<uint32_t> worklist;
-    std::vector<bool> in_worklist(num_blocks, false);
-    for (uint32_t b = 0; b < num_blocks; ++b) {
-        worklist.push_back(b);
-        in_worklist[b] = true;
-    }
-
-    const size_t max_visits = static_cast<size_t>(max_iterations) * std::max<size_t>(1, num_blocks);
-    size_t visits = 0;
-
-    while (!worklist.empty() && visits < max_visits) {
-        uint32_t b = worklist.front();
-        worklist.pop_front();
-        in_worklist[b] = false;
-        ++visits;
-
-        const auto& blk = mod.blocks[b];
-
-        // Join mutable side-channel maps from visited predecessors
-        res.final_state.fau_mem.clear();
-        res.final_state.sym_mem.clear();
-        if (b == 0) {
-            res.final_state.fau_mem = entry_state.fau_mem;
-            res.final_state.sym_mem = entry_state.sym_mem;
-        }
-        for (uint32_t pred : blk.preds) {
-            if (pred < num_blocks && visited[pred]) {
-                join_map(res.final_state.fau_mem, block_out_fau[pred]);
-                join_map(res.final_state.sym_mem, block_out_sym[pred]);
-            }
-        }
-
-        visitor.set_state(&res.final_state);
-        bool ssa_changed = false;
-
-        // 1. Evaluate Phi nodes at block entry (monotone join into shared ssa_vals)
-        for (compiler::SsaId pid : blk.phis) {
-            if (pid == compiler::kInvalidSsa || pid >= num_nodes) continue;
-            Value prev = res.final_state.val(pid);
-            dispatch_ssa_transfer(mod.get(pid), visitor);
-            Value next = DomainT::join(prev, res.final_state.val(pid));
-            if (!DomainT::equals(next, prev)) {
-                res.final_state.set_val(pid, next);
-                ssa_changed = true;
-            } else {
-                res.final_state.set_val(pid, prev);
-            }
-        }
-
-        // 2. Evaluate body nodes in topological/program order
-        for (compiler::SsaId nid : blk.nodes) {
-            if (nid == compiler::kInvalidSsa || nid >= num_nodes) continue;
-            Value prev = res.final_state.val(nid);
-            const auto& node = mod.get(nid);
-            dispatch_ssa_transfer(node, visitor);
-            Value next = DomainT::join(prev, res.final_state.val(nid));
-            if (!DomainT::equals(next, prev)) {
-                res.final_state.set_val(nid, next);
-                ssa_changed = true;
-            } else {
-                res.final_state.set_val(nid, prev);
-            }
-            if (liveness && nid < liveness->killed_after_node.size()) {
-                for (compiler::SsaId kid : liveness->killed_after_node[nid]) {
-                    visitor.on_ssa_killed(kid, node);
+                auto join_succ = [&](int32_t s) {
+                    if (s >= 0 && static_cast<size_t>(s) < num_blocks && visited[s]) {
+                        FauMemDomain::join_into(res.final_state.fau_mem, block_out_fau[s]);
+                        SymMemDomain::join_into(res.final_state.sym_mem, block_out_sym[s]);
+                    }
+                };
+                join_succ(blk.fallthrough_block);
+                if (blk.branch_target_block != blk.fallthrough_block) join_succ(blk.branch_target_block);
+                if (blk.fallthrough_block < 0 && blk.branch_target_block < 0) {
+                    res.final_state.fau_mem = entry_state.fau_mem;
+                    res.final_state.sym_mem = entry_state.sym_mem;
                 }
             }
-        }
 
-        bool mem_changed = !visited[b] ||
-                           !map_equals(res.final_state.fau_mem, block_out_fau[b]) ||
-                           !map_equals(res.final_state.sym_mem, block_out_sym[b]);
-        visited[b] = true;
-        if (ssa_changed || mem_changed) {
-            block_out_fau[b] = res.final_state.fau_mem;
-            block_out_sym[b] = res.final_state.sym_mem;
-            auto enqueue = [&](int32_t succ) {
-                if (succ >= 0 && static_cast<size_t>(succ) < num_blocks && !in_worklist[succ]) {
-                    worklist.push_back(static_cast<uint32_t>(succ));
-                    in_worklist[succ] = true;
+            visitor.set_state(&res.final_state);
+            bool ssa_changed = false;
+
+            if (dir == DataflowDirection::Forward) {
+                for (compiler::SsaId pid : blk.phis) {
+                    if (eval_node(pid)) ssa_changed = true;
                 }
-            };
-            enqueue(blk.fallthrough_block);
-            if (blk.branch_target_block != blk.fallthrough_block) {
-                enqueue(blk.branch_target_block);
+                for (compiler::SsaId nid : blk.nodes) {
+                    if (eval_node(nid)) ssa_changed = true;
+                    if (liveness && nid < liveness->killed_after_node.size()) {
+                        for (compiler::SsaId kid : liveness->killed_after_node[nid]) {
+                            visitor.on_ssa_killed(kid, mod.get(nid));
+                        }
+                    }
+                }
+            } else {
+                for (auto it = blk.nodes.rbegin(); it != blk.nodes.rend(); ++it) {
+                    if (eval_node(*it)) ssa_changed = true;
+                }
+                for (auto it = blk.phis.rbegin(); it != blk.phis.rend(); ++it) {
+                    if (eval_node(*it)) ssa_changed = true;
+                }
             }
-        }
-    }
 
-    res.converged = worklist.empty();
-    res.iterations = static_cast<uint32_t>((visits + num_blocks - 1) / std::max<size_t>(1, num_blocks));
+            bool mem_changed = !visited[b] ||
+                               !FauMemDomain::equals(res.final_state.fau_mem, block_out_fau[b]) ||
+                               !SymMemDomain::equals(res.final_state.sym_mem, block_out_sym[b]);
+            visited[b] = true;
+            if (ssa_changed || mem_changed) {
+                block_out_fau[b] = res.final_state.fau_mem;
+                block_out_sym[b] = res.final_state.sym_mem;
+                return true;
+            }
+            return false;
+        },
+        max_iterations);
+
+    res.converged = wr.converged;
+    res.iterations = wr.iterations;
 
     // Merge all visited block exit side-channel maps into final_state
     res.final_state.fau_mem = entry_state.fau_mem;
     res.final_state.sym_mem = entry_state.sym_mem;
     for (size_t b = 0; b < num_blocks; ++b) {
         if (visited[b]) {
-            join_map(res.final_state.fau_mem, block_out_fau[b]);
-            join_map(res.final_state.sym_mem, block_out_sym[b]);
+            FauMemDomain::join_into(res.final_state.fau_mem, block_out_fau[b]);
+            SymMemDomain::join_into(res.final_state.sym_mem, block_out_sym[b]);
         }
     }
     return res;
+}
+
+/// Convenience wrapper for forward SSA dataflow analysis.
+template <typename DomainT>
+SsaDataflowResult<DomainT> run_ssa_forward_dataflow(
+    const compiler::ValhallSsaModule& mod,
+    const AbstractState<DomainT>& entry_state,
+    SsaDomainTransferVisitor<DomainT>& visitor,
+    const SsaLivenessResult* liveness = nullptr,
+    uint32_t max_iterations = 64) {
+    return run_ssa_dataflow<DomainT>(
+        mod, DataflowDirection::Forward, entry_state, visitor, liveness, max_iterations);
 }
 
 }  // namespace valhall::dataflow

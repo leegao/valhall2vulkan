@@ -1,8 +1,7 @@
 #include "liveness.h"
+#include "worklist.h"
 
 #include <algorithm>
-#include <cstring>
-#include <deque>
 
 namespace valhall::dataflow {
 
@@ -10,18 +9,6 @@ namespace {
 
 inline bool is_valid_ssa(compiler::SsaId id, size_t num_nodes) {
     return id != compiler::kInvalidSsa && id < num_nodes;
-}
-
-inline void set_bit(uint64_t* bits, compiler::SsaId id) {
-    bits[id >> 6] |= (1ULL << (id & 63u));
-}
-
-inline void clear_bit(uint64_t* bits, compiler::SsaId id) {
-    bits[id >> 6] &= ~(1ULL << (id & 63u));
-}
-
-inline bool test_bit(const uint64_t* bits, compiler::SsaId id) {
-    return (bits[id >> 6] & (1ULL << (id & 63u))) != 0;
 }
 
 }  // namespace
@@ -32,140 +19,107 @@ SsaLivenessResult run_ssa_liveness(
     SsaLivenessResult res;
     const size_t num_blocks = mod.blocks.size();
     const size_t num_nodes = mod.nodes.size();
-    const size_t words = (num_nodes + 63u) / 64u;
     res.num_nodes = num_nodes;
-    res.bit_words = words;
     res.killed_after_node.resize(num_nodes);
 
-    if (num_blocks == 0 || words == 0) {
+    if (num_blocks == 0 || num_nodes == 0) {
         res.converged = true;
         return res;
     }
 
-    res.block_live_in_bits.assign(num_blocks * words, 0ULL);
-    res.block_live_out_bits.assign(num_blocks * words, 0ULL);
+    res.block_live_in.assign(num_blocks, BitsetValue(num_nodes));
+    res.block_live_out.assign(num_blocks, BitsetValue(num_nodes));
 
-    // Precompute compact bitsets per block:
-    //   phi_defs[B], body_def[B], body_ue_use[B]
-    std::vector<uint64_t> phi_defs(num_blocks * words, 0ULL);
-    std::vector<uint64_t> body_def(num_blocks * words, 0ULL);
-    std::vector<uint64_t> body_ue_use(num_blocks * words, 0ULL);
+    // Precompute per-block domain facts (expressed directly as BitsetDomain values):
+    //   phi_defs[B]    = { p | p ∈ B.phis }
+    //   body_def[B]    = { n | n ∈ B.nodes }
+    //   body_ue_use[B] = upward-exposed uses in B.nodes and B.branch_cond
+    std::vector<BitsetValue> phi_defs(num_blocks, BitsetValue(num_nodes));
+    std::vector<BitsetValue> body_def(num_blocks, BitsetValue(num_nodes));
+    std::vector<BitsetValue> body_ue_use(num_blocks, BitsetValue(num_nodes));
 
     for (size_t b = 0; b < num_blocks; ++b) {
         const auto& blk = mod.blocks[b];
-        uint64_t* pdef = &phi_defs[b * words];
-        uint64_t* bdef = &body_def[b * words];
-        uint64_t* bue  = &body_ue_use[b * words];
-
         for (compiler::SsaId pid : blk.phis) {
-            if (is_valid_ssa(pid, num_nodes)) set_bit(pdef, pid);
+            if (is_valid_ssa(pid, num_nodes)) phi_defs[b].set(pid);
         }
         for (compiler::SsaId nid : blk.nodes) {
             if (!is_valid_ssa(nid, num_nodes)) continue;
             const auto& node = mod.get(nid);
             for (compiler::SsaId arg : node.args) {
-                if (is_valid_ssa(arg, num_nodes) && !test_bit(bdef, arg)) {
-                    set_bit(bue, arg);
+                if (is_valid_ssa(arg, num_nodes) && !body_def[b].test(arg)) {
+                    body_ue_use[b].set(arg);
                 }
             }
-            set_bit(bdef, nid);
+            body_def[b].set(nid);
         }
-        if (is_valid_ssa(blk.branch_cond, num_nodes) && !test_bit(bdef, blk.branch_cond)) {
-            set_bit(bue, blk.branch_cond);
+        if (is_valid_ssa(blk.branch_cond, num_nodes) && !body_def[b].test(blk.branch_cond)) {
+            body_ue_use[b].set(blk.branch_cond);
         }
     }
 
-    // Backwards chaotic worklist (seeded in reverse block order)
-    std::deque<uint32_t> worklist;
-    std::vector<bool> in_worklist(num_blocks, false);
-    for (size_t b = num_blocks; b-- > 0; ) {
-        worklist.push_back(static_cast<uint32_t>(b));
-        in_worklist[b] = true;
-    }
+    // Solve backwards dataflow equations via shared directional CFG worklist:
+    //   LIVE_OUT[B] = ⋃_{S ∈ succ(B)} ( (LIVE_IN[S] \ PHI_DEFS[S]) ∪ PHI_USES(B → S) )
+    //   LIVE_IN[B]  = UE_USE[B] ∪ (LIVE_OUT[B] \ BODY_DEF[B])
+    BitsetValue new_out(num_nodes);
+    BitsetValue new_in(num_nodes);
 
-    const size_t max_visits = static_cast<size_t>(max_iterations) * std::max<size_t>(1, num_blocks);
-    size_t visits = 0;
+    WorklistResult wr = run_cfg_worklist(
+        mod,
+        DataflowDirection::Backward,
+        [&](uint32_t b) -> bool {
+            const auto& blk = mod.blocks[b];
+            new_out.clear_all();
 
-    std::vector<uint64_t> new_out(words, 0ULL);
-    std::vector<uint64_t> new_in(words, 0ULL);
-
-    while (!worklist.empty() && visits < max_visits) {
-        uint32_t b = worklist.front();
-        worklist.pop_front();
-        in_worklist[b] = false;
-        ++visits;
-
-        const auto& blk = mod.blocks[b];
-        std::fill(new_out.begin(), new_out.end(), 0ULL);
-
-        // LIVE_OUT[B] = U_{S in succ(B)} ( (LIVE_IN[S] \ PHI_DEFS[S]) U PHI_USES(B -> S) )
-        auto merge_succ = [&](int32_t succ_id) {
-            if (succ_id < 0 || static_cast<size_t>(succ_id) >= num_blocks) return;
-            const size_t s = static_cast<size_t>(succ_id);
-            const uint64_t* sin = &res.block_live_in_bits[s * words];
-            const uint64_t* spdef = &phi_defs[s * words];
-            for (size_t w = 0; w < words; ++w) {
-                new_out[w] |= (sin[w] & ~spdef[w]);
-            }
-            for (compiler::SsaId pid : mod.blocks[s].phis) {
-                if (!is_valid_ssa(pid, num_nodes)) continue;
-                const auto& pnode = mod.get(pid);
-                for (const auto& inc : pnode.phi_incomings) {
-                    if (inc.pred_block == b && is_valid_ssa(inc.value, num_nodes)) {
-                        set_bit(new_out.data(), inc.value);
+            auto merge_succ = [&](int32_t succ_id) {
+                if (succ_id < 0 || static_cast<size_t>(succ_id) >= num_blocks) return;
+                const size_t s = static_cast<size_t>(succ_id);
+                new_out.or_diff_with(res.block_live_in[s], phi_defs[s]);
+                for (compiler::SsaId pid : mod.blocks[s].phis) {
+                    if (!is_valid_ssa(pid, num_nodes)) continue;
+                    for (const auto& inc : mod.get(pid).phi_incomings) {
+                        if (inc.pred_block == b && is_valid_ssa(inc.value, num_nodes)) {
+                            new_out.set(inc.value);
+                        }
                     }
                 }
+            };
+            merge_succ(blk.fallthrough_block);
+            if (blk.branch_target_block != blk.fallthrough_block) {
+                merge_succ(blk.branch_target_block);
             }
-        };
-        merge_succ(blk.fallthrough_block);
-        if (blk.branch_target_block != blk.fallthrough_block) {
-            merge_succ(blk.branch_target_block);
-        }
 
-        // LIVE_IN[B] = UE_USE[B] U (LIVE_OUT[B] \ BODY_DEF[B])
-        const uint64_t* bue  = &body_ue_use[b * words];
-        const uint64_t* bdef = &body_def[b * words];
-        uint64_t* cur_out = &res.block_live_out_bits[b * words];
-        uint64_t* cur_in  = &res.block_live_in_bits[b * words];
-        bool changed = false;
-        for (size_t w = 0; w < words; ++w) {
-            new_in[w] = bue[w] | (new_out[w] & ~bdef[w]);
-            if (new_out[w] != cur_out[w] || new_in[w] != cur_in[w]) {
-                cur_out[w] = new_out[w];
-                cur_in[w] = new_in[w];
-                changed = true;
+            new_in = body_ue_use[b];
+            new_in.or_diff_with(new_out, body_def[b]);
+
+            bool changed = !BitsetDomain::equals(new_out, res.block_live_out[b]) ||
+                           !BitsetDomain::equals(new_in, res.block_live_in[b]);
+            if (changed) {
+                res.block_live_out[b] = new_out;
+                res.block_live_in[b] = new_in;
             }
-        }
+            return changed;
+        },
+        max_iterations);
 
-        if (changed) {
-            for (uint32_t pred : blk.preds) {
-                if (pred < num_blocks && !in_worklist[pred]) {
-                    worklist.push_back(pred);
-                    in_worklist[pred] = true;
-                }
-            }
-        }
-    }
-
-    res.converged = worklist.empty();
-    res.iterations = static_cast<uint32_t>((visits + num_blocks - 1) / std::max<size_t>(1, num_blocks));
+    res.converged = wr.converged;
+    res.iterations = wr.iterations;
 
     // Compute per-node killed sets by walking each block backwards from LIVE_OUT[B]
-    std::vector<uint64_t> live(words, 0ULL);
     for (size_t b = 0; b < num_blocks; ++b) {
         const auto& blk = mod.blocks[b];
-        std::memcpy(live.data(), &res.block_live_out_bits[b * words], words * sizeof(uint64_t));
+        BitsetValue live = res.block_live_out[b];
         if (is_valid_ssa(blk.branch_cond, num_nodes)) {
-            set_bit(live.data(), blk.branch_cond);
+            live.set(blk.branch_cond);
         }
         for (auto it = blk.nodes.rbegin(); it != blk.nodes.rend(); ++it) {
             compiler::SsaId nid = *it;
             if (!is_valid_ssa(nid, num_nodes)) continue;
             const auto& node = mod.get(nid);
-            clear_bit(live.data(), nid);
+            live.clear(nid);
             std::vector<compiler::SsaId> killed;
             for (compiler::SsaId arg : node.args) {
-                if (is_valid_ssa(arg, num_nodes) && !test_bit(live.data(), arg)) {
+                if (is_valid_ssa(arg, num_nodes) && !live.test(arg)) {
                     if (std::find(killed.begin(), killed.end(), arg) == killed.end()) {
                         killed.push_back(arg);
                     }
@@ -175,9 +129,7 @@ SsaLivenessResult run_ssa_liveness(
                 res.killed_after_node[nid] = std::move(killed);
             }
             for (compiler::SsaId arg : node.args) {
-                if (is_valid_ssa(arg, num_nodes)) {
-                    set_bit(live.data(), arg);
-                }
+                if (is_valid_ssa(arg, num_nodes)) live.set(arg);
             }
         }
     }

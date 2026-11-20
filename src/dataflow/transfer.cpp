@@ -10,124 +10,64 @@ inline compiler::SsaId arg_or_invalid(const compiler::SsaNode& node, size_t idx)
 
 }  // namespace
 
-void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor) {
+SsaOpKind classify_ssa_op(tables::SsaOp op) {
     using tables::SsaOp;
-    const compiler::SsaId dst = node.id;
-
-    switch (node.op) {
-        // --- Constants ---
+    switch (op) {
         case SsaOp::ConstBool:
         case SsaOp::ConstU32:
         case SsaOp::ConstS32:
         case SsaOp::ConstF32:
         case SsaOp::ConstU64:
-            visitor.on_const(dst, node);
-            return;
+            return SsaOpKind::Const;
 
-        // --- Moves / Aliases / Phi / Select ---
         case SsaOp::Copy:
         case SsaOp::Bitcast:
-            visitor.on_copy(dst, arg_or_invalid(node, 0), node);
-            return;
+            return SsaOpKind::Copy;
 
-        case SsaOp::Phi:
-            visitor.on_phi(dst, node);
-            return;
+        case SsaOp::Phi:    return SsaOpKind::Phi;
+        case SsaOp::Select: return SsaOpKind::Select;
 
-        case SsaOp::Select:
-            visitor.on_select(dst, arg_or_invalid(node, 0),
-                              arg_or_invalid(node, 1), arg_or_invalid(node, 2), node);
-            return;
-
-        // --- Integer arithmetic ---
         case SsaOp::IAdd:
-            visitor.on_iadd(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::IAdd64:
-            visitor.on_iadd(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::IntAdd;
 
         case SsaOp::ISub:
-            visitor.on_isub(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::ISub64:
-            visitor.on_isub(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::IntSub;
 
         case SsaOp::IMul:
-            visitor.on_imul(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::IMul64:
-            visitor.on_imul(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::IntMul;
 
-        // --- Bitwise logic ---
         case SsaOp::BitAnd:
-            visitor.on_and(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::BitAnd64:
-            visitor.on_and(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::BitAnd;
 
         case SsaOp::BitOr:
-            visitor.on_or(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::BitOr64:
-            visitor.on_or(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::BitOr;
 
         case SsaOp::BitXor:
-            visitor.on_xor(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), false, node);
-            return;
         case SsaOp::BitXor64:
-            visitor.on_xor(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), true, node);
-            return;
+            return SsaOpKind::BitXor;
 
         case SsaOp::BitNot:
-            visitor.on_not(dst, arg_or_invalid(node, 0), false, node);
-            return;
         case SsaOp::BitNot64:
-            visitor.on_not(dst, arg_or_invalid(node, 0), true, node);
-            return;
+            return SsaOpKind::BitNot;
 
-        // --- Shifts & rotates ---
         case SsaOp::Shl:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::Shl, false, node);
-            return;
         case SsaOp::Shl64:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::Shl, true, node);
-            return;
         case SsaOp::ShrU:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::ShrU, false, node);
-            return;
         case SsaOp::ShrU64:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::ShrU, true, node);
-            return;
         case SsaOp::ShrS:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::ShrS, false, node);
-            return;
         case SsaOp::ShrS64:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::ShrS, true, node);
-            return;
         case SsaOp::RotL:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::RotL, false, node);
-            return;
         case SsaOp::RotR:
-            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), ShiftKind::RotR, false, node);
-            return;
+            return SsaOpKind::Shift;
 
-        // --- 64-bit packing / splitting / tuples / conversions / vectors ---
-        case SsaOp::Pack64:
-            visitor.on_pack64(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), node);
-            return;
-
-        case SsaOp::Split64:
-            visitor.on_split64(dst, arg_or_invalid(node, 0), node);
-            return;
-
-        case SsaOp::TupleExtract:
-            visitor.on_tuple_extract(dst, arg_or_invalid(node, 0), node.imm_u32, node);
-            return;
+        case SsaOp::Pack64:       return SsaOpKind::Pack64;
+        case SsaOp::Split64:      return SsaOpKind::Split64;
+        case SsaOp::TupleExtract: return SsaOpKind::TupleExtract;
 
         case SsaOp::UConvert32To64:
         case SsaOp::SConvert32To64:
@@ -136,8 +76,7 @@ void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase
         case SsaOp::ConvertFToU:
         case SsaOp::ConvertSToF:
         case SsaOp::ConvertUToF:
-            visitor.on_convert(dst, arg_or_invalid(node, 0), node);
-            return;
+            return SsaOpKind::Convert;
 
         case SsaOp::VecConstruct2:
         case SsaOp::VecConstruct3:
@@ -146,57 +85,164 @@ void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase
         case SsaOp::VecShuffle:
         case SsaOp::PackHalf2x16:
         case SsaOp::UnpackHalf2x16:
-            visitor.on_vec(dst, node);
-            return;
+            return SsaOpKind::Vec;
 
-        // --- Shader inputs, FAU uniforms, sideband, memory, textures, outputs, atomics ---
-        case SsaOp::LoadFau:
-            visitor.on_load_fau(dst, node.imm_u32, node);
-            return;
-
-        case SsaOp::LoadBuiltinInput:
-            visitor.on_load_builtin(dst, node.imm_u32, node);
-            return;
+        case SsaOp::LoadFau:          return SsaOpKind::LoadFau;
+        case SsaOp::LoadBuiltinInput: return SsaOpKind::LoadBuiltin;
 
         case SsaOp::LoadSidebandU32:
-            visitor.on_load_sideband(dst, node.imm_u32, false, node);
-            return;
         case SsaOp::LoadSidebandU64:
-            visitor.on_load_sideband(dst, node.imm_u32, true, node);
-            return;
+            return SsaOpKind::LoadSideband;
 
-        case SsaOp::PsbLoad:
-            visitor.on_psb_load(dst, arg_or_invalid(node, 0), node.imm_u32, node);
-            return;
-
-        case SsaOp::PsbStore:
-            visitor.on_psb_store(arg_or_invalid(node, 0), arg_or_invalid(node, 1), node.imm_u32, node);
-            return;
-
-        case SsaOp::LoadVertAttr:
-            visitor.on_load_vert_attr(dst, node);
-            return;
-
-        case SsaOp::LoadFragVarying:
-            visitor.on_load_frag_varying(dst, node);
-            return;
-
-        case SsaOp::TexSample:
-            visitor.on_tex_sample(dst, node);
-            return;
+        case SsaOp::PsbLoad:          return SsaOpKind::PsbLoad;
+        case SsaOp::PsbStore:         return SsaOpKind::PsbStore;
+        case SsaOp::LoadVertAttr:     return SsaOpKind::LoadVertAttr;
+        case SsaOp::LoadFragVarying:  return SsaOpKind::LoadFragVarying;
+        case SsaOp::TexSample:        return SsaOpKind::TexSample;
 
         case SsaOp::StoreFragColor:
         case SsaOp::StoreVertVarying:
         case SsaOp::StoreBuiltinOutput:
-            visitor.on_store_output(node);
-            return;
+            return SsaOpKind::StoreOutput;
 
         case SsaOp::AtomicRmw:
         case SsaOp::AtomicExchange:
         case SsaOp::AtomicCmpXchg:
+            return SsaOpKind::Atomic;
+
+        default:
+            return SsaOpKind::Other;
+    }
+}
+
+bool is_ssa_op_64bit(tables::SsaOp op) {
+    using tables::SsaOp;
+    switch (op) {
+        case SsaOp::IAdd64:
+        case SsaOp::ISub64:
+        case SsaOp::IMul64:
+        case SsaOp::BitAnd64:
+        case SsaOp::BitOr64:
+        case SsaOp::BitXor64:
+        case SsaOp::BitNot64:
+        case SsaOp::Shl64:
+        case SsaOp::ShrU64:
+        case SsaOp::ShrS64:
+        case SsaOp::LoadSidebandU64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+ShiftKind classify_ssa_shift_kind(tables::SsaOp op) {
+    using tables::SsaOp;
+    switch (op) {
+        case SsaOp::ShrU:
+        case SsaOp::ShrU64:
+            return ShiftKind::ShrU;
+        case SsaOp::ShrS:
+        case SsaOp::ShrS64:
+            return ShiftKind::ShrS;
+        case SsaOp::RotL:
+            return ShiftKind::RotL;
+        case SsaOp::RotR:
+            return ShiftKind::RotR;
+        default:
+            return ShiftKind::Shl;
+    }
+}
+
+void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor) {
+    const compiler::SsaId dst = node.id;
+    const SsaOpKind kind = classify_ssa_op(node.op);
+    const bool is64 = is_ssa_op_64bit(node.op);
+
+    switch (kind) {
+        case SsaOpKind::Const:
+            visitor.on_const(dst, node);
+            return;
+        case SsaOpKind::Copy:
+            visitor.on_copy(dst, arg_or_invalid(node, 0), node);
+            return;
+        case SsaOpKind::Phi:
+            visitor.on_phi(dst, node);
+            return;
+        case SsaOpKind::Select:
+            visitor.on_select(dst, arg_or_invalid(node, 0),
+                              arg_or_invalid(node, 1), arg_or_invalid(node, 2), node);
+            return;
+        case SsaOpKind::IntAdd:
+            visitor.on_iadd(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::IntSub:
+            visitor.on_isub(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::IntMul:
+            visitor.on_imul(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::BitAnd:
+            visitor.on_and(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::BitOr:
+            visitor.on_or(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::BitXor:
+            visitor.on_xor(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), is64, node);
+            return;
+        case SsaOpKind::BitNot:
+            visitor.on_not(dst, arg_or_invalid(node, 0), is64, node);
+            return;
+        case SsaOpKind::Shift:
+            visitor.on_shift(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1),
+                             classify_ssa_shift_kind(node.op), is64, node);
+            return;
+        case SsaOpKind::Pack64:
+            visitor.on_pack64(dst, arg_or_invalid(node, 0), arg_or_invalid(node, 1), node);
+            return;
+        case SsaOpKind::Split64:
+            visitor.on_split64(dst, arg_or_invalid(node, 0), node);
+            return;
+        case SsaOpKind::TupleExtract:
+            visitor.on_tuple_extract(dst, arg_or_invalid(node, 0), node.imm_u32, node);
+            return;
+        case SsaOpKind::Convert:
+            visitor.on_convert(dst, arg_or_invalid(node, 0), node);
+            return;
+        case SsaOpKind::Vec:
+            visitor.on_vec(dst, node);
+            return;
+        case SsaOpKind::LoadFau:
+            visitor.on_load_fau(dst, node.imm_u32, node);
+            return;
+        case SsaOpKind::LoadBuiltin:
+            visitor.on_load_builtin(dst, node.imm_u32, node);
+            return;
+        case SsaOpKind::LoadSideband:
+            visitor.on_load_sideband(dst, node.imm_u32, is64, node);
+            return;
+        case SsaOpKind::PsbLoad:
+            visitor.on_psb_load(dst, arg_or_invalid(node, 0), node.imm_u32, node);
+            return;
+        case SsaOpKind::PsbStore:
+            visitor.on_psb_store(arg_or_invalid(node, 0), arg_or_invalid(node, 1), node.imm_u32, node);
+            return;
+        case SsaOpKind::LoadVertAttr:
+            visitor.on_load_vert_attr(dst, node);
+            return;
+        case SsaOpKind::LoadFragVarying:
+            visitor.on_load_frag_varying(dst, node);
+            return;
+        case SsaOpKind::TexSample:
+            visitor.on_tex_sample(dst, node);
+            return;
+        case SsaOpKind::StoreOutput:
+            visitor.on_store_output(node);
+            return;
+        case SsaOpKind::Atomic:
             visitor.on_atomic(dst, node);
             return;
-
+        case SsaOpKind::Other:
         default:
             visitor.on_other(dst, node);
             return;

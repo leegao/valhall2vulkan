@@ -182,7 +182,7 @@ IsaProjectedAnalysis lower_and_run_ssa_pointer_analysis(
         const size_t idx = static_cast<size_t>(node.orig_inst_idx);
 
         for (compiler::SsaId arg : node.args) {
-            dataflow::TrackedVal av = res.df.final_state.val(arg);
+            dataflow::TrackedVal av = res.df.val(arg);
             if (av.kind == dataflow::TrackedVal::Kind::AbiPreload) {
                 append_unique_note(res.inst_notes[idx], "ABI: " + av.label);
             } else if (av.kind == dataflow::TrackedVal::Kind::FauDstBase ||
