@@ -143,11 +143,14 @@ add_library(valhall2spirv STATIC
     src/valhall_tiler.cpp
     src/valhall_spirv_builder.cpp
     src/valhall_cfg.cpp
+    src/dataflow/transfer.cpp
+    src/dataflow/pointer_analysis.cpp
     src/valhall_to_spirv.cpp
     src/valhall_csf_pipeline.cpp
 )
 target_include_directories(valhall2spirv PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/dataflow"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generated"
     "${VULKAN_INCLUDE_DIR}"
 )
@@ -168,11 +171,24 @@ set_target_properties(moc_hook PROPERTIES OUTPUT_NAME moc_hook)
 target_compile_options(moc_hook PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(moc_hook PRIVATE ${CMAKE_DL_LIBS})
 
+if(NOT ANDROID)
+    add_library(malioc_inproc STATIC
+        tools/malioc_inproc/malioc_inproc.cpp
+    )
+    target_include_directories(malioc_inproc PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/malioc_inproc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
+    )
+    target_compile_options(malioc_inproc PRIVATE -O2 -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(malioc_inproc PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
 add_library(spirv2valhall_lib STATIC
     tools/spirv2valhall/spirv_inspect.cpp
     tools/spirv2valhall/json_lite.cpp
     tools/spirv2valhall/moc_runner.cpp
     tools/spirv2valhall/mbs2_ast_parser.cpp
+    tools/spirv2valhall/mbs2_direct_reader.cpp
     tools/spirv2valhall/mbs2_context_dumper.cpp
     tools/spirv2valhall/isa_enricher.cpp
     tools/spirv2valhall/spirv_roundtrip.cpp
@@ -187,6 +203,10 @@ target_compile_definitions(spirv2valhall_lib PRIVATE
     SPIRV2VALHALL_DEFAULT_CMPBE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools/spirv2valhall"
 )
 target_link_libraries(spirv2valhall_lib PUBLIC valhall2spirv)
+if(TARGET malioc_inproc)
+    target_link_libraries(spirv2valhall_lib PUBLIC malioc_inproc)
+    target_compile_definitions(spirv2valhall_lib PRIVATE HAVE_MALIOC_INPROC=1)
+endif()
 add_dependencies(spirv2valhall_lib moc_hook)
 
 add_executable(spirv2valhall
@@ -196,7 +216,7 @@ target_compile_options(spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter
 target_link_libraries(spirv2valhall PRIVATE spirv2valhall_lib)
 add_dependencies(spirv2valhall moc_hook)
 
-foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler)
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow)
     add_executable(${test_name} "tests/${test_name}.cpp")
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
@@ -354,26 +374,26 @@ if(NOT ANDROID)
 endif()
 
 if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
-    set(_DUMPER_SRCS tools/clang_ast_dumper/clang_ast_dumper.cpp)
+    add_library(clang_ast_dumper_lib STATIC tools/clang_ast_dumper/clang_ast_dumper_lib.cpp)
     if(_VALHALL_USE_BUNDLED_LLVM21)
-        list(APPEND _DUMPER_SRCS tools/clang_ast_dumper/glibc_compat.c)
+        add_library(clang_glibc_compat STATIC tools/clang_ast_dumper/glibc_compat.c)
+        target_compile_options(clang_glibc_compat PRIVATE -O2 -Wall -Wextra)
     endif()
-
-    add_executable(clang_ast_dumper ${_DUMPER_SRCS})
+    target_include_directories(clang_ast_dumper_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tools/clang_ast_dumper")
 
     if(_VALHALL_USE_SYSTEM_CLANG)
-        target_include_directories(clang_ast_dumper PRIVATE "${_SYS_LLVM_INC}")
+        target_include_directories(clang_ast_dumper_lib PRIVATE "${_SYS_LLVM_INC}")
         set(_DUMPER_CXX_FLAGS "-O2;-Wall;-Wextra;-Wno-unused-parameter")
         if(_SYS_LLVM_RTTI STREQUAL "NO")
             list(APPEND _DUMPER_CXX_FLAGS "-fno-rtti")
         endif()
-        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
+        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper_lib.cpp PROPERTIES
             COMPILE_OPTIONS "${_DUMPER_CXX_FLAGS}"
         )
 
         if(EXISTS "${_SYS_LLVM_LIB}/libclang-cpp.so")
             find_library(_SYS_LLVM_SHARED NAMES LLVM LLVM-${_SYS_LLVM_VER} HINTS "${_SYS_LLVM_LIB}")
-            target_link_libraries(clang_ast_dumper PRIVATE
+            target_link_libraries(clang_ast_dumper_lib PUBLIC
                 "${_SYS_LLVM_LIB}/libclang-cpp.so"
                 $<$<BOOL:${_SYS_LLVM_SHARED}>:${_SYS_LLVM_SHARED}>
                 pthread
@@ -397,7 +417,7 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
                     list(APPEND _SYS_CLANG_ARCHIVES "${_SYS_LLVM_LIB}/lib${_clib}.a")
                 endif()
             endforeach()
-            target_link_libraries(clang_ast_dumper PRIVATE
+            target_link_libraries(clang_ast_dumper_lib PUBLIC
                 -Wl,--start-group
                 ${_SYS_CLANG_ARCHIVES}
                 ${_SYS_LLVM_LIBS}
@@ -419,8 +439,8 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         find_library(VALHALL_ZSTD_LIBRARY NAMES zstd libzstd.so.1 HINTS /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu REQUIRED)
         find_library(VALHALL_ZLIB_LIBRARY NAMES z libz.so.1 HINTS /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu REQUIRED)
 
-        target_include_directories(clang_ast_dumper PRIVATE "${VALHALL_LLVM21_DIR}/include")
-        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper.cpp PROPERTIES
+        target_include_directories(clang_ast_dumper_lib PRIVATE "${VALHALL_LLVM21_DIR}/include")
+        set_source_files_properties(tools/clang_ast_dumper/clang_ast_dumper_lib.cpp PROPERTIES
             COMPILE_OPTIONS "-O2;-fno-rtti;-fno-exceptions;-Wall;-Wextra;-Wno-unused-parameter"
         )
         set_source_files_properties(tools/clang_ast_dumper/glibc_compat.c PROPERTIES
@@ -443,9 +463,10 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
             list(APPEND _VALHALL_CLANG_LLVM_ARCHIVES "${VALHALL_LLVM21_DIR}/lib/lib${_lib}.a")
         endforeach()
 
-        target_link_libraries(clang_ast_dumper PRIVATE
+        target_link_libraries(clang_ast_dumper_lib PUBLIC
             -Wl,--start-group
             ${_VALHALL_CLANG_LLVM_ARCHIVES}
+            clang_glibc_compat
             -Wl,--end-group
             "${VALHALL_ZLIB_LIBRARY}"
             "${VALHALL_ZSTD_LIBRARY}"
@@ -455,6 +476,9 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         set(_DUMPER_RESOURCE_ARGS -resource-dir "${VALHALL_LLVM21_DIR}/lib/clang/21")
         set(_TEST_RES_DIR "${VALHALL_LLVM21_DIR}/lib/clang/21")
     endif()
+
+    add_executable(clang_ast_dumper tools/clang_ast_dumper/clang_ast_dumper.cpp)
+    target_link_libraries(clang_ast_dumper PRIVATE clang_ast_dumper_lib)
 
     set(VALHALL_HOST_HANDLERS_AST_JSON "${CMAKE_CURRENT_SOURCE_DIR}/tools/verify/generated/valhall_host_handlers.json")
     add_custom_command(
@@ -492,7 +516,9 @@ if(_VALHALL_USE_SYSTEM_CLANG OR _VALHALL_USE_BUNDLED_LLVM21)
         COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_clang_ast_dumper.py
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
+    target_link_libraries(spirv2valhall_lib PRIVATE clang_ast_dumper_lib)
     target_compile_definitions(spirv2valhall_lib PRIVATE
+        HAVE_CLANG_AST_DUMPER_LIB=1
         SPIRV2VALHALL_DEFAULT_CLANG_AST_DUMPER_PATH="$<TARGET_FILE:clang_ast_dumper>"
         SPIRV2VALHALL_DEFAULT_CLANG_RESOURCE_DIR="${_TEST_RES_DIR}"
     )

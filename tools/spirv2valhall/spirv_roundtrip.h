@@ -1,5 +1,6 @@
 #pragma once
 
+#include "isa_enricher.h"
 #include "mbs2_ast_parser.h"
 #include "mbs2_types.h"
 #include "spirv_inspect.h"
@@ -30,6 +31,7 @@ bool lift_ebins_to_spirv(
     const Mbs2Module& mod,
     const std::vector<ExtractedEbin>& ebins,
     std::vector<LiftedSpirvShader>* out_shaders,
+    const PilotAnalysisResult* pilot_info = nullptr,
     std::string* err = nullptr);
 
 /// Disassemble a binary SPIR-V word stream into readable SPIR-V assembly text.

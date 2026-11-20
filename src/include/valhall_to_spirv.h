@@ -53,6 +53,15 @@ struct alignas(16) ValhallSidebandData {
     uint32_t fb_info[4];            // Offset 328 ( 16B): width, height, sample_cnt, rt_count
 };
 
+struct ValhallSymbolBindings {
+    std::string entry_point_name;                      // Optional OpEntryPoint / OpName override (default: "main")
+    std::string sideband_var_name;                     // Optional sideband UBO/SSBO variable name (default: "u_sideband")
+    std::map<uint32_t, std::string> vertex_input_names;   // location -> symbol name (e.g. 0 -> "in_pos")
+    std::map<uint32_t, std::string> varying_input_names;  // location -> symbol name (e.g. 0 -> "v_col")
+    std::map<uint32_t, std::string> color_output_names;   // location -> symbol name (e.g. 0 -> "out_col")
+    std::map<uint32_t, std::string> fau_word_names;       // FAU byte offset (0, 4, 8, ...) -> symbol name
+};
+
 struct ValhallTranslateOptions {
     ShaderStage stage = ShaderStage::Compute;
     uint8_t arch = 11; // Valhall v9..v14 (default v11 / Mali-G615)
@@ -75,6 +84,9 @@ struct ValhallTranslateOptions {
     // Sideband uniform binding location
     uint32_t sideband_set = 0;
     uint32_t sideband_binding = 0;
+
+    // Optional debug/reflection symbol names for OpName emission (empty = default generated names)
+    ValhallSymbolBindings symbol_bindings;
 };
 
 struct ValhallTranslationResult {

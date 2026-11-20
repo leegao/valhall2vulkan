@@ -134,7 +134,8 @@ struct EmitContext {
         b.member_decorate(sideband_struct_t, 6, Decoration::Offset, { 328 });
 
         uint32_t sb_ptr_t = b.type_pointer(StorageClass::StorageBuffer, sideband_struct_t);
-        sideband_var_id = b.add_global_var(sb_ptr_t, StorageClass::StorageBuffer, "u_sideband", false);
+        std::string sb_name = opts.symbol_bindings.sideband_var_name.empty() ? "u_sideband" : opts.symbol_bindings.sideband_var_name;
+        sideband_var_id = b.add_global_var(sb_ptr_t, StorageClass::StorageBuffer, sb_name, false);
         b.decorate(sideband_var_id, Decoration::DescriptorSet, { opts.sideband_set });
         b.decorate(sideband_var_id, Decoration::Binding, { opts.sideband_binding });
         b.decorate(sideband_var_id, Decoration::NonWritable);
@@ -145,7 +146,9 @@ struct EmitContext {
         if (it != vert_attr_inputs_.end()) return it->second;
         uint32_t v4f = b.type_vector(b.type_f32(), 4);
         uint32_t ptr_t = b.type_pointer(StorageClass::Input, v4f);
-        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Input, "in_attr_" + std::to_string(loc), true);
+        auto nit = opts.symbol_bindings.vertex_input_names.find(loc);
+        std::string vname = (nit != opts.symbol_bindings.vertex_input_names.end() && !nit->second.empty()) ? nit->second : ("in_attr_" + std::to_string(loc));
+        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Input, vname, true);
         b.decorate(var_id, Decoration::Location, { loc });
         vert_attr_inputs_[loc] = var_id;
         return var_id;
@@ -167,7 +170,9 @@ struct EmitContext {
         if (it != frag_varying_inputs_.end()) return it->second;
         uint32_t v4f = b.type_vector(b.type_f32(), 4);
         uint32_t ptr_t = b.type_pointer(StorageClass::Input, v4f);
-        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Input, "in_var_" + std::to_string(loc), true);
+        auto nit = opts.symbol_bindings.varying_input_names.find(loc);
+        std::string vname = (nit != opts.symbol_bindings.varying_input_names.end() && !nit->second.empty()) ? nit->second : ("in_var_" + std::to_string(loc));
+        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Input, vname, true);
         b.decorate(var_id, Decoration::Location, { loc });
         if (flat) b.decorate(var_id, Decoration::Flat);
         frag_varying_inputs_[loc] = var_id;
@@ -179,7 +184,9 @@ struct EmitContext {
         if (it != frag_color_outputs_.end()) return it->second;
         uint32_t v4f = b.type_vector(b.type_f32(), 4);
         uint32_t ptr_t = b.type_pointer(StorageClass::Output, v4f);
-        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Output, "out_color_" + std::to_string(loc), true);
+        auto nit = opts.symbol_bindings.color_output_names.find(loc);
+        std::string vname = (nit != opts.symbol_bindings.color_output_names.end() && !nit->second.empty()) ? nit->second : ("out_color_" + std::to_string(loc));
+        uint32_t var_id = b.add_global_var(ptr_t, StorageClass::Output, vname, true);
         b.decorate(var_id, Decoration::Location, { loc });
         frag_color_outputs_[loc] = var_id;
         return var_id;
@@ -311,8 +318,13 @@ struct EmitContext {
 
             case SsaOp::LoadFau: {
                 uint32_t ptr_u32 = b.type_pointer(StorageClass::StorageBuffer, b.type_u32());
-                uint32_t ac = b.op_AccessChain(ptr_u32, sideband_var_id, { b.const_u32(0), b.const_u32(n.imm_u32 & 63u) });
+                uint32_t word_idx = n.imm_u32 & 63u;
+                uint32_t ac = b.op_AccessChain(ptr_u32, sideband_var_id, { b.const_u32(0), b.const_u32(word_idx) });
                 spv_ids[id] = b.emit_load(b.type_u32(), ac);
+                auto fit = opts.symbol_bindings.fau_word_names.find(word_idx * 4u);
+                if (fit != opts.symbol_bindings.fau_word_names.end() && !fit->second.empty()) {
+                    b.set_name(spv_ids[id], fit->second);
+                }
                 return spv_ids[id];
             }
             case SsaOp::LoadSidebandU64: {

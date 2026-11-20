@@ -263,14 +263,44 @@ void main() {
             assert(lsh.disassembly.find("OpEntryPoint") != std::string::npos);
             assert(lsh.disassembly.find("OpFunctionEnd") != std::string::npos);
         }
-        std::cout << "[PASS] Extracted & lifted " << expected_flag << " (" << res.ebins.size()
+        assert(res.used_inproc_direct);  // Default Auto uses direct in-process libMali-Gxx!
+        if (expected_stage == ShaderStage::Fragment) {
+            assert(res.lifted_spirv[0].disassembly.find("_11_v_col") != std::string::npos);
+        }
+        if (expected_stage == ShaderStage::Vertex) {
+            assert(res.lifted_spirv[0].disassembly.find("_17_in_pos") != std::string::npos);
+        }
+        std::cout << "[PASS] In-process direct extracted & lifted " << expected_flag << " (" << res.ebins.size()
                   << " EBINs, " << total_insts << " Valhall insts, "
-                  << res.lifted_spirv.size() << " lifted SPIR-V module(s))\n";
+                  << res.lifted_spirv.size() << " symbol-named SPIR-V module(s))\n";
     };
 
     check_live(comp_spv, ShaderStage::Compute, "--compute");
     check_live(vert_spv, ShaderStage::Vertex, "--vertex");
     check_live(frag_spv, ShaderStage::Fragment, "--fragment");
+
+    // 4b. Verify in-process C header emission + SubprocessAst (in-process libclang_ast_dumper_lib.a)
+    {
+        ExtractOptions inproc_c_opts;
+        inproc_c_opts.core = "Mali-G710";
+        inproc_c_opts.backend = ExtractBackend::InProcDirect;
+        inproc_c_opts.dump_header_path = std::string(TEST_BUILD_DIR) + "/s2v_inproc_emit.h";
+        ExtractResult r1;
+        std::string err;
+        assert(extract_valhall_from_spirv(comp_spv, inproc_c_opts, &r1, &err));
+        assert(r1.used_inproc_direct);
+        assert(r1.dump_header_text.find("cmpbe_chunk_MBS2 MBS2") != std::string::npos);
+
+        ExtractOptions ast_opts;
+        ast_opts.core = "Mali-G710";
+        ast_opts.backend = ExtractBackend::SubprocessAst;
+        ExtractResult r2;
+        assert(extract_valhall_from_spirv(frag_spv, ast_opts, &r2, &err));
+        assert(!r2.used_inproc_direct);
+        assert(r2.mbs2.ast_global_count >= 20);
+        assert(r2.ebins.size() == 1);
+        std::cout << "[PASS] Verified both InProcDirect (live cmpbe_chunk_MBS2* + C header) and in-process clang_ast_dumper_lib\n";
+    }
 
     // 5. Verify spirv2valhall CLI executable end-to-end with --dump-spirv & --out-spirv
     const std::string cli_hdr = std::string(TEST_BUILD_DIR) + "/s2v_cli_frag.h";

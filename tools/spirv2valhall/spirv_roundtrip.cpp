@@ -508,12 +508,77 @@ std::string format_spirv_disassembly(const std::vector<uint32_t>& words) {
     return oss.str();
 }
 
+
+static std::string sanitize_spv_ident(const std::string& raw) {
+    std::string out;
+    out.reserve(raw.size());
+    for (char c : raw) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '_') {
+            out.push_back(c);
+        } else {
+            out.push_back('_');
+        }
+    }
+    return out;
+}
+
+static void populate_symbol_bindings(
+    const Mbs2Module& mod,
+    const PilotAnalysisResult* pilot_info,
+    valhall::ValhallTranslateOptions* topts) {
+    if (!topts) return;
+    auto& sb = topts->symbol_bindings;
+    for (const auto& inp : mod.cmmn.sinp) {
+        uint32_t loc = (inp.location != 0xFFFFu) ? inp.location : inp.address;
+        if (!inp.name.empty()) {
+            sb.vertex_input_names[loc] = sanitize_spv_ident(inp.name);
+            sb.varying_input_names[loc] = sanitize_spv_ident(inp.name);
+        }
+    }
+    if (mod.has_cfra) {
+        for (const auto& ov : mod.cfra.output_vars) {
+            if (!ov.name.empty()) sb.color_output_names[ov.location] = sanitize_spv_ident(ov.name);
+        }
+    }
+    for (const auto& outp : mod.cmmn.sout) {
+        uint32_t loc = (outp.location != 0xFFFFu) ? outp.location : outp.address;
+        if (!outp.name.empty() && !sb.color_output_names.count(loc)) {
+            sb.color_output_names[loc] = sanitize_spv_ident(outp.name);
+        }
+    }
+    if (pilot_info) {
+        for (const auto& kv : pilot_info->fau_map) {
+            std::string nm = sanitize_spv_ident(kv.second.symbol_name);
+            if (nm.empty()) continue;
+            if (kv.second.byte_size >= 8) {
+                sb.fau_word_names[kv.first] = "fau_" + nm + "_lo";
+                sb.fau_word_names[kv.first + 4u] = "fau_" + nm + "_hi";
+            } else {
+                sb.fau_word_names[kv.first] = "fau_" + nm;
+            }
+        }
+    }
+    for (const auto& u : mod.cmmn.suni) {
+        for (const auto& r : u.rlocs) {
+            uint32_t words = std::max<uint32_t>(1u, (r.size + 3u) / 4u);
+            for (uint32_t w = 0; w < words; ++w) {
+                uint32_t off = r.reg_offset + w * 4u;
+                if (!sb.fau_word_names.count(off) && !u.name.empty()) {
+                    sb.fau_word_names[off] = "fau_" + sanitize_spv_ident(u.name) + "_" + std::to_string(w);
+                }
+            }
+        }
+    }
+}
+
 bool lift_ebins_to_spirv(
     const SpirvStageInfo& stage_info,
     uint8_t arch,
     const Mbs2Module& mod,
     const std::vector<ExtractedEbin>& ebins,
     std::vector<LiftedSpirvShader>* out_shaders,
+    const PilotAnalysisResult* pilot_info,
     std::string* err) {
     if (!out_shaders) {
         if (err) *err = "Null LiftedSpirvShader output vector";
@@ -527,7 +592,9 @@ bool lift_ebins_to_spirv(
         LiftedSpirvShader sh;
         sh.label = label;
         sh.role = role;
-        auto tres = valhall::translate_valhall_to_spirv(code, code_sz, topts);
+        valhall::ValhallTranslateOptions enriched_opts = topts;
+        populate_symbol_bindings(mod, pilot_info, &enriched_opts);
+        auto tres = valhall::translate_valhall_to_spirv(code, code_sz, enriched_opts);
         sh.ok = tres.ok;
         sh.error_message = tres.error_message;
         if (tres.ok) {

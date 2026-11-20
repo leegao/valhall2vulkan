@@ -1,5 +1,8 @@
 #include "mbs2_ast_parser.h"
 #include "json_lite.h"
+#ifdef HAVE_CLANG_AST_DUMPER_LIB
+#include "clang_ast_dumper_lib.h"
+#endif
 #include "moc_runner.h"
 
 #include <cstdio>
@@ -797,6 +800,117 @@ bool parse_mbs2_from_ast_json(
     return walker.parse_root(arch, disassemble, out_module, out_ebins, err);
 }
 
+
+#ifdef HAVE_CLANG_AST_DUMPER_LIB
+namespace {
+
+JsonValue ast_expr_to_jv(const valhall::ast_dumper::AstExprNode* n) {
+    JsonValue jv;
+    if (!n) {
+        jv.kind = JsonValue::Kind::Null;
+        return jv;
+    }
+    jv.kind = JsonValue::Kind::Object;
+    using K = valhall::ast_dumper::AstExprNode::Kind;
+    auto mk_str = [](const std::string& st) {
+        JsonValue v; v.kind = JsonValue::Kind::String; v.str_val = st; return v;
+    };
+    auto mk_int = [](int64_t iv) {
+        JsonValue v; v.kind = JsonValue::Kind::Int; v.int_val = iv; return v;
+    };
+    auto mk_bool = [](bool bv) {
+        JsonValue v; v.kind = JsonValue::Kind::Bool; v.bool_val = bv; return v;
+    };
+
+    switch (n->kind) {
+        case K::Null:
+            jv.obj_val["kind"] = mk_str("literal");
+            jv.obj_val["lit_kind"] = mk_str("null");
+            return jv;
+        case K::IntLiteral:
+            jv.obj_val["kind"] = mk_str("literal");
+            jv.obj_val["lit_kind"] = mk_str("int");
+            jv.obj_val["int_value"] = mk_int(n->int_val);
+            jv.obj_val["value"] = mk_str(n->is_signed ? std::to_string(n->int_val) : std::to_string(n->uint_val));
+            return jv;
+        case K::BoolLiteral:
+            jv.obj_val["kind"] = mk_str("literal");
+            jv.obj_val["lit_kind"] = mk_str("bool");
+            jv.obj_val["value"] = mk_bool(n->bool_val);
+            return jv;
+        case K::StringLiteral: {
+            jv.obj_val["kind"] = mk_str("literal");
+            jv.obj_val["lit_kind"] = mk_str("string");
+            jv.obj_val["value"] = mk_str(n->str_val);
+            jv.obj_val["byte_length"] = mk_int(static_cast<int64_t>(n->bytes.size()));
+            static const char kHex[] = "0123456789abcdef";
+            std::string hex;
+            hex.reserve(n->bytes.size() * 2);
+            for (uint8_t b : n->bytes) {
+                hex.push_back(kHex[b >> 4]);
+                hex.push_back(kHex[b & 0xF]);
+            }
+            jv.obj_val["bytes_hex"] = mk_str(hex);
+            return jv;
+        }
+        case K::Ident:
+            jv.obj_val["kind"] = mk_str("ident");
+            jv.obj_val["name"] = mk_str(n->name);
+            return jv;
+        case K::UnaryOp:
+            jv.obj_val["kind"] = mk_str("unary");
+            jv.obj_val["op"] = mk_str(n->op);
+            jv.obj_val["operand"] = ast_expr_to_jv(n->sub.get());
+            return jv;
+        case K::Cast:
+            jv.obj_val["kind"] = mk_str("cast");
+            jv.obj_val["expr"] = ast_expr_to_jv(n->sub.get());
+            return jv;
+        case K::InitList: {
+            jv.obj_val["kind"] = mk_str("init_list");
+            if (!n->record_type.empty()) jv.obj_val["record_type"] = mk_str(n->record_type);
+            JsonValue items;
+            items.kind = JsonValue::Kind::Array;
+            items.arr_val.reserve(n->items.size());
+            for (const auto& it : n->items) items.arr_val.push_back(ast_expr_to_jv(it.get()));
+            jv.obj_val["items"] = std::move(items);
+            if (!n->fields.empty()) {
+                JsonValue fobj;
+                fobj.kind = JsonValue::Kind::Object;
+                for (const auto& kv : n->fields) {
+                    fobj.obj_val[kv.first] = ast_expr_to_jv(kv.second.get());
+                }
+                jv.obj_val["fields"] = std::move(fobj);
+            }
+            return jv;
+        }
+        default:
+            jv.obj_val["kind"] = mk_str("other");
+            return jv;
+    }
+}
+
+JsonValue ast_globals_to_root_jv(const valhall::ast_dumper::AstGlobalsDumpResult& dump) {
+    JsonValue root;
+    root.kind = JsonValue::Kind::Object;
+    JsonValue arr;
+    arr.kind = JsonValue::Kind::Array;
+    arr.arr_val.reserve(dump.globals.size());
+    for (const auto& g : dump.globals) {
+        JsonValue go;
+        go.kind = JsonValue::Kind::Object;
+        JsonValue nm; nm.kind = JsonValue::Kind::String; nm.str_val = g.name;
+        go.obj_val["name"] = std::move(nm);
+        go.obj_val["init"] = ast_expr_to_jv(g.init.get());
+        arr.arr_val.push_back(std::move(go));
+    }
+    root.obj_val["globals"] = std::move(arr);
+    return root;
+}
+
+}  // namespace
+#endif
+
 bool parse_mbs2_header_with_clang_ast(
     const std::string& header_text,
     uint8_t arch,
@@ -809,9 +923,39 @@ bool parse_mbs2_header_with_clang_ast(
         return false;
     }
 
-    std::string dumper_bin = resolve_clang_ast_dumper_path(opts.clang_ast_dumper_path);
     std::string inc_dir = resolve_cmpbe_include_dir(opts.cmpbe_include_dir);
     std::string res_dir = resolve_clang_resource_dir(opts.clang_resource_dir);
+
+#ifdef HAVE_CLANG_AST_DUMPER_LIB
+    // Fast in-process path via linked libclang_ast_dumper_lib.a (no subprocess, no JSON parsing!)
+    if (opts.clang_ast_dumper_path.empty()) {
+        std::vector<std::string> args = {
+            "-x", "c++",
+            "-std=c++17",
+            "-include", inc_dir + "/cmpbe_chunks.h",
+            "-I" + inc_dir,
+            "-Wno-writable-strings",
+            "-Wno-c++11-narrowing",
+            "-Wno-missing-field-initializers",
+        };
+        if (!res_dir.empty()) {
+            args.push_back("-resource-dir");
+            args.push_back(res_dir);
+        }
+        auto dump = valhall::ast_dumper::dump_globals_in_process(
+            header_text, "mbs2_inproc.cpp", args, /*strict=*/true, opts.verbose);
+        if (!dump.ok) {
+            if (err) *err = "In-process clang_ast_dumper_lib failed: " + dump.error_message;
+            return false;
+        }
+        JsonValue root = ast_globals_to_root_jv(dump);
+        out_ebins->clear();
+        Mbs2AstWalker walker(root);
+        return walker.parse_root(arch, opts.disassemble, out_module, out_ebins, err);
+    }
+#endif
+
+    std::string dumper_bin = resolve_clang_ast_dumper_path(opts.clang_ast_dumper_path);
 
     char src_tmpl[] = "/tmp/spirv2valhall_ast_in_XXXXXX";
     int src_fd = mkstemp(src_tmpl);
