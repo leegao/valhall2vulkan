@@ -17,16 +17,14 @@ std::string hex_off(int64_t off) {
     return buf;
 }
 
-/// Add constant byte offset `delta` to any pointer-like `TrackedVal`.
+/// Add constant byte offset `delta` via `SymbolicMemoryLoc::with_added_offset`.
 TrackedVal add_pointer_offset(const TrackedVal& base, int64_t delta, const PointerAnalysisEnv& env) {
     if (!base.is_pointer()) return TrackedVal::make_top();
-    TrackedVal out = base;
-    if (out.offset_known) {
-        out.byte_offset += delta;
-    }
-    if (out.kind == TrackedVal::Kind::SrtRackPtr && out.offset_known && out.byte_offset >= 0 &&
-        (out.byte_offset % 32) == 0 && out.rack >= 0) {
-        int32_t desc = static_cast<int32_t>(out.byte_offset / 32);
+    SymbolicMemoryLoc loc = base.to_memory_loc().with_added_offset(delta);
+    TrackedVal out = base.with_memory_loc(loc);
+    if (out.kind == TrackedVal::Kind::SrtRackPtr && loc.offset_known && loc.byte_offset >= 0 &&
+        (loc.byte_offset % 32) == 0 && out.rack >= 0) {
+        int32_t desc = static_cast<int32_t>(loc.byte_offset / 32);
         std::string sym = env.lookup_srt_symbol
                               ? env.lookup_srt_symbol(static_cast<uint8_t>(out.rack), static_cast<uint32_t>(desc))
                               : "";
@@ -35,13 +33,16 @@ TrackedVal add_pointer_offset(const TrackedVal& base, int64_t delta, const Point
     return out;
 }
 
-/// Widen a pointer's offset to unknown when an unknown dynamic index is added.
+/// Widen a pointer's offset to unknown via `SymbolicMemoryLoc::with_unknown_offset`.
 TrackedVal add_unknown_offset(const TrackedVal& base) {
     if (!base.is_pointer()) return TrackedVal::make_top();
-    TrackedVal out = base;
-    out.offset_known = false;
-    out.byte_offset = 0;
-    return out;
+    return base.with_memory_loc(base.to_memory_loc().with_unknown_offset());
+}
+
+/// Mask a pointer's offset via `SymbolicMemoryLoc::with_masked_offset`.
+TrackedVal mask_pointer_offset(const TrackedVal& base, int64_t mask) {
+    if (!base.is_pointer()) return TrackedVal::make_top();
+    return base.with_memory_loc(base.to_memory_loc().with_masked_offset(mask));
 }
 
 /// Pointwise dereference of a single `TrackedVal` pointer in `PsbLoad(addr, elem_bytes)`.
@@ -427,14 +428,10 @@ public:
                     return TrackedVal::make_const(0);
                 }
                 if (a.is_pointer() && b.kind == TrackedVal::Kind::ConstInt && b.const_val != 0) {
-                    TrackedVal out = a;
-                    if (out.offset_known) out.byte_offset = out.byte_offset & b.const_val;
-                    return out;
+                    return mask_pointer_offset(a, b.const_val);
                 }
                 if (b.is_pointer() && a.kind == TrackedVal::Kind::ConstInt && a.const_val != 0) {
-                    TrackedVal out = b;
-                    if (out.offset_known) out.byte_offset = out.byte_offset & a.const_val;
-                    return out;
+                    return mask_pointer_offset(b, a.const_val);
                 }
                 return TrackedVal::make_top();
             }));

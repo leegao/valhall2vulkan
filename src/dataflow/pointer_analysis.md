@@ -4,7 +4,7 @@ This document formalizes the `TrackedVal` domain (`src/dataflow/tracked_val.{h,c
 
 ---
 
-## 1. Module Architecture & Separation of Concerns
+## Module Architecture & Separation of Concerns
 
 ```text
   tools/spirv2valhall/isa_enricher.cpp
@@ -27,7 +27,7 @@ This document formalizes the `TrackedVal` domain (`src/dataflow/tracked_val.{h,c
 
 ---
 
-## 2. Base Domain: `TrackedVal` Complete Lattice (`src/dataflow/tracked_val.{h,cpp}`)
+## Base Domain: `TrackedVal` Complete Lattice (`src/dataflow/tracked_val.{h,cpp}`)
 
 ### 2.1 Value Universe $\mathcal{L}$
 
@@ -62,7 +62,7 @@ $$\mathcal{L} = \{\bot, \top\} \;\cup\; \text{ConstInt}(\mathbb{Z}_{64}) \;\cup\
 
 ---
 
-## 3. Bounded Finite-Set Lifting: `TrackedValSetDomain`
+## Bounded Finite-Set Lifting: `TrackedValSetDomain`
 
 Pointer analysis runs over the lifted domain:
 
@@ -86,7 +86,7 @@ An element $S \in \mathcal{S}_4$ is either:
 
 ---
 
-## 4. Abstract State & Disjoint Memory Model (`AbstractState<TrackedValSetDomain>`)
+## Abstract State & Disjoint Memory Model (`AbstractState<TrackedValSetDomain>`)
 
 $$\sigma = (\rho : \text{SsaId} \to \mathcal{S}_4,\quad \mu_{\text{FAU}} : \mathbb{N} \to \mathcal{S}_4,\quad \mu_{\text{sym}} : \text{SymbolicMemoryLoc} \to \mathcal{S}_4)$$
 
@@ -96,13 +96,13 @@ $$\sigma = (\rho : \text{SsaId} \to \mathcal{S}_4,\quad \mu_{\text{FAU}} : \math
 
 ---
 
-## 5. Directional CFG Dataflow Equations (`run_cfg_worklist`)
+## Directional CFG Dataflow Equations (`run_cfg_worklist`)
 
 Both forward pointer analysis and backwards liveness run on the shared `run_cfg_worklist(mod, dir, transfer_block)` engine (`src/dataflow/worklist.cpp`):
 
 - **Backwards SSA Liveness (`liveness.cpp`, `BitsetDomain`, `DataflowDirection::Backward`):**
-  $$\text{LIVE\_OUT}[B] = \bigcup_{S \in \text{succ}(B)} \Big( (\text{LIVE\_IN}[S] \setminus \text{PHI\_DEFS}[S]) \cup \text{PHI\_USES}(B \to S) \Big)$$
-  $$\text{LIVE\_IN}[B] = \text{UE\_USE}[B] \cup (\text{LIVE\_OUT}[B] \setminus \text{DEF}[B])$$
+  $$\text{LIVE\\_OUT}[B] = \bigcup_{S \in \text{succ}(B)} \Big( (\text{LIVE\\_IN}[S] \setminus \text{PHI\\_DEFS}[S]) \cup \text{PHI\\_USES}(B \to S) \Big)$$
+  $$\text{LIVE\\_IN}[B] = \text{UE\\_USE}[B] \cup (\text{LIVE\\_OUT}[B] \setminus \text{DEF}[B])$$
 
 - **Forward SSA Pointer Analysis (`pointer_analysis.cpp`, `TrackedValSetDomain`, `DataflowDirection::Forward`):**
   - Per-block incoming side-channel memory: $\mu_{\text{in}}[B] = \bigsqcup_{P \in \text{pred}(B)} \mu_{\text{out}}[P]$ (seeded with $\mu_{\text{entry}}$ at $B_0$).
@@ -111,7 +111,7 @@ Both forward pointer analysis and backwards liveness run on the shared `run_cfg_
 
 ---
 
-## 6. SSA Transfer Functions $\llbracket n \rrbracket^\#(\sigma)$
+## SSA Transfer Functions $\llbracket n \rrbracket^\#(\sigma)$
 
 ### 6.1 Inherited Extensional Equalities (`SsaDomainTransferVisitor<TrackedValSetDomain>`)
 
@@ -137,5 +137,5 @@ Automatically handled via `try_as_const_u64` / `make_const_u64` forwarding on si
 | `IntAdd(a, b)` / `IntSub(a, b)` | Lifts pointer + `ConstInt(Δ)` $\to$ offset $\delta \pm \Delta$ (promoting `SrtRackPtr(r, 32j)` $\to$ `DescriptorAddr(r, j)`); pointer + non-const/$\top$ $\to$ offset $?$ |
 | `BitAnd(a, b)` | `a == b` $\to \rho(a)$; lifts pointer `& ConstInt(M != 0)` $\to$ preserves pointer base (e.g. Mali 48-bit VA mask `& 0xffffff`) |
 | `PsbLoad(addr, sz)` | **Singleton check:** if `addr` is NOT a singleton set, returns $\top_{\mathcal{S}}$ (or $\bot_{\mathcal{S}}$ if `addr` is $\bot_{\mathcal{S}}$). Otherwise dereferences `single_addr`:<br>• `SrtBase(16r)` $\to$ `SrtRackPtr(r, 0)`<br>• `SrtRackPtr(r, 32j+f)` $\to$ `BufferSize` ($f=4, \text{sz}=4$) or `BufferAddr` ($f=8 \lor \text{sz}=8$)<br>• `DescriptorAddr(r, j, f)` $\to$ `BufferSize` ($f=4$) or `BufferAddr`<br>• `BufferAddr(r, j, δ)` $\to$ `SymbolValue(r, j, member(r, j, δ))`<br>• `FauDstBase(δ)` $\to$ `FauUniformRef(δ)` |
-| `PsbStore(addr, val, sz)` | For singleton `FauDstBase(δ)`: joins `val` into $\mu_{\text{FAU}}(\delta)$ and records `PilotFauWrite`. For other singleton pointers: joins `val` into $\mu_{\text{sym}}(\text{addr.to\_memory\_loc()})$. |
+| `PsbStore(addr, val, sz)` | For singleton `FauDstBase(δ)`: joins `val` into $\mu_{\text{FAU}}(\delta)$ and records `PilotFauWrite`. For other singleton pointers: joins `val` into $\mu_{\text{sym}}(\text{addr.to\\_memory\\_loc()})$. |
 | `LoadVertAttr` / `LoadFragVarying` / `TexSample` | Produces singleton `VertexAttrValue`, `VaryingValue`, or `TexSampleValue` resolved via `env` callbacks |

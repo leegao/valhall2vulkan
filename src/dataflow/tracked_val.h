@@ -88,6 +88,9 @@ struct TrackedVal {
     /// Convert a pointer-like `TrackedVal` into its corresponding `SymbolicMemoryLoc`.
     SymbolicMemoryLoc to_memory_loc() const;
 
+    /// Apply a `SymbolicMemoryLoc` offset/widening transformation back onto this pointer `TrackedVal`.
+    TrackedVal with_memory_loc(const SymbolicMemoryLoc& loc) const;
+
     /// Concise human-readable description (e.g. "&_83_input_0+0x10 (SRT[4]->Buf[0].addr)").
     std::string format_short() const;
 };

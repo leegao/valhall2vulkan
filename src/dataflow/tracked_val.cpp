@@ -19,9 +19,7 @@ std::string hex_off(int64_t off) {
 
 }  // namespace
 
-// ============================================================================
 // TrackedVal constructors & member helpers
-// ============================================================================
 
 TrackedVal TrackedVal::make_bottom() {
     TrackedVal v;
@@ -259,6 +257,14 @@ SymbolicMemoryLoc TrackedVal::to_memory_loc() const {
     }
 }
 
+TrackedVal TrackedVal::with_memory_loc(const SymbolicMemoryLoc& loc) const {
+    if (!is_pointer()) return TrackedVal::make_top();
+    TrackedVal out = *this;
+    out.byte_offset = loc.byte_offset;
+    out.offset_known = loc.offset_known;
+    return out;
+}
+
 std::string TrackedVal::format_short() const {
     std::ostringstream oss;
     switch (kind) {
@@ -348,9 +354,7 @@ std::string TrackedVal::format_short() const {
     return "<unknown>";
 }
 
-// ============================================================================
 // TrackedValDomain complete lattice operations
-// ============================================================================
 
 bool TrackedValDomain::equals(const Value& a, const Value& b) {
     if (a.kind != b.kind) return false;

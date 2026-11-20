@@ -10,9 +10,7 @@
 
 namespace valhall::dataflow {
 
-// ============================================================================
-// 1. Compile-Time Lattice Interface Enforcement & Auto-Equals
-// ============================================================================
+// Compile-Time Lattice Interface Enforcement & Auto-Equals
 
 namespace detail {
 
@@ -131,9 +129,7 @@ inline size_t next_power_of_two(size_t n) {
     return (p >= n) ? p : n;
 }
 
-// ============================================================================
-// 2. VectorDomain<ElemDomainT> — Pointwise Lattice over Dense Indexed Arrays
-// ============================================================================
+// VectorDomain<ElemDomainT> — Pointwise Lattice over Dense Indexed Arrays
 
 template <typename ElemDomainT>
 struct VectorDomainValue {
@@ -254,9 +250,7 @@ struct VectorDomain {
     }
 };
 
-// ============================================================================
-// 3. MapDomain<KeyT, ValDomainT> — Pointwise Lattice over Sparse Maps
-// ============================================================================
+// MapDomain<KeyT, ValDomainT> — Pointwise Lattice over Sparse Maps
 
 template <typename KeyT, typename ValDomainT>
 struct MapDomainValue {
@@ -382,9 +376,7 @@ struct MapDomain {
     }
 };
 
-// ============================================================================
-// 4. TupleDomain<Domains...> — Variadic Pointwise Product Lattice
-// ============================================================================
+// TupleDomain<Domains...> — Variadic Pointwise Product Lattice
 
 template <typename... Domains>
 struct TupleDomain {
@@ -429,9 +421,7 @@ private:
     }
 };
 
-// ============================================================================
-// 5. BitsetDomain — Compact Powerset Lattice for Liveness / Reaching Defs
-// ============================================================================
+// BitsetDomain — Compact Powerset Lattice for Liveness / Reaching Defs
 
 struct BitsetValue {
     std::vector<uint64_t> words;
@@ -546,9 +536,7 @@ struct BitsetDomain {
     }
 };
 
-// ============================================================================
-// 6. FiniteSetDomain<ElemDomainT, MaxK> — Bounded Finite-Set Powerset Lattice
-// ============================================================================
+// FiniteSetDomain<ElemDomainT, MaxK> — Bounded Finite-Set Powerset Lattice
 // Tracks up to `MaxK` (default 4) distinct non-bottom, non-top elements before
 // widening to `Top`. Provides `lift_value`, `try_as_singleton`, `lift_unary`,
 // and `lift_binary` so pointwise transfer functions remain concise and readable.
@@ -561,6 +549,19 @@ struct FiniteSetValue {
 
     bool is_top_val = false;
     std::vector<ElemValue> items;  // Always deduplicated, contains neither Bottom nor Top
+
+    FiniteSetValue() = default;
+
+    // Implicit singleton lift: allows passing/returning a single `ElemValue` wherever
+    // a `FiniteSetValue` is expected without explicit `lift_value(...)` boilerplate.
+    FiniteSetValue(const ElemValue& single) { insert(single); }
+
+    FiniteSetValue& operator=(const ElemValue& single) {
+        is_top_val = false;
+        items.clear();
+        insert(single);
+        return *this;
+    }
 
     bool is_bottom() const { return !is_top_val && items.empty(); }
     bool is_top() const { return is_top_val; }

@@ -10,16 +10,13 @@ namespace valhall::dataflow {
 
 /// Distinct GPU memory address spaces / regions modeled by symbolic memory.
 ///
-/// Disjointness Assumption (Soundness Model):
-///   - Distinct `MemoryRegionKind`s are treated as disjoint memory spaces
-///     (e.g., `Tls` never aliases `Buffer`, `SrtTable` never aliases `FauUniform`).
-///   - Within `SrtTable`, distinct `table_id` (rack indices) inhabit disjoint tables.
-///   - Within `Buffer`, distinct `(table_id, entry_id)` descriptors inhabit
-///     disjoint Vulkan buffer bindings (unless explicit aliasing is modeled).
-///   - `FauUniform` and `DataSection` are read-only (RO) in Main shaders
-///     (FAU is populated once by the Pilot shader / driver RLOC+FCST).
+/// Disjointness assumptions:
+///   - Distinct `MemoryRegionKind`s are disjoint memory spaces.
+///   - Within `SrtTable`, distinct `table_id` (rack indices) are disjoint.
+///   - Within `Buffer`, distinct `(table_id, entry_id)` bindings are disjoint.
+///   - `FauUniform` and `DataSection` are read-only (RO) in Main shaders.
 enum class MemoryRegionKind : uint8_t {
-    FauUniform = 0,   // FAU_0 uniform bank (RO in Main shaders; written by Pilot shader)
+    FauUniform = 0,   // FAU_0 uniform bank (RO in Main shaders; written in Pilot shaders)
     SrtTable,         // Shader Resource Table (SRT_0[table_id])
     Buffer,           // UBO / SSBO buffer descriptor (SRT[table_id]->Desc[entry_id])
     DataSection,      // Embedded read-only EBIN .data / LUT section
@@ -28,8 +25,8 @@ enum class MemoryRegionKind : uint8_t {
     Other,            // Unclassified symbolic memory location
 };
 
-/// Structured symbolic memory key with trivial equality, ordering, hashing,
-/// and region-aware alias queries.
+/// Structured symbolic memory location with pointer-offset arithmetic,
+/// widening, hashing, ordering, and region-aware alias queries.
 struct SymbolicMemoryLoc {
     MemoryRegionKind region = MemoryRegionKind::Other;
     int32_t table_id = -1;      // e.g. SRT rack index (0..N)
@@ -38,10 +35,11 @@ struct SymbolicMemoryLoc {
     bool offset_known = true;   // False if dynamic / widened offset
     std::string key;            // Optional human-readable label (e.g. symbol name)
 
-    static SymbolicMemoryLoc make_fau(uint32_t byte_off) {
+    static SymbolicMemoryLoc make_fau(int64_t byte_off = 0, bool off_known = true) {
         SymbolicMemoryLoc loc;
         loc.region = MemoryRegionKind::FauUniform;
-        loc.byte_offset = static_cast<int64_t>(byte_off);
+        loc.byte_offset = off_known ? byte_off : 0;
+        loc.offset_known = off_known;
         return loc;
     }
 
@@ -90,6 +88,32 @@ struct SymbolicMemoryLoc {
         return loc;
     }
 
+    /// Return a copy with a constant byte delta added to `byte_offset` (no-op if offset unknown).
+    SymbolicMemoryLoc with_added_offset(int64_t delta) const {
+        SymbolicMemoryLoc out = *this;
+        if (out.offset_known) {
+            out.byte_offset += delta;
+        }
+        return out;
+    }
+
+    /// Return a copy with `offset_known` widened to false (dynamic / unknown offset).
+    SymbolicMemoryLoc with_unknown_offset() const {
+        SymbolicMemoryLoc out = *this;
+        out.offset_known = false;
+        out.byte_offset = 0;
+        return out;
+    }
+
+    /// Return a copy with `byte_offset` masked by `mask` (preserving base region identity).
+    SymbolicMemoryLoc with_masked_offset(int64_t mask) const {
+        SymbolicMemoryLoc out = *this;
+        if (out.offset_known) {
+            out.byte_offset = out.byte_offset & mask;
+        }
+        return out;
+    }
+
     bool operator==(const SymbolicMemoryLoc& o) const {
         return region == o.region &&
                table_id == o.table_id &&
@@ -127,7 +151,10 @@ struct SymbolicMemoryLoc {
         std::ostringstream oss;
         switch (region) {
             case MemoryRegionKind::FauUniform:  oss << "FAU_0"; break;
-            case MemoryRegionKind::SrtTable:    oss << "SRT[" << table_id << "]"; break;
+            case MemoryRegionKind::SrtTable:
+                if (table_id < 0) oss << "SRT_0";
+                else oss << "SRT[" << table_id << "]";
+                break;
             case MemoryRegionKind::Buffer:
                 if (!key.empty()) oss << key;
                 else oss << "Buf[" << table_id << "," << entry_id << "]";

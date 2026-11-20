@@ -96,8 +96,8 @@ void test_domain_combinators_and_memory_disjointness() {
     assert(std::get<1>(pj).test(1) && std::get<1>(pj).test(3));
     assert(ProdDom::leq(p1, pj) && ProdDom::leq(p2, pj));
 
-    // FiniteSetDomain<TrackedValDomain, 4>: up to 4 distinct values, then Top
-    auto s1 = TrackedValSetDomain::lift_value(TrackedVal::make_const(10));
+    // FiniteSetDomain<TrackedValDomain, 4>: implicit singleton lift + up to 4 distinct values, then Top
+    TrackedValSet s1 = TrackedVal::make_const(10); // implicit converting ctor!
     auto s2 = TrackedValSetDomain::lift_value(TrackedVal::make_const(20));
     auto s12 = TrackedValSetDomain::join(s1, s2);
     assert(s12.size() == 2 && !s12.is_top());
@@ -132,6 +132,9 @@ void test_domain_combinators_and_memory_disjointness() {
     assert(!buf0.may_alias(buf0_off16));
     assert(buf0.may_alias(buf0_unk));
     assert(!buf0.may_alias(tls0));
+    assert(buf0.with_added_offset(16) == buf0_off16);
+    assert(buf0.with_unknown_offset() == buf0_unk);
+    assert(buf0_off16.with_masked_offset(0xFF) == buf0_off16);
 
     std::cout << "[PASS] test_domain_combinators_and_memory_disjointness\n";
 }
