@@ -136,6 +136,25 @@ void test_domain_combinators_and_memory_disjointness() {
     assert(buf0.with_unknown_offset() == buf0_unk);
     assert(buf0_off16.with_masked_offset(0xFF) == buf0_off16);
 
+    // SymbolicMemoryLoc::deref()
+    auto srt_root_r4 = SymbolicMemoryLoc::make_srt(-1, 0x40);
+    auto d_rack = srt_root_r4.deref(8);
+    assert(d_rack.kind == MemoryDerefResult::Kind::SrtRackPtr && d_rack.table_id == 4);
+    auto d_va = SymbolicMemoryLoc::make_srt(4, 0x08).deref(8);
+    assert(d_va.kind == MemoryDerefResult::Kind::BufferAddr && d_va.table_id == 4 && d_va.entry_id == 0);
+    auto d_sz = SymbolicMemoryLoc::make_srt(4, 0x04).deref(4);
+    assert(d_sz.kind == MemoryDerefResult::Kind::BufferSize && d_sz.table_id == 4 && d_sz.entry_id == 0);
+
+    // TrackedValSetOps & SidebandValue
+    TrackedValSet sb = TrackedVal::make_sideband(5);
+    TrackedValSet c0 = TrackedVal::make_const(0);
+    TrackedValSet c4 = TrackedVal::make_const(4);
+    TrackedValSet c20 = TrackedVal::make_const(20);
+    assert(collapse_tracked_val_set(TrackedValSetOps::add(sb, c0)).kind == TrackedVal::Kind::SidebandValue);
+    assert(TrackedValSetOps::add(sb, c4).is_top());
+    assert(collapse_tracked_val_set(TrackedValSetOps::div(c20, c4)).const_val == 5);
+    assert(collapse_tracked_val_set(TrackedValSetOps::mul(c4, c20)).const_val == 80);
+
     std::cout << "[PASS] test_domain_combinators_and_memory_disjointness\n";
 }
 

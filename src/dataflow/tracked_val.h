@@ -4,6 +4,7 @@
 #include "memory_domain.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 namespace valhall::dataflow {
@@ -11,19 +12,16 @@ namespace valhall::dataflow {
 /// Broadened abstract pointer / resource / ABI value domain for SSA-level
 /// Valhall dataflow analysis.
 ///
-/// Forms a bounded complete lattice (L, <=, join, meet, Bottom, Top) of finite
+/// Forms a complete lattice / CPO (L, <=, join, meet, Bottom, Top) of finite
 /// height h = 3, guaranteeing monotone fixpoint termination on all CFGs:
 ///   Bottom < Concrete(Kind, id, known_offset) < Symbolic(Kind, id, unknown_offset) < Top
-///
-/// Split into its own module (`tracked_val.{h,cpp}`) so any SSA analysis
-/// (pointer analysis, alias analysis, uniformity/divergence, bounds checking)
-/// can reuse `TrackedVal`, `TrackedValDomain`, and `TrackedValSetDomain`.
 struct TrackedVal {
     enum class Kind : uint8_t {
         Bottom = 0,          // Unreachable / uninitialized
         Top,                 // Unknown / over-approximated value
         ConstInt,            // Known 64-bit integer constant (or raw 32-bit bit pattern)
         AbiPreload,          // Live hardware ABI entry builtin (WorkgroupID, GlobalInvocationID, VertexIndex, ...)
+        SidebandValue,       // Symbolic sideband struct member (`sideband[member_idx]`)
         FauDstBase,          // Pilot shader FAU_0 destination base VA (+ optional byte offset)
         SrtBase,             // Shader Resource Table (SRT_0) base VA (+ optional byte offset)
         SrtRackPtr,          // Dereferenced SRT rack pointer (SRT[rack] + optional descriptor byte offset)
@@ -48,18 +46,19 @@ struct TrackedVal {
     int32_t rack = -1;             // SRT rack index (0..N)
     int32_t desc_idx = -1;         // Descriptor index within rack (0..N)
     uint32_t fau_offset = 0;       // Byte offset inside FAU_0
-    uint32_t location = 0;         // Vertex attr / varying / color output / image binding index
+    uint32_t location = 0;         // Vertex attr / varying / color output / image / sideband member index
     uint32_t sampler_idx = 0;      // Sampler index for TexSampleValue
     bool derived = false;          // True if value was transformed by ALU/arithmetic
     bool is_hi_half = false;       // True if upper 32-bit half of a split 64-bit pointer
     std::string symbol_name;       // Resolved MBS2 symbol or member name (e.g. "_83_input_0")
     std::string label;             // Human-readable label (e.g. "gl_GlobalInvocationID.x")
 
-    // --- Convenience constructors ---
+    // Convenience constructors
     static TrackedVal make_bottom();
     static TrackedVal make_top();
     static TrackedVal make_const(int64_t v);
     static TrackedVal make_abi(std::string lbl);
+    static TrackedVal make_sideband(uint32_t member_idx);
     static TrackedVal make_fau_dst(int64_t off = 0, bool off_known = true);
     static TrackedVal make_srt_base(int64_t off = 0, bool off_known = true);
     static TrackedVal make_srt_rack(int32_t rack, int64_t off = 0, bool off_known = true);
@@ -78,7 +77,7 @@ struct TrackedVal {
     static TrackedVal make_tex_sample(uint32_t img_idx, uint32_t smp_idx, std::string sym = "");
     static TrackedVal make_blend_desc(uint32_t loc, std::string sym = "");
 
-    // --- Member predicates & helpers (reusable by any analysis) ---
+    // Member predicates & helpers
     bool is_bottom() const { return kind == Kind::Bottom; }
     bool is_top() const { return kind == Kind::Top; }
     bool has_offset() const;
@@ -95,7 +94,9 @@ struct TrackedVal {
     std::string format_short() const;
 };
 
-/// Formal complete lattice traits for `TrackedVal`.
+using SrtSymbolLookupFn = std::function<std::string(uint8_t rack, uint32_t desc_idx)>;
+
+/// Complete lattice traits and pointwise algebraic operations for `TrackedVal`.
 struct TrackedValDomain {
     using Value = TrackedVal;
 
@@ -107,21 +108,37 @@ struct TrackedValDomain {
     static bool leq(const Value& a, const Value& b);
     static bool equals(const Value& a, const Value& b);
 
-    // Optional constant-folding hooks used by `SsaDomainTransferVisitor<TrackedValDomain>`
     static bool try_as_const_u64(const Value& v, uint64_t* out);
     static Value make_const_u64(uint64_t v);
+
+    // Pointwise abstract arithmetic & bitwise operations (delegating pointer offsets to SymbolicMemoryLoc)
+    static Value add(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt = {});
+    static Value sub(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt = {});
+    static Value mul(const Value& a, const Value& b);
+    static Value div(const Value& a, const Value& b);
+    static Value bit_and(const Value& a, const Value& b);
 };
 
 /// Bounded finite-set domain over `TrackedVal` (tracks up to 4 distinct concrete
-/// values before widening to Top, e.g. across a Phi/Select of 2 constants or 2 buffers).
+/// values before widening to Top).
 using TrackedValSetDomain = FiniteSetDomain<TrackedValDomain, 4>;
 using TrackedValSet = TrackedValSetDomain::Value;
+
+/// Lifted abstract arithmetic & bitwise operations over `TrackedValSet`.
+struct TrackedValSetOps {
+    static TrackedValSet add(const TrackedValSet& a, const TrackedValSet& b,
+                             const SrtSymbolLookupFn& lookup_srt = {});
+    static TrackedValSet sub(const TrackedValSet& a, const TrackedValSet& b,
+                             const SrtSymbolLookupFn& lookup_srt = {});
+    static TrackedValSet mul(const TrackedValSet& a, const TrackedValSet& b);
+    static TrackedValSet div(const TrackedValSet& a, const TrackedValSet& b);
+    static TrackedValSet bit_and(const TrackedValSet& a, const TrackedValSet& b);
+};
 
 /// Format a `TrackedValSet` concisely (`<bottom>`, `<top>`, single item, or `{a, b}`).
 std::string format_tracked_val_set(const TrackedValSet& s);
 
-/// Collapse a `TrackedValSet` down to a single `TrackedVal` via `TrackedValDomain::join`
-/// (useful for consumers that expect a single summary `TrackedVal`, e.g. Pilot FAU entries).
+/// Collapse a `TrackedValSet` down to a single `TrackedVal` via `TrackedValDomain::join`.
 TrackedVal collapse_tracked_val_set(const TrackedValSet& s);
 
 }  // namespace valhall::dataflow

@@ -17,6 +17,31 @@ std::string hex_off(int64_t off) {
     return buf;
 }
 
+TrackedVal apply_pointer_delta(const TrackedVal& base, int64_t delta, const SrtSymbolLookupFn& lookup_srt) {
+    if (!base.is_pointer()) return TrackedVal::make_top();
+    SymbolicMemoryLoc loc = base.to_memory_loc().with_added_offset(delta);
+    TrackedVal out = base.with_memory_loc(loc);
+    if (out.kind == TrackedVal::Kind::SrtRackPtr && loc.offset_known && loc.byte_offset >= 0 &&
+        (loc.byte_offset % 32) == 0 && out.rack >= 0) {
+        int32_t desc = static_cast<int32_t>(loc.byte_offset / 32);
+        std::string sym = lookup_srt
+                              ? lookup_srt(static_cast<uint8_t>(out.rack), static_cast<uint32_t>(desc))
+                              : "";
+        return TrackedVal::make_descriptor(out.rack, desc, std::move(sym), 0, true);
+    }
+    return out;
+}
+
+TrackedVal widen_pointer_offset(const TrackedVal& base) {
+    if (!base.is_pointer()) return TrackedVal::make_top();
+    return base.with_memory_loc(base.to_memory_loc().with_unknown_offset());
+}
+
+TrackedVal mask_pointer_offset(const TrackedVal& base, int64_t mask) {
+    if (!base.is_pointer()) return TrackedVal::make_top();
+    return base.with_memory_loc(base.to_memory_loc().with_masked_offset(mask));
+}
+
 }  // namespace
 
 // TrackedVal constructors & member helpers
@@ -44,6 +69,13 @@ TrackedVal TrackedVal::make_abi(std::string lbl) {
     TrackedVal v;
     v.kind = Kind::AbiPreload;
     v.label = std::move(lbl);
+    return v;
+}
+
+TrackedVal TrackedVal::make_sideband(uint32_t member_idx) {
+    TrackedVal v;
+    v.kind = Kind::SidebandValue;
+    v.location = member_idx;
     return v;
 }
 
@@ -201,9 +233,6 @@ bool TrackedVal::same_base_identity(const TrackedVal& other) const {
     if (kind != other.kind) return false;
     if (is_hi_half != other.is_hi_half) return false;
     switch (kind) {
-        // Singleton per-dispatch / per-thread / per-workgroup base regions:
-        // there is only ONE FAU_0, ONE SRT_0, ONE .data section, ONE TLS frame,
-        // and ONE WLS block per shader invocation.
         case Kind::FauDstBase:
         case Kind::SrtBase:
         case Kind::DataSectionPtr:
@@ -221,6 +250,8 @@ bool TrackedVal::same_base_identity(const TrackedVal& other) const {
             return fau_offset == other.fau_offset && symbol_name == other.symbol_name;
         case Kind::AbiPreload:
             return label == other.label;
+        case Kind::SidebandValue:
+            return location == other.location;
         case Kind::VertexAttrValue:
         case Kind::VaryingValue:
         case Kind::BlendDescRef:
@@ -236,14 +267,13 @@ bool TrackedVal::same_base_identity(const TrackedVal& other) const {
 SymbolicMemoryLoc TrackedVal::to_memory_loc() const {
     switch (kind) {
         case Kind::FauDstBase:
-            return SymbolicMemoryLoc::make_fau(offset_known && byte_offset >= 0
-                                                   ? static_cast<uint32_t>(byte_offset)
-                                                   : 0u);
+            return SymbolicMemoryLoc::make_fau(byte_offset, offset_known);
         case Kind::SrtBase:
             return SymbolicMemoryLoc::make_srt(-1, byte_offset, offset_known);
         case Kind::SrtRackPtr:
             return SymbolicMemoryLoc::make_srt(rack, byte_offset, offset_known);
         case Kind::DescriptorAddr:
+            return SymbolicMemoryLoc::make_descriptor(rack, desc_idx, byte_offset, offset_known, symbol_name);
         case Kind::BufferAddr:
             return SymbolicMemoryLoc::make_buffer(rack, desc_idx, byte_offset, offset_known, symbol_name);
         case Kind::DataSectionPtr:
@@ -275,6 +305,9 @@ std::string TrackedVal::format_short() const {
             return oss.str();
         case Kind::AbiPreload:
             return label.empty() ? "ABI" : label;
+        case Kind::SidebandValue:
+            oss << "sideband[" << location << "]";
+            return oss.str();
         case Kind::FauDstBase:
             oss << "FAU_0";
             if (!offset_known) oss << "+?";
@@ -354,7 +387,7 @@ std::string TrackedVal::format_short() const {
     return "<unknown>";
 }
 
-// TrackedValDomain complete lattice operations
+// TrackedValDomain complete lattice & pointwise algebraic operations
 
 bool TrackedValDomain::equals(const Value& a, const Value& b) {
     if (a.kind != b.kind) return false;
@@ -429,6 +462,149 @@ bool TrackedValDomain::try_as_const_u64(const Value& v, uint64_t* out) {
 
 TrackedVal TrackedValDomain::make_const_u64(uint64_t v) {
     return TrackedVal::make_const(static_cast<int64_t>(v));
+}
+
+TrackedVal TrackedValDomain::add(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val + b.const_val);
+    }
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && a.const_val == 0) return b;
+    if (a.is_pointer() && b.kind == TrackedVal::Kind::ConstInt) {
+        return apply_pointer_delta(a, b.const_val, lookup_srt);
+    }
+    if (b.is_pointer() && a.kind == TrackedVal::Kind::ConstInt) {
+        return apply_pointer_delta(b, a.const_val, lookup_srt);
+    }
+    if (a.is_pointer()) return widen_pointer_offset(a);
+    if (b.is_pointer()) return widen_pointer_offset(b);
+    if (a.kind == TrackedVal::Kind::SymbolValue || b.kind == TrackedVal::Kind::SymbolValue) {
+        TrackedVal s = (a.kind == TrackedVal::Kind::SymbolValue) ? a : b;
+        s.derived = true;
+        return s;
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::sub(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val - b.const_val);
+    }
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0) return a;
+    if (a.is_pointer() && b.kind == TrackedVal::Kind::ConstInt) {
+        return apply_pointer_delta(a, -b.const_val, lookup_srt);
+    }
+    if (a.is_pointer()) return widen_pointer_offset(a);
+    if (a.kind == TrackedVal::Kind::SymbolValue) {
+        TrackedVal s = a;
+        s.derived = true;
+        return s;
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::mul(const Value& a, const Value& b) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val * b.const_val);
+    }
+    if ((a.kind == TrackedVal::Kind::ConstInt && a.const_val == 0) ||
+        (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0)) {
+        return TrackedVal::make_const(0);
+    }
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 1) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && a.const_val == 1) return b;
+    if (a.kind == TrackedVal::Kind::SymbolValue || b.kind == TrackedVal::Kind::SymbolValue) {
+        TrackedVal s = (a.kind == TrackedVal::Kind::SymbolValue) ? a : b;
+        s.derived = true;
+        return s;
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::div(const Value& a, const Value& b) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 1) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt && b.const_val != 0) {
+        return TrackedVal::make_const(a.const_val / b.const_val);
+    }
+    if (a.kind == TrackedVal::Kind::SymbolValue) {
+        TrackedVal s = a;
+        s.derived = true;
+        return s;
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::bit_and(const Value& a, const Value& b) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val & b.const_val);
+    }
+    if ((a.kind == TrackedVal::Kind::ConstInt && a.const_val == 0) ||
+        (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0)) {
+        return TrackedVal::make_const(0);
+    }
+    if (a.is_pointer() && b.kind == TrackedVal::Kind::ConstInt && b.const_val != 0) {
+        return mask_pointer_offset(a, b.const_val);
+    }
+    if (b.is_pointer() && a.kind == TrackedVal::Kind::ConstInt && a.const_val != 0) {
+        return mask_pointer_offset(b, a.const_val);
+    }
+    return top();
+}
+
+// Lifted TrackedValSetOps
+
+TrackedValSet TrackedValSetOps::add(const TrackedValSet& sa, const TrackedValSet& sb,
+                                    const SrtSymbolLookupFn& lookup_srt) {
+    if (sa.is_bottom() || sb.is_bottom()) return TrackedValSetDomain::bottom();
+    if (!sa.is_top() && sb.is_top()) {
+        return TrackedValSetDomain::lift_unary(sa, [](const TrackedVal& a) {
+            return TrackedValDomain::add(a, TrackedVal::make_top());
+        });
+    }
+    if (sa.is_top() && !sb.is_top()) {
+        return TrackedValSetDomain::lift_unary(sb, [](const TrackedVal& b) {
+            return TrackedValDomain::add(TrackedVal::make_top(), b);
+        });
+    }
+    return TrackedValSetDomain::lift_binary(sa, sb, [&](const TrackedVal& a, const TrackedVal& b) {
+        return TrackedValDomain::add(a, b, lookup_srt);
+    });
+}
+
+TrackedValSet TrackedValSetOps::sub(const TrackedValSet& sa, const TrackedValSet& sb,
+                                    const SrtSymbolLookupFn& lookup_srt) {
+    if (sa.is_bottom() || sb.is_bottom()) return TrackedValSetDomain::bottom();
+    if (!sa.is_top() && sb.is_top()) {
+        return TrackedValSetDomain::lift_unary(sa, [](const TrackedVal& a) {
+            return TrackedValDomain::sub(a, TrackedVal::make_top());
+        });
+    }
+    return TrackedValSetDomain::lift_binary(sa, sb, [&](const TrackedVal& a, const TrackedVal& b) {
+        return TrackedValDomain::sub(a, b, lookup_srt);
+    });
+}
+
+TrackedValSet TrackedValSetOps::mul(const TrackedValSet& sa, const TrackedValSet& sb) {
+    return TrackedValSetDomain::lift_binary(sa, sb, [](const TrackedVal& a, const TrackedVal& b) {
+        return TrackedValDomain::mul(a, b);
+    });
+}
+
+TrackedValSet TrackedValSetOps::div(const TrackedValSet& sa, const TrackedValSet& sb) {
+    return TrackedValSetDomain::lift_binary(sa, sb, [](const TrackedVal& a, const TrackedVal& b) {
+        return TrackedValDomain::div(a, b);
+    });
+}
+
+TrackedValSet TrackedValSetOps::bit_and(const TrackedValSet& sa, const TrackedValSet& sb) {
+    return TrackedValSetDomain::lift_binary(sa, sb, [](const TrackedVal& a, const TrackedVal& b) {
+        return TrackedValDomain::bit_and(a, b);
+    });
 }
 
 std::string format_tracked_val_set(const TrackedValSet& s) {

@@ -13,23 +13,45 @@ namespace valhall::dataflow {
 /// Disjointness assumptions:
 ///   - Distinct `MemoryRegionKind`s are disjoint memory spaces.
 ///   - Within `SrtTable`, distinct `table_id` (rack indices) are disjoint.
-///   - Within `Buffer`, distinct `(table_id, entry_id)` bindings are disjoint.
+///   - Within `Descriptor` / `Buffer`, distinct `(table_id, entry_id)` bindings are disjoint.
 ///   - `FauUniform` and `DataSection` are read-only (RO) in Main shaders.
 enum class MemoryRegionKind : uint8_t {
     FauUniform = 0,   // FAU_0 uniform bank (RO in Main shaders; written in Pilot shaders)
-    SrtTable,         // Shader Resource Table (SRT_0[table_id])
-    Buffer,           // UBO / SSBO buffer descriptor (SRT[table_id]->Desc[entry_id])
+    SrtTable,         // Shader Resource Table (SRT_0 if table_id < 0, else SRT[table_id])
+    Descriptor,       // Address of a 32-byte buffer descriptor inside SRT[table_id]
+    Buffer,           // UBO / SSBO buffer memory (SRT[table_id]->Desc[entry_id])
     DataSection,      // Embedded read-only EBIN .data / LUT section
     Tls,              // Per-thread scratch / spill stack (thread_local_pointer)
     Wls,              // Workgroup-local shared memory (workgroup_local_pointer)
     Other,            // Unclassified symbolic memory location
 };
 
+/// Result of dereferencing a `SymbolicMemoryLoc` by `elem_bytes`.
+struct MemoryDerefResult {
+    enum class Kind : uint8_t {
+        Top = 0,          // Unknown / unmodeled dereference
+        SrtRackPtr,       // Loaded SRT rack pointer (rack = table_id)
+        DescriptorAddr,   // Loaded/sub-field descriptor address (rack = table_id, desc = entry_id, field = byte_offset)
+        BufferAddr,       // Loaded 64-bit buffer GPU VA (rack = table_id, desc = entry_id)
+        BufferSize,       // Loaded 32-bit buffer byte size (rack = table_id, desc = entry_id)
+        FauUniformRef,    // Loaded FAU uniform slot (fau_offset = byte_offset)
+        SymbolValue,      // Loaded scalar/member from Buffer or DataSection
+    };
+
+    Kind kind = Kind::Top;
+    int32_t table_id = -1;
+    int32_t entry_id = -1;
+    int64_t byte_offset = 0;
+    bool offset_known = true;
+    bool from_data_section = false;
+    std::string key;
+};
+
 /// Structured symbolic memory location with pointer-offset arithmetic,
-/// widening, hashing, ordering, and region-aware alias queries.
+/// widening, dereferencing, hashing, ordering, and region-aware alias queries.
 struct SymbolicMemoryLoc {
     MemoryRegionKind region = MemoryRegionKind::Other;
-    int32_t table_id = -1;      // e.g. SRT rack index (0..N)
+    int32_t table_id = -1;      // e.g. SRT rack index (-1 for root SRT_0)
     int32_t entry_id = -1;      // e.g. descriptor index within rack (0..N)
     int64_t byte_offset = 0;    // Byte offset within region (valid when offset_known)
     bool offset_known = true;   // False if dynamic / widened offset
@@ -49,6 +71,18 @@ struct SymbolicMemoryLoc {
         loc.table_id = rack;
         loc.byte_offset = off_known ? off : 0;
         loc.offset_known = off_known;
+        return loc;
+    }
+
+    static SymbolicMemoryLoc make_descriptor(int32_t rack, int32_t desc, int64_t field_off = 0,
+                                             bool off_known = true, std::string label = "") {
+        SymbolicMemoryLoc loc;
+        loc.region = MemoryRegionKind::Descriptor;
+        loc.table_id = rack;
+        loc.entry_id = desc;
+        loc.byte_offset = off_known ? field_off : 0;
+        loc.offset_known = off_known;
+        loc.key = std::move(label);
         return loc;
     }
 
@@ -114,6 +148,88 @@ struct SymbolicMemoryLoc {
         return out;
     }
 
+    /// Dereference this symbolic memory location for a load of `elem_bytes` bytes,
+    /// encoding Mali Valhall's CSF descriptor table layout (16B SRT entries, 32B buffer
+    /// descriptors with +0x04 = size and +0x08 = 64-bit VA).
+    MemoryDerefResult deref(uint32_t elem_bytes) const {
+        MemoryDerefResult res;
+        switch (region) {
+            case MemoryRegionKind::SrtTable: {
+                if (table_id < 0) {
+                    // Root SRT_0 -> load 16-byte rack entry at byte_offset / 16
+                    res.kind = MemoryDerefResult::Kind::SrtRackPtr;
+                    if (offset_known && byte_offset >= 0) {
+                        res.table_id = static_cast<int32_t>(byte_offset / 16);
+                        res.offset_known = true;
+                    } else {
+                        res.table_id = -1;
+                        res.offset_known = false;
+                    }
+                    return res;
+                }
+                // SRT[rack] -> load field from 32-byte descriptor at byte_offset / 32
+                if (!offset_known || byte_offset < 0) {
+                    res.kind = MemoryDerefResult::Kind::Top;
+                    return res;
+                }
+                int32_t desc = static_cast<int32_t>(byte_offset / 32);
+                int64_t field = byte_offset % 32;
+                res.table_id = table_id;
+                res.entry_id = desc;
+                res.byte_offset = field;
+                res.offset_known = true;
+                if (field == 4 && elem_bytes == 4) {
+                    res.kind = MemoryDerefResult::Kind::BufferSize;
+                } else if (field == 8 || elem_bytes == 8) {
+                    res.kind = MemoryDerefResult::Kind::BufferAddr;
+                    res.byte_offset = 0;
+                } else {
+                    res.kind = MemoryDerefResult::Kind::DescriptorAddr;
+                }
+                return res;
+            }
+            case MemoryRegionKind::Descriptor: {
+                res.table_id = table_id;
+                res.entry_id = entry_id;
+                res.key = key;
+                res.offset_known = true;
+                if (offset_known && byte_offset == 4 && elem_bytes == 4) {
+                    res.kind = MemoryDerefResult::Kind::BufferSize;
+                } else {
+                    res.kind = MemoryDerefResult::Kind::BufferAddr;
+                    res.byte_offset = 0;
+                }
+                return res;
+            }
+            case MemoryRegionKind::Buffer: {
+                res.kind = MemoryDerefResult::Kind::SymbolValue;
+                res.table_id = table_id;
+                res.entry_id = entry_id;
+                res.byte_offset = byte_offset;
+                res.offset_known = offset_known;
+                res.key = key;
+                return res;
+            }
+            case MemoryRegionKind::FauUniform: {
+                if (offset_known && byte_offset >= 0) {
+                    res.kind = MemoryDerefResult::Kind::FauUniformRef;
+                    res.byte_offset = byte_offset;
+                    res.offset_known = true;
+                }
+                return res;
+            }
+            case MemoryRegionKind::DataSection: {
+                res.kind = MemoryDerefResult::Kind::SymbolValue;
+                res.from_data_section = true;
+                res.byte_offset = byte_offset;
+                res.offset_known = offset_known;
+                return res;
+            }
+            default:
+                return res;
+        }
+    }
+
     bool operator==(const SymbolicMemoryLoc& o) const {
         return region == o.region &&
                table_id == o.table_id &&
@@ -137,7 +253,7 @@ struct SymbolicMemoryLoc {
             table_id != o.table_id) {
             return false;
         }
-        if (region == MemoryRegionKind::Buffer) {
+        if (region == MemoryRegionKind::Buffer || region == MemoryRegionKind::Descriptor) {
             if (table_id >= 0 && o.table_id >= 0 && table_id != o.table_id) return false;
             if (entry_id >= 0 && o.entry_id >= 0 && entry_id != o.entry_id) return false;
         }
@@ -154,6 +270,9 @@ struct SymbolicMemoryLoc {
             case MemoryRegionKind::SrtTable:
                 if (table_id < 0) oss << "SRT_0";
                 else oss << "SRT[" << table_id << "]";
+                break;
+            case MemoryRegionKind::Descriptor:
+                oss << "SRT[" << table_id << "]->Desc[" << entry_id << "]";
                 break;
             case MemoryRegionKind::Buffer:
                 if (!key.empty()) oss << key;
