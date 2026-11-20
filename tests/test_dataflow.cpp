@@ -372,6 +372,65 @@ void test_ssa_pack64_split64_and_fau_seed() {
     std::cout << "[PASS] test_ssa_pack64_split64_and_fau_seed\n";
 }
 
+void test_compound_op_delegation_lane_wrapper_and_atomic_exchange() {
+    // 1. Compound domain pointwise op delegation: VectorDomain, MapDomain, TupleDomain, FiniteSetDomain
+    VectorDomain<TrackedValDomain>::Value va, vb;
+    va.set(0, TrackedVal::make_const(10));
+    vb.set(0, TrackedVal::make_const(32));
+    auto vsum = VectorDomain<TrackedValDomain>::iadd(va, vb, false);
+    assert(vsum.get(0).const_val == 42);
+
+    MapDomain<uint32_t, TrackedValDomain>::Value ma, mb;
+    ma.set(1, TrackedVal::make_const(0xF0));
+    mb.set(1, TrackedVal::make_const(0x3C));
+    auto mand = MapDomain<uint32_t, TrackedValDomain>::bit_and(ma, mb, false);
+    assert(mand.get(1).const_val == 0x30);
+
+    using PairDom = TupleDomain<TrackedValDomain, TrackedValDomain>;
+    auto tmul = PairDom::imul({TrackedVal::make_const(3), TrackedVal::make_const(5)},
+                              {TrackedVal::make_const(7), TrackedVal::make_const(9)}, false);
+    assert(std::get<0>(tmul).const_val == 21 && std::get<1>(tmul).const_val == 45);
+
+    auto fsh = TrackedValSetDomain::shift(TrackedVal::make_const(3), TrackedVal::make_const(4),
+                                          ShiftKind::Shl, false);
+    assert(collapse_tracked_val_set(fsh).const_val == 48);
+
+    // 2. LaneDomainWrapper<TrackedValDomain>
+    using LaneTv = LaneDomainWrapper<TrackedValDomain>;
+    LaneTv::Value lv(TrackedVal::make_const(0x0000000200000005LL));
+    auto sp = LaneTv::split64(lv);
+    auto lo = LaneTv::tuple_extract(sp, 0);
+    auto hi = LaneTv::tuple_extract(sp, 1);
+    assert(lo.inner.const_val == 0x0000000200000005LL && hi.inner.const_val == 2);
+    auto repacked = LaneTv::pack64(LaneTv::Value(TrackedVal::make_const(5)),
+                                   LaneTv::Value(TrackedVal::make_const(2)));
+    assert(repacked.inner.const_val == 0x0000000200000005LL);
+
+    // 3. Default AtomicExchange transfer in SSA pointer analysis
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
+    mod.blocks.push_back(b0);
+    SsaId tok = emit_op(mod, 0, SsaOp::Nop, ValType::Token);
+    SsaId w0 = emit_op(mod, 0, SsaOp::LoadFau, ValType::U32, {}, 0);
+    SsaId w1 = emit_op(mod, 0, SsaOp::LoadFau, ValType::U32, {}, 1);
+    SsaId buf = emit_op(mod, 0, SsaOp::Pack64, ValType::U64, {w0, w1});
+    SsaId c7 = emit_op(mod, 0, SsaOp::ConstU32, ValType::U32, {}, 7);
+    SsaId c9 = emit_op(mod, 0, SsaOp::ConstU32, ValType::U32, {}, 9);
+    emit_op(mod, 0, SsaOp::PsbStore, ValType::Token, {buf, c7, tok}, 4);
+    SsaId ax = emit_op(mod, 0, SsaOp::AtomicExchange, ValType::TupleValToken, {buf, c9, tok});
+    SsaId old_v = emit_op(mod, 0, SsaOp::TupleExtract, ValType::U32, {ax}, 0);
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::MainCompute;
+    env.initial_fau[0x00] = TrackedVal::make_buffer_addr(4, 0, "counter_buf", 0, false, true);
+    auto df = run_ssa_pointer_analysis(mod, env);
+    assert(df.converged);
+    // old_v sees {7} (and on fixpoint iteration joins {7, 9} -> cardinality 2, both ConstInt)
+    assert(!df.val_set(old_v).is_bottom() && !df.val_set(old_v).is_top());
+
+    std::cout << "[PASS] test_compound_op_delegation_lane_wrapper_and_atomic_exchange\n";
+}
+
 }  // namespace
 
 int main() {
@@ -382,6 +441,7 @@ int main() {
     test_ssa_diamond_cfg_phi_finiteset_and_liveness();
     test_ssa_pilot_srt_chasing_and_fau_store();
     test_ssa_pack64_split64_and_fau_seed();
+    test_compound_op_delegation_lane_wrapper_and_atomic_exchange();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

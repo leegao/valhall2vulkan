@@ -556,6 +556,113 @@ TrackedVal TrackedValDomain::bit_and(const Value& a, const Value& b) {
     return top();
 }
 
+TrackedVal TrackedValDomain::bit_and(const Value& a, const Value& b, bool is64) {
+    const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
+    if (b.kind == TrackedVal::Kind::ConstInt && (static_cast<uint64_t>(b.const_val) & all_ones) == all_ones) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && (static_cast<uint64_t>(a.const_val) & all_ones) == all_ones) return b;
+    return bit_and(a, b);
+}
+
+TrackedVal TrackedValDomain::bit_or(const Value& a, const Value& b, bool /*is64*/) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val | b.const_val);
+    }
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && a.const_val == 0) return b;
+    return top();
+}
+
+TrackedVal TrackedValDomain::bit_xor(const Value& a, const Value& b, bool /*is64*/) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        return TrackedVal::make_const(a.const_val ^ b.const_val);
+    }
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && a.const_val == 0) return b;
+    return top();
+}
+
+TrackedVal TrackedValDomain::bit_not(const Value& a, bool is64) {
+    if (a.is_bottom()) return bottom();
+    if (a.kind == TrackedVal::Kind::ConstInt) {
+        uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
+        return TrackedVal::make_const(static_cast<int64_t>((~static_cast<uint64_t>(a.const_val)) & mask));
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::shift(const Value& a, const Value& b, ShiftKind kind, bool is64) {
+    if (a.is_bottom() || b.is_bottom()) return bottom();
+    if (b.kind == TrackedVal::Kind::ConstInt && b.const_val == 0) return a;
+    if (a.kind == TrackedVal::Kind::ConstInt && b.kind == TrackedVal::Kind::ConstInt) {
+        uint64_t ca = static_cast<uint64_t>(a.const_val);
+        uint32_t sh = static_cast<uint32_t>(static_cast<uint64_t>(b.const_val) & (is64 ? 63u : 31u));
+        uint64_t mask = is64 ? ~0ULL : 0xFFFFFFFFULL;
+        uint64_t res = 0;
+        switch (kind) {
+            case ShiftKind::Shl:  res = (ca << sh) & mask; break;
+            case ShiftKind::ShrU: res = (ca & mask) >> sh; break;
+            case ShiftKind::ShrS:
+                if (is64) res = static_cast<uint64_t>(static_cast<int64_t>(ca) >> sh);
+                else res = static_cast<uint64_t>(static_cast<uint32_t>(static_cast<int32_t>(ca) >> sh));
+                break;
+            case ShiftKind::RotL: {
+                uint32_t w = is64 ? 64u : 32u;
+                res = (sh == 0) ? (ca & mask) : (((ca << sh) | ((ca & mask) >> (w - sh))) & mask);
+                break;
+            }
+            case ShiftKind::RotR: {
+                uint32_t w = is64 ? 64u : 32u;
+                res = (sh == 0) ? (ca & mask) : ((((ca & mask) >> sh) | (ca << (w - sh))) & mask);
+                break;
+            }
+        }
+        return TrackedVal::make_const(static_cast<int64_t>(res));
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::pack64(const Value& lo, const Value& hi) {
+    if (lo.is_bottom() || hi.is_bottom()) return bottom();
+    if (lo.kind == TrackedVal::Kind::ConstInt && hi.kind == TrackedVal::Kind::ConstInt) {
+        uint64_t packed = (static_cast<uint64_t>(static_cast<uint32_t>(hi.const_val)) << 32) |
+                          static_cast<uint64_t>(static_cast<uint32_t>(lo.const_val));
+        return TrackedVal::make_const(static_cast<int64_t>(packed));
+    }
+    if (lo.is_pointer() || lo.kind == TrackedVal::Kind::FauUniformRef ||
+        lo.kind == TrackedVal::Kind::SymbolValue) {
+        TrackedVal out = lo;
+        out.is_hi_half = false;
+        return out;
+    }
+    if (hi.is_pointer()) {
+        TrackedVal out = hi;
+        out.is_hi_half = false;
+        return out;
+    }
+    return top();
+}
+
+TrackedVal TrackedValDomain::tuple_extract(const Value& tup, uint32_t elem_idx) {
+    if (tup.is_bottom()) return bottom();
+    if (tup.is_top()) return top();
+    if (elem_idx == 0) {
+        TrackedVal lo = tup;
+        lo.is_hi_half = false;
+        return lo;
+    }
+    if (elem_idx == 1) {
+        if (tup.kind == TrackedVal::Kind::ConstInt) {
+            return TrackedVal::make_const(static_cast<int64_t>(static_cast<uint64_t>(tup.const_val) >> 32));
+        }
+        TrackedVal hi = tup;
+        hi.is_hi_half = true;
+        return hi;
+    }
+    return top();
+}
+
 // Lifted TrackedValSetOps
 
 TrackedValSet TrackedValSetOps::add(const TrackedValSet& sa, const TrackedValSet& sb,

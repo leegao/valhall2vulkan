@@ -10,7 +10,16 @@
 
 namespace valhall::dataflow {
 
-// Compile-Time Lattice Interface Enforcement & Auto-Equals
+/// Shift / rotate direction for normalized `shift` domain and visitor operations.
+enum class ShiftKind : uint8_t {
+    Shl = 0,
+    ShrU,
+    ShrS,
+    RotL,
+    RotR,
+};
+
+// Compile-Time Lattice Interface Enforcement, Auto-Equals & Optional Op Traits
 
 namespace detail {
 
@@ -68,26 +77,65 @@ struct has_const_helpers<
         decltype(D::try_as_const_u64(std::declval<const typename D::Value&>(), std::declval<uint64_t*>())),
         decltype(D::make_const_u64(std::declval<uint64_t>()))>> : std::true_type {};
 
+// Optional arithmetic, logical, and lane-op traits on DomainT
+#define VALHALL_DEFINE_BINOP_TRAIT(trait_name, method_name)                                                   \
+    template <typename D, typename = void>                                                                    \
+    struct trait_name : std::false_type {};                                                                   \
+    template <typename D>                                                                                     \
+    struct trait_name<D, std::enable_if_t<std::is_convertible_v<                                              \
+        decltype(D::method_name(std::declval<const typename D::Value&>(),                                     \
+                                std::declval<const typename D::Value&>(), std::declval<bool>())),             \
+        typename D::Value>>> : std::true_type {};
+
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_iadd, iadd)
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_isub, isub)
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_imul, imul)
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_bit_and, bit_and)
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_bit_or, bit_or)
+VALHALL_DEFINE_BINOP_TRAIT(has_domain_bit_xor, bit_xor)
+#undef VALHALL_DEFINE_BINOP_TRAIT
+
+template <typename D, typename = void>
+struct has_domain_bit_not : std::false_type {};
+template <typename D>
+struct has_domain_bit_not<D, std::enable_if_t<std::is_convertible_v<
+    decltype(D::bit_not(std::declval<const typename D::Value&>(), std::declval<bool>())),
+    typename D::Value>>> : std::true_type {};
+
+template <typename D, typename = void>
+struct has_domain_shift : std::false_type {};
+template <typename D>
+struct has_domain_shift<D, std::enable_if_t<std::is_convertible_v<
+    decltype(D::shift(std::declval<const typename D::Value&>(),
+                      std::declval<const typename D::Value&>(),
+                      std::declval<ShiftKind>(), std::declval<bool>())),
+    typename D::Value>>> : std::true_type {};
+
+template <typename D, typename = void>
+struct has_domain_pack64 : std::false_type {};
+template <typename D>
+struct has_domain_pack64<D, std::enable_if_t<std::is_convertible_v<
+    decltype(D::pack64(std::declval<const typename D::Value&>(), std::declval<const typename D::Value&>())),
+    typename D::Value>>> : std::true_type {};
+
+template <typename D, typename = void>
+struct has_domain_split64 : std::false_type {};
+template <typename D>
+struct has_domain_split64<D, std::enable_if_t<std::is_convertible_v<
+    decltype(D::split64(std::declval<const typename D::Value&>())),
+    typename D::Value>>> : std::true_type {};
+
+template <typename D, typename = void>
+struct has_domain_tuple_extract : std::false_type {};
+template <typename D>
+struct has_domain_tuple_extract<D, std::enable_if_t<std::is_convertible_v<
+    decltype(D::tuple_extract(std::declval<const typename D::Value&>(), std::declval<uint32_t>())),
+    typename D::Value>>> : std::true_type {};
+
 }  // namespace detail
 
 /// Enforces the Lattice Domain contract at the point of instantiation with
 /// human-readable compile-time error messages.
-///
-/// Required interface on `DomainT`:
-///   using Value = ...;
-///   static Value bottom();
-///   static Value top();
-///   static Value join(const Value& a, const Value& b);
-///   static Value meet(const Value& a, const Value& b);
-///   static bool  leq(const Value& a, const Value& b);
-///
-/// Optional interface on `DomainT`:
-///   static bool  equals(const Value& a, const Value& b);
-///     (Auto-implemented via `leq(a, b) && leq(b, a)` if omitted.)
-///   static bool  try_as_const_u64(const Value& v, uint64_t* out);
-///   static Value make_const_u64(uint64_t c);
-///     (Enables built-in constant folding & algebraic extensional equalities
-///      such as x+0 == x, x&~0 == x, x^x == 0 in `SsaDomainTransferVisitor`.)
 template <typename DomainT>
 struct ValidateLatticeDomain {
     static_assert(detail::has_value_type<DomainT>::value,
@@ -106,8 +154,6 @@ struct ValidateLatticeDomain {
 };
 
 /// Canonical equality helper for any Lattice Domain.
-/// Calls `DomainT::equals(a, b)` when provided; otherwise defaults to
-/// antisymmetry: `DomainT::leq(a, b) && DomainT::leq(b, a)`.
 template <typename DomainT>
 inline bool domain_equals(const typename DomainT::Value& a, const typename DomainT::Value& b) {
     static_assert(ValidateLatticeDomain<DomainT>::valid, "");
@@ -118,8 +164,6 @@ inline bool domain_equals(const typename DomainT::Value& a, const typename Domai
     }
 }
 
-/// Round `n` up to the next power of two (minimum 1) to guarantee amortized O(1)
-/// growth and prevent adversarial O(N^2) reallocations in dense vector domains.
 inline size_t next_power_of_two(size_t n) {
     if (n <= 1) return 1;
     size_t p = 1;
@@ -217,17 +261,8 @@ struct VectorDomain {
         return changed;
     }
 
-    static Value join(const Value& a, const Value& b) {
-        Value out = a;
-        join_into(out, b);
-        return out;
-    }
-
-    static Value meet(const Value& a, const Value& b) {
-        Value out = a;
-        meet_into(out, b);
-        return out;
-    }
+    static Value join(const Value& a, const Value& b) { Value out = a; join_into(out, b); return out; }
+    static Value meet(const Value& a, const Value& b) { Value out = a; meet_into(out, b); return out; }
 
     static bool leq(const Value& a, const Value& b) {
         if (b.is_top_val) return true;
@@ -247,6 +282,57 @@ struct VectorDomain {
             if (!domain_equals<ElemDomainT>(a.get(i), b.get(i))) return false;
         }
         return true;
+    }
+
+    // Pointwise delegation of optional arithmetic / logical ops
+    template <typename Fn>
+    static Value apply_binary(const Value& a, const Value& b, Fn&& fn) {
+        if (a.is_top_val || b.is_top_val) return top();
+        size_t n = std::max(a.elems.size(), b.elems.size());
+        Value out(n);
+        for (size_t i = 0; i < n; ++i) out.elems[i] = fn(a.get(i), b.get(i));
+        return out;
+    }
+
+    template <typename Fn>
+    static Value apply_unary(const Value& a, Fn&& fn) {
+        if (a.is_top_val) return top();
+        Value out(a.elems.size());
+        for (size_t i = 0; i < a.elems.size(); ++i) out.elems[i] = fn(a.elems[i]);
+        return out;
+    }
+
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_iadd<D>::value, int> = 0>
+    static Value iadd(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::iadd(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_isub<D>::value, int> = 0>
+    static Value isub(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::isub(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_imul<D>::value, int> = 0>
+    static Value imul(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::imul(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_and<D>::value, int> = 0>
+    static Value bit_and(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_and(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_or<D>::value, int> = 0>
+    static Value bit_or(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_or(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_xor<D>::value, int> = 0>
+    static Value bit_xor(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_xor(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_not<D>::value, int> = 0>
+    static Value bit_not(const Value& a, bool is64) {
+        return apply_unary(a, [is64](const auto& x) { return D::bit_not(x, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_shift<D>::value, int> = 0>
+    static Value shift(const Value& a, const Value& b, ShiftKind k, bool is64) {
+        return apply_binary(a, b, [k, is64](const auto& x, const auto& y) { return D::shift(x, y, k, is64); });
     }
 };
 
@@ -343,17 +429,8 @@ struct MapDomain {
         return changed;
     }
 
-    static Value join(const Value& a, const Value& b) {
-        Value out = a;
-        join_into(out, b);
-        return out;
-    }
-
-    static Value meet(const Value& a, const Value& b) {
-        Value out = a;
-        meet_into(out, b);
-        return out;
-    }
+    static Value join(const Value& a, const Value& b) { Value out = a; join_into(out, b); return out; }
+    static Value meet(const Value& a, const Value& b) { Value out = a; meet_into(out, b); return out; }
 
     static bool leq(const Value& a, const Value& b) {
         if (b.is_top_val) return true;
@@ -374,6 +451,61 @@ struct MapDomain {
         }
         return true;
     }
+
+    // Pointwise delegation of optional arithmetic / logical ops across union of keys
+    template <typename Fn>
+    static Value apply_binary(const Value& a, const Value& b, Fn&& fn) {
+        if (a.is_top_val || b.is_top_val) return top();
+        Value out;
+        for (const auto& kv : a.entries) out.set(kv.first, fn(kv.second, b.get(kv.first)));
+        for (const auto& kv : b.entries) {
+            if (a.entries.find(kv.first) == a.entries.end()) {
+                out.set(kv.first, fn(ValDomainT::bottom(), kv.second));
+            }
+        }
+        return out;
+    }
+
+    template <typename Fn>
+    static Value apply_unary(const Value& a, Fn&& fn) {
+        if (a.is_top_val) return top();
+        Value out;
+        for (const auto& kv : a.entries) out.set(kv.first, fn(kv.second));
+        return out;
+    }
+
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_iadd<D>::value, int> = 0>
+    static Value iadd(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::iadd(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_isub<D>::value, int> = 0>
+    static Value isub(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::isub(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_imul<D>::value, int> = 0>
+    static Value imul(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::imul(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_bit_and<D>::value, int> = 0>
+    static Value bit_and(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_and(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_bit_or<D>::value, int> = 0>
+    static Value bit_or(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_or(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_bit_xor<D>::value, int> = 0>
+    static Value bit_xor(const Value& a, const Value& b, bool is64) {
+        return apply_binary(a, b, [is64](const auto& x, const auto& y) { return D::bit_xor(x, y, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_bit_not<D>::value, int> = 0>
+    static Value bit_not(const Value& a, bool is64) {
+        return apply_unary(a, [is64](const auto& x) { return D::bit_not(x, is64); });
+    }
+    template <typename D = ValDomainT, std::enable_if_t<detail::has_domain_shift<D>::value, int> = 0>
+    static Value shift(const Value& a, const Value& b, ShiftKind k, bool is64) {
+        return apply_binary(a, b, [k, is64](const auto& x, const auto& y) { return D::shift(x, y, k, is64); });
+    }
 };
 
 // TupleDomain<Domains...> — Variadic Pointwise Product Lattice
@@ -389,17 +521,48 @@ struct TupleDomain {
     static Value join(const Value& a, const Value& b) {
         return join_impl(a, b, std::index_sequence_for<Domains...>{});
     }
-
     static Value meet(const Value& a, const Value& b) {
         return meet_impl(a, b, std::index_sequence_for<Domains...>{});
     }
-
     static bool leq(const Value& a, const Value& b) {
         return leq_impl(a, b, std::index_sequence_for<Domains...>{});
     }
-
     static bool equals(const Value& a, const Value& b) {
         return equals_impl(a, b, std::index_sequence_for<Domains...>{});
+    }
+
+    // Pointwise delegation of optional arithmetic / logical ops when all component domains support them
+    template <bool En = (detail::has_domain_iadd<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value iadd(const Value& a, const Value& b, bool is64) {
+        return iadd_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_isub<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value isub(const Value& a, const Value& b, bool is64) {
+        return isub_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_imul<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value imul(const Value& a, const Value& b, bool is64) {
+        return imul_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_bit_and<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value bit_and(const Value& a, const Value& b, bool is64) {
+        return bit_and_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_bit_or<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value bit_or(const Value& a, const Value& b, bool is64) {
+        return bit_or_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_bit_xor<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value bit_xor(const Value& a, const Value& b, bool is64) {
+        return bit_xor_impl(a, b, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_bit_not<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value bit_not(const Value& a, bool is64) {
+        return bit_not_impl(a, is64, std::index_sequence_for<Domains...>{});
+    }
+    template <bool En = (detail::has_domain_shift<Domains>::value && ...), std::enable_if_t<En, int> = 0>
+    static Value shift(const Value& a, const Value& b, ShiftKind k, bool is64) {
+        return shift_impl(a, b, k, is64, std::index_sequence_for<Domains...>{});
     }
 
 private:
@@ -418,6 +581,38 @@ private:
     template <size_t... Is>
     static bool equals_impl(const Value& a, const Value& b, std::index_sequence<Is...>) {
         return (domain_equals<Domains>(std::get<Is>(a), std::get<Is>(b)) && ...);
+    }
+    template <size_t... Is>
+    static Value iadd_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::iadd(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value isub_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::isub(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value imul_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::imul(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value bit_and_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::bit_and(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value bit_or_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::bit_or(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value bit_xor_impl(const Value& a, const Value& b, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::bit_xor(std::get<Is>(a), std::get<Is>(b), is64)...};
+    }
+    template <size_t... Is>
+    static Value bit_not_impl(const Value& a, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::bit_not(std::get<Is>(a), is64)...};
+    }
+    template <size_t... Is>
+    static Value shift_impl(const Value& a, const Value& b, ShiftKind k, bool is64, std::index_sequence<Is...>) {
+        return Value{Domains::shift(std::get<Is>(a), std::get<Is>(b), k, is64)...};
     }
 };
 
@@ -459,7 +654,6 @@ struct BitsetValue {
         std::fill(words.begin(), words.end(), 0ULL);
     }
 
-    /// In-place set union: `this |= other`.
     void or_with(const BitsetValue& other) {
         if (is_top_val) return;
         if (other.is_top_val) { is_top_val = true; return; }
@@ -467,7 +661,6 @@ struct BitsetValue {
         for (size_t i = 0; i < other.words.size(); ++i) words[i] |= other.words[i];
     }
 
-    /// In-place set union with difference: `this |= (other \ minus)`.
     void or_diff_with(const BitsetValue& other, const BitsetValue& minus) {
         if (is_top_val) return;
         if (other.words.size() > words.size()) words.resize(other.words.size(), 0ULL);
@@ -537,9 +730,6 @@ struct BitsetDomain {
 };
 
 // FiniteSetDomain<ElemDomainT, MaxK> — Bounded Finite-Set Powerset Lattice
-// Tracks up to `MaxK` (default 4) distinct non-bottom, non-top elements before
-// widening to `Top`. Provides `lift_value`, `try_as_singleton`, `lift_unary`,
-// and `lift_binary` so pointwise transfer functions remain concise and readable.
 
 template <typename ElemDomainT, size_t MaxK = 4>
 struct FiniteSetValue {
@@ -552,8 +742,7 @@ struct FiniteSetValue {
 
     FiniteSetValue() = default;
 
-    // Implicit singleton lift: allows passing/returning a single `ElemValue` wherever
-    // a `FiniteSetValue` is expected without explicit `lift_value(...)` boilerplate.
+    // Implicit singleton lift
     FiniteSetValue(const ElemValue& single) { insert(single); }
 
     FiniteSetValue& operator=(const ElemValue& single) {
@@ -568,15 +757,12 @@ struct FiniteSetValue {
     bool is_singleton() const { return !is_top_val && items.size() == 1; }
     size_t size() const { return items.size(); }
 
-    /// Free lower: extracts the unique element when this set is a singleton.
     bool try_as_singleton(ElemValue* out) const {
         if (!is_singleton()) return false;
         if (out) *out = items[0];
         return true;
     }
 
-    /// Insert an element into the bounded set (widening to Top if `e` is Top or
-    /// cardinality exceeds `MaxK`).
     void insert(const ElemValue& e) {
         if (is_top_val) return;
         if (domain_equals<ElemDomainT>(e, ElemDomainT::bottom())) return;
@@ -606,16 +792,9 @@ struct FiniteSetDomain {
     static Value bottom() { return Value{}; }
     static Value top() { Value v; v.is_top_val = true; return v; }
 
-    /// Free lift: promote a single `ElemValue` into a singleton `FiniteSetValue`.
-    static Value singleton(const ElemValue& e) {
-        Value v;
-        v.insert(e);
-        return v;
-    }
+    static Value singleton(const ElemValue& e) { Value v; v.insert(e); return v; }
     static Value lift_value(const ElemValue& e) { return singleton(e); }
 
-    /// Lift a pointwise unary transfer function `fn(const ElemValue&) -> ElemValue`
-    /// (or `-> Value`) across all elements in `s`.
     template <typename Fn>
     static Value lift_unary(const Value& s, Fn&& fn) {
         if (s.is_bottom()) return bottom();
@@ -633,8 +812,6 @@ struct FiniteSetDomain {
         return out;
     }
 
-    /// Lift a pointwise binary transfer function `fn(const ElemValue&, const ElemValue&) -> ElemValue`
-    /// (or `-> Value`) across the Cartesian product `a × b`.
     template <typename Fn>
     static Value lift_binary(const Value& a, const Value& b, Fn&& fn) {
         if (a.is_bottom() || b.is_bottom()) return bottom();
@@ -673,10 +850,7 @@ struct FiniteSetDomain {
         Value out = bottom();
         for (const auto& ea : a.items) {
             for (const auto& eb : b.items) {
-                if (domain_equals<ElemDomainT>(ea, eb)) {
-                    out.insert(ea);
-                    break;
-                }
+                if (domain_equals<ElemDomainT>(ea, eb)) { out.insert(ea); break; }
             }
         }
         return out;
@@ -688,10 +862,7 @@ struct FiniteSetDomain {
         for (const auto& ea : a.items) {
             bool covered = false;
             for (const auto& eb : b.items) {
-                if (ElemDomainT::leq(ea, eb)) {
-                    covered = true;
-                    break;
-                }
+                if (ElemDomainT::leq(ea, eb)) { covered = true; break; }
             }
             if (!covered) return false;
         }
@@ -716,12 +887,9 @@ struct FiniteSetDomain {
     static bool try_as_const_u64(const Value& v, uint64_t* out) {
         if constexpr (detail::has_const_helpers<ElemDomainT>::value) {
             ElemValue single;
-            if (v.try_as_singleton(&single)) {
-                return ElemDomainT::try_as_const_u64(single, out);
-            }
+            if (v.try_as_singleton(&single)) return ElemDomainT::try_as_const_u64(single, out);
         }
-        (void)v;
-        (void)out;
+        (void)v; (void)out;
         return false;
     }
 
@@ -731,6 +899,152 @@ struct FiniteSetDomain {
         }
         (void)c;
         return top();
+    }
+
+    // Pointwise delegation of optional arithmetic, logical, and lane ops
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_iadd<D>::value, int> = 0>
+    static Value iadd(const Value& a, const Value& b, bool is64) {
+        if (a.is_bottom() || b.is_bottom()) return bottom();
+        if (!a.is_top() && b.is_top()) {
+            return lift_unary(a, [is64](const ElemValue& x) { return D::iadd(x, D::top(), is64); });
+        }
+        if (a.is_top() && !b.is_top()) {
+            return lift_unary(b, [is64](const ElemValue& y) { return D::iadd(D::top(), y, is64); });
+        }
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::iadd(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_isub<D>::value, int> = 0>
+    static Value isub(const Value& a, const Value& b, bool is64) {
+        if (a.is_bottom() || b.is_bottom()) return bottom();
+        if (!a.is_top() && b.is_top()) {
+            return lift_unary(a, [is64](const ElemValue& x) { return D::isub(x, D::top(), is64); });
+        }
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::isub(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_imul<D>::value, int> = 0>
+    static Value imul(const Value& a, const Value& b, bool is64) {
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::imul(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_and<D>::value, int> = 0>
+    static Value bit_and(const Value& a, const Value& b, bool is64) {
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::bit_and(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_or<D>::value, int> = 0>
+    static Value bit_or(const Value& a, const Value& b, bool is64) {
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::bit_or(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_xor<D>::value, int> = 0>
+    static Value bit_xor(const Value& a, const Value& b, bool is64) {
+        return lift_binary(a, b, [is64](const ElemValue& x, const ElemValue& y) { return D::bit_xor(x, y, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_bit_not<D>::value, int> = 0>
+    static Value bit_not(const Value& a, bool is64) {
+        return lift_unary(a, [is64](const ElemValue& x) { return D::bit_not(x, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_shift<D>::value, int> = 0>
+    static Value shift(const Value& a, const Value& b, ShiftKind k, bool is64) {
+        return lift_binary(a, b, [k, is64](const ElemValue& x, const ElemValue& y) { return D::shift(x, y, k, is64); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_pack64<D>::value, int> = 0>
+    static Value pack64(const Value& lo, const Value& hi) {
+        if (lo.is_bottom() || hi.is_bottom()) return bottom();
+        if (!lo.is_top() && hi.is_top()) {
+            return lift_unary(lo, [](const ElemValue& x) { return D::pack64(x, D::top()); });
+        }
+        return lift_binary(lo, hi, [](const ElemValue& x, const ElemValue& y) { return D::pack64(x, y); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_split64<D>::value, int> = 0>
+    static Value split64(const Value& src64) {
+        return lift_unary(src64, [](const ElemValue& x) { return D::split64(x); });
+    }
+    template <typename D = ElemDomainT, std::enable_if_t<detail::has_domain_tuple_extract<D>::value, int> = 0>
+    static Value tuple_extract(const Value& tup, uint32_t elem_idx) {
+        return lift_unary(tup, [elem_idx](const ElemValue& x) { return D::tuple_extract(x, elem_idx); });
+    }
+};
+
+// LaneDomainWrapper<InnerDomainT> — Dedicated Wrapper Adding 64-Bit Lane Ops (pack64 / split64 / tuple_extract)
+
+template <typename InnerDomainT>
+struct LaneValue {
+    static_assert(ValidateLatticeDomain<InnerDomainT>::valid, "");
+    using InnerValue = typename InnerDomainT::Value;
+
+    InnerValue inner = InnerDomainT::bottom();
+    bool is_hi_half = false;
+
+    LaneValue() = default;
+    LaneValue(const InnerValue& v, bool hi = false) : inner(v), is_hi_half(hi) {}
+};
+
+template <typename InnerDomainT>
+struct LaneDomainWrapper {
+    static_assert(ValidateLatticeDomain<InnerDomainT>::valid, "");
+    using InnerValue = typename InnerDomainT::Value;
+    using Value = LaneValue<InnerDomainT>;
+
+    static Value bottom() { return Value(InnerDomainT::bottom(), false); }
+    static Value top() { return Value(InnerDomainT::top(), false); }
+
+    static Value join(const Value& a, const Value& b) {
+        if (domain_equals<InnerDomainT>(a.inner, InnerDomainT::bottom())) return b;
+        if (domain_equals<InnerDomainT>(b.inner, InnerDomainT::bottom())) return a;
+        if (a.is_hi_half != b.is_hi_half) return top();
+        return Value(InnerDomainT::join(a.inner, b.inner), a.is_hi_half);
+    }
+
+    static Value meet(const Value& a, const Value& b) {
+        if (domain_equals<InnerDomainT>(a.inner, InnerDomainT::top())) return b;
+        if (domain_equals<InnerDomainT>(b.inner, InnerDomainT::top())) return a;
+        if (a.is_hi_half != b.is_hi_half) return bottom();
+        return Value(InnerDomainT::meet(a.inner, b.inner), a.is_hi_half);
+    }
+
+    static bool leq(const Value& a, const Value& b) {
+        if (domain_equals<InnerDomainT>(a.inner, InnerDomainT::bottom()) ||
+            domain_equals<InnerDomainT>(b.inner, InnerDomainT::top())) return true;
+        if (a.is_hi_half != b.is_hi_half) return false;
+        return InnerDomainT::leq(a.inner, b.inner);
+    }
+
+    static bool equals(const Value& a, const Value& b) {
+        if (domain_equals<InnerDomainT>(a.inner, InnerDomainT::bottom()) &&
+            domain_equals<InnerDomainT>(b.inner, InnerDomainT::bottom())) return true;
+        if (domain_equals<InnerDomainT>(a.inner, InnerDomainT::top()) &&
+            domain_equals<InnerDomainT>(b.inner, InnerDomainT::top())) return true;
+        return a.is_hi_half == b.is_hi_half && domain_equals<InnerDomainT>(a.inner, b.inner);
+    }
+
+    static Value split64(const Value& src64) { return src64; }
+
+    static Value tuple_extract(const Value& tup, uint32_t elem_idx) {
+        if (elem_idx == 0) return Value(tup.inner, false);
+        if (elem_idx == 1) {
+            if constexpr (detail::has_const_helpers<InnerDomainT>::value) {
+                uint64_t c = 0;
+                if (InnerDomainT::try_as_const_u64(tup.inner, &c)) {
+                    return Value(InnerDomainT::make_const_u64(c >> 32), false);
+                }
+            }
+            return Value(tup.inner, true);
+        }
+        return top();
+    }
+
+    static Value pack64(const Value& lo, const Value& hi) {
+        if constexpr (detail::has_const_helpers<InnerDomainT>::value) {
+            uint64_t clo = 0, chi = 0;
+            if (InnerDomainT::try_as_const_u64(lo.inner, &clo) &&
+                InnerDomainT::try_as_const_u64(hi.inner, &chi)) {
+                uint64_t packed = ((chi & 0xFFFFFFFFULL) << 32) | (clo & 0xFFFFFFFFULL);
+                return Value(InnerDomainT::make_const_u64(packed), false);
+            }
+        }
+        if (!domain_equals<InnerDomainT>(lo.inner, InnerDomainT::bottom()) &&
+            !domain_equals<InnerDomainT>(lo.inner, InnerDomainT::top())) {
+            return Value(lo.inner, false);
+        }
+        return Value(hi.inner, false);
     }
 };
 

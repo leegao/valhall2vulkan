@@ -73,8 +73,12 @@ void append_unique_note(std::vector<std::string>& notes, const std::string& s) {
     }
 }
 
-/// SSA Pointer Transfer Visitor operating over `TrackedValSetDomain`
-/// (`FiniteSetDomain<TrackedValDomain, 4>`).
+/// SSA Pointer Transfer Visitor operating over `TrackedValSetDomain`.
+///
+/// Notice how `on_imul`, `on_and`, `on_or`, `on_xor`, `on_not`, `on_shift`,
+/// `on_pack64`, `on_split64`, and `on_tuple_extract` are NOT overridden here:
+/// they flow automatically through `SsaDomainTransferVisitor<TrackedValSetDomain>`
+/// into `TrackedValDomain`!
 class SsaPointerTransferVisitor : public SsaDomainTransferVisitor<TrackedValSetDomain> {
 public:
     using SetDom = TrackedValSetDomain;
@@ -151,69 +155,6 @@ public:
         assign(dst, TrackedVal::make_fau_uniform(byte_off));
     }
 
-    void on_split64(compiler::SsaId dst, compiler::SsaId src64,
-                    const compiler::SsaNode&) override {
-        assign(dst, eval(src64));
-    }
-
-    void on_tuple_extract(compiler::SsaId dst, compiler::SsaId tuple_val, uint32_t elem_idx,
-                          const compiler::SsaNode& node) override {
-        if (node.type == compiler::ValType::Token) return;
-        assign(dst, SetDom::lift_unary(eval(tuple_val), [elem_idx](const TrackedVal& tv) {
-            if (elem_idx == 0) {
-                TrackedVal lo = tv;
-                lo.is_hi_half = false;
-                return lo;
-            }
-            if (elem_idx == 1) {
-                if (tv.kind == TrackedVal::Kind::ConstInt) {
-                    return TrackedVal::make_const(static_cast<int64_t>(static_cast<uint64_t>(tv.const_val) >> 32));
-                }
-                TrackedVal hi = tv;
-                hi.is_hi_half = true;
-                return hi;
-            }
-            return TrackedVal::make_top();
-        }));
-    }
-
-    void on_pack64(compiler::SsaId dst, compiler::SsaId lo, compiler::SsaId hi,
-                   const compiler::SsaNode&) override {
-        TrackedValSet slo = eval(lo);
-        TrackedValSet shi = eval(hi);
-        if (!slo.is_bottom() && !slo.is_top() && shi.is_top()) {
-            assign(dst, SetDom::lift_unary(slo, [](const TrackedVal& vlo) {
-                if (vlo.is_pointer() || vlo.kind == TrackedVal::Kind::FauUniformRef ||
-                    vlo.kind == TrackedVal::Kind::SymbolValue) {
-                    TrackedVal out = vlo;
-                    out.is_hi_half = false;
-                    return out;
-                }
-                return TrackedVal::make_top();
-            }));
-            return;
-        }
-        assign(dst, SetDom::lift_binary(slo, shi, [](const TrackedVal& vlo, const TrackedVal& vhi) {
-            if (vlo.kind == TrackedVal::Kind::ConstInt && vhi.kind == TrackedVal::Kind::ConstInt) {
-                uint64_t packed = (static_cast<uint64_t>(static_cast<uint32_t>(vhi.const_val)) << 32) |
-                                  static_cast<uint64_t>(static_cast<uint32_t>(vlo.const_val));
-                return TrackedVal::make_const(static_cast<int64_t>(packed));
-            }
-            if (vlo.is_pointer() || vlo.kind == TrackedVal::Kind::FauUniformRef ||
-                vlo.kind == TrackedVal::Kind::SymbolValue) {
-                TrackedVal out = vlo;
-                out.is_hi_half = false;
-                return out;
-            }
-            if (vhi.is_pointer()) {
-                TrackedVal out = vhi;
-                out.is_hi_half = false;
-                return out;
-            }
-            return TrackedVal::make_top();
-        }));
-    }
-
     void on_vec(compiler::SsaId dst, const compiler::SsaNode& node) override {
         if (node.op == tables::SsaOp::VecExtract && !node.args.empty()) {
             uint32_t comp = node.imm_u32;
@@ -272,20 +213,6 @@ public:
         assign(dst, TrackedValSetOps::sub(eval(lhs), eval(rhs), env_.lookup_srt_symbol));
     }
 
-    void on_imul(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                 bool /*is_64bit*/, const compiler::SsaNode&) override {
-        assign(dst, TrackedValSetOps::mul(eval(lhs), eval(rhs)));
-    }
-
-    void on_and(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                bool /*is_64bit*/, const compiler::SsaNode&) override {
-        if (lhs != compiler::kInvalidSsa && lhs == rhs) {
-            assign(dst, eval(lhs));
-            return;
-        }
-        assign(dst, TrackedValSetOps::bit_and(eval(lhs), eval(rhs)));
-    }
-
     void on_psb_load(compiler::SsaId dst, compiler::SsaId addr, uint32_t elem_bytes,
                      const compiler::SsaNode&) override {
         TrackedValSet addr_set = eval(addr);
@@ -333,6 +260,27 @@ public:
             }
             record_note(node.id, "store " + single_addr.format_short());
         }
+    }
+
+    void on_atomic_exchange(compiler::SsaId dst, compiler::SsaId addr,
+                            compiler::SsaId val, const compiler::SsaNode& node) override {
+        TrackedValSet addr_set = eval(addr);
+        TrackedValSet val_set = eval(val);
+        TrackedVal single_addr;
+        if (!addr_set.try_as_singleton(&single_addr) || !single_addr.is_pointer()) {
+            assign(dst, SetDom::top());
+            return;
+        }
+        SymbolicMemoryLoc loc = single_addr.to_memory_loc();
+        TrackedValSet old_val = state_ ? state_->sym(loc) : SetDom::bottom();
+        if (old_val.is_bottom()) {
+            old_val = deref_pointer_single(single_addr, node.aux_bool ? 8u : 4u, env_);
+        }
+        assign(dst, old_val);
+        if (state_) {
+            state_->join_sym(loc, val_set);
+        }
+        record_note(dst, "axchg " + single_addr.format_short());
     }
 
     void on_load_vert_attr(compiler::SsaId dst, const compiler::SsaNode& node) override {

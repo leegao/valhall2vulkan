@@ -13,8 +13,6 @@
 namespace valhall::dataflow {
 
 /// High-level semantic classification of `tables::SsaOp`.
-/// Decouples op categorization from transfer dispatch so `dispatch_ssa_transfer`
-/// switches on self-contained semantic kinds rather than 134 raw opcodes.
 enum class SsaOpKind : uint8_t {
     Const = 0,
     Copy,
@@ -46,22 +44,8 @@ enum class SsaOpKind : uint8_t {
     Other,
 };
 
-/// Shift / rotate direction for normalized `on_shift` dispatch.
-enum class ShiftKind : uint8_t {
-    Shl = 0,
-    ShrU,
-    ShrS,
-    RotL,
-    RotR,
-};
-
-/// Classify any `tables::SsaOp` into its semantic `SsaOpKind`.
 SsaOpKind classify_ssa_op(tables::SsaOp op);
-
-/// Returns true if `op` is a 64-bit integer / bitwise / shift / sideband op.
 bool is_ssa_op_64bit(tables::SsaOp op);
-
-/// Returns the `ShiftKind` for shift/rotate ops (defaults to `ShiftKind::Shl`).
 ShiftKind classify_ssa_shift_kind(tables::SsaOp op);
 
 /// Abstract SSA transfer-function visitor base class.
@@ -125,17 +109,18 @@ public:
     virtual void on_store_output(const compiler::SsaNode& node) { on_other(node.id, node); }
     virtual void on_atomic(compiler::SsaId dst, const compiler::SsaNode& node) { on_other(dst, node); }
 
-    // Fallback for all other ops (FP math, comparisons, barriers, branches, Nop, etc.)
+    // Fallback for all other ops
     virtual void on_other(compiler::SsaId /*dst*/, const compiler::SsaNode& /*node*/) {}
 
-    // Optional liveness hook: fired after an SSA node when liveness reports `killed_id` is last-used
+    // Optional liveness hook
     virtual void on_ssa_killed(compiler::SsaId /*killed_id*/, const compiler::SsaNode& /*at_node*/) {}
 };
 
-/// Normalized dispatcher from any `compiler::SsaNode` into `SsaTransferVisitorBase`.
 void dispatch_ssa_transfer(const compiler::SsaNode& node, SsaTransferVisitorBase& visitor);
 
-/// Domain-aware SSA transfer visitor providing built-in **extensional equalities**.
+/// Domain-aware SSA transfer visitor providing built-in extensional equalities,
+/// automatic delegation to optional arithmetic / logical / lane ops on `DomainT`,
+/// and a default `on_atomic` transfer (handling `AtomicExchange`).
 template <typename DomainT>
 class SsaDomainTransferVisitor : public SsaTransferVisitorBase {
 public:
@@ -162,8 +147,7 @@ public:
         if constexpr (detail::has_const_helpers<DomainT>::value) {
             return DomainT::try_as_const_u64(v, out);
         }
-        (void)v;
-        (void)out;
+        (void)v; (void)out;
         return false;
     }
 
@@ -174,8 +158,6 @@ public:
         (void)c;
         return DomainT::top();
     }
-
-    // --- Built-in extensional equalities ---
 
     void on_copy(compiler::SsaId dst, compiler::SsaId src, const compiler::SsaNode&) override {
         assign(dst, eval(src));
@@ -201,7 +183,11 @@ public:
     }
 
     void on_iadd(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+                 bool is_64bit, const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_iadd<DomainT>::value) {
+            assign(dst, DomainT::iadd(eval(lhs), eval(rhs), is_64bit));
+            return;
+        }
         Value a = eval(lhs), b = eval(rhs);
         uint64_t ca = 0, cb = 0;
         bool ha = try_const(a, &ca), hb = try_const(b, &cb);
@@ -212,9 +198,13 @@ public:
     }
 
     void on_isub(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+                 bool is_64bit, const compiler::SsaNode&) override {
         if (lhs != compiler::kInvalidSsa && lhs == rhs) {
             assign(dst, make_const(0));
+            return;
+        }
+        if constexpr (detail::has_domain_isub<DomainT>::value) {
+            assign(dst, DomainT::isub(eval(lhs), eval(rhs), is_64bit));
             return;
         }
         Value a = eval(lhs), b = eval(rhs);
@@ -226,7 +216,11 @@ public:
     }
 
     void on_imul(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                 bool /*is_64bit*/, const compiler::SsaNode&) override {
+                 bool is_64bit, const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_imul<DomainT>::value) {
+            assign(dst, DomainT::imul(eval(lhs), eval(rhs), is_64bit));
+            return;
+        }
         Value a = eval(lhs), b = eval(rhs);
         uint64_t ca = 0, cb = 0;
         bool ha = try_const(a, &ca), hb = try_const(b, &cb);
@@ -243,6 +237,10 @@ public:
             assign(dst, eval(lhs));
             return;
         }
+        if constexpr (detail::has_domain_bit_and<DomainT>::value) {
+            assign(dst, DomainT::bit_and(eval(lhs), eval(rhs), is_64bit));
+            return;
+        }
         Value a = eval(lhs), b = eval(rhs);
         uint64_t ca = 0, cb = 0;
         bool ha = try_const(a, &ca), hb = try_const(b, &cb);
@@ -255,9 +253,13 @@ public:
     }
 
     void on_or(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-               bool /*is_64bit*/, const compiler::SsaNode&) override {
+               bool is_64bit, const compiler::SsaNode&) override {
         if (lhs != compiler::kInvalidSsa && lhs == rhs) {
             assign(dst, eval(lhs));
+            return;
+        }
+        if constexpr (detail::has_domain_bit_or<DomainT>::value) {
+            assign(dst, DomainT::bit_or(eval(lhs), eval(rhs), is_64bit));
             return;
         }
         Value a = eval(lhs), b = eval(rhs);
@@ -270,9 +272,13 @@ public:
     }
 
     void on_xor(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
-                bool /*is_64bit*/, const compiler::SsaNode&) override {
+                bool is_64bit, const compiler::SsaNode&) override {
         if (lhs != compiler::kInvalidSsa && lhs == rhs) {
             assign(dst, make_const(0));
+            return;
+        }
+        if constexpr (detail::has_domain_bit_xor<DomainT>::value) {
+            assign(dst, DomainT::bit_xor(eval(lhs), eval(rhs), is_64bit));
             return;
         }
         Value a = eval(lhs), b = eval(rhs);
@@ -286,6 +292,10 @@ public:
 
     void on_not(compiler::SsaId dst, compiler::SsaId src,
                 bool is_64bit, const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_bit_not<DomainT>::value) {
+            assign(dst, DomainT::bit_not(eval(src), is_64bit));
+            return;
+        }
         uint64_t c = 0;
         if (try_const(eval(src), &c)) {
             uint64_t mask = is_64bit ? ~0ULL : 0xFFFFFFFFULL;
@@ -297,6 +307,10 @@ public:
 
     void on_shift(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
                   ShiftKind kind, bool is_64bit, const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_shift<DomainT>::value) {
+            assign(dst, DomainT::shift(eval(lhs), eval(rhs), kind, is_64bit));
+            return;
+        }
         Value a = eval(lhs), b = eval(rhs);
         uint64_t ca = 0, cb = 0;
         bool ha = try_const(a, &ca), hb = try_const(b, &cb);
@@ -329,6 +343,55 @@ public:
         assign(dst, DomainT::top());
     }
 
+    void on_pack64(compiler::SsaId dst, compiler::SsaId lo, compiler::SsaId hi,
+                   const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_pack64<DomainT>::value) {
+            assign(dst, DomainT::pack64(eval(lo), eval(hi)));
+            return;
+        }
+        assign(dst, DomainT::top());
+    }
+
+    void on_split64(compiler::SsaId dst, compiler::SsaId src64,
+                    const compiler::SsaNode&) override {
+        if constexpr (detail::has_domain_split64<DomainT>::value) {
+            assign(dst, DomainT::split64(eval(src64)));
+            return;
+        }
+        assign(dst, eval(src64));
+    }
+
+    void on_tuple_extract(compiler::SsaId dst, compiler::SsaId tuple_val, uint32_t elem_idx,
+                          const compiler::SsaNode& node) override {
+        if (node.type == compiler::ValType::Token) return;
+        if constexpr (detail::has_domain_tuple_extract<DomainT>::value) {
+            assign(dst, DomainT::tuple_extract(eval(tuple_val), elem_idx));
+            return;
+        }
+        if (elem_idx == 0) {
+            assign(dst, eval(tuple_val));
+        } else {
+            assign(dst, DomainT::top());
+        }
+    }
+
+    /// Default atomic transfer: dispatches `AtomicExchange` to `on_atomic_exchange`,
+    /// and conservatively assigns `Top` for other atomic RMW / CmpXchg results.
+    void on_atomic(compiler::SsaId dst, const compiler::SsaNode& node) override {
+        if (node.op == tables::SsaOp::AtomicExchange && node.args.size() >= 2) {
+            on_atomic_exchange(dst, node.args[0], node.args[1], node);
+            return;
+        }
+        assign(dst, DomainT::top());
+    }
+
+    /// Overridable hook for `AtomicExchange(addr, val, tok)`.
+    /// Default conservatively returns `Top` (unknown prior memory contents).
+    virtual void on_atomic_exchange(compiler::SsaId dst, compiler::SsaId /*addr*/,
+                                    compiler::SsaId /*val*/, const compiler::SsaNode&) {
+        assign(dst, DomainT::top());
+    }
+
     void on_other(compiler::SsaId dst, const compiler::SsaNode& node) override {
         if (dst != compiler::kInvalidSsa && node.type != compiler::ValType::Void &&
             node.type != compiler::ValType::Token) {
@@ -340,7 +403,6 @@ protected:
     State* state_ = nullptr;
 };
 
-/// Result of directional SSA CFG worklist dataflow analysis.
 template <typename DomainT>
 struct SsaDataflowResult {
     static_assert(ValidateLatticeDomain<DomainT>::valid, "");
@@ -349,12 +411,6 @@ struct SsaDataflowResult {
     AbstractState<DomainT> final_state;
 };
 
-/// Directional chaotic-iteration fixpoint solver over a `ValhallSsaModule`,
-/// backed by the domain-independent `run_cfg_worklist()` in `worklist.cpp`.
-///
-/// Exploits SSA single-static-assignment: `ssa_vals` is stored ONCE in O(|V|)
-/// space, while mutable side-channel maps (`fau_mem`, `sym_mem`) are joined per
-/// basic block (`O(|V| + |B| * |mu|)` memory).
 template <typename DomainT>
 SsaDataflowResult<DomainT> run_ssa_dataflow(
     const compiler::ValhallSsaModule& mod,
@@ -404,7 +460,6 @@ SsaDataflowResult<DomainT> run_ssa_dataflow(
         [&](uint32_t b) -> bool {
             const auto& blk = mod.blocks[b];
 
-            // Join side-channel memory maps from incoming edges
             res.final_state.fau_mem.clear();
             res.final_state.sym_mem.clear();
             if (dir == DataflowDirection::Forward) {
@@ -473,7 +528,6 @@ SsaDataflowResult<DomainT> run_ssa_dataflow(
     res.converged = wr.converged;
     res.iterations = wr.iterations;
 
-    // Merge all visited block exit side-channel maps into final_state
     res.final_state.fau_mem = entry_state.fau_mem;
     res.final_state.sym_mem = entry_state.sym_mem;
     for (size_t b = 0; b < num_blocks; ++b) {
@@ -485,7 +539,6 @@ SsaDataflowResult<DomainT> run_ssa_dataflow(
     return res;
 }
 
-/// Convenience wrapper for forward SSA dataflow analysis.
 template <typename DomainT>
 SsaDataflowResult<DomainT> run_ssa_forward_dataflow(
     const compiler::ValhallSsaModule& mod,

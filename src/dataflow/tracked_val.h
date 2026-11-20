@@ -111,12 +111,25 @@ struct TrackedValDomain {
     static bool try_as_const_u64(const Value& v, uint64_t* out);
     static Value make_const_u64(uint64_t v);
 
-    // Pointwise abstract arithmetic & bitwise operations (delegating pointer offsets to SymbolicMemoryLoc)
+    // Pointwise abstract arithmetic, logical & lane operations (delegating pointer offsets to SymbolicMemoryLoc)
     static Value add(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt = {});
     static Value sub(const Value& a, const Value& b, const SrtSymbolLookupFn& lookup_srt = {});
     static Value mul(const Value& a, const Value& b);
     static Value div(const Value& a, const Value& b);
     static Value bit_and(const Value& a, const Value& b);
+
+    // Optional domain-trait signatures automatically flowed by SsaDomainTransferVisitor & FiniteSetDomain
+    static Value iadd(const Value& a, const Value& b, bool /*is64*/) { return add(a, b); }
+    static Value isub(const Value& a, const Value& b, bool /*is64*/) { return sub(a, b); }
+    static Value imul(const Value& a, const Value& b, bool /*is64*/) { return mul(a, b); }
+    static Value bit_and(const Value& a, const Value& b, bool is64);
+    static Value bit_or(const Value& a, const Value& b, bool is64);
+    static Value bit_xor(const Value& a, const Value& b, bool is64);
+    static Value bit_not(const Value& a, bool is64);
+    static Value shift(const Value& a, const Value& b, ShiftKind kind, bool is64);
+    static Value pack64(const Value& lo, const Value& hi);
+    static Value split64(const Value& src64) { return src64; }
+    static Value tuple_extract(const Value& tup, uint32_t elem_idx);
 };
 
 /// Bounded finite-set domain over `TrackedVal` (tracks up to 4 distinct concrete
