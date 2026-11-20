@@ -25,7 +25,7 @@ The Valhall SSA dataflow framework provides a reusable abstract interpretation i
 
 ### Core Design Principles
 
-- **Domain Combinators (`domains.h`):** Compose `VectorDomain`, `MapDomain`, `TupleDomain`, `BitsetDomain`, and `FiniteSetDomain<T, K>` like algebraic building blocks rather than hand-writing map/vector/tuple join-meet-equals loops inside each analysis.
+- **Domain Combinators (`domains.h`):** Compose `VectorDomain`, `MapDomain`, `TupleDomain`, `BitsetDomain`, `FiniteSetDomain<T, K>`, `UnionDomain<...>`, and `LaneDomainWrapper<T>` like algebraic building blocks. Every wrapper inherits automatic SFINAE-constrained point-wise lifting (`PointwiseOpsMixin`) for all optional arithmetic, logical, shift, and 64-bit lane operations implemented by its base domain(s).
 - **Extensional Equalities by Default (`SsaDomainTransferVisitor`):** Every domain automatically inherits copy propagation, `Phi`/`Select` joins, and algebraic identities (`x+0 == x`, `x&~0 == x`, `x^x == 0`, etc.) simply by opting into `try_as_const_u64` / `make_const_u64`.
 
 ## Module Map & Dependency Graph
@@ -48,6 +48,9 @@ The Valhall SSA dataflow framework provides a reusable abstract interpretation i
 │ • TupleDomain       │                   │                   └───────────┬───────────┘
 │ • BitsetDomain      │                   │                               │
 │ • FiniteSetDomain   │                   │                               │
+│ • UnionDomain       │                   │                               │
+│ • LaneDomainWrapper │                   │                               │
+│ • PointwiseOpsMixin │                   │                               │
 └─────────┬───────────┘                   │                               │
           │                               │                               │
           ├───────────────────────────────┼───────────────────────────────┤
@@ -174,6 +177,23 @@ A bounded finite powerset domain that tracks up to `MaxK` (default 4) distinct c
   - `try_as_singleton(&out)`: extracts the unique element when `size() == 1` (e.g., to check whether a memory address is uniquely resolved before dereferencing).
   - `lift_unary(S, fn)` & `lift_binary(A, B, fn)`: project any pointwise transfer function `ElemValue -> ElemValue` (or `-> FiniteSetValue`) across the set, widening to `Top` cleanly if cardinality exceeds `MaxK`.
 - **Constant-Folding Forwarding:** When `ElemDomainT` provides `try_as_const_u64`/`make_const_u64`, `FiniteSetDomain` forwards them for singleton constant sets, so `SsaDomainTransferVisitor<FiniteSetDomain<TrackedValDomain, 4>>` inherits all extensional equalities automatically.
+
+
+### `PointwiseOpsMixin` — Automatic Point-Wise Lifting Across All Wrappers
+
+All single-base wrapper domains (`VectorDomain`, `MapDomain`, `FiniteSetDomain`, `LaneDomainWrapper`) inherit from `PointwiseOpsMixin<Derived, ValueT, BaseDomain>` (and `TupleDomain` provides the matching variadic fold). Whenever `BaseDomain` implements an optional operation (`add`, `sub`, `mul`, `div`, `iadd`, `isub`, `imul`, `idiv`, `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shift`, `pack64`, `split64`, `tuple_extract`) — including arbitrary trailing arguments such as `is64` or `SrtSymbolLookupFn` — the wrapper exposes the point-wise lifted operation automatically via variadic SFINAE traits (`detail::has_domain_*_v<D, Extra...>`).
+
+### `UnionDomain<Domains...>`
+
+Tagged disjoint-sum lattice backed by `std::variant<UnionBottomTag, UnionTopTag, typename Domains::Value...>`:
+
+- Automatically normalizes member `bottom()` / `top()` values into shared `UnionBottomTag` / `UnionTopTag`.
+- Dispatches binary operations across matching (`DA == DB`) or cross-domain (`DA != DB`) alternatives whenever `DA::op(va, vb, ...)`, `DB::op(va, vb, ...)`, or `CrossDomainOp<OpTag, DA, DB>::apply(...)` is defined, with universal lattice-agnostic identity short-circuits (`x + 0 = x`, `x * 1 = x`, `x * 0 = 0`, `x & 0 = 0`, `x & all_ones = x`, etc.).
+- Guards `UnionValue::get_if() const && = delete` to prevent taking raw pointers into temporary `UnionValue` objects at compile time.
+
+### `LaneDomainWrapper<InnerDomainT>`
+
+Adds 64-bit split/pack lane tracking (`is_hi_half`, `pack64`, `split64`, `tuple_extract`) on top of any lattice domain while automatically inheriting all base domain arithmetic/logical operations via `PointwiseOpsMixin`. `TrackedValDomain` is composed directly as `LaneDomainWrapper<UnionDomain<ConstIntDomain, PointerDomain, SymbolValueDomain, ShaderAtomDomain>>`.
 
 ## Symbolic Memory Domain
 

@@ -20,8 +20,9 @@ std::string hex_off(int64_t off) {
 /// Dereference a single `TrackedVal` pointer by delegating to `SymbolicMemoryLoc::deref()`,
 /// then attaching MBS2 symbol names via `env` callbacks.
 TrackedVal deref_pointer_single(const TrackedVal& addr, uint32_t elem_bytes, const PointerAnalysisEnv& env) {
-    if (!addr.is_pointer()) return TrackedVal::make_top();
-    MemoryDerefResult d = addr.to_memory_loc().deref(elem_bytes);
+    const PointerVal* ptr = addr.inner.get_if<PointerDomain>();
+    if (!ptr || !ptr->is_valid_pointer()) return TrackedValDomain::top();
+    MemoryDerefResult d = ptr->to_memory_loc().deref(elem_bytes);
     auto resolve_srt = [&](int32_t rack, int32_t desc, const std::string& fallback) -> std::string {
         if (!fallback.empty()) return fallback;
         if (env.lookup_srt_symbol && rack >= 0 && desc >= 0) {
@@ -32,22 +33,22 @@ TrackedVal deref_pointer_single(const TrackedVal& addr, uint32_t elem_bytes, con
 
     switch (d.kind) {
         case MemoryDerefResult::Kind::SrtRackPtr:
-            return TrackedVal::make_srt_rack(d.table_id, 0, d.offset_known);
+            return TrackedValDomain::make_srt_rack(d.table_id, 0, d.offset_known);
         case MemoryDerefResult::Kind::BufferSize:
-            return TrackedVal::make_buffer_size(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key));
+            return TrackedValDomain::make_buffer_size(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key));
         case MemoryDerefResult::Kind::BufferAddr:
-            return TrackedVal::make_buffer_addr(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key),
-                                                0, false, true);
+            return TrackedValDomain::make_buffer_addr(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key),
+                                                      0, false, true);
         case MemoryDerefResult::Kind::DescriptorAddr:
-            return TrackedVal::make_descriptor(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key),
-                                               d.byte_offset, d.offset_known);
+            return TrackedValDomain::make_descriptor(d.table_id, d.entry_id, resolve_srt(d.table_id, d.entry_id, d.key),
+                                                     d.byte_offset, d.offset_known);
         case MemoryDerefResult::Kind::FauUniformRef:
-            return TrackedVal::make_fau_uniform(static_cast<uint32_t>(d.byte_offset));
+            return TrackedValDomain::make_fau_uniform(static_cast<uint32_t>(d.byte_offset));
         case MemoryDerefResult::Kind::SymbolValue: {
             if (d.from_data_section) {
                 std::string lbl = ".data";
                 if (d.offset_known) lbl += hex_off(d.byte_offset);
-                return TrackedVal::make_symbol_value(-1, -1, std::move(lbl), false);
+                return TrackedValDomain::make_symbol_value(-1, -1, std::move(lbl), false);
             }
             std::string mem_sym = d.key;
             if (d.offset_known && d.byte_offset >= 0 && env.lookup_symbol_member &&
@@ -58,11 +59,11 @@ TrackedVal deref_pointer_single(const TrackedVal& addr, uint32_t elem_bytes, con
                     static_cast<uint32_t>(d.byte_offset));
                 if (!m.empty()) mem_sym = std::move(m);
             }
-            return TrackedVal::make_symbol_value(d.table_id, d.entry_id, std::move(mem_sym), false);
+            return TrackedValDomain::make_symbol_value(d.table_id, d.entry_id, std::move(mem_sym), false);
         }
         case MemoryDerefResult::Kind::Top:
         default:
-            return TrackedVal::make_top();
+            return TrackedValDomain::top();
     }
 }
 
@@ -75,10 +76,10 @@ void append_unique_note(std::vector<std::string>& notes, const std::string& s) {
 
 /// SSA Pointer Transfer Visitor operating over `TrackedValSetDomain`.
 ///
-/// Notice how `on_imul`, `on_and`, `on_or`, `on_xor`, `on_not`, `on_shift`,
-/// `on_pack64`, `on_split64`, and `on_tuple_extract` are NOT overridden here:
-/// they flow automatically through `SsaDomainTransferVisitor<TrackedValSetDomain>`
-/// into `TrackedValDomain`!
+/// `on_imul`, `on_and`, `on_or`, `on_xor`, `on_not`, `on_shift`, `on_pack64`,
+/// `on_split64`, and `on_tuple_extract` flow automatically through
+/// `SsaDomainTransferVisitor<TrackedValSetDomain>` -> `FiniteSetDomain` ->
+/// `LaneDomainWrapper` -> `UnionDomain<ConstInt, Pointer, Symbol, ShaderAtom>`.
 class SsaPointerTransferVisitor : public SsaDomainTransferVisitor<TrackedValSetDomain> {
 public:
     using SetDom = TrackedValSetDomain;
@@ -93,15 +94,15 @@ public:
         using tables::SsaOp;
         switch (node.op) {
             case SsaOp::ConstU64:
-                assign(dst, TrackedVal::make_const(static_cast<int64_t>(node.imm_u64)));
+                assign(dst, TrackedValDomain::make_const(static_cast<int64_t>(node.imm_u64)));
                 break;
             case SsaOp::ConstS32:
-                assign(dst, TrackedVal::make_const(static_cast<int64_t>(static_cast<int32_t>(node.imm_u32))));
+                assign(dst, TrackedValDomain::make_const(static_cast<int64_t>(static_cast<int32_t>(node.imm_u32))));
                 break;
             case SsaOp::ConstU32:
             case SsaOp::ConstBool:
             case SsaOp::ConstF32:
-                assign(dst, TrackedVal::make_const(static_cast<int64_t>(node.imm_u32)));
+                assign(dst, TrackedValDomain::make_const(static_cast<int64_t>(node.imm_u32)));
                 break;
             default:
                 assign(dst, SetDom::top());
@@ -112,20 +113,20 @@ public:
     void on_load_sideband(compiler::SsaId dst, uint32_t member_idx, bool /*is_64bit*/,
                           const compiler::SsaNode&) override {
         if (env_.is_fau_dst_va(member_idx)) {
-            assign(dst, TrackedVal::make_fau_dst(0, true));
+            assign(dst, TrackedValDomain::make_fau_dst(0, true));
             return;
         }
         if (env_.is_srt_base_va(member_idx)) {
-            assign(dst, TrackedVal::make_srt_base(0, true));
+            assign(dst, TrackedValDomain::make_srt_base(0, true));
             return;
         }
-        assign(dst, TrackedVal::make_sideband(member_idx));
+        assign(dst, TrackedValDomain::make_sideband(member_idx));
     }
 
     void on_load_builtin(compiler::SsaId dst, uint32_t /*builtin_id*/,
                          const compiler::SsaNode& node) override {
         std::string lbl = node.aux_str.empty() ? "gl_BuiltIn" : node.aux_str;
-        assign(dst, TrackedVal::make_abi(std::move(lbl)));
+        assign(dst, TrackedValDomain::make_abi(std::move(lbl)));
     }
 
     void on_load_fau(compiler::SsaId dst, uint32_t fau_word_idx,
@@ -141,32 +142,31 @@ public:
                 TrackedValSet lo = state_->fau(byte_off & ~7u);
                 if (!lo.is_bottom()) {
                     assign(dst, SetDom::lift_unary(lo, [](const TrackedVal& v) {
-                        if (v.is_pointer()) {
-                            TrackedVal hi = v;
-                            hi.is_hi_half = true;
-                            return hi;
+                        if (v.inner.is<PointerDomain>()) {
+                            return TrackedValDomain::tuple_extract(v, 1);
                         }
-                        return TrackedVal::make_top();
+                        return TrackedValDomain::top();
                     }));
                     return;
                 }
             }
         }
-        assign(dst, TrackedVal::make_fau_uniform(byte_off));
+        assign(dst, TrackedValDomain::make_fau_uniform(byte_off));
     }
 
     void on_vec(compiler::SsaId dst, const compiler::SsaNode& node) override {
         if (node.op == tables::SsaOp::VecExtract && !node.args.empty()) {
             uint32_t comp = node.imm_u32;
             assign(dst, SetDom::lift_unary(eval(node.args[0]), [comp](const TrackedVal& base) {
-                if (base.kind == TrackedVal::Kind::AbiPreload) {
+                if (const auto* atom = base.inner.get_if<ShaderAtomDomain>();
+                    atom && atom->kind == ShaderAtomVal::Kind::AbiPreload) {
                     static const char kComp[] = "xyzw";
-                    std::string lbl = base.label;
+                    std::string lbl = atom->label;
                     if (comp < 4) {
                         lbl.push_back('.');
                         lbl.push_back(kComp[comp]);
                     }
-                    return TrackedVal::make_abi(std::move(lbl));
+                    return TrackedValDomain::make_abi(std::move(lbl));
                 }
                 return base;
             }));
@@ -181,11 +181,11 @@ public:
             node.op == tables::SsaOp::UConvert64To32) {
             auto op = node.op;
             assign(dst, SetDom::lift_unary(eval(src), [op](const TrackedVal& v) {
-                if (v.kind == TrackedVal::Kind::ConstInt) {
+                if (const auto* ci = v.inner.get_if<ConstIntDomain>(); ci && ci->is_known()) {
                     if (op == tables::SsaOp::SConvert32To64) {
-                        return TrackedVal::make_const(static_cast<int64_t>(static_cast<int32_t>(v.const_val)));
+                        return TrackedValDomain::make_const(static_cast<int64_t>(static_cast<int32_t>(ci->value)));
                     }
-                    return TrackedVal::make_const(static_cast<int64_t>(static_cast<uint32_t>(v.const_val)));
+                    return TrackedValDomain::make_const(static_cast<int64_t>(static_cast<uint32_t>(ci->value)));
                 }
                 return v;
             }));
@@ -196,21 +196,21 @@ public:
 
     void on_iadd(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
                  bool /*is_64bit*/, const compiler::SsaNode&) override {
-        TrackedValSet out = TrackedValSetOps::add(eval(lhs), eval(rhs), env_.lookup_srt_symbol);
+        TrackedValSet out = SetDom::add(eval(lhs), eval(rhs), env_.lookup_srt_symbol);
         assign(dst, out);
         TrackedVal single;
-        if (out.try_as_singleton(&single) && single.is_pointer()) {
-            record_note(dst, "ptr " + single.format_short());
+        if (out.try_as_singleton(&single) && single.inner.is<PointerDomain>()) {
+            record_note(dst, "ptr " + format_tracked_val(single));
         }
     }
 
     void on_isub(compiler::SsaId dst, compiler::SsaId lhs, compiler::SsaId rhs,
                  bool /*is_64bit*/, const compiler::SsaNode&) override {
         if (lhs != compiler::kInvalidSsa && lhs == rhs) {
-            assign(dst, TrackedVal::make_const(0));
+            assign(dst, TrackedValDomain::make_const(0));
             return;
         }
-        assign(dst, TrackedValSetOps::sub(eval(lhs), eval(rhs), env_.lookup_srt_symbol));
+        assign(dst, SetDom::sub(eval(lhs), eval(rhs), env_.lookup_srt_symbol));
     }
 
     void on_psb_load(compiler::SsaId dst, compiler::SsaId addr, uint32_t elem_bytes,
@@ -224,7 +224,7 @@ public:
         TrackedVal loaded = deref_pointer_single(single_addr, elem_bytes, env_);
         assign(dst, loaded);
         if (!single_addr.is_bottom() && !single_addr.is_top()) {
-            record_note(dst, "load " + single_addr.format_short() + " -> " + loaded.format_short());
+            record_note(dst, "load " + format_tracked_val(single_addr) + " -> " + format_tracked_val(loaded));
         }
     }
 
@@ -236,9 +236,13 @@ public:
         if (!addr_set.try_as_singleton(&single_addr)) {
             return;
         }
-        if (single_addr.kind == TrackedVal::Kind::FauDstBase &&
-            single_addr.offset_known && single_addr.byte_offset >= 0) {
-            uint32_t fau_off = static_cast<uint32_t>(single_addr.byte_offset);
+        const PointerVal* ptr = single_addr.inner.get_if<PointerDomain>();
+        if (!ptr || !ptr->is_valid_pointer()) {
+            return;
+        }
+        if (ptr->kind == PointerVal::Kind::FauDstBase &&
+            ptr->offset_known && ptr->byte_offset >= 0) {
+            uint32_t fau_off = static_cast<uint32_t>(ptr->byte_offset);
             if (state_) {
                 state_->join_fau(fau_off, val_set);
             }
@@ -254,11 +258,11 @@ public:
             }
             record_note(node.id, "pilot store FAU+0x" + hex_off(fau_off).substr(3) + " <- " +
                                      format_tracked_val_set(val_set));
-        } else if (single_addr.is_pointer()) {
+        } else {
             if (state_) {
-                state_->join_sym(single_addr.to_memory_loc(), val_set);
+                state_->join_sym(ptr->to_memory_loc(), val_set);
             }
-            record_note(node.id, "store " + single_addr.format_short());
+            record_note(node.id, "store " + format_tracked_val(single_addr));
         }
     }
 
@@ -267,11 +271,13 @@ public:
         TrackedValSet addr_set = eval(addr);
         TrackedValSet val_set = eval(val);
         TrackedVal single_addr;
-        if (!addr_set.try_as_singleton(&single_addr) || !single_addr.is_pointer()) {
+        const PointerVal* ptr = nullptr;
+        if (!addr_set.try_as_singleton(&single_addr) ||
+            !(ptr = single_addr.inner.get_if<PointerDomain>()) || !ptr->is_valid_pointer()) {
             assign(dst, SetDom::top());
             return;
         }
-        SymbolicMemoryLoc loc = single_addr.to_memory_loc();
+        SymbolicMemoryLoc loc = ptr->to_memory_loc();
         TrackedValSet old_val = state_ ? state_->sym(loc) : SetDom::bottom();
         if (old_val.is_bottom()) {
             old_val = deref_pointer_single(single_addr, node.aux_bool ? 8u : 4u, env_);
@@ -280,40 +286,40 @@ public:
         if (state_) {
             state_->join_sym(loc, val_set);
         }
-        record_note(dst, "axchg " + single_addr.format_short());
+        record_note(dst, "axchg " + format_tracked_val(single_addr));
     }
 
     void on_load_vert_attr(compiler::SsaId dst, const compiler::SsaNode& node) override {
         uint32_t loc = node.imm_u32;
         std::string sym = env_.lookup_input_symbol ? env_.lookup_input_symbol(loc) : "";
-        TrackedVal v = TrackedVal::make_vertex_attr(loc, sym);
+        TrackedVal v = TrackedValDomain::make_vertex_attr(loc, sym);
         assign(dst, v);
-        record_note(dst, v.format_short());
+        record_note(dst, format_tracked_val(v));
     }
 
     void on_load_frag_varying(compiler::SsaId dst, const compiler::SsaNode& node) override {
         uint32_t loc = node.imm_u32;
         std::string sym = env_.lookup_input_symbol ? env_.lookup_input_symbol(loc) : "";
-        TrackedVal v = TrackedVal::make_varying(loc, sym);
+        TrackedVal v = TrackedValDomain::make_varying(loc, sym);
         assign(dst, v);
-        record_note(dst, v.format_short());
+        record_note(dst, format_tracked_val(v));
     }
 
     void on_tex_sample(compiler::SsaId dst, const compiler::SsaNode& node) override {
         uint32_t img = node.imm_u32;
         uint32_t smp = node.imm_u32_2;
         std::string sym = env_.lookup_image_symbol ? env_.lookup_image_symbol(img) : "";
-        TrackedVal v = TrackedVal::make_tex_sample(img, smp, sym);
+        TrackedVal v = TrackedValDomain::make_tex_sample(img, smp, sym);
         assign(dst, v);
-        record_note(dst, v.format_short());
+        record_note(dst, format_tracked_val(v));
     }
 
     void on_store_output(const compiler::SsaNode& node) override {
         if (node.op == tables::SsaOp::StoreFragColor || node.op == tables::SsaOp::StoreVertVarying) {
             uint32_t loc = node.imm_u32;
             std::string sym = env_.lookup_output_symbol ? env_.lookup_output_symbol(loc) : "";
-            TrackedVal v = TrackedVal::make_blend_desc(loc, sym);
-            record_note(node.id, "out " + v.format_short());
+            TrackedVal v = TrackedValDomain::make_blend_desc(loc, sym);
+            record_note(node.id, "out " + format_tracked_val(v));
         }
     }
 

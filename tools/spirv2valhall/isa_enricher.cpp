@@ -183,11 +183,13 @@ IsaProjectedAnalysis lower_and_run_ssa_pointer_analysis(
 
         for (compiler::SsaId arg : node.args) {
             dataflow::TrackedVal av = res.df.val(arg);
-            if (av.kind == dataflow::TrackedVal::Kind::AbiPreload) {
-                append_unique_note(res.inst_notes[idx], "ABI: " + av.label);
-            } else if (av.kind == dataflow::TrackedVal::Kind::FauDstBase ||
-                       av.kind == dataflow::TrackedVal::Kind::SrtBase) {
-                append_unique_note(res.inst_notes[idx], av.label);
+            if (const auto* atom = av.inner.get_if<dataflow::ShaderAtomDomain>();
+                atom && atom->kind == dataflow::ShaderAtomVal::Kind::AbiPreload) {
+                append_unique_note(res.inst_notes[idx], "ABI: " + atom->label);
+            } else if (const auto* ptr = av.inner.get_if<dataflow::PointerDomain>();
+                       ptr && (ptr->kind == dataflow::PointerVal::Kind::FauDstBase ||
+                               ptr->kind == dataflow::PointerVal::Kind::SrtBase)) {
+                append_unique_note(res.inst_notes[idx], ptr->label);
             }
         }
 
@@ -213,10 +215,10 @@ dataflow::PointerAnalysisEnv build_df_env(
         for (const auto& kv : pilot_info->fau_map) {
             const auto& pe = kv.second;
             if (pe.srt_rack >= 0 && pe.desc_index >= 0 && pe.byte_size == 8) {
-                env.initial_fau[pe.fau_offset] = dataflow::TrackedVal::make_buffer_addr(
+                env.initial_fau[pe.fau_offset] = dataflow::TrackedValDomain::make_buffer_addr(
                     pe.srt_rack, pe.desc_index, pe.symbol_name, 0, false);
             } else {
-                env.initial_fau[pe.fau_offset] = dataflow::TrackedVal::make_symbol_value(
+                env.initial_fau[pe.fau_offset] = dataflow::TrackedValDomain::make_symbol_value(
                     pe.srt_rack, pe.desc_index, pe.symbol_name, true);
             }
         }
@@ -302,10 +304,20 @@ PilotAnalysisResult analyze_pilot_shaders(
             PilotFauEntry entry;
             entry.fau_offset = pw.fau_offset;
             entry.byte_size = pw.byte_size;
-            entry.symbol_name = pw.value.symbol_name;
-            entry.expression = pw.value.format_short();
-            entry.srt_rack = pw.value.rack;
-            entry.desc_index = pw.value.desc_idx;
+            entry.expression = dataflow::format_tracked_val(pw.value);
+            if (const auto* ptr = pw.value.inner.get_if<dataflow::PointerDomain>()) {
+                entry.symbol_name = ptr->symbol_name;
+                entry.srt_rack = ptr->rack;
+                entry.desc_index = ptr->desc_idx;
+            } else if (const auto* sym = pw.value.inner.get_if<dataflow::SymbolValueDomain>()) {
+                entry.symbol_name = sym->symbol_name;
+                entry.srt_rack = sym->rack;
+                entry.desc_index = sym->desc_idx;
+            } else if (const auto* atom = pw.value.inner.get_if<dataflow::ShaderAtomDomain>()) {
+                entry.symbol_name = atom->symbol_name;
+                entry.srt_rack = atom->rack;
+                entry.desc_index = atom->desc_idx;
+            }
             res.fau_map[entry.fau_offset] = std::move(entry);
         }
         break;

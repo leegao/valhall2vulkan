@@ -8,7 +8,15 @@
 #include "valhall_ssa.h"
 #include "worklist.h"
 
-#include <cassert>
+#include <cstdlib>
+
+#define CHECK(cond)                                                                           \
+    do {                                                                                      \
+        if (!(cond)) {                                                                        \
+            std::cerr << "[FAIL] " << __FILE__ << ":" << __LINE__ << ": " #cond << "\n";      \
+            std::exit(1);                                                                     \
+        }                                                                                     \
+    } while (0)
 #include <iostream>
 #include <string>
 #include <vector>
@@ -61,19 +69,49 @@ struct SignDomain {
 
 void test_domain_combinators_and_memory_disjointness() {
     static_assert(ValidateLatticeDomain<SignDomain>::valid, "");
-    assert(domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Pos));
-    assert(!domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Neg));
+    static_assert(ValidateLatticeDomain<ConstIntDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<PointerDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<SymbolValueDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<ShaderAtomDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<TrackedValUnionDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<TrackedValDomain>::valid, "");
+    static_assert(ValidateLatticeDomain<TrackedValSetDomain>::valid, "");
+
+    // SFINAE verification: ops only exist on wrappers when base domain implements them
+    static_assert(!detail::has_domain_iadd<SignDomain>::value, "");
+    static_assert(!detail::has_domain_iadd<VectorDomain<SignDomain>>::value, "");
+    static_assert(!detail::has_domain_iadd<MapDomain<uint32_t, SignDomain>>::value, "");
+    static_assert(!detail::has_domain_iadd<FiniteSetDomain<SignDomain, 4>>::value, "");
+    static_assert(!detail::has_domain_iadd<LaneDomainWrapper<SignDomain>>::value, "");
+    static_assert(!detail::has_domain_iadd<UnionDomain<SignDomain, BitsetDomain>>::value, "");
+    static_assert(!detail::has_domain_iadd<TupleDomain<SignDomain, BitsetDomain>>::value, "");
+
+    static_assert(detail::has_domain_iadd<TrackedValUnionDomain>::value, "");
+    static_assert(detail::has_domain_iadd<TrackedValDomain>::value, "");
+    static_assert(detail::has_domain_iadd<TrackedValSetDomain>::value, "");
+    static_assert(detail::has_domain_add_v<TrackedValSetDomain, const SrtSymbolLookupFn&>, "");
+    static_assert(detail::has_domain_sub_v<TrackedValSetDomain, const SrtSymbolLookupFn&>, "");
+    static_assert(detail::has_domain_mul_v<TrackedValSetDomain>, "");
+    static_assert(detail::has_domain_div_v<TrackedValSetDomain>, "");
+    static_assert(detail::has_domain_bit_and_v<TrackedValSetDomain>, "");
+    static_assert(detail::has_domain_bit_and_v<TrackedValSetDomain, bool>, "");
+    static_assert(detail::has_domain_pack64<TrackedValDomain>::value, "");
+    static_assert(detail::has_domain_pack64<TrackedValSetDomain>::value, "");
+    static_assert(detail::has_domain_tuple_extract<TrackedValSetDomain>::value, "");
+
+    CHECK(domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Pos));
+    CHECK(!domain_equals<SignDomain>(SignDomain::Value::Pos, SignDomain::Value::Neg));
 
     // VectorDomain power-of-2 growth + join/meet
     VectorDomain<SignDomain>::Value va, vb;
     va.set(5, SignDomain::Value::Pos);
-    assert(va.elems.size() == 8); // next_power_of_two(6) == 8
+    CHECK(va.elems.size() == 8);
     vb.set(5, SignDomain::Value::Neg);
     vb.set(2, SignDomain::Value::Zero);
     auto vj = VectorDomain<SignDomain>::join(va, vb);
-    assert(vj.get(5) == SignDomain::Value::Top);
-    assert(vj.get(2) == SignDomain::Value::Zero);
-    assert(vj.get(99) == SignDomain::Value::Bottom);
+    CHECK(vj.get(5) == SignDomain::Value::Top);
+    CHECK(vj.get(2) == SignDomain::Value::Zero);
+    CHECK(vj.get(99) == SignDomain::Value::Bottom);
 
     // MapDomain
     MapDomain<uint32_t, SignDomain>::Value ma, mb;
@@ -82,8 +120,8 @@ void test_domain_combinators_and_memory_disjointness() {
     mb.set(0x08, SignDomain::Value::Neg);
     auto mj = MapDomain<uint32_t, SignDomain>::join(ma, mb);
     auto mm = MapDomain<uint32_t, SignDomain>::meet(ma, mb);
-    assert(mj.get(0x00) == SignDomain::Value::Pos && mj.get(0x08) == SignDomain::Value::Neg);
-    assert(mm.get(0x00) == SignDomain::Value::Pos && mm.get(0x08) == SignDomain::Value::Bottom);
+    CHECK(mj.get(0x00) == SignDomain::Value::Pos && mj.get(0x08) == SignDomain::Value::Neg);
+    CHECK(mm.get(0x00) == SignDomain::Value::Pos && mm.get(0x08) == SignDomain::Value::Bottom);
 
     // TupleDomain<SignDomain, BitsetDomain>
     using ProdDom = TupleDomain<SignDomain, BitsetDomain>;
@@ -92,31 +130,32 @@ void test_domain_combinators_and_memory_disjointness() {
     auto p1 = ProdDom::Value{SignDomain::Value::Pos, b1};
     auto p2 = ProdDom::Value{SignDomain::Value::Pos, b2};
     auto pj = ProdDom::join(p1, p2);
-    assert(std::get<0>(pj) == SignDomain::Value::Pos);
-    assert(std::get<1>(pj).test(1) && std::get<1>(pj).test(3));
-    assert(ProdDom::leq(p1, pj) && ProdDom::leq(p2, pj));
+    CHECK(std::get<0>(pj) == SignDomain::Value::Pos);
+    CHECK(std::get<1>(pj).test(1) && std::get<1>(pj).test(3));
+    CHECK(ProdDom::leq(p1, pj) && ProdDom::leq(p2, pj));
 
     // FiniteSetDomain<TrackedValDomain, 4>: implicit singleton lift + up to 4 distinct values, then Top
-    TrackedValSet s1 = TrackedVal::make_const(10); // implicit converting ctor!
-    auto s2 = TrackedValSetDomain::lift_value(TrackedVal::make_const(20));
+    TrackedValSet s1 = TrackedValDomain::make_const(10);
+    auto s2 = TrackedValSetDomain::lift_value(TrackedValDomain::make_const(20));
     auto s12 = TrackedValSetDomain::join(s1, s2);
-    assert(s12.size() == 2 && !s12.is_top());
+    CHECK(s12.size() == 2 && !s12.is_top());
     TrackedVal single;
-    assert(!s12.try_as_singleton(&single));
-    assert(s1.try_as_singleton(&single) && single.const_val == 10);
+    CHECK(!s12.try_as_singleton(&single));
+    CHECK(s1.try_as_singleton(&single));
+    CHECK(single.inner.get_if<ConstIntDomain>()->value == 10);
 
     // Lift unary (+1) across {10, 20} -> {11, 21}
     auto s12_plus1 = TrackedValSetDomain::lift_unary(s12, [](const TrackedVal& v) {
-        return TrackedVal::make_const(v.const_val + 1);
+        return TrackedValDomain::make_const(v.inner.get_if<ConstIntDomain>()->value + 1);
     });
-    assert(s12_plus1.size() == 2);
-    auto s3 = TrackedValSetDomain::lift_value(TrackedVal::make_const(30));
-    auto s4 = TrackedValSetDomain::lift_value(TrackedVal::make_const(40));
-    auto s5 = TrackedValSetDomain::lift_value(TrackedVal::make_const(50));
+    CHECK(s12_plus1.size() == 2);
+    auto s3 = TrackedValSetDomain::lift_value(TrackedValDomain::make_const(30));
+    auto s4 = TrackedValSetDomain::lift_value(TrackedValDomain::make_const(40));
+    auto s5 = TrackedValSetDomain::lift_value(TrackedValDomain::make_const(50));
     auto s1234 = TrackedValSetDomain::join(TrackedValSetDomain::join(s12, s3), s4);
-    assert(s1234.size() == 4 && !s1234.is_top());
+    CHECK(s1234.size() == 4 && !s1234.is_top());
     auto s12345 = TrackedValSetDomain::join(s1234, s5);
-    assert(s12345.is_top()); // > 4 elements widens to Top!
+    CHECK(s12345.is_top());
 
     // SymbolicMemoryLoc disjointness
     auto srt0 = SymbolicMemoryLoc::make_srt(0, 0);
@@ -126,72 +165,138 @@ void test_domain_combinators_and_memory_disjointness() {
     auto buf0_off16 = SymbolicMemoryLoc::make_buffer(4, 0, 16, true, "buf0");
     auto buf0_unk = SymbolicMemoryLoc::make_buffer(4, 0, 0, false, "buf0");
     auto tls0 = SymbolicMemoryLoc::make_tls(0);
-    assert(!srt0.may_alias(srt4));
-    assert(!srt4.may_alias(buf0));
-    assert(!buf0.may_alias(buf1));
-    assert(!buf0.may_alias(buf0_off16));
-    assert(buf0.may_alias(buf0_unk));
-    assert(!buf0.may_alias(tls0));
-    assert(buf0.with_added_offset(16) == buf0_off16);
-    assert(buf0.with_unknown_offset() == buf0_unk);
-    assert(buf0_off16.with_masked_offset(0xFF) == buf0_off16);
+    CHECK(!srt0.may_alias(srt4));
+    CHECK(!srt4.may_alias(buf0));
+    CHECK(!buf0.may_alias(buf1));
+    CHECK(!buf0.may_alias(buf0_off16));
+    CHECK(buf0.may_alias(buf0_unk));
+    CHECK(!buf0.may_alias(tls0));
+    CHECK(buf0.with_added_offset(16) == buf0_off16);
+    CHECK(buf0.with_unknown_offset() == buf0_unk);
+    CHECK(buf0_off16.with_masked_offset(0xFF) == buf0_off16);
 
     // SymbolicMemoryLoc::deref()
     auto srt_root_r4 = SymbolicMemoryLoc::make_srt(-1, 0x40);
     auto d_rack = srt_root_r4.deref(8);
-    assert(d_rack.kind == MemoryDerefResult::Kind::SrtRackPtr && d_rack.table_id == 4);
+    CHECK(d_rack.kind == MemoryDerefResult::Kind::SrtRackPtr && d_rack.table_id == 4);
     auto d_va = SymbolicMemoryLoc::make_srt(4, 0x08).deref(8);
-    assert(d_va.kind == MemoryDerefResult::Kind::BufferAddr && d_va.table_id == 4 && d_va.entry_id == 0);
+    CHECK(d_va.kind == MemoryDerefResult::Kind::BufferAddr && d_va.table_id == 4 && d_va.entry_id == 0);
     auto d_sz = SymbolicMemoryLoc::make_srt(4, 0x04).deref(4);
-    assert(d_sz.kind == MemoryDerefResult::Kind::BufferSize && d_sz.table_id == 4 && d_sz.entry_id == 0);
+    CHECK(d_sz.kind == MemoryDerefResult::Kind::BufferSize && d_sz.table_id == 4 && d_sz.entry_id == 0);
 
-    // TrackedValSetOps & SidebandValue
-    TrackedValSet sb = TrackedVal::make_sideband(5);
-    TrackedValSet c0 = TrackedVal::make_const(0);
-    TrackedValSet c4 = TrackedVal::make_const(4);
-    TrackedValSet c20 = TrackedVal::make_const(20);
-    assert(collapse_tracked_val_set(TrackedValSetOps::add(sb, c0)).kind == TrackedVal::Kind::SidebandValue);
-    assert(TrackedValSetOps::add(sb, c4).is_top());
-    assert(collapse_tracked_val_set(TrackedValSetOps::div(c20, c4)).const_val == 5);
-    assert(collapse_tracked_val_set(TrackedValSetOps::mul(c4, c20)).const_val == 80);
+    // Auto-lifted FiniteSetDomain arithmetic ops (replacing old TrackedValSetOps)
+    TrackedValSet sb = TrackedValDomain::make_sideband(5);
+    TrackedValSet c0 = TrackedValDomain::make_const(0);
+    TrackedValSet c4 = TrackedValDomain::make_const(4);
+    TrackedValSet c20 = TrackedValDomain::make_const(20);
+    auto sb_add0 = collapse_tracked_val_set(TrackedValSetDomain::add(sb, c0));
+    CHECK(sb_add0.inner.get_if<ShaderAtomDomain>()->kind == ShaderAtomVal::Kind::SidebandValue);
+    CHECK(TrackedValSetDomain::add(sb, c4).is_top());
+    CHECK(TrackedValDomain::equals(collapse_tracked_val_set(TrackedValSetDomain::div(c20, c4)), TrackedValDomain::make_const(5)));
+    CHECK(TrackedValDomain::equals(collapse_tracked_val_set(TrackedValSetDomain::mul(c4, c20)), TrackedValDomain::make_const(80)));
 
     std::cout << "[PASS] test_domain_combinators_and_memory_disjointness\n";
 }
 
-void test_tracked_val_lattice_laws() {
+void test_tracked_val_lattice_laws_and_union_dispatch() {
     auto bot = TrackedValDomain::bottom();
     auto top = TrackedValDomain::top();
-    auto c42 = TrackedVal::make_const(42);
-    auto c99 = TrackedVal::make_const(99);
-    auto b0 = TrackedVal::make_buffer_addr(4, 0, "bufA", 0, false, true);
-    auto b16 = TrackedVal::make_buffer_addr(4, 0, "bufA", 16, false, true);
-    auto b_unk = TrackedVal::make_buffer_addr(4, 0, "bufA", 0, false, false);
-    auto b_other = TrackedVal::make_buffer_addr(4, 1, "bufB", 0, false, true);
+    auto c42 = TrackedValDomain::make_const(42);
+    auto c99 = TrackedValDomain::make_const(99);
+    auto b0 = TrackedValDomain::make_buffer_addr(4, 0, "bufA", 0, false, true);
+    auto b16 = TrackedValDomain::make_buffer_addr(4, 0, "bufA", 16, false, true);
+    auto b_unk = TrackedValDomain::make_buffer_addr(4, 0, "bufA", 0, false, false);
+    auto b_other = TrackedValDomain::make_buffer_addr(4, 1, "bufB", 0, false, true);
+    auto abi_tid = TrackedValDomain::make_abi("gl_GlobalInvocationID.x");
+    auto sym = TrackedValDomain::make_symbol_value(4, 0, "ubo.scale", false);
 
-    assert(TrackedValDomain::equals(TrackedValDomain::join(bot, c42), c42));
-    assert(TrackedValDomain::equals(TrackedValDomain::join(c42, bot), c42));
-    assert(TrackedValDomain::equals(TrackedValDomain::join(top, c42), top));
-    assert(TrackedValDomain::equals(TrackedValDomain::meet(top, c42), c42));
-    assert(TrackedValDomain::equals(TrackedValDomain::meet(bot, c42), bot));
+    // Core lattice laws via LaneDomainWrapper<UnionDomain<...>>
+    CHECK(TrackedValDomain::equals(TrackedValDomain::join(bot, c42), c42));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::join(c42, bot), c42));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::join(top, c42), top));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::meet(top, c42), c42));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::meet(bot, c42), bot));
 
-    assert(TrackedValDomain::leq(bot, b0));
-    assert(TrackedValDomain::leq(b0, b_unk));
-    assert(TrackedValDomain::leq(b_unk, top));
-    assert(!TrackedValDomain::leq(b_unk, b0));
+    CHECK(TrackedValDomain::leq(bot, b0));
+    CHECK(TrackedValDomain::leq(b0, b_unk));
+    CHECK(TrackedValDomain::leq(b_unk, top));
+    CHECK(!TrackedValDomain::leq(b_unk, b0));
 
     auto j_same_base = TrackedValDomain::join(b0, b16);
-    assert(j_same_base.kind == TrackedVal::Kind::BufferAddr);
-    assert(j_same_base.symbol_name == "bufA");
-    assert(!j_same_base.offset_known);
-    assert(TrackedValDomain::equals(j_same_base, b_unk));
+    const auto* j_ptr = j_same_base.inner.get_if<PointerDomain>();
+    CHECK(j_ptr && j_ptr->kind == PointerVal::Kind::BufferAddr);
+    CHECK(j_ptr->symbol_name == "bufA" && !j_ptr->offset_known);
+    CHECK(TrackedValDomain::equals(j_same_base, b_unk));
 
-    assert(TrackedValDomain::join(c42, c99).is_top());
-    assert(TrackedValDomain::join(b0, b_other).is_top());
-    assert(TrackedValDomain::meet(c42, c99).is_bottom());
-    assert(TrackedValDomain::meet(b0, b_unk).offset_known);
-    assert(TrackedValDomain::meet(b0, b_unk).byte_offset == 0);
+    CHECK(TrackedValDomain::join(c42, c99).is_top());
+    CHECK(TrackedValDomain::join(b0, b_other).is_top());
+    CHECK(TrackedValDomain::join(c42, b0).is_top());
+    CHECK(TrackedValDomain::meet(c42, c99).is_bottom());
+    CHECK(TrackedValDomain::meet(c42, b0).is_bottom());
+    auto m_ptr = TrackedValDomain::meet(b0, b_unk);
+    CHECK(m_ptr.inner.get_if<PointerDomain>()->offset_known);
+    CHECK(m_ptr.inner.get_if<PointerDomain>()->byte_offset == 0);
 
-    std::cout << "[PASS] test_tracked_val_lattice_laws\n";
+    // Cross-domain arithmetic dispatch in UnionDomain:
+    // Ptr + ConstInt and ConstInt + Ptr (commutative)
+    auto p_plus_16 = TrackedValDomain::add(b0, TrackedValDomain::make_const(16));
+    CHECK(TrackedValDomain::equals(p_plus_16, b16));
+    auto c16_plus_p = TrackedValDomain::add(TrackedValDomain::make_const(16), b0);
+    CHECK(TrackedValDomain::equals(c16_plus_p, b16));
+
+    // Ptr - ConstInt works, but ConstInt - Ptr is disallowed -> Top
+    auto p_minus_16 = TrackedValDomain::sub(b16, TrackedValDomain::make_const(16));
+    CHECK(TrackedValDomain::equals(p_minus_16, b0));
+    CHECK(TrackedValDomain::sub(TrackedValDomain::make_const(16), b0).is_top());
+
+    // Same-base Ptr - Ptr -> ConstInt(delta); different-base Ptr - Ptr -> Top
+    auto ptr_diff = TrackedValDomain::sub(b16, b0);
+    CHECK(ptr_diff.inner.get_if<ConstIntDomain>()->value == 16);
+    CHECK(TrackedValDomain::sub(b16, b_other).is_top());
+
+    // Ptr + dynamic non-pointer (ABI / Top / Symbol) widens offset to +? while keeping base identity
+    CHECK(TrackedValDomain::equals(TrackedValDomain::add(b0, abi_tid), b_unk));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::add(abi_tid, b0), b_unk));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::add(b0, top), b_unk));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::add(sym, b0), b_unk));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::sub(b0, abi_tid), b_unk));
+
+    // Ptr + Ptr is nonsensical and yields Top (no longer arbitrarily returning LHS)
+    CHECK(TrackedValDomain::add(b0, b_other).is_top());
+    CHECK(TrackedValDomain::add(b0, b16).is_top());
+
+    // SymbolValue + ConstInt(0) preserves non-derived; SymbolValue + ConstInt(4) marks derived
+    auto sym_plus0 = TrackedValDomain::add(sym, TrackedValDomain::make_const(0));
+    CHECK(!sym_plus0.inner.get_if<SymbolValueDomain>()->derived);
+    auto sym_plus4 = TrackedValDomain::add(sym, TrackedValDomain::make_const(4));
+    CHECK(sym_plus4.inner.get_if<SymbolValueDomain>()->derived);
+
+    // Merged bit_and(a, b, is64 = true) handles both 32-bit and 64-bit all-ones masks
+    auto mask32 = TrackedValDomain::make_const(0xFFFFFFFFLL);
+    CHECK(TrackedValDomain::equals(TrackedValDomain::bit_and(b16, mask32, false), b16));
+    CHECK(TrackedValDomain::equals(TrackedValDomain::bit_and(b16, TrackedValDomain::make_const(~0LL)), b16));
+    auto b_masked = TrackedValDomain::bit_and(b16, TrackedValDomain::make_const(0x0F));
+    CHECK(b_masked.inner.get_if<PointerDomain>()->byte_offset == 0);
+
+    // FiniteSetDomain auto-lifted add with SrtSymbolLookupFn callback & Top propagation
+    SrtSymbolLookupFn lookup = [](uint8_t rack, uint32_t desc) -> std::string {
+        return (rack == 4 && desc == 2) ? "ssbo_2" : "";
+    };
+    TrackedValSet rack4 = TrackedValDomain::make_srt_rack(4, 0, true);
+    TrackedValSet desc2_set = TrackedValSetDomain::add(rack4, TrackedValDomain::make_const(64), lookup);
+    TrackedVal desc2 = collapse_tracked_val_set(desc2_set);
+    const auto* dptr = desc2.inner.get_if<PointerDomain>();
+    CHECK(dptr && dptr->kind == PointerVal::Kind::DescriptorAddr && dptr->desc_idx == 2 && dptr->symbol_name == "ssbo_2");
+
+    TrackedValSet buf_plus_top = TrackedValSetDomain::add(TrackedValSet(b0), TrackedValSetDomain::top());
+    CHECK(TrackedValDomain::equals(collapse_tracked_val_set(buf_plus_top), b_unk));
+
+    // Debug formatter exposes active union alternative and .hi lane tag
+    CHECK(format_tracked_val_debug(c42) == "[ConstInt] 0x2a");
+    CHECK(format_tracked_val_debug(b16).rfind("[Pointer] &bufA+0x10", 0) == 0);
+    CHECK(format_tracked_val_debug(TrackedValDomain::tuple_extract(b16, 1)).find(".hi") != std::string::npos);
+
+    std::cout << "[PASS] test_tracked_val_lattice_laws_and_union_dispatch\n";
 }
 
 void test_ssa_grouped_dispatch_and_extensional_equalities() {
@@ -222,16 +327,18 @@ void test_ssa_grouped_dispatch_and_extensional_equalities() {
     PointerAnalysisEnv env;
     env.role = PointerAnalysisEnv::StageRole::Pilot;
     auto res = run_ssa_pointer_analysis(mod, env);
-    assert(res.converged);
+    CHECK(res.converged);
 
     for (SsaId id : {cp, add0, or0, xor0, and_all1, and_self, or_self, shl0, mul1, sel_same}) {
         auto v = res.val(id);
-        assert(v.kind == TrackedVal::Kind::SrtBase);
-        assert(v.offset_known && v.byte_offset == 0);
+        const auto* ptr = v.inner.get_if<PointerDomain>();
+        CHECK(ptr && ptr->kind == PointerVal::Kind::SrtBase);
+        CHECK(ptr->offset_known && ptr->byte_offset == 0);
     }
     for (SsaId z : {sub_self, xor_self, and0}) {
         auto v = res.val(z);
-        assert(v.kind == TrackedVal::Kind::ConstInt && v.const_val == 0);
+        const auto* ci = v.inner.get_if<ConstIntDomain>();
+        CHECK(ci && ci->is_known() && ci->value == 0);
     }
 
     std::cout << "[PASS] test_ssa_grouped_dispatch_and_extensional_equalities\n";
@@ -266,35 +373,32 @@ void test_ssa_diamond_cfg_phi_finiteset_and_liveness() {
     mod.get_mut(pm).phi_incomings = {{1, p1}, {2, p2}};
     SsaId zero = emit_op(mod, 3, SsaOp::ConstU64, ValType::U64, {}, 0, 0);
     SsaId use_pm = emit_op(mod, 3, SsaOp::IAdd64, ValType::U64, {pm, zero});
-    // Dereference non-singleton set {SRT_0+0x10, SRT_0+0x20} -> must widen to Top!
     SsaId ld_non_single = emit_op(mod, 3, SsaOp::PsbLoad, ValType::TupleValToken, {use_pm, tok}, 8);
 
-    // 1. Verify backwards SSA liveness (BitsetDomain + run_cfg_worklist(Backward))
     SsaLivenessResult live = run_ssa_liveness(mod);
-    assert(live.converged);
-    assert(live.is_live_out(1, p1));
-    assert(!live.is_live_out(2, p1));
-    assert(live.is_live_out(2, p2));
-    assert(!live.is_live_out(1, p2));
-    assert(!live.is_live_in(3, p1));
-    assert(!live.is_live_in(3, p2));
-    assert(live.is_live_out(0, srt));
-    assert(live.is_live_in(1, srt));
-    assert(live.is_live_in(2, srt));
-    assert(live.is_killed_at(p1, srt));
-    assert(live.is_killed_at(p2, srt));
-    assert(live.is_killed_at(use_pm, pm));
+    CHECK(live.converged);
+    CHECK(live.is_live_out(1, p1));
+    CHECK(!live.is_live_out(2, p1));
+    CHECK(live.is_live_out(2, p2));
+    CHECK(!live.is_live_out(1, p2));
+    CHECK(!live.is_live_in(3, p1));
+    CHECK(!live.is_live_in(3, p2));
+    CHECK(live.is_live_out(0, srt));
+    CHECK(live.is_live_in(1, srt));
+    CHECK(live.is_live_in(2, srt));
+    CHECK(live.is_killed_at(p1, srt));
+    CHECK(live.is_killed_at(p2, srt));
+    CHECK(live.is_killed_at(use_pm, pm));
 
-    // 2. Verify FiniteSetDomain preserves exact 2-element set {SRT_0+0x10, SRT_0+0x20} at Phi pm,
-    //    collapses to SrtBase+? via df.val(pm), and widens non-singleton PsbLoad to Top!
     PointerAnalysisEnv env;
     env.role = PointerAnalysisEnv::StageRole::Pilot;
     auto df = run_ssa_pointer_analysis(mod, env, &live);
-    assert(df.converged);
-    assert(df.val_set(pm).size() == 2);
+    CHECK(df.converged);
+    CHECK(df.val_set(pm).size() == 2);
     auto vpm = df.val(pm);
-    assert(vpm.kind == TrackedVal::Kind::SrtBase && !vpm.offset_known);
-    assert(df.val_set(ld_non_single).is_top());
+    const auto* vpm_ptr = vpm.inner.get_if<PointerDomain>();
+    CHECK(vpm_ptr && vpm_ptr->kind == PointerVal::Kind::SrtBase && !vpm_ptr->offset_known);
+    CHECK(df.val_set(ld_non_single).is_top());
 
     std::cout << "[PASS] test_ssa_diamond_cfg_phi_finiteset_and_liveness\n";
 }
@@ -334,12 +438,20 @@ void test_ssa_pilot_srt_chasing_and_fau_store() {
     };
 
     auto df = run_ssa_pointer_analysis(mod, env);
-    assert(df.converged);
-    assert(df.val(rack_ptr).kind == TrackedVal::Kind::SrtRackPtr && df.val(rack_ptr).rack == 4);
-    assert(df.val(buf_va).kind == TrackedVal::Kind::BufferAddr && df.val(buf_va).symbol_name == "my_ssbo");
-    assert(df.val(buf_sz).kind == TrackedVal::Kind::BufferSize && df.val(buf_sz).symbol_name == "my_ssbo");
-    assert(df.pilot_fau_writes.count(0x00) == 1 && df.pilot_fau_writes.at(0x00).value.symbol_name == "my_ssbo");
-    assert(df.pilot_fau_writes.count(0x08) == 1 && df.pilot_fau_writes.at(0x08).value.kind == TrackedVal::Kind::BufferSize);
+    CHECK(df.converged);
+    auto v_rack = df.val(rack_ptr);
+    const auto* rp = v_rack.inner.get_if<PointerDomain>();
+    CHECK(rp && rp->kind == PointerVal::Kind::SrtRackPtr && rp->rack == 4);
+    auto v_buf = df.val(buf_va);
+    const auto* bv = v_buf.inner.get_if<PointerDomain>();
+    CHECK(bv && bv->kind == PointerVal::Kind::BufferAddr && bv->symbol_name == "my_ssbo");
+    auto v_sz = df.val(buf_sz);
+    const auto* bs = v_sz.inner.get_if<ShaderAtomDomain>();
+    CHECK(bs && bs->kind == ShaderAtomVal::Kind::BufferSize && bs->symbol_name == "my_ssbo");
+    CHECK(df.pilot_fau_writes.count(0x00) == 1 &&
+           df.pilot_fau_writes.at(0x00).value.inner.get_if<PointerDomain>()->symbol_name == "my_ssbo");
+    CHECK(df.pilot_fau_writes.count(0x08) == 1 &&
+           df.pilot_fau_writes.at(0x08).value.inner.get_if<ShaderAtomDomain>()->kind == ShaderAtomVal::Kind::BufferSize);
 
     std::cout << "[PASS] test_ssa_pilot_srt_chasing_and_fau_store\n";
 }
@@ -360,53 +472,69 @@ void test_ssa_pack64_split64_and_fau_seed() {
 
     PointerAnalysisEnv env;
     env.role = PointerAnalysisEnv::StageRole::MainCompute;
-    env.initial_fau[0x00] = TrackedVal::make_buffer_addr(4, 0, "input_buf", 0, false, true);
+    env.initial_fau[0x00] = TrackedValDomain::make_buffer_addr(4, 0, "input_buf", 0, false, true);
 
     auto df = run_ssa_pointer_analysis(mod, env);
-    assert(df.converged);
+    CHECK(df.converged);
     auto vp = df.val(ptr16);
-    assert(vp.kind == TrackedVal::Kind::BufferAddr && vp.symbol_name == "input_buf");
-    assert(vp.offset_known && vp.byte_offset == 16);
-    assert(!df.val(lo).is_hi_half && df.val(hi).is_hi_half);
+    const auto* vptr = vp.inner.get_if<PointerDomain>();
+    CHECK(vptr && vptr->kind == PointerVal::Kind::BufferAddr && vptr->symbol_name == "input_buf");
+    CHECK(vptr->offset_known && vptr->byte_offset == 16);
+    CHECK(!df.val(lo).is_hi_half && df.val(hi).is_hi_half);
 
     std::cout << "[PASS] test_ssa_pack64_split64_and_fau_seed\n";
 }
 
 void test_compound_op_delegation_lane_wrapper_and_atomic_exchange() {
-    // 1. Compound domain pointwise op delegation: VectorDomain, MapDomain, TupleDomain, FiniteSetDomain
+    // Compound domain pointwise op delegation across VectorDomain, MapDomain, TupleDomain, FiniteSetDomain, LaneDomainWrapper
     VectorDomain<TrackedValDomain>::Value va, vb;
-    va.set(0, TrackedVal::make_const(10));
-    vb.set(0, TrackedVal::make_const(32));
+    va.set(0, TrackedValDomain::make_const(10));
+    vb.set(0, TrackedValDomain::make_const(32));
     auto vsum = VectorDomain<TrackedValDomain>::iadd(va, vb, false);
-    assert(vsum.get(0).const_val == 42);
+    CHECK(TrackedValDomain::equals(vsum.get(0), TrackedValDomain::make_const(42)));
+    auto vmul = VectorDomain<TrackedValDomain>::mul(va, vb);
+    CHECK(TrackedValDomain::equals(vmul.get(0), TrackedValDomain::make_const(320)));
 
     MapDomain<uint32_t, TrackedValDomain>::Value ma, mb;
-    ma.set(1, TrackedVal::make_const(0xF0));
-    mb.set(1, TrackedVal::make_const(0x3C));
+    ma.set(1, TrackedValDomain::make_const(0xF0));
+    mb.set(1, TrackedValDomain::make_const(0x3C));
     auto mand = MapDomain<uint32_t, TrackedValDomain>::bit_and(ma, mb, false);
-    assert(mand.get(1).const_val == 0x30);
+    CHECK(TrackedValDomain::equals(mand.get(1), TrackedValDomain::make_const(0x30)));
+    auto mand_def = MapDomain<uint32_t, TrackedValDomain>::bit_and(ma, mb);
+    CHECK(TrackedValDomain::equals(mand_def.get(1), TrackedValDomain::make_const(0x30)));
 
     using PairDom = TupleDomain<TrackedValDomain, TrackedValDomain>;
-    auto tmul = PairDom::imul({TrackedVal::make_const(3), TrackedVal::make_const(5)},
-                              {TrackedVal::make_const(7), TrackedVal::make_const(9)}, false);
-    assert(std::get<0>(tmul).const_val == 21 && std::get<1>(tmul).const_val == 45);
+    auto tmul = PairDom::imul({TrackedValDomain::make_const(3), TrackedValDomain::make_const(5)},
+                              {TrackedValDomain::make_const(7), TrackedValDomain::make_const(9)}, false);
+    CHECK(std::get<0>(tmul).inner.get_if<ConstIntDomain>()->value == 21);
+    CHECK(std::get<1>(tmul).inner.get_if<ConstIntDomain>()->value == 45);
+    auto tsub = PairDom::sub({TrackedValDomain::make_const(20), TrackedValDomain::make_const(10)},
+                             {TrackedValDomain::make_const(8), TrackedValDomain::make_const(3)});
+    CHECK(std::get<0>(tsub).inner.get_if<ConstIntDomain>()->value == 12);
+    CHECK(std::get<1>(tsub).inner.get_if<ConstIntDomain>()->value == 7);
 
-    auto fsh = TrackedValSetDomain::shift(TrackedVal::make_const(3), TrackedVal::make_const(4),
+    auto fsh = TrackedValSetDomain::shift(TrackedValDomain::make_const(3), TrackedValDomain::make_const(4),
                                           ShiftKind::Shl, false);
-    assert(collapse_tracked_val_set(fsh).const_val == 48);
+    CHECK(TrackedValDomain::equals(collapse_tracked_val_set(fsh), TrackedValDomain::make_const(48)));
 
-    // 2. LaneDomainWrapper<TrackedValDomain>
-    using LaneTv = LaneDomainWrapper<TrackedValDomain>;
-    LaneTv::Value lv(TrackedVal::make_const(0x0000000200000005LL));
-    auto sp = LaneTv::split64(lv);
-    auto lo = LaneTv::tuple_extract(sp, 0);
-    auto hi = LaneTv::tuple_extract(sp, 1);
-    assert(lo.inner.const_val == 0x0000000200000005LL && hi.inner.const_val == 2);
-    auto repacked = LaneTv::pack64(LaneTv::Value(TrackedVal::make_const(5)),
-                                   LaneTv::Value(TrackedVal::make_const(2)));
-    assert(repacked.inner.const_val == 0x0000000200000005LL);
+    // LaneDomainWrapper<ConstIntDomain> & TrackedValDomain (= LaneDomainWrapper<TrackedValUnionDomain>)
+    auto lv = TrackedValDomain::make_const(0x0000000200000005LL);
+    auto sp = TrackedValDomain::split64(lv);
+    auto lo = TrackedValDomain::tuple_extract(sp, 0);
+    auto hi = TrackedValDomain::tuple_extract(sp, 1);
+    CHECK(lo.inner.get_if<ConstIntDomain>()->value == 0x0000000200000005LL);
+    CHECK(hi.inner.get_if<ConstIntDomain>()->value == 2 && !hi.is_hi_half);
+    auto repacked = TrackedValDomain::pack64(TrackedValDomain::make_const(5),
+                                             TrackedValDomain::make_const(2));
+    CHECK(repacked.inner.get_if<ConstIntDomain>()->value == 0x0000000200000005LL);
 
-    // 3. Default AtomicExchange transfer in SSA pointer analysis
+    // pack64(ConstInt, Top) must widen to Top rather than falsely returning ConstInt
+    CHECK(TrackedValDomain::pack64(TrackedValDomain::make_const(5), TrackedValDomain::top()).is_top());
+    // pack64(Pointer, Top) preserves the pointer identity
+    auto ptr_lo = TrackedValDomain::make_buffer_addr(4, 0, "p", 0);
+    CHECK(TrackedValDomain::equals(TrackedValDomain::pack64(ptr_lo, TrackedValDomain::top()), ptr_lo));
+
+    // Default AtomicExchange transfer in SSA pointer analysis
     ValhallSsaModule mod;
     SsaBlock b0{}; b0.id = 0; b0.is_terminated_by_end = true;
     mod.blocks.push_back(b0);
@@ -422,11 +550,10 @@ void test_compound_op_delegation_lane_wrapper_and_atomic_exchange() {
 
     PointerAnalysisEnv env;
     env.role = PointerAnalysisEnv::StageRole::MainCompute;
-    env.initial_fau[0x00] = TrackedVal::make_buffer_addr(4, 0, "counter_buf", 0, false, true);
+    env.initial_fau[0x00] = TrackedValDomain::make_buffer_addr(4, 0, "counter_buf", 0, false, true);
     auto df = run_ssa_pointer_analysis(mod, env);
-    assert(df.converged);
-    // old_v sees {7} (and on fixpoint iteration joins {7, 9} -> cardinality 2, both ConstInt)
-    assert(!df.val_set(old_v).is_bottom() && !df.val_set(old_v).is_top());
+    CHECK(df.converged);
+    CHECK(!df.val_set(old_v).is_bottom() && !df.val_set(old_v).is_top());
 
     std::cout << "[PASS] test_compound_op_delegation_lane_wrapper_and_atomic_exchange\n";
 }
@@ -436,7 +563,7 @@ void test_compound_op_delegation_lane_wrapper_and_atomic_exchange() {
 int main() {
     std::cout << "=== [Test] Valhall SSA Dataflow Combinators, Worklist, Liveness & Pointer Analysis ===\n";
     test_domain_combinators_and_memory_disjointness();
-    test_tracked_val_lattice_laws();
+    test_tracked_val_lattice_laws_and_union_dispatch();
     test_ssa_grouped_dispatch_and_extensional_equalities();
     test_ssa_diamond_cfg_phi_finiteset_and_liveness();
     test_ssa_pilot_srt_chasing_and_fau_store();
