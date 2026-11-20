@@ -499,84 +499,112 @@ struct IntegralAdditiveActionMixin {
     using IntValue = typename IntDomainT::Value;
     using IntScalar = typename IntDomainT::Scalar;
 
-    template <typename... Extra>
-    static ValueT add(const ValueT& base, const IntValue& delta, Extra&&... extra) {
-        if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
-        if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
-        if (delta.is_known()) {
-            if (delta.value == 0) return base;
-            return Derived::apply_int_delta(base, delta.value, std::forward<Extra>(extra)...);
+    // Single templated `add` handling (ValueT, IntValue), (IntValue, ValueT),
+    // (ValueT, OtherVal), and (OtherVal, ValueT) via enable_if. Using one overload
+    // instead of multiple swapped-arg overloads avoids a clangd 21.1.8 segfault
+    // during SFINAE overload resolution.
+    template <typename A, typename B, typename... Extra,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> &&
+                   (std::is_same_v<std::decay_t<B>, IntValue> ||
+                    (!std::is_same_v<std::decay_t<B>, ValueT> &&
+                     !std::is_same_v<std::decay_t<B>, IntValue>))) ||
+                  (std::is_same_v<std::decay_t<A>, IntValue> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> &&
+                   !std::is_same_v<std::decay_t<A>, IntValue> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT add(const A& a, const B& b, Extra&&... extra) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT> &&
+                      std::is_same_v<std::decay_t<B>, IntValue>) {
+            const ValueT& base = a;
+            const IntValue& delta = b;
+            if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
+            if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
+            if (delta.is_known()) {
+                if (delta.value == 0) return base;
+                return Derived::apply_int_delta(base, delta.value, std::forward<Extra>(extra)...);
+            }
+            return Derived::widen_unknown_offset(base);
+        } else if constexpr (std::is_same_v<std::decay_t<A>, IntValue> &&
+                             std::is_same_v<std::decay_t<B>, ValueT>) {
+            const IntValue& delta = a;
+            const ValueT& base = b;
+            if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
+            if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
+            if (delta.is_known()) {
+                if (delta.value == 0) return base;
+                return Derived::apply_int_delta(base, delta.value, std::forward<Extra>(extra)...);
+            }
+            return Derived::widen_unknown_offset(base);
+        } else if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            // (ValueT, OtherVal) -> widen
+            return Derived::widen_unknown_offset(a);
+        } else {
+            // (OtherVal, ValueT) -> widen
+            return Derived::widen_unknown_offset(b);
         }
-        return Derived::widen_unknown_offset(base);
     }
 
-    template <typename... Extra>
-    static ValueT add(const IntValue& delta, const ValueT& base, Extra&&... extra) {
-        return add(base, delta, std::forward<Extra>(extra)...);
-    }
-
-    template <typename... Extra>
-    static ValueT sub(const ValueT& base, const IntValue& delta, Extra&&... extra) {
-        if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
-        if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
-        if (delta.is_known()) {
-            if (delta.value == 0) return base;
-            return Derived::apply_int_delta(base, static_cast<IntScalar>(-delta.value),
-                                            std::forward<Extra>(extra)...);
+    // Single templated `sub` handling (ValueT, IntValue) and (ValueT, OtherVal).
+    template <typename A, typename B, typename... Extra,
+              std::enable_if_t<std::is_same_v<std::decay_t<A>, ValueT> &&
+                               (std::is_same_v<std::decay_t<B>, IntValue> ||
+                                (!std::is_same_v<std::decay_t<B>, ValueT> &&
+                                 !std::is_same_v<std::decay_t<B>, IntValue>)), int> = 0>
+    static ValueT sub(const A& base, const B& delta, Extra&&... extra) {
+        if constexpr (std::is_same_v<std::decay_t<B>, IntValue>) {
+            if (domain_equals<Derived>(base, Derived::bottom()) || delta.is_bottom()) return Derived::bottom();
+            if (domain_equals<Derived>(base, Derived::top())) return Derived::top();
+            if (delta.is_known()) {
+                if (delta.value == 0) return base;
+                return Derived::apply_int_delta(base, static_cast<IntScalar>(-delta.value),
+                                                std::forward<Extra>(extra)...);
+            }
+            return Derived::widen_unknown_offset(base);
+        } else {
+            return Derived::widen_unknown_offset(base);
         }
-        return Derived::widen_unknown_offset(base);
     }
 
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT add(const ValueT& base, const OtherVal&) {
-        return Derived::widen_unknown_offset(base);
+    // Single templated `iadd` handling (ValueT, IntValue), (IntValue, ValueT),
+    // (ValueT, OtherVal), and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<(std::is_same_v<std::decay_t<A>, ValueT> &&
+                                (std::is_same_v<std::decay_t<B>, IntValue> ||
+                                 (!std::is_same_v<std::decay_t<B>, ValueT> &&
+                                  !std::is_same_v<std::decay_t<B>, IntValue>))) ||
+                               (std::is_same_v<std::decay_t<A>, IntValue> &&
+                                std::is_same_v<std::decay_t<B>, ValueT>) ||
+                               (!std::is_same_v<std::decay_t<A>, ValueT> &&
+                                !std::is_same_v<std::decay_t<A>, IntValue> &&
+                                std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT iadd(const A& a, const B& b, bool is64 = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT> &&
+                      std::is_same_v<std::decay_t<B>, IntValue>) {
+            return add(a, b);
+        } else if constexpr (std::is_same_v<std::decay_t<A>, IntValue> &&
+                             std::is_same_v<std::decay_t<B>, ValueT>) {
+            return add(b, a);
+        } else if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::widen_unknown_offset(a);
+        } else {
+            return Derived::widen_unknown_offset(b);
+        }
     }
 
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT add(const OtherVal&, const ValueT& base) {
-        return Derived::widen_unknown_offset(base);
-    }
-
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT sub(const ValueT& base, const OtherVal&) {
-        return Derived::widen_unknown_offset(base);
-    }
-
-    static ValueT iadd(const ValueT& base, const IntValue& delta, bool /*is64*/ = true) {
-        return add(base, delta);
-    }
-    static ValueT iadd(const IntValue& delta, const ValueT& base, bool /*is64*/ = true) {
-        return add(delta, base);
-    }
-    static ValueT isub(const ValueT& base, const IntValue& delta, bool /*is64*/ = true) {
-        return sub(base, delta);
-    }
-
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT iadd(const ValueT& base, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::widen_unknown_offset(base);
-    }
-
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT iadd(const OtherVal&, const ValueT& base, bool /*is64*/ = true) {
-        return Derived::widen_unknown_offset(base);
-    }
-
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT> &&
-                               !std::is_same_v<std::decay_t<OtherVal>, IntValue>, int> = 0>
-    static ValueT isub(const ValueT& base, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::widen_unknown_offset(base);
+    // Single templated `isub` handling (ValueT, IntValue) and (ValueT, OtherVal).
+    template <typename A, typename B,
+              std::enable_if_t<std::is_same_v<std::decay_t<A>, ValueT> &&
+                               (std::is_same_v<std::decay_t<B>, IntValue> ||
+                                (!std::is_same_v<std::decay_t<B>, ValueT> &&
+                                 !std::is_same_v<std::decay_t<B>, IntValue>)), int> = 0>
+    static ValueT isub(const A& base, const B& delta, bool is64 = true) {
+        if constexpr (std::is_same_v<std::decay_t<B>, IntValue>) {
+            return sub(base, delta);
+        } else {
+            return Derived::widen_unknown_offset(base);
+        }
     }
 };
 
@@ -587,17 +615,34 @@ template <typename Derived, typename ValueT, typename IntDomainT>
 struct IntegralBitmaskActionMixin {
     using IntValue = typename IntDomainT::Value;
 
-    static ValueT bit_and(const ValueT& base, const IntValue& mask, bool is64 = true) {
-        if (domain_equals<Derived>(base, Derived::bottom()) || mask.is_bottom()) return Derived::bottom();
-        if (domain_equals<Derived>(base, Derived::top()) || !mask.is_known()) return Derived::top();
-        const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
-        if ((static_cast<uint64_t>(mask.value) & all_ones) == all_ones) return base;
-        if (mask.value == 0) return Derived::top();
-        return Derived::apply_int_mask(base, mask.value);
-    }
-
-    static ValueT bit_and(const IntValue& mask, const ValueT& base, bool is64 = true) {
-        return bit_and(base, mask, is64);
+    // Single templated `bit_and` handling both (ValueT, IntValue) and (IntValue, ValueT)
+    // argument orders via enable_if. Using one overload instead of two swapped-arg
+    // overloads avoids a clangd 21.1.8 segfault during SFINAE overload resolution.
+    template <typename A, typename B,
+              std::enable_if_t<(std::is_same_v<std::decay_t<A>, ValueT> &&
+                                std::is_same_v<std::decay_t<B>, IntValue>) ||
+                               (std::is_same_v<std::decay_t<A>, IntValue> &&
+                                std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT bit_and(const A& a, const B& b, bool is64 = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            const ValueT& base = a;
+            const IntValue& mask = b;
+            if (domain_equals<Derived>(base, Derived::bottom()) || mask.is_bottom()) return Derived::bottom();
+            if (domain_equals<Derived>(base, Derived::top()) || !mask.is_known()) return Derived::top();
+            const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
+            if ((static_cast<uint64_t>(mask.value) & all_ones) == all_ones) return base;
+            if (mask.value == 0) return Derived::top();
+            return Derived::apply_int_mask(base, mask.value);
+        } else {
+            const IntValue& mask = a;
+            const ValueT& base = b;
+            if (domain_equals<Derived>(base, Derived::bottom()) || mask.is_bottom()) return Derived::bottom();
+            if (domain_equals<Derived>(base, Derived::top()) || !mask.is_known()) return Derived::top();
+            const uint64_t all_ones = is64 ? ~0ULL : 0xFFFFFFFFULL;
+            if ((static_cast<uint64_t>(mask.value) & all_ones) == all_ones) return base;
+            if (mask.value == 0) return Derived::top();
+            return Derived::apply_int_mask(base, mask.value);
+        }
     }
 };
 
@@ -611,52 +656,118 @@ struct IntegralCombinableMixin {
     template <typename OtherVal>
     static constexpr bool is_excluded_v = (std::is_same_v<std::decay_t<OtherVal>, ExcludedValues> || ...);
 
-    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
-    static ValueT add(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
-    template <typename OtherVal,
-              std::enable_if_t<!is_excluded_v<OtherVal> && !std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
-    static ValueT add(const OtherVal&, const ValueT& s) { return Derived::combine_with_scalar(s); }
-
-    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
-    static ValueT sub(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
-
-    template <typename OtherVal>
-    static ValueT mul(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
-    static ValueT mul(const OtherVal&, const ValueT& s) { return Derived::combine_with_scalar(s); }
-
-    template <typename OtherVal>
-    static ValueT div(const ValueT& s, const OtherVal&) { return Derived::combine_with_scalar(s); }
-
-    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
-    static ValueT iadd(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
-    }
-    template <typename OtherVal,
-              std::enable_if_t<!is_excluded_v<OtherVal> && !std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
-    static ValueT iadd(const OtherVal&, const ValueT& s, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
+    // Single templated `add` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    // Using one overload instead of two swapped-arg overloads avoids a clangd 21.1.8 segfault
+    // during SFINAE overload resolution.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT add(const A& a, const B& b) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
     }
 
-    template <typename OtherVal, std::enable_if_t<!is_excluded_v<OtherVal>, int> = 0>
-    static ValueT isub(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
+    // Single templated `sub` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT sub(const A& a, const B& b) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
     }
 
-    template <typename OtherVal>
-    static ValueT imul(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
-    }
-    template <typename OtherVal,
-              std::enable_if_t<!std::is_same_v<std::decay_t<OtherVal>, ValueT>, int> = 0>
-    static ValueT imul(const OtherVal&, const ValueT& s, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
+    // Single templated `mul` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT mul(const A& a, const B& b) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
     }
 
-    template <typename OtherVal>
-    static ValueT idiv(const ValueT& s, const OtherVal&, bool /*is64*/ = true) {
-        return Derived::combine_with_scalar(s);
+    // Single templated `div` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT div(const A& a, const B& b) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
+    }
+
+    // Single templated `iadd` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT iadd(const A& a, const B& b, bool /*is64*/ = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
+    }
+
+    // Single templated `isub` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT isub(const A& a, const B& b, bool /*is64*/ = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
+    }
+
+    // Single templated `imul` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT imul(const A& a, const B& b, bool /*is64*/ = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
+    }
+
+    // Single templated `idiv` handling (ValueT, OtherVal) and (OtherVal, ValueT) via enable_if.
+    template <typename A, typename B,
+              std::enable_if_t<
+                  (std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<B>) ||
+                  (!std::is_same_v<std::decay_t<A>, ValueT> && !is_excluded_v<A> &&
+                   std::is_same_v<std::decay_t<B>, ValueT>), int> = 0>
+    static ValueT idiv(const A& a, const B& b, bool /*is64*/ = true) {
+        if constexpr (std::is_same_v<std::decay_t<A>, ValueT>) {
+            return Derived::combine_with_scalar(a);
+        } else {
+            return Derived::combine_with_scalar(b);
+        }
     }
 };
 
