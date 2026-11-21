@@ -90,6 +90,10 @@ class TestAllPathsMiter(unittest.TestCase):
         # Sound side-effect specs -> UNSAT
         for mnem, var, mods in [
             ("BRANCH", "", {}),
+            ("BRANCH", "", {"combine": "h0"}),
+            ("BRANCH", "", {"combine": "h1"}),
+            ("BRANCH", "", {"combine": "and"}),
+            ("BRANCH", "", {"combine": "lowbits"}),
             ("BARRIER", "", {}),
             ("STORE", "i32", {}),
         ]:
@@ -102,7 +106,6 @@ class TestAllPathsMiter(unittest.TestCase):
 
         # Known side-effect divergences -> SAT
         for mnem, var, mods in [
-            ("BRANCH", "", {"combine": "h0"}),
             ("JUMP", "", {}),
             ("DISCARD", "", {}),
         ]:

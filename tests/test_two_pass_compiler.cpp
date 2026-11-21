@@ -480,6 +480,71 @@ int main() {
         std::cout << "[PASS] Checkpoint v27: Compute ABI r55..r62 and LD_TEX_IMM 16:16 coordinate unpacking verified\n";
     }
 
+    // Checkpoint v27.1: BRANCH unary combine modes and CLPER lane_op / subgroup modes.
+    {
+        auto lower_single = [&](const DecodedValhallInst& ins) {
+            DecodedValhallInst end = make_inst(0x08, Mnemonic::NOP, Mnemonic::NOP);
+            end.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> v = { ins, end };
+            auto cfg = cfg::build_cfg(v);
+            ValhallTranslateOptions opts{};
+            opts.stage = ShaderStage::Compute;
+            auto p1 = run_pass1_lowering(cfg, cfg::ControlFlowGraph{}, opts);
+            assert(p1.ok);
+            return p1;
+        };
+        auto has_op = [&](const Pass1Result& p1, SsaOp op) {
+            for (size_t id = 1; id < p1.ssa.nodes.size(); ++id) {
+                if (p1.ssa.nodes[id].op == op) return true;
+            }
+            return false;
+        };
+        auto br_and = make_inst(0x00, Mnemonic::BRANCH, Mnemonic::BRANCH);
+        br_and.srcs = { reg_src(2) };
+        br_and.modifier_strs["combine"] = "and";
+        auto p_and = lower_single(br_and);
+        assert(has_op(p_and, SsaOp::ICmpEq));
+        bool saw_all_ones = false;
+        for (size_t id = 1; id < p_and.ssa.nodes.size(); ++id) {
+            const auto& n = p_and.ssa.nodes[id];
+            if (n.op == SsaOp::ConstU32 && n.imm_u32 == 0xFFFFFFFFu) saw_all_ones = true;
+        }
+        assert(saw_all_ones);
+
+        auto br_h1 = make_inst(0x00, Mnemonic::BRANCH, Mnemonic::BRANCH);
+        br_h1.srcs = { reg_src(2) };
+        br_h1.modifier_strs["combine"] = "h1";
+        assert(has_op(lower_single(br_h1), SsaOp::ShrU));
+
+        auto br_lb = make_inst(0x00, Mnemonic::BRANCH, Mnemonic::BRANCH);
+        br_lb.srcs = { reg_src(2) };
+        br_lb.modifier_strs["combine"] = "lowbits";
+        assert(has_op(lower_single(br_lb), SsaOp::LogicalAnd));
+
+        auto clper_xor = make_inst(0x00, Mnemonic::CLPER, Mnemonic::CLPER, Variant::NONE);
+        clper_xor.has_dest = true; clper_xor.dest_reg = 2;
+        clper_xor.srcs = { reg_src(1), reg_src(3) };
+        clper_xor.modifier_strs["lane_op"] = "xor";
+        clper_xor.modifier_strs["subgroup"] = "subgroup16";
+        auto p_xor = lower_single(clper_xor);
+        assert(has_op(p_xor, SsaOp::BitXor));
+        assert(has_op(p_xor, SsaOp::SubgroupShuffle));
+
+        auto clper_shift = make_inst(0x00, Mnemonic::CLPER, Mnemonic::CLPER, Variant::NONE);
+        clper_shift.has_dest = true; clper_shift.dest_reg = 2;
+        clper_shift.srcs = { reg_src(1), reg_src(3) };
+        clper_shift.modifier_strs["lane_op"] = "shift";
+        clper_shift.modifier_strs["subgroup"] = "subgroup4";
+        assert(has_op(lower_single(clper_shift), SsaOp::ISub));
+
+        auto clper_or = make_inst(0x00, Mnemonic::CLPER_OR, Mnemonic::CLPER_OR, Variant::NONE);
+        clper_or.has_dest = true; clper_or.dest_reg = 2;
+        clper_or.srcs = { reg_src(1), reg_src(3), reg_src(4) };
+        assert(has_op(lower_single(clper_or), SsaOp::BitOr));
+
+        std::cout << "[PASS] Checkpoint v27.1: BRANCH combine modes and CLPER lane_op/subgroup verified\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }

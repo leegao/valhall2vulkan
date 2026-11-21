@@ -166,20 +166,30 @@ SsaId Pass1Context::format_cmp_result(uint32_t blk, const DecodedValhallInst& in
 SsaId Pass1Context::eval_branch_cond(uint32_t blk, const DecodedValhallInst& ins) {
     if (ins.srcs.empty()) return sb.emit_const_bool(blk, true);
     SsaId s0 = fetch_src_int32(*this, blk, ins, nullptr, 0, false);
-    SsaId cond = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { s0, sb.emit_const_u32(blk, 0u) });
 
     std::string comb = "none";
     auto it_c = ins.modifier_strs.find("combine");
     if (it_c != ins.modifier_strs.end()) comb = it_c->second;
-    if (ins.srcs.size() >= 2 && comb != "none") {
-        SsaId s1 = fetch_src_int32(*this, blk, ins, nullptr, 1, false);
-        if (comb == "eq") {
-            cond = emit_op(blk, SsaOp::ICmpEq, ValType::Bool, { s0, s1 });
-        } else {
-            SsaId c1 = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { s1, sb.emit_const_u32(blk, 0u) });
-            cond = emit_op(blk, (comb == "and") ? SsaOp::LogicalAnd : SsaOp::LogicalOr, ValType::Bool, { cond, c1 });
-        }
+
+    SsaId cond = kInvalidSsa;
+    if (comb == "and") {
+        cond = emit_op(blk, SsaOp::ICmpEq, ValType::Bool, { s0, sb.emit_const_u32(blk, 0xFFFFFFFFu) });
+    } else if (comb == "h0") {
+        SsaId lo = emit_op(blk, SsaOp::BitAnd, ValType::U32, { s0, sb.emit_const_u32(blk, 0xFFFFu) });
+        cond = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { lo, sb.emit_const_u32(blk, 0u) });
+    } else if (comb == "h1") {
+        SsaId hi = emit_op(blk, SsaOp::ShrU, ValType::U32, { s0, sb.emit_const_u32(blk, 16u) });
+        cond = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { hi, sb.emit_const_u32(blk, 0u) });
+    } else if (comb == "lowbits") {
+        SsaId mask = sb.emit_const_u32(blk, 0x001FFFF8u);
+        SsaId lb = emit_op(blk, SsaOp::BitAnd, ValType::U32, { s0, mask });
+        SsaId nz = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { lb, sb.emit_const_u32(blk, 0u) });
+        SsaId nf = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { lb, mask });
+        cond = emit_op(blk, SsaOp::LogicalAnd, ValType::Bool, { nz, nf });
+    } else {
+        cond = emit_op(blk, SsaOp::ICmpNe, ValType::Bool, { s0, sb.emit_const_u32(blk, 0u) });
     }
+
     auto it_not = ins.fields.find("not");
     if (it_not != ins.fields.end() && it_not->second != 0) {
         cond = emit_op(blk, SsaOp::LogicalNot, ValType::Bool, { cond });
