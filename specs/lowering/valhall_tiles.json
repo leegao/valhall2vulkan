@@ -13,7 +13,15 @@
                 "args": [
                     {
                         "op": "Split64",
-                        "args": [{ "op": "Pack64", "args": ["$lo", "$hi"] }]
+                        "args": [
+                            {
+                                "op": "Pack64",
+                                "args": [
+                                    "$lo",
+                                    "$hi"
+                                ]
+                            }
+                        ]
                     }
                 ]
             },
@@ -30,7 +38,15 @@
                 "args": [
                     {
                         "op": "Split64",
-                        "args": [{ "op": "Pack64", "args": ["$lo", "$hi"] }]
+                        "args": [
+                            {
+                                "op": "Pack64",
+                                "args": [
+                                    "$lo",
+                                    "$hi"
+                                ]
+                            }
+                        ]
                     }
                 ]
             },
@@ -45,7 +61,10 @@
                 "op": "Bfi",
                 "imm_offset": 0,
                 "imm_width": 32,
-                "args": ["$old", "$val"]
+                "args": [
+                    "$old",
+                    "$val"
+                ]
             },
             "emit": "ForwardArg1",
             "effects": []
@@ -56,7 +75,14 @@
             "cost": 0,
             "pattern": {
                 "op": "BitNot",
-                "args": [{ "op": "BitNot", "args": ["$x"] }]
+                "args": [
+                    {
+                        "op": "BitNot",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
             },
             "emit": "ForwardInnerArg0",
             "effects": []
@@ -67,7 +93,14 @@
             "cost": 0,
             "pattern": {
                 "op": "FNeg",
-                "args": [{ "op": "FNeg", "args": ["$x"] }]
+                "args": [
+                    {
+                        "op": "FNeg",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
             },
             "emit": "ForwardInnerArg0",
             "effects": []
@@ -79,7 +112,14 @@
             "pattern": {
                 "op": "Bitcast",
                 "same_type_as_inner": true,
-                "args": [{ "op": "Bitcast", "args": ["$x"] }]
+                "args": [
+                    {
+                        "op": "Bitcast",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
             },
             "emit": "ForwardInnerArg0",
             "effects": []
@@ -90,7 +130,14 @@
             "cost": 0,
             "pattern": {
                 "op": "UnpackHalf2x16",
-                "args": [{ "op": "PackHalf2x16", "args": ["$v"] }]
+                "args": [
+                    {
+                        "op": "PackHalf2x16",
+                        "args": [
+                            "$v"
+                        ]
+                    }
+                ]
             },
             "emit": "ForwardInnerArg0",
             "effects": []
@@ -101,7 +148,13 @@
             "cost": 0,
             "pattern": {
                 "op": "IAdd",
-                "args": ["$x", { "op": "ConstU32", "imm": 0 }]
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstU32",
+                        "imm": 0
+                    }
+                ]
             },
             "emit": "ForwardArg0",
             "effects": []
@@ -112,7 +165,13 @@
             "cost": 0,
             "pattern": {
                 "op": "BitOr",
-                "args": ["$x", { "op": "ConstU32", "imm": 0 }]
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstU32",
+                        "imm": 0
+                    }
+                ]
             },
             "emit": "ForwardArg0",
             "effects": []
@@ -123,7 +182,13 @@
             "cost": 0,
             "pattern": {
                 "op": "BitAnd",
-                "args": ["$x", { "op": "ConstU32", "imm": 4294967295 }]
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstU32",
+                        "imm": 4294967295
+                    }
+                ]
             },
             "emit": "ForwardArg0",
             "effects": []
@@ -134,7 +199,13 @@
             "cost": 0,
             "pattern": {
                 "op": "IMul",
-                "args": ["$x", { "op": "ConstU32", "imm": 1 }]
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstU32",
+                        "imm": 1
+                    }
+                ]
             },
             "emit": "ForwardArg0",
             "effects": []
@@ -145,10 +216,21 @@
             "cost": 1,
             "pattern": {
                 "op": "FAdd",
-                "args": [{ "op": "FMul", "args": ["$a", "$b"] }, "$c"]
+                "args": [
+                    {
+                        "op": "FMul",
+                        "args": [
+                            "$a",
+                            "$b"
+                        ]
+                    },
+                    "$c"
+                ]
             },
             "emit": "GlslFma",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "fuse_fma_f32_commuted",
@@ -156,10 +238,21 @@
             "cost": 1,
             "pattern": {
                 "op": "FAdd",
-                "args": ["$c", { "op": "FMul", "args": ["$a", "$b"] }]
+                "args": [
+                    "$c",
+                    {
+                        "op": "FMul",
+                        "args": [
+                            "$a",
+                            "$b"
+                        ]
+                    }
+                ]
             },
             "emit": "GlslFmaCommuted",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "fuse_fsub_f32",
@@ -167,7 +260,15 @@
             "cost": 1,
             "pattern": {
                 "op": "FAdd",
-                "args": ["$a", { "op": "FNeg", "args": ["$b"] }]
+                "args": [
+                    "$a",
+                    {
+                        "op": "FNeg",
+                        "args": [
+                            "$b"
+                        ]
+                    }
+                ]
             },
             "emit": "OpFSub",
             "effects": []
@@ -178,10 +279,21 @@
             "cost": 1,
             "pattern": {
                 "op": "NMin",
-                "args": [{ "op": "NMax", "args": ["$x", "$lo"] }, "$hi"]
+                "args": [
+                    {
+                        "op": "NMax",
+                        "args": [
+                            "$x",
+                            "$lo"
+                        ]
+                    },
+                    "$hi"
+                ]
             },
             "emit": "GlslFClamp",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "fuse_bfe_u32",
@@ -189,12 +301,20 @@
             "cost": 1,
             "pattern": {
                 "op": "BitAnd",
-                "args": [{ "op": "ShrU", "args": ["$x", "$off"] }, "$mask"]
+                "args": [
+                    {
+                        "op": "ShrU",
+                        "args": [
+                            "$x",
+                            "$off"
+                        ]
+                    },
+                    "$mask"
+                ]
             },
             "emit": "OpBitFieldUExtractMask",
             "effects": []
         },
-
         {
             "name": "canon_nop",
             "kind": "canonical",
@@ -241,7 +361,9 @@
             "cost": 0,
             "ssa_op": "ConstU64",
             "emit": "ConstU64",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_const_bool",
@@ -265,7 +387,9 @@
             "cost": 1,
             "ssa_op": "LoadFau",
             "emit": "LoadFau",
-            "effects": ["uses_sideband"]
+            "effects": [
+                "uses_sideband"
+            ]
         },
         {
             "name": "canon_load_sideband_u64",
@@ -273,7 +397,10 @@
             "cost": 1,
             "ssa_op": "LoadSidebandU64",
             "emit": "LoadSidebandU64",
-            "effects": ["uses_sideband", "cap:Int64"]
+            "effects": [
+                "uses_sideband",
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_load_sideband_u32",
@@ -281,7 +408,9 @@
             "cost": 1,
             "ssa_op": "LoadSidebandU32",
             "emit": "LoadSidebandU32",
-            "effects": ["uses_sideband"]
+            "effects": [
+                "uses_sideband"
+            ]
         },
         {
             "name": "canon_load_builtin_input",
@@ -313,7 +442,9 @@
             "cost": 1,
             "ssa_op": "Pack64",
             "emit": "Pack64",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_split64",
@@ -321,7 +452,9 @@
             "cost": 1,
             "ssa_op": "Split64",
             "emit": "Split64",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_tuple_extract",
@@ -361,7 +494,9 @@
             "cost": 1,
             "ssa_op": "UnpackHalf2x16",
             "emit": "GlslUnpackHalf2x16",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_pack_half2x16",
@@ -369,7 +504,9 @@
             "cost": 1,
             "ssa_op": "PackHalf2x16",
             "emit": "GlslPackHalf2x16",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_bitcast",
@@ -419,7 +556,6 @@
             "emit": "OpVectorShuffle",
             "effects": []
         },
-
         {
             "name": "canon_fadd",
             "kind": "canonical",
@@ -466,7 +602,9 @@
             "cost": 1,
             "ssa_op": "FAbs",
             "emit": "GlslFAbs",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_fma",
@@ -474,7 +612,9 @@
             "cost": 1,
             "ssa_op": "Fma",
             "emit": "GlslFma",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_fmin",
@@ -482,7 +622,9 @@
             "cost": 1,
             "ssa_op": "FMin",
             "emit": "GlslFMin",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_fmax",
@@ -490,7 +632,9 @@
             "cost": 1,
             "ssa_op": "FMax",
             "emit": "GlslFMax",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_nmin",
@@ -498,7 +642,9 @@
             "cost": 1,
             "ssa_op": "NMin",
             "emit": "GlslNMin",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_nmax",
@@ -506,7 +652,9 @@
             "cost": 1,
             "ssa_op": "NMax",
             "emit": "GlslNMax",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_fclamp",
@@ -514,7 +662,9 @@
             "cost": 1,
             "ssa_op": "FClamp",
             "emit": "GlslFClamp",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_round_even",
@@ -522,7 +672,9 @@
             "cost": 1,
             "ssa_op": "RoundEven",
             "emit": "GlslRoundEven",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_floor",
@@ -530,7 +682,9 @@
             "cost": 1,
             "ssa_op": "Floor",
             "emit": "GlslFloor",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_ceil",
@@ -538,7 +692,9 @@
             "cost": 1,
             "ssa_op": "Ceil",
             "emit": "GlslCeil",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_trunc",
@@ -546,7 +702,9 @@
             "cost": 1,
             "ssa_op": "Trunc",
             "emit": "GlslTrunc",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_ldexp",
@@ -554,7 +712,9 @@
             "cost": 1,
             "ssa_op": "Ldexp",
             "emit": "GlslLdexp",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_frexp_exp",
@@ -562,7 +722,9 @@
             "cost": 2,
             "ssa_op": "FrexpExp",
             "emit": "GlslFrexpExp",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_frexp_sig",
@@ -570,7 +732,9 @@
             "cost": 2,
             "ssa_op": "FrexpSignificand",
             "emit": "GlslFrexpSig",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_exp",
@@ -578,7 +742,9 @@
             "cost": 1,
             "ssa_op": "Exp",
             "emit": "GlslExp",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_exp2",
@@ -586,7 +752,9 @@
             "cost": 1,
             "ssa_op": "Exp2",
             "emit": "GlslExp2",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_log",
@@ -594,7 +762,9 @@
             "cost": 1,
             "ssa_op": "Log",
             "emit": "GlslLog",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_log2",
@@ -602,7 +772,9 @@
             "cost": 1,
             "ssa_op": "Log2",
             "emit": "GlslLog2",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_pow",
@@ -610,7 +782,9 @@
             "cost": 1,
             "ssa_op": "Pow",
             "emit": "GlslPow",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_sqrt",
@@ -618,7 +792,9 @@
             "cost": 1,
             "ssa_op": "Sqrt",
             "emit": "GlslSqrt",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_rsqrt",
@@ -626,7 +802,9 @@
             "cost": 1,
             "ssa_op": "InverseSqrt",
             "emit": "GlslInverseSqrt",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_sin",
@@ -634,7 +812,9 @@
             "cost": 1,
             "ssa_op": "Sin",
             "emit": "GlslSin",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_cos",
@@ -642,7 +822,9 @@
             "cost": 1,
             "ssa_op": "Cos",
             "emit": "GlslCos",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_atan",
@@ -650,7 +832,9 @@
             "cost": 1,
             "ssa_op": "Atan",
             "emit": "GlslAtan",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_isnan",
@@ -668,7 +852,6 @@
             "emit": "OpIsInf",
             "effects": []
         },
-
         {
             "name": "canon_iadd",
             "kind": "canonical",
@@ -699,7 +882,9 @@
             "cost": 1,
             "ssa_op": "IAdd64",
             "emit": "OpIAdd",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_isub64",
@@ -707,7 +892,9 @@
             "cost": 1,
             "ssa_op": "ISub64",
             "emit": "OpISub",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_imul64",
@@ -715,7 +902,9 @@
             "cost": 1,
             "ssa_op": "IMul64",
             "emit": "OpIMul",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_sabs",
@@ -723,7 +912,9 @@
             "cost": 1,
             "ssa_op": "SAbs",
             "emit": "GlslSAbs",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_sneg",
@@ -757,7 +948,6 @@
             "emit": "EmitIDot4SU",
             "effects": []
         },
-
         {
             "name": "canon_bit_and",
             "kind": "canonical",
@@ -796,7 +986,9 @@
             "cost": 1,
             "ssa_op": "BitAnd64",
             "emit": "OpBitwiseAnd",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_bit_or64",
@@ -804,7 +996,9 @@
             "cost": 1,
             "ssa_op": "BitOr64",
             "emit": "OpBitwiseOr",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_bit_xor64",
@@ -812,7 +1006,9 @@
             "cost": 1,
             "ssa_op": "BitXor64",
             "emit": "OpBitwiseXor",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_bit_not64",
@@ -820,7 +1016,9 @@
             "cost": 1,
             "ssa_op": "BitNot64",
             "emit": "OpNot",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_shl",
@@ -852,7 +1050,9 @@
             "cost": 1,
             "ssa_op": "Shl64",
             "emit": "OpShiftLeftLogical",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_shru64",
@@ -860,7 +1060,9 @@
             "cost": 1,
             "ssa_op": "ShrU64",
             "emit": "OpShiftRightLogical",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_shrs64",
@@ -868,7 +1070,9 @@
             "cost": 1,
             "ssa_op": "ShrS64",
             "emit": "OpShiftRightArithmetic",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_rotl",
@@ -908,9 +1112,10 @@
             "cost": 3,
             "ssa_op": "Clz",
             "emit": "EmitClz",
-            "effects": ["uses_glsl_std450"]
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
-
         {
             "name": "canon_fcmp_ord_eq",
             "kind": "canonical",
@@ -975,7 +1180,6 @@
             "emit": "EmitFCmpTotal",
             "effects": []
         },
-
         {
             "name": "canon_icmp_eq",
             "kind": "canonical",
@@ -1056,7 +1260,6 @@
             "emit": "OpULessThanEqual",
             "effects": []
         },
-
         {
             "name": "canon_land",
             "kind": "canonical",
@@ -1089,7 +1292,6 @@
             "emit": "OpSelect",
             "effects": []
         },
-
         {
             "name": "canon_ftos",
             "kind": "canonical",
@@ -1128,7 +1330,9 @@
             "cost": 1,
             "ssa_op": "UConvert32To64",
             "emit": "OpUConvert",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_s32_to_64",
@@ -1136,7 +1340,9 @@
             "cost": 1,
             "ssa_op": "SConvert32To64",
             "emit": "OpSConvert",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
         {
             "name": "canon_u64_to_32",
@@ -1144,16 +1350,20 @@
             "cost": 1,
             "ssa_op": "UConvert64To32",
             "emit": "OpUConvert",
-            "effects": ["cap:Int64"]
+            "effects": [
+                "cap:Int64"
+            ]
         },
-
         {
             "name": "canon_sg_ballot",
             "kind": "canonical",
             "cost": 1,
             "ssa_op": "SubgroupBallot",
             "emit": "OpGroupNonUniformBallot",
-            "effects": ["cap:GroupNonUniform", "cap:GroupNonUniformBallot"]
+            "effects": [
+                "cap:GroupNonUniform",
+                "cap:GroupNonUniformBallot"
+            ]
         },
         {
             "name": "canon_sg_shuffle",
@@ -1161,9 +1371,11 @@
             "cost": 1,
             "ssa_op": "SubgroupShuffle",
             "emit": "OpGroupNonUniformShuffle",
-            "effects": ["cap:GroupNonUniform", "cap:GroupNonUniformShuffle"]
+            "effects": [
+                "cap:GroupNonUniform",
+                "cap:GroupNonUniformShuffle"
+            ]
         },
-
         {
             "name": "canon_psb_load",
             "kind": "canonical",
@@ -1294,6 +1506,138 @@
             "cost": 1,
             "ssa_op": "Return",
             "emit": "OpReturn",
+            "effects": []
+        },
+        {
+            "name": "canon_udiv",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "UDiv",
+            "emit": "OpUDiv",
+            "effects": []
+        },
+        {
+            "name": "canon_sdiv",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "SDiv",
+            "emit": "OpSDiv",
+            "effects": []
+        },
+        {
+            "name": "canon_umod",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "UMod",
+            "emit": "OpUMod",
+            "effects": []
+        },
+        {
+            "name": "canon_srem",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "SRem",
+            "emit": "OpSRem",
+            "effects": []
+        },
+        {
+            "name": "canon_smod",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "SMod",
+            "emit": "OpSMod",
+            "effects": []
+        },
+        {
+            "name": "canon_atan2",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Atan2",
+            "emit": "GlslAtan2",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_asin",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Asin",
+            "emit": "GlslAsin",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_acos",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Acos",
+            "emit": "GlslAcos",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_sinh",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Sinh",
+            "emit": "GlslSinh",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_cosh",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Cosh",
+            "emit": "GlslCosh",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_tanh",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Tanh",
+            "emit": "GlslTanh",
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "canon_dpdx",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "DPdx",
+            "emit": "OpDPdx",
+            "effects": []
+        },
+        {
+            "name": "canon_dpdy",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "DPdy",
+            "emit": "OpDPdy",
+            "effects": []
+        },
+        {
+            "name": "canon_fwidth",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "Fwidth",
+            "emit": "OpFwidth",
+            "effects": []
+        },
+        {
+            "name": "canon_img_query_size",
+            "kind": "canonical",
+            "cost": 1,
+            "ssa_op": "ImageQuerySize",
+            "emit": "OpImageQuerySize",
             "effects": []
         }
     ]

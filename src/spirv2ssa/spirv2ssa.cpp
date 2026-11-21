@@ -45,8 +45,12 @@ std::vector<uint32_t> block_succ_labels(const SpirvBasicBlock& blk) {
 
 bool is_atomic_opcode(SpvOp op) {
     switch (op) {
+        case SpvOpAtomicLoad:
         case SpvOpAtomicExchange:
         case SpvOpAtomicCompareExchange:
+        case SpvOpAtomicCompareExchangeWeak:
+        case SpvOpAtomicIIncrement:
+        case SpvOpAtomicIDecrement:
         case SpvOpAtomicIAdd:
         case SpvOpAtomicISub:
         case SpvOpAtomicSMin:
@@ -253,11 +257,19 @@ void SpirvLowerer::lower_switch(
     auto dit = lbl_map.find(inst.words[2]);
     int32_t default_blk = (dit != lbl_map.end()) ? static_cast<int32_t>(dit->second) : -1;
 
-    std::vector<std::pair<uint32_t, uint32_t>> cases;
-    for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
-        auto tit = lbl_map.find(inst.words[k + 1]);
-        if (tit != lbl_map.end()) {
-            cases.push_back({inst.words[k], tit->second});
+    const SpirvType* sel_t = mod_.get_type(sel.spv_type_id);
+    bool is_64 = (sel_t && sel_t->width == 64);
+    std::vector<std::pair<uint64_t, uint32_t>> cases;
+    if (is_64) {
+        for (size_t k = 3; k + 2 < inst.words.size(); k += 3) {
+            uint64_t lit64 = uint64_t(inst.words[k]) | (uint64_t(inst.words[k + 1]) << 32);
+            auto tit = lbl_map.find(inst.words[k + 2]);
+            if (tit != lbl_map.end()) cases.push_back({lit64, tit->second});
+        }
+    } else {
+        for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
+            auto tit = lbl_map.find(inst.words[k + 1]);
+            if (tit != lbl_map.end()) cases.push_back({inst.words[k], tit->second});
         }
     }
 
@@ -272,10 +284,13 @@ void SpirvLowerer::lower_switch(
 
     uint32_t cur_blk = blk_id;
     for (size_t i = 0; i < cases.size(); ++i) {
-        uint32_t lit = cases[i].first;
+        uint64_t lit = cases[i].first;
         uint32_t target_blk = cases[i].second;
-        SsaId cmp = emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
-                            {sel.scalar(), sb_.emit_const_u32(cur_blk, lit)});
+        SsaId cmp = is_64
+                        ? emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
+                                  {sel.scalar(), sb_.emit_const_u64(cur_blk, lit)})
+                        : emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
+                                  {sel.scalar(), sb_.emit_const_u32(cur_blk, static_cast<uint32_t>(lit))});
         res_.ssa.blocks[cur_blk].is_conditional_branch = true;
         res_.ssa.blocks[cur_blk].branch_cond = cmp;
         res_.ssa.blocks[cur_blk].branch_target_block = static_cast<int32_t>(target_blk);
@@ -498,6 +513,7 @@ bool SpirvLowerer::lower_function_body(
                 case SpvOpAccessChain:
                 case SpvOpInBoundsAccessChain:
                 case SpvOpPtrAccessChain:
+                case SpvOpInBoundsPtrAccessChain:
                     if (inst.words.size() >= 4) {
                         pointers_[inst.words[2]] = lower_access_chain(cur_b, inst);
                     }
@@ -511,6 +527,14 @@ bool SpirvLowerer::lower_function_body(
 
                 case SpvOpStore:
                     lower_store(cur_b, inst);
+                    break;
+
+                case SpvOpCopyMemory:
+                    lower_copy_memory(cur_b, inst);
+                    break;
+
+                case SpvOpAtomicStore:
+                    lower_atomic_store(cur_b, inst);
                     break;
 
                 case SpvOpFunctionCall:

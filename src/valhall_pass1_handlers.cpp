@@ -506,6 +506,29 @@ SsaId load_frag_var_idx(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
     return ctx.sb.emit(blk, std::move(ld));
 }
 
+SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+    uint32_t special_idx = 2u;  // default frag_w
+    if (auto it = ins.fields.find("index"); it != ins.fields.end()) {
+        special_idx = it->second;
+    }
+    if (special_idx == 2u || special_idx == 3u) {
+        SsaId fc = ctx.emit_builtin_input(blk, spirv::BuiltIn::FragCoord, ValType::V4F32, "gl_FragCoord", false);
+        SsaNode ex{};
+        ex.op = SsaOp::VecExtract;
+        ex.type = ValType::F32;
+        ex.imm_u32 = (special_idx == 2u) ? 3u : 2u;  // 2=frag_w (.w), 3=frag_z (.z)
+        ex.args = { fc };
+        return ctx.sb.emit(blk, std::move(ex));
+    }
+    SsaId pc = ctx.emit_builtin_input(blk, spirv::BuiltIn::PointCoord, ValType::V2F32, "gl_PointCoord", false);
+    SsaNode ex{};
+    ex.op = SsaOp::VecExtract;
+    ex.type = ValType::F32;
+    ex.imm_u32 = (special_idx == 1u) ? 1u : 0u;  // 0=point_x, 1=point_y
+    ex.args = { pc };
+    return ctx.sb.emit(blk, std::move(ex));
+}
+
 SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, SsaId uv, bool is_gather, SsaId tok) {
     uint32_t gcomp = 0;
     if (is_gather) {
@@ -550,7 +573,11 @@ SsaId store_builtin_depth(Pass1Context& ctx, uint32_t blk, const DecodedValhallI
     return ctx.sb.emit(blk, std::move(st));
 }
 
-SsaId store_vert_varying(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, SsaId vec, SsaId tok) {
+SsaId store_vert_varying(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId vec, SsaId tok) {
+    // Valhall Vertex Position shaders write gl_Position to the Position FIFO via STORE.estream k0, #0x1.
+    if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::SmallConstant && ins.imm_signed == 1) {
+        return store_builtin_pos(ctx, blk, ins, rule, vec, tok);
+    }
     uint32_t var_loc = static_cast<uint32_t>(std::max<int64_t>(0, ins.imm_signed) / 16);
     SsaNode st{};
     st.op = SsaOp::StoreVertVarying;

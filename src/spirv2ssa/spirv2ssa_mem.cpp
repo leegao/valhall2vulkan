@@ -72,6 +72,75 @@ uint32_t compute_flat_offset(
     return flat_off;
 }
 
+struct BufferLaneLayout {
+    uint64_t byte_offset = 0;
+    uint32_t scalar_type_id = 0;
+};
+
+void collect_buffer_lane_layout(
+    const SpirvModule& mod,
+    uint32_t type_id,
+    uint64_t base_off,
+    uint32_t active_mat_stride,
+    bool active_row_major,
+    std::vector<BufferLaneLayout>& out) {
+    const SpirvType* t = mod.get_type(type_id);
+    if (!t) {
+        out.push_back({base_off, type_id});
+        return;
+    }
+    switch (t->kind) {
+        case SpirvTypeKind::Vector: {
+            uint32_t esz = mod.type_byte_size(t->elem_type);
+            for (uint32_t c = 0; c < std::max<uint32_t>(1u, t->count); ++c) {
+                out.push_back({base_off + uint64_t(c) * esz, t->elem_type});
+            }
+            break;
+        }
+        case SpirvTypeKind::Matrix: {
+            const SpirvType* col_t = mod.get_type(t->elem_type);
+            uint32_t nrows = (col_t && col_t->kind == SpirvTypeKind::Vector) ? col_t->count : 4u;
+            uint32_t scalar_tid = (col_t && col_t->kind == SpirvTypeKind::Vector) ? col_t->elem_type : t->elem_type;
+            uint32_t esz = mod.type_byte_size(scalar_tid);
+            uint32_t stride = (active_mat_stride != 0) ? active_mat_stride : (nrows * esz);
+            for (uint32_t c = 0; c < t->count; ++c) {
+                for (uint32_t r = 0; r < nrows; ++r) {
+                    uint64_t off = active_row_major
+                                       ? (base_off + uint64_t(r) * stride + uint64_t(c) * esz)
+                                       : (base_off + uint64_t(c) * stride + uint64_t(r) * esz);
+                    out.push_back({off, scalar_tid});
+                }
+            }
+            break;
+        }
+        case SpirvTypeKind::Array: {
+            uint32_t stride = (t->array_stride != 0) ? t->array_stride : mod.type_byte_size(t->elem_type);
+            uint32_t cnt = std::min<uint32_t>(t->count, 64u);
+            for (uint32_t e = 0; e < cnt; ++e) {
+                collect_buffer_lane_layout(mod, t->elem_type, base_off + uint64_t(e) * stride,
+                                           active_mat_stride, active_row_major, out);
+            }
+            break;
+        }
+        case SpirvTypeKind::Struct: {
+            for (uint32_t m = 0; m < t->member_types.size(); ++m) {
+                uint64_t moff = base_off + mod.struct_member_offset(*t, m);
+                uint32_t m_stride = 0;
+                bool m_row_maj = false;
+                if (auto mit = mod.member_decorations.find({t->id, m}); mit != mod.member_decorations.end()) {
+                    m_stride = mit->second.array_stride;
+                    m_row_maj = mit->second.flat;
+                }
+                collect_buffer_lane_layout(mod, t->member_types[m], moff, m_stride, m_row_maj, out);
+            }
+            break;
+        }
+        default:
+            out.push_back({base_off, type_id});
+            break;
+    }
+}
+
 } // namespace
 
 uint64_t SpirvLowerer::make_slot_key(uint32_t var_id, uint32_t flat_idx) const {
@@ -299,8 +368,55 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
         res.const_offset = 0;
     }
 
+    const auto ac_op = static_cast<SpvOp>(inst.opcode);
+    bool is_ptr_ac = (ac_op == SpvOpPtrAccessChain || ac_op == SpvOpInBoundsPtrAccessChain);
+    size_t first_idx_word = 4;
     uint32_t cur_type = res.pointee_type_id;
-    for (size_t k = 4; k < inst.words.size(); ++k) {
+
+    // SPIR-V §3.3.8: OpPtrAccessChain takes an Element index at word 4 before composite Indexes.
+    if (is_ptr_ac && inst.words.size() >= 5 && res.kind == PtrKind::Buffer) {
+        uint32_t elem_idx_id = inst.words[4];
+        first_idx_word = 5;
+        uint32_t elem_stride = mod_.type_byte_size(cur_type);
+        if (auto dit = mod_.decorations.find(result_ptr_type);
+            dit != mod_.decorations.end() && dit->second.array_stride != 0) {
+            elem_stride = dit->second.array_stride;
+        }
+        const SpirvConstant* ec = mod_.get_const(elem_idx_id);
+        bool is_ec = (ec != nullptr &&
+                      (ec->kind == SpirvConstKind::Scalar32 || ec->kind == SpirvConstKind::Scalar64 ||
+                       ec->kind == SpirvConstKind::Null));
+        if (is_ec) {
+            int64_t sv = (ec->kind == SpirvConstKind::Scalar64)
+                             ? static_cast<int64_t>(ec->scalar_bits)
+                             : static_cast<int64_t>(static_cast<int32_t>(ec->scalar_bits));
+            uint64_t delta = static_cast<uint64_t>(sv * static_cast<int64_t>(elem_stride));
+            res.const_offset += delta;
+            if (delta != 0) {
+                res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64,
+                                          {res.byte_offset, sb_.emit_const_u64(blk_id, delta)});
+            }
+        } else {
+            res.has_const_offset = false;
+            LoweredValue iv = get_value(blk_id, elem_idx_id);
+            const SpirvType* itype = mod_.get_type(iv.spv_type_id);
+            SsaId i64 = (itype && itype->width == 64)
+                            ? iv.scalar()
+                            : emit_op(blk_id, SsaOp::SConvert32To64, ValType::U64, {iv.scalar()});
+            SsaId delta = emit_op(blk_id, SsaOp::IMul64, ValType::U64, {i64, sb_.emit_const_u64(blk_id, elem_stride)});
+            res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, delta});
+        }
+    }
+
+    auto to_signed_i64 = [&](uint32_t idx_id) -> SsaId {
+        LoweredValue iv = get_value(blk_id, idx_id);
+        const SpirvType* itype = mod_.get_type(iv.spv_type_id);
+        if (itype && itype->width == 64) return iv.scalar();
+        // SPIR-V §3.3.8: Each index in OpAccessChain is treated as signed.
+        return emit_op(blk_id, SsaOp::SConvert32To64, ValType::U64, {iv.scalar()});
+    };
+
+    for (size_t k = first_idx_word; k < inst.words.size(); ++k) {
         uint32_t idx_id = inst.words[k];
         const SpirvType* t = mod_.get_type(cur_type);
         if (!t) break;
@@ -320,6 +436,10 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
                     SsaId add_c = sb_.emit_const_u64(blk_id, off);
                     res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, add_c});
                 }
+                if (auto mit = mod_.member_decorations.find({t->id, c_idx}); mit != mod_.member_decorations.end()) {
+                    if (mit->second.array_stride != 0) res.matrix_stride = mit->second.array_stride;
+                    res.is_row_major = mit->second.flat;
+                }
                 cur_type = (c_idx < t->member_types.size()) ? t->member_types[c_idx] : 0;
             } else if (t->kind == SpirvTypeKind::Array || t->kind == SpirvTypeKind::RuntimeArray) {
                 uint32_t stride = (t->array_stride != 0) ? t->array_stride : mod_.type_byte_size(t->elem_type);
@@ -332,21 +452,39 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
                     }
                 } else {
                     res.has_const_offset = false;
-                    LoweredValue iv = get_value(blk_id, idx_id);
-                    SsaId i32 = iv.scalar();
-                    const SpirvType* itype = mod_.get_type(iv.spv_type_id);
-                    SsaId i64 = (itype && itype->width == 64)
-                                    ? i32
-                                    : emit_op(blk_id,
-                                              (itype && itype->is_signed) ? SsaOp::SConvert32To64 : SsaOp::UConvert32To64,
-                                              ValType::U64, {i32});
+                    SsaId i64 = to_signed_i64(idx_id);
                     SsaId stride_c = sb_.emit_const_u64(blk_id, stride);
                     SsaId delta = emit_op(blk_id, SsaOp::IMul64, ValType::U64, {i64, stride_c});
                     res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, delta});
                 }
                 cur_type = t->elem_type;
-            } else if (t->kind == SpirvTypeKind::Vector || t->kind == SpirvTypeKind::Matrix) {
-                uint32_t elem_sz = mod_.type_byte_size(t->elem_type);
+            } else if (t->kind == SpirvTypeKind::Matrix) {
+                uint32_t col_stride = 0;
+                if (res.is_row_major) {
+                    const SpirvType* col_t = mod_.get_type(t->elem_type);
+                    uint32_t scalar_tid = (col_t && col_t->kind == SpirvTypeKind::Vector) ? col_t->elem_type : t->elem_type;
+                    col_stride = mod_.type_byte_size(scalar_tid);
+                } else {
+                    col_stride = (res.matrix_stride != 0) ? res.matrix_stride : mod_.type_byte_size(t->elem_type);
+                }
+                if (is_const_idx) {
+                    uint64_t delta = uint64_t(c_idx) * uint64_t(col_stride);
+                    res.const_offset += delta;
+                    if (delta != 0) {
+                        SsaId add_c = sb_.emit_const_u64(blk_id, delta);
+                        res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, add_c});
+                    }
+                } else {
+                    res.has_const_offset = false;
+                    SsaId i64 = to_signed_i64(idx_id);
+                    SsaId delta = emit_op(blk_id, SsaOp::IMul64, ValType::U64, {i64, sb_.emit_const_u64(blk_id, col_stride)});
+                    res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, delta});
+                }
+                cur_type = t->elem_type;
+            } else if (t->kind == SpirvTypeKind::Vector) {
+                uint32_t elem_sz = (res.is_row_major && res.matrix_stride != 0)
+                                       ? res.matrix_stride
+                                       : mod_.type_byte_size(t->elem_type);
                 if (is_const_idx) {
                     uint64_t delta = uint64_t(c_idx) * uint64_t(elem_sz);
                     res.const_offset += delta;
@@ -356,8 +494,7 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
                     }
                 } else {
                     res.has_const_offset = false;
-                    LoweredValue iv = get_value(blk_id, idx_id);
-                    SsaId i64 = emit_op(blk_id, SsaOp::UConvert32To64, ValType::U64, {iv.scalar()});
+                    SsaId i64 = to_signed_i64(idx_id);
                     SsaId delta = emit_op(blk_id, SsaOp::IMul64, ValType::U64, {i64, sb_.emit_const_u64(blk_id, elem_sz)});
                     res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, delta});
                 }
@@ -411,17 +548,17 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
 
     if (ptr.kind == PtrKind::Buffer) {
         SsaId base_addr = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {ptr.base_ptr, ptr.byte_offset});
-        const SpirvType* rt = mod_.get_type(res_type);
-        uint32_t nlanes = flat_lane_count(res_type);
-        uint32_t elem_tid = scalar_elem_type(res_type);
-        ValType elem_vt = to_val_type(elem_tid);
-        uint32_t elem_bytes = mod_.type_byte_size(elem_tid);
+        std::vector<BufferLaneLayout> layout;
+        collect_buffer_lane_layout(mod_, res_type, 0u, ptr.matrix_stride, ptr.is_row_major, layout);
 
-        for (uint32_t i = 0; i < nlanes; ++i) {
-            SsaId lane_addr = (i == 0)
+        for (const auto& lane : layout) {
+            const SpirvType* rt = mod_.get_type(lane.scalar_type_id);
+            ValType elem_vt = to_val_type(lane.scalar_type_id);
+            uint32_t elem_bytes = mod_.type_byte_size(lane.scalar_type_id);
+            SsaId lane_addr = (lane.byte_offset == 0)
                                   ? base_addr
                                   : emit_op(blk_id, SsaOp::IAdd64, ValType::U64,
-                                            {base_addr, sb_.emit_const_u64(blk_id, uint64_t(i) * elem_bytes)});
+                                            {base_addr, sb_.emit_const_u64(blk_id, lane.byte_offset)});
             SsaId tok = sb_.current_token(blk_id);
             SsaNode ld{};
             ld.op = SsaOp::PsbLoad;
@@ -590,14 +727,17 @@ void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
 
     if (ptr.kind == PtrKind::Buffer) {
         SsaId base_addr = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {ptr.base_ptr, ptr.byte_offset});
-        uint32_t elem_tid = scalar_elem_type(val.spv_type_id);
-        uint32_t elem_bytes = mod_.type_byte_size(elem_tid);
+        std::vector<BufferLaneLayout> layout;
+        collect_buffer_lane_layout(mod_, val.spv_type_id, 0u, ptr.matrix_stride, ptr.is_row_major, layout);
 
-        for (uint32_t i = 0; i < val.lanes.size(); ++i) {
-            SsaId lane_addr = (i == 0)
+        for (size_t i = 0; i < val.lanes.size(); ++i) {
+            uint64_t boff = (i < layout.size()) ? layout[i].byte_offset : (uint64_t(i) * 4u);
+            uint32_t elem_tid = (i < layout.size()) ? layout[i].scalar_type_id : scalar_elem_type(val.spv_type_id);
+            uint32_t elem_bytes = mod_.type_byte_size(elem_tid);
+            SsaId lane_addr = (boff == 0)
                                   ? base_addr
                                   : emit_op(blk_id, SsaOp::IAdd64, ValType::U64,
-                                            {base_addr, sb_.emit_const_u64(blk_id, uint64_t(i) * elem_bytes)});
+                                            {base_addr, sb_.emit_const_u64(blk_id, boff)});
             SsaId lane_val = val.lanes[i];
             if (elem_bytes == 8u) {
                 SsaNode sp{}; sp.op = SsaOp::Split64; sp.type = ValType::TupleU32x2; sp.args = {lane_val};
@@ -746,12 +886,51 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
     }
 }
 
+void SpirvLowerer::lower_copy_memory(uint32_t blk_id, const SpirvInst& inst) {
+    // OpCopyMemory: [hdr, target_ptr, source_ptr, optional memory_operands...]
+    if (inst.words.size() < 3) return;
+    uint32_t dst_ptr_id = inst.words[1];
+    uint32_t src_ptr_id = inst.words[2];
+    auto sit = pointers_.find(src_ptr_id);
+    if (sit == pointers_.end()) return;
+    uint32_t pointee_t = sit->second.pointee_type_id;
+    SpirvInst fake_ld{};
+    fake_ld.opcode = SpvOpLoad;
+    fake_ld.words = {0u, pointee_t, 0u, src_ptr_id};
+    LoweredValue loaded = lower_load(blk_id, fake_ld);
+    // Synthesize store using a temporary value id
+    constexpr uint32_t kTempCopyId = 0xFFFFFFFEu;
+    values_[kTempCopyId] = std::move(loaded);
+    SpirvInst fake_st{};
+    fake_st.opcode = SpvOpStore;
+    fake_st.words = {0u, dst_ptr_id, kTempCopyId};
+    lower_store(blk_id, fake_st);
+    values_.erase(kTempCopyId);
+}
+
+void SpirvLowerer::lower_atomic_store(uint32_t blk_id, const SpirvInst& inst) {
+    // OpAtomicStore: [hdr, pointer, memory_scope, semantics, value]
+    if (inst.words.size() < 5) return;
+    SpirvInst fake_st{};
+    fake_st.opcode = SpvOpStore;
+    fake_st.words = {0u, inst.words[1], inst.words[4]};
+    lower_store(blk_id, fake_st);
+}
+
 LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) {
     LoweredValue out{};
-    if (inst.words.size() < 7) return out;
+    if (inst.words.size() < 6) return out;
+    const auto op = static_cast<SpvOp>(inst.opcode);
     uint32_t res_type = inst.words[1];
     uint32_t ptr_id = inst.words[3];
     out.spv_type_id = res_type;
+
+    if (op == SpvOpAtomicLoad) {
+        SpirvInst fake_ld{};
+        fake_ld.opcode = SpvOpLoad;
+        fake_ld.words = {0u, res_type, inst.words[2], ptr_id};
+        return lower_load(blk_id, fake_ld);
+    }
 
     auto pit = pointers_.find(ptr_id);
     if (pit == pointers_.end() || pit->second.kind != PtrKind::Buffer) {
@@ -766,17 +945,21 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     at.is_barrier_or_cf = true;
     at.is_side_effect = true;
 
-    const auto op = static_cast<SpvOp>(inst.opcode);
-    if (op == SpvOpAtomicExchange) {
+    if (op == SpvOpAtomicExchange && inst.words.size() >= 7) {
         SsaId val = get_value(blk_id, inst.words[6]).scalar();
         at.op = SsaOp::AtomicExchange;
         at.args = {addr, val, tok};
-    } else if (op == SpvOpAtomicCompareExchange && inst.words.size() >= 9) {
+    } else if ((op == SpvOpAtomicCompareExchange || op == SpvOpAtomicCompareExchangeWeak) && inst.words.size() >= 9) {
         SsaId val = get_value(blk_id, inst.words[7]).scalar();
         SsaId cmp = get_value(blk_id, inst.words[8]).scalar();
         at.op = SsaOp::AtomicCmpXchg;
         at.args = {addr, val, cmp, tok};
-    } else {
+    } else if (op == SpvOpAtomicIIncrement || op == SpvOpAtomicIDecrement) {
+        SsaId one = sb_.emit_const_u32(blk_id, 1u);
+        at.op = SsaOp::AtomicRmw;
+        at.aux_str = (op == SpvOpAtomicIIncrement) ? "aadd" : "asub";
+        at.args = {addr, one, tok};
+    } else if (inst.words.size() >= 7) {
         SsaId val = get_value(blk_id, inst.words[6]).scalar();
         at.op = SsaOp::AtomicRmw;
         switch (op) {
@@ -792,6 +975,8 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
             default: at.aux_str = "aadd"; break;
         }
         at.args = {addr, val, tok};
+    } else {
+        return make_zero_value(blk_id, res_type);
     }
 
     SsaId tup = sb_.emit(blk_id, std::move(at));

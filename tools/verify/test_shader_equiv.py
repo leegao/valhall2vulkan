@@ -318,5 +318,158 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertEqual(res.status, "UNSAT")
 
 
+
+    def test_symbolic_offset_ssbo_array_probing(self) -> None:
+        """Dynamic-offset SSBO writes must be checked via Z3 Array probing (not skipped as outputs=0)."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadBuiltinInput", "type": "V3U32", "blk": 0, "args": [], "imm_u32": 28},
+                {"id": 3, "op": "VecExtract", "type": "U32", "blk": 0, "args": [2], "imm_u32": 0},
+                {"id": 4, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 2},
+                {"id": 5, "op": "Shl", "type": "U32", "blk": 0, "args": [3, 4]},
+                {"id": 6, "op": "UConvert32To64", "type": "U64", "blk": 0, "args": [5]},
+                {"id": 7, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 8, "op": "IAdd64", "type": "U64", "blk": 0, "args": [7, 6]},
+                {"id": 9, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 42},
+                {"id": 10, "op": "PsbStore", "type": "Token", "blk": 0, "args": [8, 9, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_dyn_ssbo.spv",
+            "stage": "Compute",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": copy.deepcopy(direct_ssa),
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertIn("ssbo:0:0[probe_off]", res.checked_outputs)
+
+    def test_fragment_preload_pilot_ubo_word_binding(self) -> None:
+        """Fragment preload pilot UBO word in FAU must match direct UBO PsbLoad at same byte_offset."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ubo:0:0"},
+                {"id": 3, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 16},
+                {"id": 4, "op": "IAdd64", "type": "U64", "blk": 0, "args": [2, 3]},
+                {"id": 5, "op": "PsbLoad", "type": "F32", "blk": 0, "args": [4, 1], "imm_u32": 4, "aux_str": "ubo:0:0"},
+                {"id": 6, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [5, 5, 5, 5]},
+                {"id": 7, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [6, 1], "imm_u32": 0},
+            ],
+        }
+        valhall_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadFau", "type": "F32", "blk": 0, "args": [], "imm_u32": 4, "orig_pc": 0},
+                {"id": 3, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [2, 2, 2, 2]},
+                {"id": 4, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [3, 1], "imm_u32": 0, "orig_pc": 8},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_frag_preload_ubo.spv",
+            "stage": "Fragment",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [{"kind": "UBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ubo:0:0"}],
+            "mbs2_context": {
+                "fcsts": [], "rlocs": [],
+                "pilot_fau": [{
+                    "fau_offset": 16, "word_idx": 4, "byte_size": 4, "resolved": True,
+                    "kind": "ubo", "binding": 0, "is_loaded_value": True,
+                    "has_byte_offset": True, "byte_offset": 16, "is_derived": False, "key": "ubo:0:0",
+                }],
+                "sinp": [], "sout": [], "pc_disasm": {},
+            },
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+    def test_vertex_viewport_transform_identity_precondition(self) -> None:
+        """Vertex gl_Position with gl_mali_ViewportTransform (scale=1, bias=0, w=1) must prove UNSAT."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadVertAttr", "type": "V4F32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 3, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 0},
+                {"id": 4, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+                {"id": 5, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [3, 3, 3, 4]},
+                {"id": 6, "op": "StoreBuiltinOutput", "type": "Token", "blk": 0, "args": [5, 1], "imm_u32": 0},
+            ],
+        }
+        # Valhall applies FMA(pos.xyz, vp_scale.xyz, vp_bias.xyz) with vp_scale=u0..u2, vp_bias=u4..u6
+        valhall_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadVertAttr", "type": "V4F32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 3, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 0},
+                {"id": 4, "op": "LoadFau", "type": "F32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 5, "op": "LoadFau", "type": "F32", "blk": 0, "args": [], "imm_u32": 4},
+                {"id": 6, "op": "Fma", "type": "F32", "blk": 0, "args": [3, 4, 5]},
+                {"id": 7, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+                {"id": 8, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [6, 6, 6, 7]},
+                {"id": 9, "op": "StoreBuiltinOutput", "type": "Token", "blk": 0, "args": [8, 1], "imm_u32": 0},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_vert_vp.spv",
+            "stage": "Vertex",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {
+                "fcsts": [],
+                "rlocs": [
+                    {"symbol": "gl_mali_ViewportTransform", "fau_offset": 0, "word_idx": 0, "uni_offset": 0, "byte_size": 12},
+                    {"symbol": "gl_mali_ViewportTransform", "fau_offset": 16, "word_idx": 4, "uni_offset": 16, "byte_size": 12},
+                ],
+                "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {},
+            },
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+
 if __name__ == "__main__":
     unittest.main()

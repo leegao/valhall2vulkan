@@ -862,6 +862,10 @@
       "args": [
         "uint32_t"
       ]
+    },
+    "load_frag_special": {
+      "ret": "SsaId",
+      "args": []
     }
   },
   "lookup_tables": {
@@ -6163,12 +6167,9 @@
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%vec : v4f32 = @load_frag_var($is_flat_var);",
-        "for (%c : 0 .. $sr_write_count_max4) {",
-        "  %f : f32 = @extract(%vec, %c);",
-        "  %u : u32 = @bitcast(%f);",
-        "  @sr_set(%c, %u);",
-        "}"
+        "%f : f32 = @load_frag_special();",
+        "%u : u32 = @bitcast(%f);",
+        "@sr_set(0, %u);"
       ]
     },
     {

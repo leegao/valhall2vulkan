@@ -234,18 +234,33 @@ class SharedShaderEnv:
         for fc in self.mbs2.get("fcsts", []):
             self.fcst_by_word[int(fc["word_idx"])] = int(fc["value"]) & 0xFFFFFFFF
 
-        self.pilot_by_word: Dict[int, Dict[str, Any]] = {}
+        self.init_img_mem: Dict[str, Tuple[z3.ArrayRef, ...]] = {}
+        self.viewport_fau_words: Dict[int, int] = {}
+
+        # Pilot FAU bindings: (pf_dict, is_hi_word)
+        self.pilot_by_word: Dict[int, Tuple[Dict[str, Any], bool]] = {}
         for pf in self.mbs2.get("pilot_fau", []):
             if pf.get("resolved") and pf.get("key"):
                 w = int(pf["word_idx"])
-                self.pilot_by_word[w] = pf
+                is_hi_word = (int(pf["fau_offset"]) % 8) != 0
+                self.pilot_by_word[w] = (pf, is_hi_word)
+                if not pf.get("is_loaded_value", False) and not is_hi_word and int(pf.get("byte_size", 4)) >= 8:
+                    if (w + 1) not in self.pilot_by_word:
+                        self.pilot_by_word[w + 1] = (pf, True)
 
         self.rloc_by_word: Dict[int, Tuple[str, int]] = {}
         for rl in self.mbs2.get("rlocs", []):
-            bkey = f"ubo:0:{rl.get('binding', 0)}"
+            sym = rl.get("symbol", "")
             w0 = int(rl["word_idx"])
             nwords = max(1, (int(rl.get("size", 4)) + 3) // 4)
             uoff = int(rl.get("uni_offset", 0))
+            if sym == "gl_mali_ViewportTransform":
+                # Identity viewport precondition: scale = (1,1,1,1) at uni+0..0xc, bias = (0,0,0,0) at uni+0x10..0x1c.
+                for k in range(nwords):
+                    off = uoff + k * 4
+                    self.viewport_fau_words[w0 + k] = 0x3F800000 if off < 16 else 0x00000000
+                continue
+            bkey = f"ubo:0:{rl.get('binding', 0)}"
             for k in range(nwords):
                 self.rloc_by_word[w0 + k] = (bkey, uoff + k * 4)
 
@@ -280,6 +295,12 @@ class SharedShaderEnv:
             safe = key.replace(":", "_")
             self.init_buf_mem[key] = z3.Array(f"mem_{safe}", BV32, BV32)
         return self.init_buf_mem[key]
+
+    def get_img_mem(self, key: str) -> Tuple[z3.ArrayRef, ...]:
+        if key not in self.init_img_mem:
+            safe = key.replace(":", "_")
+            self.init_img_mem[key] = tuple(z3.Array(f"img_{safe}_c{c}", BV64, BV32) for c in range(4))
+        return self.init_img_mem[key]
 
     def resolve_addr(self, addr_expr: z3.BitVecRef) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
         """Decompose a 64-bit address into (buf_key, const_offset_or_None, offset_bv32)."""
@@ -330,10 +351,16 @@ class SharedShaderEnv:
     def load_fau_word(self, word_idx: int) -> z3.BitVecRef:
         if word_idx in self.fcst_by_word:
             return bv32(self.fcst_by_word[word_idx])
+        if word_idx in self.viewport_fau_words:
+            return bv32(self.viewport_fau_words[word_idx])
         if word_idx in self.pilot_by_word:
-            pf = self.pilot_by_word[word_idx]
+            pf, is_hi = self.pilot_by_word[word_idx]
+            if pf.get("is_loaded_value", False):
+                if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
+                    return z3.Select(self.get_buf_mem(pf["key"]), bv32(int(pf["byte_offset"])))
+                return z3.Select(self.fau_sym, bv32(word_idx))
             base = self.get_buf_base(pf["key"])
-            if (int(pf["fau_offset"]) % 8) == 0:
+            if not is_hi:
                 return bv32(base & 0xFFFFFFFF)
             return bv32((base >> 32) & 0xFFFFFFFF)
         if word_idx in self.rloc_by_word:
@@ -354,6 +381,8 @@ class BlockEffectState:
     const_stores: Dict[Tuple[str, int], Tuple[z3.BoolRef, z3.BitVecRef]]
     # Dynamic buffer memory arrays: buf_key -> Array(BV32, BV32)
     buf_mems: Dict[str, z3.ArrayRef]
+    # Image write arrays: img_key -> Tuple[Array(BV64, BV32) x 4]
+    image_mems: Dict[str, Tuple[z3.ArrayRef, ...]]
     fallback_mem: z3.ArrayRef
     # Track originating PCs per output for counterexample localization
     output_pcs: Dict[str, Set[int]]
@@ -367,6 +396,7 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
         vert_varyings=dict(st.vert_varyings),
         const_stores=dict(st.const_stores),
         buf_mems=dict(st.buf_mems),
+        image_mems=dict(st.image_mems),
         fallback_mem=st.fallback_mem,
         output_pcs={k: set(v) for k, v in st.output_pcs.items()},
     )
@@ -412,6 +442,13 @@ def _merge_states(
             m_b = st.buf_mems.get(bkey, env.get_buf_mem(bkey))
             if not m_a.eq(m_b):
                 base_st.buf_mems[bkey] = z3.If(cond, m_b, m_a)
+        all_im = set(base_st.image_mems.keys()) | set(st.image_mems.keys())
+        for ikey in all_im:
+            im_a = base_st.image_mems.get(ikey, env.get_img_mem(ikey))
+            im_b = st.image_mems.get(ikey, env.get_img_mem(ikey))
+            base_st.image_mems[ikey] = tuple(
+                z3.If(cond, b, a) if not a.eq(b) else a for a, b in zip(im_a, im_b)
+            )
         if not base_st.fallback_mem.eq(st.fallback_mem):
             base_st.fallback_mem = z3.If(cond, st.fallback_mem, base_st.fallback_mem)
         for k, pcs in st.output_pcs.items():
@@ -452,7 +489,7 @@ class DagSsaZ3Evaluator:
             return x & bv32(0x7FFFFFFF)
         if op == "FNeg":
             return x ^ bv32(0x80000000)
-        if self.fp_mode == "uf" or op in ("InverseSqrt", "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "FrexpExp", "FrexpSignificand"):
+        if self.fp_mode == "uf" or op in ("InverseSqrt", "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "Asin", "Acos", "Sinh", "Cosh", "Tanh", "DPdx", "DPdy", "Fwidth", "FrexpExp", "FrexpSignificand"):
             return _hw_uf(f"fp_{op}", BV32, BV32)(x)
         f = bv32_to_fp32(x)
         if op == "Floor":
@@ -468,7 +505,7 @@ class DagSsaZ3Evaluator:
         return _hw_uf(f"fp_{op}", BV32, BV32)(x)
 
     def _fp_binary(self, op: str, a: z3.BitVecRef, b: z3.BitVecRef) -> z3.BitVecRef:
-        if self.fp_mode == "uf" or op in ("Pow", "Ldexp"):
+        if self.fp_mode == "uf" or op in ("Pow", "Ldexp", "Atan2"):
             return _hw_uf(f"fp_{op}", BV32, BV32, BV32)(a, b)
         fa, fb = bv32_to_fp32(a), bv32_to_fp32(b)
         if op == "FAdd":
@@ -585,7 +622,7 @@ class DagSsaZ3Evaluator:
             return _popcount_bv32(_as_bv32(args[0]))
         if op == "BitReverse":
             return _bitrev_bv32(_as_bv32(args[0]))
-        if op in ("IAdd", "ISub", "IMul", "BitAnd", "BitOr", "BitXor", "Shl", "ShrU", "ShrS", "RotL", "RotR"):
+        if op in ("IAdd", "ISub", "IMul", "BitAnd", "BitOr", "BitXor", "Shl", "ShrU", "ShrS", "RotL", "RotR", "UDiv", "SDiv", "UMod", "SRem", "SMod"):
             a, b = _as_bv32(args[0]), _as_bv32(args[1])
             if op == "IAdd": return a + b
             if op == "ISub": return a - b
@@ -598,6 +635,11 @@ class DagSsaZ3Evaluator:
             if op == "ShrS": return a >> (b & bv32(31))
             if op == "RotL": return z3.RotateLeft(a, b & bv32(31))
             if op == "RotR": return z3.RotateRight(a, b & bv32(31))
+            if op == "UDiv": return z3.UDiv(a, b)
+            if op == "SDiv": return a / b
+            if op == "UMod": return z3.URem(a, b)
+            if op == "SRem": return z3.SRem(a, b)
+            if op == "SMod": return z3.SMod(a, b)
         if op in ("BfeU", "BfeS"):
             x, off, w = _as_bv32(args[0]), _as_bv32(args[1]), _as_bv32(args[2])
             if isinstance(off, z3.BitVecNumRef) and isinstance(w, z3.BitVecNumRef):
@@ -610,9 +652,13 @@ class DagSsaZ3Evaluator:
                 if ext == 0:
                     return sl
                 return z3.SignExt(ext, sl) if op == "BfeS" else z3.ZeroExt(ext, sl)
-            shifted = (x >> (off & bv32(31))) if op == "BfeS" else z3.LShR(x, off & bv32(31))
+            if op == "BfeS":
+                sh = bv32(32) - w
+                extracted = (x << (sh - off)) >> sh
+                return z3.If(w == bv32(0), bv32(0), z3.If(z3.UGE(w, bv32(32)), x, extracted))
             mask = (bv32(1) << (w & bv32(31))) - bv32(1)
-            return shifted & mask
+            extracted = z3.LShR(x, off & bv32(31)) & mask
+            return z3.If(w == bv32(0), bv32(0), z3.If(z3.UGE(w, bv32(32)), x, extracted))
         if op == "Bfi":
             base, ins_v, off, w = _as_bv32(args[0]), _as_bv32(args[1]), _as_bv32(args[2]), _as_bv32(args[3])
             if isinstance(off, z3.BitVecNumRef) and isinstance(w, z3.BitVecNumRef):
@@ -622,7 +668,8 @@ class DagSsaZ3Evaluator:
                 mask_v = ((1 << w_i) - 1) << o_i
                 return (base & bv32(~mask_v)) | ((ins_v << o_i) & bv32(mask_v))
             mask = ((bv32(1) << (w & bv32(31))) - bv32(1)) << (off & bv32(31))
-            return (base & ~mask) | ((ins_v << (off & bv32(31))) & mask)
+            res_bfi = (base & ~mask) | ((ins_v << (off & bv32(31))) & mask)
+            return z3.If(w == bv32(0), base, z3.If(z3.UGE(w, bv32(32)), ins_v, res_bfi))
         if op in ("IDot4S", "IDot4SU", "IDot4U"):
             a32, b32 = _as_bv32(args[0]), _as_bv32(args[1])
             acc = bv32(0)
@@ -678,9 +725,9 @@ class DagSsaZ3Evaluator:
 
         # Floating-point operations (lifted elementwise for V2F32 / v2f16 vectors)
         if op in ("FAbs", "FNeg", "Floor", "Ceil", "Trunc", "RoundEven", "Sqrt", "InverseSqrt",
-                  "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "FrexpExp", "FrexpSignificand"):
+                  "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "Asin", "Acos", "Sinh", "Cosh", "Tanh", "DPdx", "DPdy", "Fwidth", "FrexpExp", "FrexpSignificand"):
             return _eval_elementwise(vt, args, lambda x: self._fp_unary(op, _as_bv32(x)))
-        if op in ("FAdd", "FSub", "FMul", "FDiv", "FMin", "FMax", "NMin", "NMax", "Pow", "Ldexp"):
+        if op in ("FAdd", "FSub", "FMul", "FDiv", "FMin", "FMax", "NMin", "NMax", "Pow", "Ldexp", "Atan2"):
             return _eval_elementwise(vt, args, lambda x, y: self._fp_binary(op, _as_bv32(x), _as_bv32(y)))
         if op == "FClamp":
             def _fclamp(x: Z3Val, lo: Z3Val, hi: Z3Val) -> z3.BitVecRef:
@@ -746,6 +793,11 @@ class DagSsaZ3Evaluator:
         if op == "LoadFragVarying":
             loc = self.env.sinp_addr_to_loc.get(imm_u32, imm_u32) if self.is_valhall else imm_u32
             return self.env.get_input_vec4("frag_var", loc)
+        if op == "ImageQuerySize":
+            lod = _as_bv32(args[0]) if args else bv32(0)
+            qkey = (aux_str or "img").replace(":", "_")
+            return _hw_uf(f"imgq_{qkey}_c{imm_u32}", BV32, BV32)(lod)
+
         if op == "TexSample":
             uv = args[0] if args else (bv32(0), bv32(0))
             u0 = _as_bv32(uv[0]) if isinstance(uv, tuple) else _as_bv32(uv)
@@ -818,6 +870,24 @@ class DagSsaZ3Evaluator:
             st.output_pcs.setdefault(f"vert_var[{loc}]", set()).update(self._collect_pcs(node))
             return args[-1] if args else bv32(0)
 
+        if op == "StoreTexel":
+            coord = args[0]
+            texel = args[1] if len(args) > 1 else (bv32(0),) * 4
+            cx = _as_bv32(coord[0]) if isinstance(coord, tuple) and len(coord) > 0 else _as_bv32(coord)
+            cy = _as_bv32(coord[1]) if isinstance(coord, tuple) and len(coord) > 1 else bv32(0)
+            xy = z3.Concat(cy, cx)
+            vec4 = tuple(_as_bv32(texel[c]) if isinstance(texel, tuple) and c < len(texel) else bv32(0) for c in range(4))
+            ikey = aux_str or f"img_{imm_u32}"
+            cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
+            updated = tuple(
+                z3.If(reach, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c]) if not z3.is_true(reach)
+                else z3.Store(cur_im[c], xy, vec4[c])
+                for c in range(4)
+            )
+            st.image_mems[ikey] = updated
+            st.output_pcs.setdefault(f"img:{ikey}", set()).update(self._collect_pcs(node))
+            return args[-1] if args else bv32(0)
+
         if op in ("AtomicRmw", "AtomicExchange", "AtomicCmpXchg"):
             addr = _as_bv64(args[0])
             arg = _as_bv32(args[1]) if len(args) > 1 else bv32(0)
@@ -843,6 +913,7 @@ class DagSsaZ3Evaluator:
             vert_varyings={},
             const_stores={},
             buf_mems={},
+            image_mems={},
             fallback_mem=self.env.fallback_mem,
             output_pcs={},
         )
@@ -1061,11 +1132,22 @@ def verify_equivalence_bundle(
         vo = v_st.builtin_outputs.get(bi)
         if do is None or vo is None:
             continue
+        bi_guard = not_disc
+        # Under Valhall's folded gl_mali_ViewportTransform + perspective divide,
+        # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
+        if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
+            vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
+            for c in range(3):
+                dbv = _as_bv32(do[c])
+                # FMA(x, 1.0, +0.0) == x bit-for-bit iff x is not NaN and x != -0.0
+                vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
+                vp_conds.append(dbv != bv32(0x80000000))
+            bi_guard = _z3_and(bi_guard, z3.And(*vp_conds))
         if isinstance(do, tuple) and isinstance(vo, tuple):
             for c in range(min(len(do), len(vo))):
-                checks.append((f"builtin_out[{bi}][{c}]", _as_bv32(do[c]), _as_bv32(vo[c]), not_disc, f"builtin_out[{bi}]"))
+                checks.append((f"builtin_out[{bi}][{c}]", _as_bv32(do[c]), _as_bv32(vo[c]), bi_guard, f"builtin_out[{bi}]"))
         else:
-            checks.append((f"builtin_out[{bi}]", _as_bv32(do), _as_bv32(vo), not_disc, f"builtin_out[{bi}]"))
+            checks.append((f"builtin_out[{bi}]", _as_bv32(do), _as_bv32(vo), bi_guard, f"builtin_out[{bi}]"))
 
     # 4. Vertex varying outputs
     all_vv = sorted(set(d_st.vert_varyings.keys()) | set(v_st.vert_varyings.keys()))
@@ -1085,6 +1167,32 @@ def verify_equivalence_bundle(
         tag = f"{bkey}+0x{off:x}"
         checks.append((f"{tag}.written", dw, vw, None, tag))
         checks.append((f"{tag}.value", dv, vv, _z3_or(dw, vw), tag))
+
+    # 6. Symbolic/dynamic-offset buffer stores (SSBO writes via Z3 Array theory)
+    const_store_bkeys = {bk for bk, _ in all_cs}
+    all_bm_keys = sorted(set(d_st.buf_mems.keys()) | set(v_st.buf_mems.keys()))
+    for bkey in all_bm_keys:
+        if bkey in ("tls_private", "wls_shared"):
+            continue
+        has_dyn = (f"{bkey}:dyn" in d_st.output_pcs) or (f"{bkey}:dyn" in v_st.output_pcs)
+        if not has_dyn and bkey in const_store_bkeys:
+            continue
+        d_mem = d_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
+        v_mem = v_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
+        probe_name = f"probe_{bkey.replace(':', '_')}_off"
+        probe_off = z3.BitVec(probe_name, 32)
+        env.inputs[probe_name] = probe_off
+        checks.append((f"{bkey}[probe_off]", z3.Select(d_mem, probe_off), z3.Select(v_mem, probe_off), None, f"{bkey}:dyn"))
+
+    # 7. Storage image writes (OpImageWrite / StoreTexel)
+    all_im_keys = sorted(set(d_st.image_mems.keys()) | set(v_st.image_mems.keys()))
+    for ikey in all_im_keys:
+        d_im = d_st.image_mems.get(ikey, env.get_img_mem(ikey))
+        v_im = v_st.image_mems.get(ikey, env.get_img_mem(ikey))
+        probe_xy = z3.BitVec(f"probe_{ikey.replace(':', '_')}_xy", 64)
+        env.inputs[f"probe_{ikey.replace(':', '_')}_xy"] = probe_xy
+        for c, cname in enumerate(("r", "g", "b", "a")):
+            checks.append((f"img:{ikey}[xy].{cname}", z3.Select(d_im[c], probe_xy), z3.Select(v_im[c], probe_xy), None, f"img:{ikey}"))
 
     if not checks:
         res.status = "SKIP"

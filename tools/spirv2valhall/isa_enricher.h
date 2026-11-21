@@ -18,6 +18,10 @@ struct PilotFauEntry {
     std::string expression;       // e.g. "&_83_input_0 (SRT[4]->Buf[0].addr)" or "derived(_43_pushConstants_0.u_TextureDimensions_0.x)"
     int32_t srt_rack = -1;        // SRT rack index if sourced from SRT
     int32_t desc_index = -1;      // Descriptor index within rack
+    bool is_loaded_value = false; // True for preloaded UBO/SSBO data words (vs. 64-bit buffer base ptr)
+    bool has_byte_offset = false; // True when loaded word byte offset inside buffer is statically known
+    int64_t byte_offset = 0;      // Byte offset inside UBO/SSBO for preloaded data word
+    bool is_derived = false;      // True if arithmetic/transform was applied after loading
 };
 
 struct PilotAnalysisResult {

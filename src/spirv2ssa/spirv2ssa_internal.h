@@ -43,6 +43,8 @@ struct PointerRef {
     compiler::SsaId byte_offset = compiler::kInvalidSsa;
     bool has_const_offset = true;
     uint64_t const_offset = 0;
+    uint32_t matrix_stride = 0;
+    bool is_row_major = false;
     std::string canonical_key;
 
     // Input/Output/Local access path (constant member/element indices)
@@ -101,7 +103,9 @@ public:
     PointerRef lower_access_chain(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_load(uint32_t blk_id, const SpirvInst& inst);
     void lower_store(uint32_t blk_id, const SpirvInst& inst);
+    void lower_copy_memory(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_atomic(uint32_t blk_id, const SpirvInst& inst);
+    void lower_atomic_store(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_image_sample(uint32_t blk_id, const SpirvInst& inst);
     void lower_image_write(uint32_t blk_id, const SpirvInst& inst);
     void flush_stage_outputs(uint32_t blk_id);

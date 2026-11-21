@@ -480,7 +480,14 @@ def eval_ssa_module_z3(
         elif op == "LoadSidebandU64":
             values[node.id] = _hw_uf(f"sideband_u64_{node.imm_u32}", BV32, BV64)(bv32(node.imm_u32))
         elif op == "LoadBuiltinInput":
-            values[node.id] = _hw_uf(f"builtin_{node.aux_str or node.imm_u32}", BV32)(z3.ZeroExt(27, st.lane_id))
+            vlen = _vec_len(node.val_type)
+            if vlen > 1:
+                values[node.id] = tuple(
+                    _hw_uf(f"builtin_{node.aux_str or node.imm_u32}_{i}", BV32, BV32)(z3.ZeroExt(27, st.lane_id))
+                    for i in range(vlen)
+                )
+            else:
+                values[node.id] = _hw_uf(f"builtin_{node.aux_str or node.imm_u32}", BV32, BV32)(z3.ZeroExt(27, st.lane_id))
         elif op == "Kill":
             cond = _as_bool(args[0]) if args else z3.BoolVal(True)
             st.discarded = z3.Or(st.discarded, cond)

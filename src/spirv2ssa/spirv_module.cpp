@@ -444,6 +444,82 @@ bool parse_spirv_module(
                 }
                 break;
 
+            case SpvOpSpecConstantOp:
+                if (wc >= 4) {
+                    SpirvConstant c{};
+                    c.id = dec.result_id;
+                    c.type_id = dec.result_type;
+                    c.is_spec_const = true;
+                    const auto sub_op = static_cast<SpvOp>(w[3]);
+                    auto get_u64 = [&](size_t wi) -> uint64_t {
+                        if (wi >= wc) return 0u;
+                        auto it = out->constants.find(w[wi]);
+                        return (it != out->constants.end()) ? it->second.scalar_bits : 0u;
+                    };
+                    uint64_t a = get_u64(4), b = get_u64(5);
+                    uint64_t rv = 0u;
+                    switch (sub_op) {
+                        case SpvOpIAdd: rv = a + b; break;
+                        case SpvOpISub: rv = a - b; break;
+                        case SpvOpIMul: rv = a * b; break;
+                        case SpvOpUDiv: rv = (b != 0) ? (a / b) : 0u; break;
+                        case SpvOpSDiv: {
+                            int64_t sa = static_cast<int32_t>(a), sb = static_cast<int32_t>(b);
+                            rv = (sb != 0) ? static_cast<uint64_t>(sa / sb) : 0u;
+                            break;
+                        }
+                        case SpvOpUMod: rv = (b != 0) ? (a % b) : 0u; break;
+                        case SpvOpSRem: {
+                            int64_t sa = static_cast<int32_t>(a), sb = static_cast<int32_t>(b);
+                            rv = (sb != 0) ? static_cast<uint64_t>(sa % sb) : 0u;
+                            break;
+                        }
+                        case SpvOpSMod: {
+                            int64_t sa = static_cast<int32_t>(a), sb = static_cast<int32_t>(b);
+                            if (sb != 0) {
+                                int64_t r = sa % sb;
+                                if (r != 0 && ((r < 0) != (sb < 0))) r += sb;
+                                rv = static_cast<uint64_t>(r);
+                            }
+                            break;
+                        }
+                        case SpvOpShiftLeftLogical: rv = a << (b & 63u); break;
+                        case SpvOpShiftRightLogical: rv = a >> (b & 63u); break;
+                        case SpvOpShiftRightArithmetic: rv = static_cast<uint64_t>(static_cast<int32_t>(a) >> (b & 31u)); break;
+                        case SpvOpBitwiseAnd: rv = a & b; break;
+                        case SpvOpBitwiseOr: rv = a | b; break;
+                        case SpvOpBitwiseXor: rv = a ^ b; break;
+                        case SpvOpNot: rv = ~a; break;
+                        case SpvOpSNegate: rv = static_cast<uint64_t>(-static_cast<int32_t>(a)); break;
+                        case SpvOpSConvert: rv = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(a))); break;
+                        case SpvOpUConvert: rv = a; break;
+                        case SpvOpIEqual: rv = (a == b) ? 1u : 0u; break;
+                        case SpvOpINotEqual: rv = (a != b) ? 1u : 0u; break;
+                        case SpvOpULessThan: rv = (a < b) ? 1u : 0u; break;
+                        case SpvOpSLessThan: rv = (static_cast<int32_t>(a) < static_cast<int32_t>(b)) ? 1u : 0u; break;
+                        case SpvOpUGreaterThan: rv = (a > b) ? 1u : 0u; break;
+                        case SpvOpSGreaterThan: rv = (static_cast<int32_t>(a) > static_cast<int32_t>(b)) ? 1u : 0u; break;
+                        case SpvOpLogicalAnd: rv = ((a != 0) && (b != 0)) ? 1u : 0u; break;
+                        case SpvOpLogicalOr: rv = ((a != 0) || (b != 0)) ? 1u : 0u; break;
+                        case SpvOpLogicalNot: rv = (a == 0) ? 1u : 0u; break;
+                        case SpvOpSelect: rv = (a != 0) ? b : get_u64(6); break;
+                        default: rv = 0u; break;
+                    }
+                    const SpirvType* rt = out->get_type(c.type_id);
+                    if (rt && rt->kind == SpirvTypeKind::Bool) {
+                        c.kind = SpirvConstKind::Bool;
+                        c.scalar_bits = (rv != 0) ? 1u : 0u;
+                    } else if (rt && rt->width == 64) {
+                        c.kind = SpirvConstKind::Scalar64;
+                        c.scalar_bits = rv;
+                    } else {
+                        c.kind = SpirvConstKind::Scalar32;
+                        c.scalar_bits = rv & 0xFFFFFFFFu;
+                    }
+                    out->constants[c.id] = c;
+                }
+                break;
+
             case SpvOpConstantNull:
                 if (wc >= 3) {
                     SpirvConstant c{};

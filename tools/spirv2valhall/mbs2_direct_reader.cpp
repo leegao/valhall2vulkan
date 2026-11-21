@@ -158,9 +158,12 @@ std::vector<Mbs2Symbol> read_ssym(const cmpbe_chunk_SSYM& ss) {
 }
 
 EbinRole classify_role(const std::string& stage_chunk, const Mbs2EbinMeta& meta) {
+    // Preload/Pilot EBINs carry flag bit 0x20000000 across Compute, Fragment, and Vertex stages.
+    if ((meta.flags & 0x20000000u) != 0) {
+        return EbinRole::Pilot;
+    }
     if (stage_chunk == "CCOM") {
-        if ((meta.flags & 0x20000000u) != 0 ||
-            (meta.rt_num == 0xFFFFu && meta.aux_idx == 0 && meta.variant == 0) ||
+        if ((meta.rt_num == 0xFFFFu && meta.aux_idx == 0 && meta.variant == 0) ||
             (meta.has_fnmd && !meta.fnmd.pilot_name.empty())) {
             return EbinRole::Pilot;
         }

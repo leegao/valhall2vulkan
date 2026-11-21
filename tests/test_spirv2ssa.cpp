@@ -143,7 +143,7 @@ std::vector<uint32_t> make_switch_compute_spv() {
     uint32_t gid = b.op_Load(t_v3u32, v_gid);
     uint32_t x = b.op_CompositeExtract(t_u32, gid, {0u});
     b.op_SelectionMerge(lbl_merge, SelectionControlMask::None);
-    b.op_Switch(x, lbl_def, {0u, lbl_c0, 1u, lbl_c1});
+    b.op_Switch(x, lbl_def, {{0u, lbl_c0}, {1u, lbl_c1}});
 
     b.emit_label(lbl_c0);
     b.op_Store(local_res, b.const_u32(100u));
@@ -217,6 +217,92 @@ void test_switch_desugaring() {
     std::cout << "[PASS] test_switch_desugaring (" << res.ssa.blocks.size() << " blocks)\n";
 }
 
+
+std::vector<uint32_t> make_v24_2_spec_ops_spv() {
+    SpirvBuilder b(ExecutionModel::GLCompute, /*enable_bda=*/false);
+    b.add_execution_mode(ExecutionMode::LocalSize, {1u, 1u, 1u});
+
+    uint32_t t_bool = b.op_TypeBool();
+    uint32_t t_u32 = b.op_TypeInt(32u, 0u);
+    uint32_t t_s32 = b.op_TypeInt(32u, 1u);
+    uint32_t t_u64 = b.op_TypeInt(64u, 0u);
+    uint32_t t_f32 = b.op_TypeFloat(32u);
+    uint32_t t_v2u32 = b.op_TypeVector(t_u32, 2u);
+    uint32_t t_v3u32 = b.op_TypeVector(t_u32, 3u);
+    uint32_t t_ptr_in_v3u32 = b.op_TypePointer(StorageClass::Input, t_v3u32);
+    uint32_t t_rta_u32 = b.op_TypeRuntimeArray(t_u32);
+    b.op_Decorate(t_rta_u32, Decoration::ArrayStride, {4u});
+    uint32_t t_ssbo = b.op_TypeStruct({t_rta_u32});
+    b.op_Decorate(t_ssbo, Decoration::Block);
+    b.op_MemberDecorate(t_ssbo, 0u, Decoration::Offset, {0u});
+    uint32_t t_ptr_ssbo = b.op_TypePointer(StorageClass::StorageBuffer, t_ssbo);
+    uint32_t t_ptr_ssbo_u32 = b.op_TypePointer(StorageClass::StorageBuffer, t_u32);
+
+    uint32_t v_gid = b.add_global_var(t_ptr_in_v3u32, StorageClass::Input, "gl_GlobalInvocationID", true);
+    b.op_Decorate(v_gid, Decoration::BuiltIn, {static_cast<uint32_t>(BuiltIn::GlobalInvocationId)});
+    uint32_t v_buf = b.add_global_var(t_ptr_ssbo, StorageClass::StorageBuffer, "u_buf", false);
+    b.op_Decorate(v_buf, Decoration::DescriptorSet, {0u});
+    b.op_Decorate(v_buf, Decoration::Binding, {0u});
+
+    uint32_t c_0 = b.const_u32(0u);
+    uint32_t c_1 = b.const_u32(1u);
+    uint32_t c_2 = b.const_u32(2u);
+    uint32_t c_3 = b.const_u32(3u);
+    uint32_t c_4 = b.const_u32(4u);
+    uint32_t c_7 = b.const_u32(7u);
+
+    b.begin_main_function();
+    uint32_t gid = b.op_Load(t_v3u32, v_gid);
+    uint32_t x = b.op_CompositeExtract(t_u32, gid, {0u});
+    uint32_t y = b.op_CompositeExtract(t_u32, gid, {1u});
+    uint32_t xs = b.op_Bitcast(t_s32, x);
+    uint32_t ys = b.op_Bitcast(t_s32, y);
+
+    uint32_t q_u = b.op_UDiv(t_u32, x, c_7);
+    uint32_t q_s = b.op_SDiv(t_s32, xs, b.op_Bitcast(t_s32, c_7));
+    uint32_t r_s = b.op_SRem(t_s32, xs, ys);
+    uint32_t m_s = b.op_SMod(t_s32, xs, ys);
+
+    uint32_t pair = b.op_CompositeConstruct(t_v2u32, {q_u, b.op_Bitcast(t_u32, q_s)});
+    uint32_t packed64 = b.op_Bitcast(t_u64, pair);
+    uint32_t unpacked = b.op_Bitcast(t_v2u32, packed64);
+    uint32_t lo = b.op_CompositeExtract(t_u32, unpacked, {0u});
+
+    uint32_t xf = b.op_Bitcast(t_f32, x);
+    uint32_t yf = b.op_Bitcast(t_f32, y);
+    uint32_t qf16 = b.op_QuantizeToF16(t_f32, xf);
+    uint32_t ord = b.op_Ordered(t_bool, qf16, yf);
+    uint32_t ord_u = b.op_Select(t_u32, ord, c_1, c_0);
+    uint32_t copied = b.op_CopyLogical(t_u32, ord_u);
+
+    b.op_Store(b.op_AccessChain(t_ptr_ssbo_u32, v_buf, {c_0, c_0}), lo);
+    b.op_Store(b.op_AccessChain(t_ptr_ssbo_u32, v_buf, {c_0, c_1}), b.op_Bitcast(t_u32, r_s));
+    b.op_Store(b.op_AccessChain(t_ptr_ssbo_u32, v_buf, {c_0, c_2}), b.op_Bitcast(t_u32, m_s));
+    b.op_Store(b.op_AccessChain(t_ptr_ssbo_u32, v_buf, {c_0, c_3}), b.op_Bitcast(t_u32, qf16));
+    b.op_Store(b.op_AccessChain(t_ptr_ssbo_u32, v_buf, {c_0, c_4}), copied);
+    b.op_Return();
+    b.end_main_function();
+    return b.assemble();
+}
+
+void test_v24_2_spec_ops() {
+    auto spv = make_v24_2_spec_ops_spv();
+    auto res = lower_spirv_to_valhall_ssa(spv);
+    assert(res.ok);
+    assert(res.unsupported_ops.empty());
+    assert(count_ops(res.ssa, SsaOp::UDiv) == 1);
+    assert(count_ops(res.ssa, SsaOp::SDiv) == 1);
+    assert(count_ops(res.ssa, SsaOp::SRem) == 1);
+    assert(count_ops(res.ssa, SsaOp::SMod) == 1);
+    assert(count_ops(res.ssa, SsaOp::Pack64) == 1);
+    assert(count_ops(res.ssa, SsaOp::Split64) == 1);
+    assert(count_ops(res.ssa, SsaOp::PackHalf2x16) == 1);
+    assert(count_ops(res.ssa, SsaOp::UnpackHalf2x16) == 1);
+    assert(count_ops(res.ssa, SsaOp::IsNan) == 2);
+    assert(count_ops(res.ssa, SsaOp::PsbStore) == 5);
+    std::cout << "[PASS] test_v24_2_spec_ops (" << res.ssa.nodes.size() - 1 << " SSA nodes)\n";
+}
+
 } // namespace
 
 int main() {
@@ -224,6 +310,7 @@ int main() {
     test_compute_lowering();
     test_branching_frag_mem2reg();
     test_switch_desugaring();
+    test_v24_2_spec_ops();
     std::cout << "All spirv2ssa tests passed!\n";
     return 0;
 }

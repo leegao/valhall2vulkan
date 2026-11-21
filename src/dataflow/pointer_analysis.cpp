@@ -59,7 +59,7 @@ TrackedVal deref_pointer_single(const TrackedVal& addr, uint32_t elem_bytes, con
                     static_cast<uint32_t>(d.byte_offset));
                 if (!m.empty()) mem_sym = std::move(m);
             }
-            return TrackedValDomain::make_symbol_value(d.table_id, d.entry_id, std::move(mem_sym), false);
+            return TrackedValDomain::make_symbol_value(d.table_id, d.entry_id, std::move(mem_sym), false, d.byte_offset, d.offset_known);
         }
         case MemoryDerefResult::Kind::Top:
         default:

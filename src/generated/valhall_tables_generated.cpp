@@ -513,6 +513,21 @@ static const CanonicalTileSpec kCanonicalTiles[] = {
     { "canon_branch", SsaOp::Branch, 1u, TileEmitKind::OpBranch, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_branch_cond", SsaOp::BranchCond, 1u, TileEmitKind::OpBranchConditional, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_return", SsaOp::Return, 1u, TileEmitKind::OpReturn, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_udiv", SsaOp::UDiv, 1u, TileEmitKind::OpUDiv, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_sdiv", SsaOp::SDiv, 1u, TileEmitKind::OpSDiv, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_umod", SsaOp::UMod, 1u, TileEmitKind::OpUMod, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_srem", SsaOp::SRem, 1u, TileEmitKind::OpSRem, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_smod", SsaOp::SMod, 1u, TileEmitKind::OpSMod, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_atan2", SsaOp::Atan2, 1u, TileEmitKind::GlslAtan2, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_asin", SsaOp::Asin, 1u, TileEmitKind::GlslAsin, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_acos", SsaOp::Acos, 1u, TileEmitKind::GlslAcos, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_sinh", SsaOp::Sinh, 1u, TileEmitKind::GlslSinh, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_cosh", SsaOp::Cosh, 1u, TileEmitKind::GlslCosh, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_tanh", SsaOp::Tanh, 1u, TileEmitKind::GlslTanh, { 0x0u, 0x0u, 0x0u, 0x2u } },
+    { "canon_dpdx", SsaOp::DPdx, 1u, TileEmitKind::OpDPdx, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_dpdy", SsaOp::DPdy, 1u, TileEmitKind::OpDPdy, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_fwidth", SsaOp::Fwidth, 1u, TileEmitKind::OpFwidth, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_img_query_size", SsaOp::ImageQuerySize, 1u, TileEmitKind::OpImageQuerySize, { 0x0u, 0x0u, 0x0u, 0x0u } },
 };
 
 static const FusionPatternNode kFusionPatternNodes[] = {
@@ -626,7 +641,7 @@ const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic) {
 }
 
 const CanonicalTileSpec* lookup_canonical_tile(SsaOp op) {
-    for (size_t i = 0; i < 134; ++i) {
+    for (size_t i = 0; i < 149; ++i) {
         if (kCanonicalTiles[i].ssa_op == op) return &kCanonicalTiles[i];
     }
     return nullptr;
@@ -737,7 +752,10 @@ const char* op_class_to_string(OpClass c) {
 
 const char* ssa_op_to_string(SsaOp op) {
     switch (op) {
+        case SsaOp::Acos: return "Acos";
+        case SsaOp::Asin: return "Asin";
         case SsaOp::Atan: return "Atan";
+        case SsaOp::Atan2: return "Atan2";
         case SsaOp::AtomicCmpXchg: return "AtomicCmpXchg";
         case SsaOp::AtomicExchange: return "AtomicExchange";
         case SsaOp::AtomicRmw: return "AtomicRmw";
@@ -771,6 +789,9 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::ConvertUToF: return "ConvertUToF";
         case SsaOp::Copy: return "Copy";
         case SsaOp::Cos: return "Cos";
+        case SsaOp::Cosh: return "Cosh";
+        case SsaOp::DPdx: return "DPdx";
+        case SsaOp::DPdy: return "DPdy";
         case SsaOp::Exp: return "Exp";
         case SsaOp::Exp2: return "Exp2";
         case SsaOp::FAbs: return "FAbs";
@@ -794,6 +815,7 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::Fma: return "Fma";
         case SsaOp::FrexpExp: return "FrexpExp";
         case SsaOp::FrexpSignificand: return "FrexpSignificand";
+        case SsaOp::Fwidth: return "Fwidth";
         case SsaOp::IAdd: return "IAdd";
         case SsaOp::IAdd64: return "IAdd64";
         case SsaOp::ICmpEq: return "ICmpEq";
@@ -813,6 +835,7 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::IMul64: return "IMul64";
         case SsaOp::ISub: return "ISub";
         case SsaOp::ISub64: return "ISub64";
+        case SsaOp::ImageQuerySize: return "ImageQuerySize";
         case SsaOp::InverseSqrt: return "InverseSqrt";
         case SsaOp::IsInf: return "IsInf";
         case SsaOp::IsNan: return "IsNan";
@@ -844,7 +867,10 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::RoundEven: return "RoundEven";
         case SsaOp::SAbs: return "SAbs";
         case SsaOp::SConvert32To64: return "SConvert32To64";
+        case SsaOp::SDiv: return "SDiv";
+        case SsaOp::SMod: return "SMod";
         case SsaOp::SNeg: return "SNeg";
+        case SsaOp::SRem: return "SRem";
         case SsaOp::Select: return "Select";
         case SsaOp::Shl: return "Shl";
         case SsaOp::Shl64: return "Shl64";
@@ -853,6 +879,7 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::ShrU: return "ShrU";
         case SsaOp::ShrU64: return "ShrU64";
         case SsaOp::Sin: return "Sin";
+        case SsaOp::Sinh: return "Sinh";
         case SsaOp::Split64: return "Split64";
         case SsaOp::Sqrt: return "Sqrt";
         case SsaOp::StoreBuiltinOutput: return "StoreBuiltinOutput";
@@ -860,11 +887,14 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::StoreVertVarying: return "StoreVertVarying";
         case SsaOp::SubgroupBallot: return "SubgroupBallot";
         case SsaOp::SubgroupShuffle: return "SubgroupShuffle";
+        case SsaOp::Tanh: return "Tanh";
         case SsaOp::TexSample: return "TexSample";
         case SsaOp::Trunc: return "Trunc";
         case SsaOp::TupleExtract: return "TupleExtract";
         case SsaOp::UConvert32To64: return "UConvert32To64";
         case SsaOp::UConvert64To32: return "UConvert64To32";
+        case SsaOp::UDiv: return "UDiv";
+        case SsaOp::UMod: return "UMod";
         case SsaOp::UnpackHalf2x16: return "UnpackHalf2x16";
         case SsaOp::VecConstruct2: return "VecConstruct2";
         case SsaOp::VecConstruct3: return "VecConstruct3";

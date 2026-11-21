@@ -113,6 +113,8 @@ struct SymbolVal {
     int32_t rack = -1;
     int32_t desc_idx = -1;
     std::string symbol_name;
+    int64_t byte_offset = 0;
+    bool offset_known = false;
     bool derived = false;
 
     static SymbolVal make_bottom() { return SymbolVal{}; }
@@ -121,12 +123,15 @@ struct SymbolVal {
         v.state = State::Top;
         return v;
     }
-    static SymbolVal make(int32_t r, int32_t d, std::string sym, bool drv = false) {
+    static SymbolVal make(int32_t r, int32_t d, std::string sym, bool drv = false,
+                          int64_t off = 0, bool off_known = false) {
         SymbolVal v;
         v.state = State::Known;
         v.rack = r;
         v.desc_idx = d;
         v.symbol_name = std::move(sym);
+        v.byte_offset = off;
+        v.offset_known = off_known;
         v.derived = drv;
         return v;
     }
@@ -264,8 +269,9 @@ struct TrackedValDomain : public LaneDomainWrapper<TrackedValUnionDomain> {
     static Value make_fau_uniform(uint32_t fau_off, std::string sym = "") {
         return Value(ShaderAtomDomain::make_fau_uniform(fau_off, std::move(sym)));
     }
-    static Value make_symbol_value(int32_t rack, int32_t desc, std::string sym, bool derived = false) {
-        return Value(SymbolVal::make(rack, desc, std::move(sym), derived));
+    static Value make_symbol_value(int32_t rack, int32_t desc, std::string sym, bool derived = false,
+                                   int64_t off = 0, bool off_known = false) {
+        return Value(SymbolVal::make(rack, desc, std::move(sym), derived, off, off_known));
     }
     static Value make_data_section(int64_t off = 0, bool off_known = true) {
         return Value(PointerVal::make_data_section(off, off_known));

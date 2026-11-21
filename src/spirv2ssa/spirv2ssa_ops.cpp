@@ -198,15 +198,13 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
             }
             break;
         }
+        case kGlslAsin: emit_unary(SsaOp::Asin); break;
+        case kGlslAcos: emit_unary(SsaOp::Acos); break;
         case kGlslAtan: emit_unary(SsaOp::Atan); break;
-        case kGlslAtan2: {
-            LoweredValue y = arg_val(0), x = arg_val(1);
-            for (uint32_t i = 0; i < nlanes; ++i) {
-                SsaId ratio = emit_op(blk_id, SsaOp::FDiv, ValType::F32, {lane_of(y, i), lane_of(x, i)});
-                out.lanes.push_back(emit_op(blk_id, SsaOp::Atan, ValType::F32, {ratio}));
-            }
-            break;
-        }
+        case kGlslSinh: emit_unary(SsaOp::Sinh); break;
+        case kGlslCosh: emit_unary(SsaOp::Cosh); break;
+        case kGlslTanh: emit_unary(SsaOp::Tanh); break;
+        case kGlslAtan2: emit_binary(SsaOp::Atan2); break;
         case kGlslPow: emit_binary(SsaOp::Pow); break;
         case kGlslExp: emit_unary(SsaOp::Exp); break;
         case kGlslLog: emit_unary(SsaOp::Log); break;
@@ -476,6 +474,45 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
             }
             break;
         }
+        case kGlslFaceForward: {
+            // FaceForward(N, I, Nref): returns N if dot(Nref, I) < 0, else -N.
+            LoweredValue nv = arg_val(0), iv = arg_val(1), nref = arg_val(2);
+            SsaId dot = emit_op(blk_id, SsaOp::FMul, ValType::F32, {lane_of(nref, 0), lane_of(iv, 0)});
+            for (uint32_t i = 1; i < nlanes; ++i) {
+                dot = emit_op(blk_id, SsaOp::Fma, ValType::F32, {lane_of(nref, i), lane_of(iv, i), dot});
+            }
+            SsaId lt = emit_op(blk_id, SsaOp::FCmpOrdLt, ValType::Bool, {dot, sb_.emit_const_f32_bits(blk_id, 0u)});
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId neg_n = emit_op(blk_id, SsaOp::FNeg, ValType::F32, {lane_of(nv, i)});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::Select, ValType::F32, {lt, lane_of(nv, i), neg_n}));
+            }
+            break;
+        }
+        case kGlslRefract: {
+            // Refract(I, N, eta): k = 1 - eta^2 * (1 - dot(N,I)^2); k < 0 ? 0 : eta*I - (eta*dot(N,I) + sqrt(k))*N
+            LoweredValue iv = arg_val(0), nv = arg_val(1), eta_v = arg_val(2);
+            SsaId eta = eta_v.scalar();
+            SsaId one = sb_.emit_const_f32_bits(blk_id, f32_to_bits(1.0f));
+            SsaId zero = sb_.emit_const_f32_bits(blk_id, 0u);
+            SsaId dot = emit_op(blk_id, SsaOp::FMul, ValType::F32, {lane_of(nv, 0), lane_of(iv, 0)});
+            for (uint32_t i = 1; i < nlanes; ++i) {
+                dot = emit_op(blk_id, SsaOp::Fma, ValType::F32, {lane_of(nv, i), lane_of(iv, i), dot});
+            }
+            SsaId dot2 = emit_op(blk_id, SsaOp::FMul, ValType::F32, {dot, dot});
+            SsaId om_d2 = emit_op(blk_id, SsaOp::FSub, ValType::F32, {one, dot2});
+            SsaId eta2 = emit_op(blk_id, SsaOp::FMul, ValType::F32, {eta, eta});
+            SsaId k = emit_op(blk_id, SsaOp::FSub, ValType::F32, {one, emit_op(blk_id, SsaOp::FMul, ValType::F32, {eta2, om_d2})});
+            SsaId k_lt = emit_op(blk_id, SsaOp::FCmpOrdLt, ValType::Bool, {k, zero});
+            SsaId sk = emit_op(blk_id, SsaOp::Sqrt, ValType::F32, {emit_op(blk_id, SsaOp::FMax, ValType::F32, {k, zero})});
+            SsaId scale_n = emit_op(blk_id, SsaOp::Fma, ValType::F32, {eta, dot, sk});
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId t1 = emit_op(blk_id, SsaOp::FMul, ValType::F32, {eta, lane_of(iv, i)});
+                SsaId t2 = emit_op(blk_id, SsaOp::FMul, ValType::F32, {scale_n, lane_of(nv, i)});
+                SsaId r = emit_op(blk_id, SsaOp::FSub, ValType::F32, {t1, t2});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::Select, ValType::F32, {k_lt, zero, r}));
+            }
+            break;
+        }
         case kGlslFindILsb: {
             LoweredValue a = arg_val(0);
             SsaId z = sb_.emit_const_u32(blk_id, 0u);
@@ -666,6 +703,7 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
             break;
         }
         case SpvOpCopyObject:
+        case SpvOpCopyLogical:
             out = arg_v(3);
             out.spv_type_id = res_type;
             break;
@@ -703,15 +741,27 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
             uint32_t dw = et ? et->width : 32u;
             for (uint32_t i = 0; i < nlanes; ++i) {
                 SsaId x = lane_of(a, i);
-                if (sw <= 32 && dw == 64) {
+                if (sw == 64 && dw <= 32) {
+                    x = emit_op(blk_id, SsaOp::UConvert64To32, ValType::U32, {x});
+                    if (dw < 32) {
+                        x = emit_op(blk_id, SsaOp::BfeU, ValType::U32,
+                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, dw)});
+                    }
+                    out.lanes.push_back(x);
+                } else if (sw <= 32 && dw == 64) {
+                    if (sw < 32) {
+                        x = emit_op(blk_id, SsaOp::BfeU, ValType::U32,
+                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, sw)});
+                    }
                     out.lanes.push_back(emit_op(blk_id, SsaOp::UConvert32To64, ValType::U64, {x}));
-                } else if (sw == 64 && dw <= 32) {
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::UConvert64To32, ValType::U32, {x}));
-                } else if (dw < 32) {
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32,
-                                                {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, dw)}));
                 } else {
-                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, x));
+                    uint32_t keep = std::min(sw, dw);
+                    if (keep < 32) {
+                        out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32,
+                                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, keep)}));
+                    } else {
+                        out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, x));
+                    }
                 }
             }
             break;
@@ -723,32 +773,106 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
             uint32_t dw = et ? et->width : 32u;
             for (uint32_t i = 0; i < nlanes; ++i) {
                 SsaId x = lane_of(a, i);
-                if (sw <= 32 && dw == 64) {
+                if (sw == 64 && dw <= 32) {
+                    x = emit_op(blk_id, SsaOp::UConvert64To32, ValType::S32, {x});
+                    if (dw < 32) {
+                        x = emit_op(blk_id, SsaOp::BfeS, ValType::S32,
+                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, dw)});
+                    }
+                    out.lanes.push_back(x);
+                } else if (sw <= 32 && dw == 64) {
+                    if (sw < 32) {
+                        x = emit_op(blk_id, SsaOp::BfeS, ValType::S32,
+                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, sw)});
+                    }
                     out.lanes.push_back(emit_op(blk_id, SsaOp::SConvert32To64, ValType::S64, {x}));
-                } else if (sw == 64 && dw <= 32) {
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::UConvert64To32, ValType::S32, {x}));
-                } else if (sw < 32 && dw == 32) {
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeS, ValType::S32,
-                                                {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, sw)}));
                 } else {
-                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, x));
+                    uint32_t keep = std::min(sw, dw);
+                    if (keep < 32) {
+                        out.lanes.push_back(emit_op(blk_id, SsaOp::BfeS, ValType::S32,
+                                                    {x, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, keep)}));
+                    } else {
+                        out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, x));
+                    }
                 }
             }
             break;
         }
         case SpvOpFConvert: {
+            // SPIR-V §3.3.11: Numeric floating-point width conversion (f16 <-> f32).
             LoweredValue a = arg_v(3);
+            const SpirvType* src_et = mod_.get_type(scalar_elem_type(a.spv_type_id));
+            uint32_t sw = src_et ? src_et->width : 32u;
+            uint32_t dw = et ? et->width : 32u;
             for (uint32_t i = 0; i < nlanes; ++i) {
-                out.lanes.push_back(sb_.emit_bitcast(blk_id, ValType::F32, lane_of(a, i)));
+                SsaId x = lane_of(a, i);
+                if (sw == 16 && dw == 32) {
+                    SsaId v2 = emit_op(blk_id, SsaOp::UnpackHalf2x16, ValType::V2F32, {sb_.emit_bitcast(blk_id, ValType::U32, x)});
+                    SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = 0; ex.args = {v2};
+                    out.lanes.push_back(sb_.emit(blk_id, std::move(ex)));
+                } else if (sw == 32 && dw == 16) {
+                    SsaId z = sb_.emit_const_f32_bits(blk_id, 0u);
+                    SsaId v2 = emit_op(blk_id, SsaOp::VecConstruct2, ValType::V2F32, {sb_.emit_bitcast(blk_id, ValType::F32, x), z});
+                    SsaId pk = emit_op(blk_id, SsaOp::PackHalf2x16, ValType::U32, {v2});
+                    out.lanes.push_back(emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {pk, sb_.emit_const_u32(blk_id, 0xFFFFu)}));
+                } else {
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, ValType::F32, x));
+                }
+            }
+            break;
+        }
+        case SpvOpQuantizeToF16: {
+            // SPIR-V §3.3.11: Quantize f32 to f16 representable value (flushes denorms to 0).
+            LoweredValue a = arg_v(3);
+            SsaId z = sb_.emit_const_f32_bits(blk_id, 0u);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId v2 = emit_op(blk_id, SsaOp::VecConstruct2, ValType::V2F32, {lane_of(a, i), z});
+                SsaId pk = emit_op(blk_id, SsaOp::PackHalf2x16, ValType::U32, {v2});
+                SsaId up = emit_op(blk_id, SsaOp::UnpackHalf2x16, ValType::V2F32, {pk});
+                SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = 0; ex.args = {up};
+                out.lanes.push_back(sb_.emit(blk_id, std::move(ex)));
             }
             break;
         }
         case SpvOpConvertPtrToU:
         case SpvOpConvertUToPtr:
         case SpvOpBitcast: {
+            // SPIR-V §3.3.11: Support both same-count and cross-component-count bitcasts (e.g. uvec2 <-> u64).
             LoweredValue a = arg_v(3);
-            for (uint32_t i = 0; i < nlanes; ++i) {
-                out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, lane_of(a, i)));
+            const SpirvType* src_et = mod_.get_type(scalar_elem_type(a.spv_type_id));
+            uint32_t sw = src_et ? src_et->width : 32u;
+            uint32_t dw = et ? et->width : 32u;
+            if (sw == 32 && dw == 64 && a.lanes.size() == nlanes * 2) {
+                for (uint32_t i = 0; i < nlanes; ++i) {
+                    SsaId lo = sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i]);
+                    SsaId hi = sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i + 1]);
+                    out.lanes.push_back(emit_op(blk_id, SsaOp::Pack64, elem_vt, {lo, hi}));
+                }
+            } else if (sw == 64 && dw == 32 && nlanes == a.lanes.size() * 2) {
+                for (size_t i = 0; i < a.lanes.size(); ++i) {
+                    SsaNode sp{}; sp.op = SsaOp::Split64; sp.type = ValType::TupleU32x2; sp.args = {a.lanes[i]};
+                    SsaId tup = sb_.emit(blk_id, std::move(sp));
+                    SsaNode e0{}; e0.op = SsaOp::TupleExtract; e0.type = ValType::U32; e0.imm_u32 = 0; e0.args = {tup};
+                    SsaNode e1{}; e1.op = SsaOp::TupleExtract; e1.type = ValType::U32; e1.imm_u32 = 1; e1.args = {tup};
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, sb_.emit(blk_id, std::move(e0))));
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, sb_.emit(blk_id, std::move(e1))));
+                }
+            } else if (sw == 32 && dw == 16 && nlanes == a.lanes.size() * 2) {
+                for (size_t i = 0; i < a.lanes.size(); ++i) {
+                    SsaId u = sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[i]);
+                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, 16u)}));
+                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 16u), sb_.emit_const_u32(blk_id, 16u)}));
+                }
+            } else if (sw == 16 && dw == 32 && a.lanes.size() == nlanes * 2) {
+                for (uint32_t i = 0; i < nlanes; ++i) {
+                    SsaId lo = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i]), sb_.emit_const_u32(blk_id, 0xFFFFu)});
+                    SsaId hi = emit_op(blk_id, SsaOp::Shl, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i + 1]), sb_.emit_const_u32(blk_id, 16u)});
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, emit_op(blk_id, SsaOp::BitOr, ValType::U32, {lo, hi})));
+                }
+            } else {
+                for (uint32_t i = 0; i < nlanes; ++i) {
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, lane_of(a, i)));
+                }
             }
             break;
         }
@@ -763,36 +887,11 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         case SpvOpIMul: emit_binary(is_64 ? SsaOp::IMul64 : SsaOp::IMul); break;
         case SpvOpFMul: emit_binary(SsaOp::FMul); break;
         case SpvOpFDiv: emit_binary(SsaOp::FDiv); break;
-        case SpvOpUDiv:
-        case SpvOpSDiv: {
-            // Lower integer division via float conversion when exact integer div SsaOp is absent
-            LoweredValue a = arg_v(3), b = arg_v(4);
-            bool is_s = (op == SpvOpSDiv);
-            for (uint32_t i = 0; i < nlanes; ++i) {
-                SsaId fa = emit_op(blk_id, is_s ? SsaOp::ConvertSToF : SsaOp::ConvertUToF, ValType::F32, {lane_of(a, i)});
-                SsaId fb = emit_op(blk_id, is_s ? SsaOp::ConvertSToF : SsaOp::ConvertUToF, ValType::F32, {lane_of(b, i)});
-                SsaId q = emit_op(blk_id, SsaOp::FDiv, ValType::F32, {fa, fb});
-                SsaId tr = emit_op(blk_id, SsaOp::Trunc, ValType::F32, {q});
-                out.lanes.push_back(emit_op(blk_id, is_s ? SsaOp::ConvertFToS : SsaOp::ConvertFToU, elem_vt, {tr}));
-            }
-            break;
-        }
-        case SpvOpUMod:
-        case SpvOpSRem:
-        case SpvOpSMod: {
-            LoweredValue a = arg_v(3), b = arg_v(4);
-            bool is_s = (op != SpvOpUMod);
-            for (uint32_t i = 0; i < nlanes; ++i) {
-                SsaId fa = emit_op(blk_id, is_s ? SsaOp::ConvertSToF : SsaOp::ConvertUToF, ValType::F32, {lane_of(a, i)});
-                SsaId fb = emit_op(blk_id, is_s ? SsaOp::ConvertSToF : SsaOp::ConvertUToF, ValType::F32, {lane_of(b, i)});
-                SsaId q = emit_op(blk_id, SsaOp::FDiv, ValType::F32, {fa, fb});
-                SsaId tr = emit_op(blk_id, SsaOp::Trunc, ValType::F32, {q});
-                SsaId qi = emit_op(blk_id, is_s ? SsaOp::ConvertFToS : SsaOp::ConvertFToU, elem_vt, {tr});
-                SsaId prod = emit_op(blk_id, SsaOp::IMul, elem_vt, {qi, lane_of(b, i)});
-                out.lanes.push_back(emit_op(blk_id, SsaOp::ISub, elem_vt, {lane_of(a, i), prod}));
-            }
-            break;
-        }
+        case SpvOpUDiv: emit_binary(SsaOp::UDiv); break;
+        case SpvOpSDiv: emit_binary(SsaOp::SDiv); break;
+        case SpvOpUMod: emit_binary(SsaOp::UMod); break;
+        case SpvOpSRem: emit_binary(SsaOp::SRem); break;
+        case SpvOpSMod: emit_binary(SsaOp::SMod); break;
         case SpvOpFRem:
         case SpvOpFMod: {
             LoweredValue a = arg_v(3), b = arg_v(4);
@@ -941,6 +1040,60 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         }
         case SpvOpIsNan: emit_unary(SsaOp::IsNan); break;
         case SpvOpIsInf: emit_unary(SsaOp::IsInf); break;
+        case SpvOpIsFinite: {
+            LoweredValue a = arg_v(3);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId x = lane_of(a, i);
+                SsaId bad = emit_op(blk_id, SsaOp::LogicalOr, ValType::Bool, {
+                    emit_op(blk_id, SsaOp::IsNan, ValType::Bool, {x}),
+                    emit_op(blk_id, SsaOp::IsInf, ValType::Bool, {x})
+                });
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalNot, ValType::Bool, {bad}));
+            }
+            break;
+        }
+        case SpvOpIsNormal: {
+            // Normal IEEE-754 f32: exponent in [1, 254] (bits 23..30 neither 0 nor 0xFF).
+            LoweredValue a = arg_v(3);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId bits = sb_.emit_bitcast(blk_id, ValType::U32, lane_of(a, i));
+                SsaId exp = emit_op(blk_id, SsaOp::BfeU, ValType::U32, {bits, sb_.emit_const_u32(blk_id, 23u), sb_.emit_const_u32(blk_id, 8u)});
+                SsaId nz = emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {exp, sb_.emit_const_u32(blk_id, 0u)});
+                SsaId nff = emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {exp, sb_.emit_const_u32(blk_id, 0xFFu)});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalAnd, ValType::Bool, {nz, nff}));
+            }
+            break;
+        }
+        case SpvOpSignBitSet: {
+            LoweredValue a = arg_v(3);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId bits = sb_.emit_bitcast(blk_id, ValType::U32, lane_of(a, i));
+                SsaId sbit = emit_op(blk_id, SsaOp::ShrU, ValType::U32, {bits, sb_.emit_const_u32(blk_id, 31u)});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {sbit, sb_.emit_const_u32(blk_id, 0u)}));
+            }
+            break;
+        }
+        case SpvOpOrdered: {
+            LoweredValue a = arg_v(3), b = arg_v(4);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId any_nan = emit_op(blk_id, SsaOp::LogicalOr, ValType::Bool, {
+                    emit_op(blk_id, SsaOp::IsNan, ValType::Bool, {lane_of(a, i)}),
+                    emit_op(blk_id, SsaOp::IsNan, ValType::Bool, {lane_of(b, i)})
+                });
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalNot, ValType::Bool, {any_nan}));
+            }
+            break;
+        }
+        case SpvOpUnordered: {
+            LoweredValue a = arg_v(3), b = arg_v(4);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalOr, ValType::Bool, {
+                    emit_op(blk_id, SsaOp::IsNan, ValType::Bool, {lane_of(a, i)}),
+                    emit_op(blk_id, SsaOp::IsNan, ValType::Bool, {lane_of(b, i)})
+                }));
+            }
+            break;
+        }
         case SpvOpLogicalEqual: {
             LoweredValue a = arg_v(3), b = arg_v(4);
             for (uint32_t i = 0; i < nlanes; ++i) {
@@ -1050,7 +1203,78 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         case SpvOpBitReverse: emit_unary(SsaOp::BitReverse); break;
         case SpvOpBitCount: emit_unary(SsaOp::BitCount); break;
 
-        // Subgroup operations
+        // Fragment derivatives
+        case SpvOpDPdx:
+        case SpvOpDPdxFine:
+        case SpvOpDPdxCoarse: emit_unary(SsaOp::DPdx); break;
+        case SpvOpDPdy:
+        case SpvOpDPdyFine:
+        case SpvOpDPdyCoarse: emit_unary(SsaOp::DPdy); break;
+        case SpvOpFwidth:
+        case SpvOpFwidthFine:
+        case SpvOpFwidthCoarse: emit_unary(SsaOp::Fwidth); break;
+
+        // Image metadata queries
+        case SpvOpImageQuerySize:
+        case SpvOpImageQuerySizeLod:
+        case SpvOpImageQueryLevels:
+        case SpvOpImageQuerySamples: {
+            uint32_t img_id = inst.words[3];
+            std::string ikey = "img_" + std::to_string(img_id);
+            if (auto it = sampled_images_.find(img_id); it != sampled_images_.end() && !it->second.canonical_key.empty()) {
+                ikey = it->second.canonical_key;
+            }
+            SsaId lod = (op == SpvOpImageQuerySizeLod && inst.words.size() >= 5)
+                            ? get_value(blk_id, inst.words[4]).scalar()
+                            : sb_.emit_const_u32(blk_id, 0u);
+            for (uint32_t c = 0; c < nlanes; ++c) {
+                SsaNode q{};
+                q.op = SsaOp::ImageQuerySize;
+                q.type = elem_vt;
+                q.imm_u32 = c;
+                q.aux_str = ikey + ":" + spirv_parser::spv_op_name(inst.opcode);
+                q.args = {lod};
+                out.lanes.push_back(sb_.emit(blk_id, std::move(q)));
+            }
+            break;
+        }
+
+        // Subgroup operations (SPIR-V §3.3.24)
+        case SpvOpGroupNonUniformElect: {
+            SsaNode lid{};
+            lid.op = SsaOp::LoadBuiltinInput;
+            lid.type = ValType::U32;
+            lid.imm_u32 = static_cast<uint32_t>(SpvBuiltInSubgroupLocalInvocationId);
+            lid.aux_str = "gl_SubgroupInvocationID";
+            SsaId id_v = sb_.emit(blk_id, std::move(lid));
+            out.lanes.push_back(emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {id_v, sb_.emit_const_u32(blk_id, 0u)}));
+            break;
+        }
+        case SpvOpGroupNonUniformAll:
+        case SpvOpGroupNonUniformAny: {
+            LoweredValue pred = arg_v(4);
+            SsaId b = emit_op(blk_id, SsaOp::SubgroupBallot, ValType::U32, {pred.scalar()});
+            if (op == SpvOpGroupNonUniformAny) {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {b, sb_.emit_const_u32(blk_id, 0u)}));
+            } else {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {b, sb_.emit_const_u32(blk_id, 0xFFFFu)}));
+            }
+            break;
+        }
+        case SpvOpGroupNonUniformAllEqual: {
+            LoweredValue v = arg_v(4);
+            SsaId lane0 = sb_.emit_const_u32(blk_id, 0u);
+            SsaId acc = sb_.emit_const_bool(blk_id, true);
+            for (size_t i = 0; i < v.lanes.size(); ++i) {
+                SsaId v0 = emit_op(blk_id, SsaOp::SubgroupShuffle, res_.ssa.get(v.lanes[i]).type, {v.lanes[i], lane0});
+                SsaId eq = emit_op(blk_id, (res_.ssa.get(v.lanes[i]).type == ValType::F32) ? SsaOp::FCmpOrdEq : SsaOp::ICmpEq,
+                                   ValType::Bool, {v.lanes[i], v0});
+                acc = emit_op(blk_id, SsaOp::LogicalAnd, ValType::Bool, {acc, eq});
+            }
+            SsaId b = emit_op(blk_id, SsaOp::SubgroupBallot, ValType::U32, {acc});
+            out.lanes.push_back(emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {b, sb_.emit_const_u32(blk_id, 0xFFFFu)}));
+            break;
+        }
         case SpvOpGroupNonUniformBallot: {
             LoweredValue pred = arg_v(4);
             SsaId b = emit_op(blk_id, SsaOp::SubgroupBallot, ValType::U32, {pred.scalar()});
@@ -1058,10 +1282,73 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
             for (uint32_t i = 1; i < nlanes; ++i) out.lanes.push_back(sb_.emit_const_u32(blk_id, 0u));
             break;
         }
+        case SpvOpGroupNonUniformBallotBitCount: {
+            LoweredValue mask = arg_v(5);
+            out.lanes.push_back(emit_op(blk_id, SsaOp::BitCount, elem_vt, {mask.scalar()}));
+            break;
+        }
+        case SpvOpGroupNonUniformBallotFindLSB: {
+            LoweredValue mask = arg_v(4);
+            SsaId rev = emit_op(blk_id, SsaOp::BitReverse, ValType::U32, {mask.scalar()});
+            out.lanes.push_back(emit_op(blk_id, SsaOp::Clz, elem_vt, {rev}));
+            break;
+        }
+        case SpvOpGroupNonUniformBallotFindMSB: {
+            LoweredValue mask = arg_v(4);
+            SsaId clz = emit_op(blk_id, SsaOp::Clz, ValType::U32, {mask.scalar()});
+            out.lanes.push_back(emit_op(blk_id, SsaOp::ISub, elem_vt, {sb_.emit_const_u32(blk_id, 31u), clz}));
+            break;
+        }
+        case SpvOpGroupNonUniformBroadcast:
         case SpvOpGroupNonUniformShuffle: {
             LoweredValue v = arg_v(4), idx = arg_v(5);
             for (uint32_t i = 0; i < nlanes; ++i) {
                 out.lanes.push_back(emit_op(blk_id, SsaOp::SubgroupShuffle, elem_vt, {lane_of(v, i), idx.scalar()}));
+            }
+            break;
+        }
+        case SpvOpGroupNonUniformBroadcastFirst: {
+            LoweredValue v = arg_v(4);
+            SsaId z = sb_.emit_const_u32(blk_id, 0u);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::SubgroupShuffle, elem_vt, {lane_of(v, i), z}));
+            }
+            break;
+        }
+        case SpvOpGroupNonUniformShuffleXor:
+        case SpvOpGroupNonUniformShuffleUp:
+        case SpvOpGroupNonUniformShuffleDown: {
+            LoweredValue v = arg_v(4), delta = arg_v(5);
+            SsaNode lid{};
+            lid.op = SsaOp::LoadBuiltinInput;
+            lid.type = ValType::U32;
+            lid.imm_u32 = static_cast<uint32_t>(SpvBuiltInSubgroupLocalInvocationId);
+            lid.aux_str = "gl_SubgroupInvocationID";
+            SsaId id_v = sb_.emit(blk_id, std::move(lid));
+            SsaOp idx_op = (op == SpvOpGroupNonUniformShuffleXor) ? SsaOp::BitXor
+                         : (op == SpvOpGroupNonUniformShuffleUp)  ? SsaOp::ISub
+                                                                  : SsaOp::IAdd;
+            SsaId src_lane = emit_op(blk_id, idx_op, ValType::U32, {id_v, delta.scalar()});
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::SubgroupShuffle, elem_vt, {lane_of(v, i), src_lane}));
+            }
+            break;
+        }
+        case SpvOpGroupNonUniformIAdd:
+        case SpvOpGroupNonUniformFAdd:
+        case SpvOpGroupNonUniformSMin:
+        case SpvOpGroupNonUniformUMin:
+        case SpvOpGroupNonUniformFMin:
+        case SpvOpGroupNonUniformSMax:
+        case SpvOpGroupNonUniformUMax:
+        case SpvOpGroupNonUniformFMax:
+        case SpvOpGroupNonUniformBitwiseAnd:
+        case SpvOpGroupNonUniformBitwiseOr:
+        case SpvOpGroupNonUniformBitwiseXor: {
+            LoweredValue v = arg_v(5);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                out.lanes.push_back(emit_op(blk_id, SsaOp::SubgroupShuffle, elem_vt,
+                                            {lane_of(v, i), sb_.emit_const_u32(blk_id, inst.opcode)}));
             }
             break;
         }

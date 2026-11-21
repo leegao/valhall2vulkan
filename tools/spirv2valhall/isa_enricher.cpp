@@ -313,6 +313,10 @@ PilotAnalysisResult analyze_pilot_shaders(
                 entry.symbol_name = sym->symbol_name;
                 entry.srt_rack = sym->rack;
                 entry.desc_index = sym->desc_idx;
+                entry.is_loaded_value = true;
+                entry.has_byte_offset = sym->offset_known;
+                entry.byte_offset = sym->byte_offset;
+                entry.is_derived = sym->derived;
             } else if (const auto* atom = pw.value.inner.get_if<dataflow::ShaderAtomDomain>();
                        atom && atom->is_known()) {
                 entry.symbol_name = atom->value.symbol_name;

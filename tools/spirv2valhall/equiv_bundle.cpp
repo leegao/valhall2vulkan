@@ -268,6 +268,10 @@ bool build_equivalence_bundle_json(
            << ",\"kind\":";
         write_json_str(os, kind);
         os << ",\"binding\":" << binding
+           << ",\"is_loaded_value\":" << (entry.is_loaded_value ? "true" : "false")
+           << ",\"has_byte_offset\":" << (entry.has_byte_offset ? "true" : "false")
+           << ",\"byte_offset\":" << entry.byte_offset
+           << ",\"is_derived\":" << (entry.is_derived ? "true" : "false")
            << ",\"key\":";
         write_json_str(os, resolved ? (kind + ":0:" + std::to_string(binding)) : "");
         os << '}';
