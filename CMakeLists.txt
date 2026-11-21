@@ -163,6 +163,7 @@ add_library(valhall2spirv STATIC
     src/dataflow/ssa_sroa.cpp
     src/dataflow/ssa_buffer_symbolize.cpp
     src/dataflow/ssa_defau_devirt.cpp
+    src/dataflow/ssa_fact_prover.cpp
     src/dataflow/ssa_fp_opt.cpp
     src/dataflow/ssa_opt_pipeline.cpp
     src/valhall_to_spirv.cpp

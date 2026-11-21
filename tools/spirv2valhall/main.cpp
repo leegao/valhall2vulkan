@@ -5,6 +5,7 @@
 #include "valhall_pass1.h"
 #include "valhall_ssa_json.h"
 #include "ssa_defau_devirt.h"
+#include "ssa_fact_prover.h"
 #include "ssa_opt_pipeline.h"
 #include "isa_enricher.h"
 
@@ -293,6 +294,7 @@ int main(int argc, char** argv) {
                               << " %" << std::dec << fb.ssa_id << " " << fb.detail << "\n";
                 }
             }
+            auto fp_pre = valhall::dataflow::run_ssa_fact_prover(p1.ssa);
             if (equiv_opts.run_ssa_opt) {
                 valhall::dataflow::SsaOptPipelineOptions popts;
                 popts.fp_mode = equiv_opts.fp_fast_math ? valhall::dataflow::FpOptMode::FastMath
@@ -300,6 +302,17 @@ int main(int argc, char** argv) {
                 popts.enable_fp_tile_rewrites = equiv_opts.enable_fp_tile_rewrites;
                 popts.enable_fp_cpp_rewrites = equiv_opts.enable_fp_cpp_rewrites;
                 valhall::dataflow::run_ssa_opt_pipeline(p1.ssa, popts);
+                auto fp_post = valhall::dataflow::run_ssa_fact_prover(p1.ssa);
+                valhall::dataflow::run_ssa_dce(p1.ssa);
+                if (dump_devirt_fallbacks) {
+                    std::cerr << "[fact_prover] bitcasts=" << (fp_pre.bitcasts_eliminated + fp_post.bitcasts_eliminated)
+                              << " isnan=" << (fp_pre.isnan_canonicalized + fp_post.isnan_canonicalized)
+                              << " bool_masks=" << (fp_pre.bool_masks_unwrapped + fp_post.bool_masks_unwrapped)
+                              << " bfi_bfe=" << (fp_pre.bfi_bfe_projected + fp_post.bfi_bfe_projected)
+                              << " path_consts=" << (fp_pre.path_consts_folded + fp_post.path_consts_folded)
+                              << " csel_ladders=" << (fp_pre.csel_ladders_collapsed + fp_post.csel_ladders_collapsed)
+                              << "\n";
+                }
             }
         }
         if (!dump_ssa_json_path.empty()) {

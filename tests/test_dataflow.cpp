@@ -651,6 +651,36 @@ void test_sym_expr_domain_and_mixins() {
     std::cout << "[PASS] test_sym_expr_domain_and_mixins\n";
 }
 
+void test_known_bits_domain() {
+    auto c16 = KnownBitsDomain::make_const_u64(16u);
+    auto lane = KnownBitsDomain::make_u32_bound(15u);
+    CHECK(lane.upper16_zero());
+    CHECK(!lane.is_exact_const());
+
+    auto or_val = KnownBitsDomain::bit_or(c16, lane, false);
+    CHECK((or_val.known_one & 16u) == 16u);
+    CHECK((or_val.known_zero & ~31ULL) == ~31ULL);
+
+    auto lane0 = KnownBitsDomain::meet(lane, KnownBitsDomain::make_const_u64(0u));
+    CHECK(lane0.is_exact_const() && lane0.const_u64() == 0u);
+    auto or0 = KnownBitsDomain::bit_or(c16, lane0, false);
+    CHECK(or0.is_exact_const() && or0.const_u64() == 16u);
+
+    auto packed = KnownBitsDomain::bfi(KnownBitsDomain::make_const_u64(0x1234u),
+                                       KnownBitsDomain::make_const_u64(0x5678u),
+                                       KnownBitsDomain::make_const_u64(16u),
+                                       KnownBitsDomain::make_const_u64(16u));
+    CHECK(packed.is_exact_const() && packed.const_u64() == 0x56781234ULL);
+    auto hi = KnownBitsDomain::bfe_u(packed, KnownBitsDomain::make_const_u64(16u),
+                                     KnownBitsDomain::make_const_u64(16u));
+    CHECK(hi.is_exact_const() && hi.const_u64() == 0x5678ULL);
+
+    auto conflict = KnownBitsDomain::meet(KnownBitsDomain::make_const_u64(1u),
+                                          KnownBitsDomain::make_const_u64(2u));
+    CHECK(conflict.is_bottom());
+    std::cout << "[PASS] test_known_bits_domain\n";
+}
+
 }  // namespace
 
 int main() {
@@ -664,6 +694,7 @@ int main() {
     test_compound_op_delegation_lane_wrapper_and_atomic_exchange();
     test_flat_float_domains_algebraic_mixins_and_auto_convert();
     test_sym_expr_domain_and_mixins();
+    test_known_bits_domain();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

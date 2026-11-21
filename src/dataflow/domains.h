@@ -13,3 +13,4 @@
 #include "domains/union.h"
 #include "domains/lane.h"
 #include "domains/sym_expr.h"
+#include "domains/known_bits.h"

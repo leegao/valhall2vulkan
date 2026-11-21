@@ -1,4 +1,5 @@
 #include "ssa_defau_devirt.h"
+#include "transfer.h"
 
 #include <cstring>
 #include <unordered_map>
@@ -157,145 +158,195 @@ bool try_extract_fau_dst_offset(const TrackedVal& tv, uint32_t* out_fau_off) {
 
 }  // namespace
 
+namespace {
+
+/// Visitor-based symbolic expression transfer for Valhall Pilot shaders (`EBIN[1]`),
+/// driven through `dispatch_ssa_transfer` (`src/dataflow/transfer.h`).
+class PilotFauSummaryVisitor : public SsaTransferVisitorBase {
+public:
+    PilotFauSummaryVisitor(const ValhallSsaModule& mod,
+                           const PointerAnalysisResult& pa,
+                           FauSummaryMap* summary)
+        : mod_(mod), pa_(pa), summary_(summary),
+          exprs_(mod.nodes.size()), vec_exprs_(mod.nodes.size()) {}
+
+    void on_const(SsaId dst, const SsaNode& node) override {
+        if (node.op == SsaOp::ConstU32 || node.op == SsaOp::ConstF32 || node.op == SsaOp::ConstS32) {
+            exprs_[dst] = SymExpr::make_const_u32(node.imm_u32);
+        } else if (node.op == SsaOp::ConstBool) {
+            exprs_[dst] = SymExpr::make_const_u32(node.imm_u32 ? 1u : 0u);
+        }
+    }
+
+    void on_copy(SsaId dst, SsaId src, const SsaNode& node) override {
+        if (try_seed_from_pa(dst)) return;
+        exprs_[dst] = get_expr(src);
+        if (src < vec_exprs_.size() && !vec_exprs_[src].empty()) {
+            vec_exprs_[dst] = vec_exprs_[src];
+        }
+        (void)node;
+    }
+
+    void on_convert(SsaId dst, SsaId src, const SsaNode& node) override {
+        if (try_seed_from_pa(dst)) return;
+        if (node.op == SsaOp::Bitcast) {
+            exprs_[dst] = get_expr(src);
+            if (src < vec_exprs_.size() && !vec_exprs_[src].empty()) {
+                vec_exprs_[dst] = vec_exprs_[src];
+            }
+        }
+    }
+
+    void on_tuple_extract(SsaId dst, SsaId tuple_val, uint32_t elem_idx, const SsaNode&) override {
+        if (try_seed_from_pa(dst)) return;
+        if (elem_idx == 0u) {
+            exprs_[dst] = get_expr(tuple_val);
+            if (tuple_val < vec_exprs_.size() && !vec_exprs_[tuple_val].empty()) {
+                vec_exprs_[dst] = vec_exprs_[tuple_val];
+            }
+        }
+    }
+
+    void on_psb_load(SsaId dst, SsaId addr, uint32_t elem_bytes, const SsaNode&) override {
+        if (try_seed_from_pa(dst)) return;
+        int32_t rack = -1, desc = -1;
+        std::string sym;
+        int64_t off = 0;
+        bool off_known = false;
+        if (try_extract_buffer_addr(pa_.val(addr), &rack, &desc, &sym, &off, &off_known) &&
+            off_known && off >= 0) {
+            exprs_[dst] = SymExpr::make_buffer_load(rack, desc, sym, off,
+                                                    elem_bytes > 0 ? elem_bytes : 4u);
+        }
+    }
+
+    void on_vec(SsaId dst, const SsaNode& node) override {
+        if (try_seed_from_pa(dst)) return;
+        if ((node.op == SsaOp::VecConstruct2 || node.op == SsaOp::VecConstruct4) && !node.args.empty()) {
+            vec_exprs_[dst].reserve(node.args.size());
+            for (SsaId a : node.args) vec_exprs_[dst].push_back(get_expr(a));
+        } else if (node.op == SsaOp::VecExtract && !node.args.empty()) {
+            SsaId base = node.args[0];
+            if (base < vec_exprs_.size() && node.imm_u32 < vec_exprs_[base].size()) {
+                exprs_[dst] = vec_exprs_[base][node.imm_u32];
+            }
+        }
+    }
+
+    void on_pack64(SsaId dst, SsaId lo, SsaId hi, const SsaNode&) override {
+        if (try_seed_from_pa(dst)) return;
+        auto e_lo = get_expr(lo);
+        auto e_hi = get_expr(hi);
+        if (e_lo && e_lo->kind == SymExpr::Kind::BufferAddr) exprs_[dst] = e_lo;
+        else if (e_hi && e_hi->kind == SymExpr::Kind::BufferAddr) exprs_[dst] = e_hi;
+    }
+
+    void on_select(SsaId dst, SsaId cond, SsaId tv, SsaId fv, const SsaNode&) override {
+        if (try_seed_from_pa(dst)) return;
+        auto ec = get_expr(cond);
+        auto et = get_expr(tv);
+        auto ef = get_expr(fv);
+        if (ec && et && ef) {
+            exprs_[dst] = SymExpr::make_select(std::move(ec), std::move(et), std::move(ef));
+        }
+    }
+
+    void on_iadd(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_isub(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_imul(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_and(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_or(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_xor(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+    void on_not(SsaId dst, SsaId src, bool, const SsaNode& n) override { handle_unary(dst, src, n.op); }
+    void on_shift(SsaId dst, SsaId lhs, SsaId rhs, ShiftKind, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
+
+    void on_psb_store(SsaId addr, SsaId val_id, uint32_t, const SsaNode&) override {
+        uint32_t fau_off = 0;
+        if (!try_extract_fau_dst_offset(pa_.val(addr), &fau_off)) return;
+        if (val_id < vec_exprs_.size() && !vec_exprs_[val_id].empty()) {
+            for (size_t i = 0; i < vec_exprs_[val_id].size(); ++i) {
+                if (vec_exprs_[val_id][i]) {
+                    (*summary_)[fau_off + static_cast<uint32_t>(i * 4u)] = vec_exprs_[val_id][i];
+                }
+            }
+        } else if (auto e = get_expr(val_id)) {
+            (*summary_)[fau_off] = e;
+        }
+    }
+
+    void on_other(SsaId dst, const SsaNode& node) override {
+        if (try_seed_from_pa(dst)) return;
+        if (is_pure_unary_sym_op(node.op) && !node.args.empty()) {
+            handle_unary(dst, node.args[0], node.op);
+        } else if (is_pure_binary_sym_op(node.op) && node.args.size() >= 2) {
+            handle_binary(dst, node.args[0], node.args[1], node.op);
+        }
+    }
+
+private:
+    const ValhallSsaModule& mod_;
+    const PointerAnalysisResult& pa_;
+    FauSummaryMap* summary_ = nullptr;
+    std::vector<std::shared_ptr<const SymExpr>> exprs_;
+    std::vector<std::vector<std::shared_ptr<const SymExpr>>> vec_exprs_;
+
+    std::shared_ptr<const SymExpr> get_expr(SsaId id) const {
+        if (id == kInvalidSsa || id >= exprs_.size()) return nullptr;
+        return exprs_[id];
+    }
+
+    bool try_seed_from_pa(SsaId dst) {
+        if (dst == kInvalidSsa || dst >= exprs_.size()) return false;
+        uint64_t cv = 0;
+        if (TrackedValDomain::try_as_const_u64(pa_.val(dst), &cv)) {
+            exprs_[dst] = SymExpr::make_const_u32(static_cast<uint32_t>(cv));
+            return true;
+        }
+        int32_t rack = -1, desc = -1;
+        std::string sym;
+        int64_t off = 0;
+        bool off_known = false;
+        if (try_extract_buffer_addr(pa_.val(dst), &rack, &desc, &sym, &off, &off_known)) {
+            exprs_[dst] = SymExpr::make_buffer_addr(rack, desc, sym, off, off_known);
+            return true;
+        }
+        return false;
+    }
+
+    void handle_unary(SsaId dst, SsaId src, SsaOp op) {
+        if (try_seed_from_pa(dst)) return;
+        if (!is_pure_unary_sym_op(op)) return;
+        if (auto a = get_expr(src)) {
+            exprs_[dst] = SymExpr::make_unary(op, std::move(a));
+        }
+    }
+
+    void handle_binary(SsaId dst, SsaId lhs, SsaId rhs, SsaOp op) {
+        if (try_seed_from_pa(dst)) return;
+        if (!is_pure_binary_sym_op(op)) return;
+        auto a = get_expr(lhs);
+        auto b = get_expr(rhs);
+        if (a && b) {
+            exprs_[dst] = SymExpr::make_binary(op, std::move(a), std::move(b));
+        }
+    }
+};
+
+}  // namespace
+
 FauSummaryMap run_pilot_fau_summary(const ValhallSsaModule& pilot_ssa,
                                     const PointerAnalysisEnv& pilot_env) {
     FauSummaryMap summary;
     if (pilot_ssa.blocks.empty()) return summary;
 
     PointerAnalysisResult pa = run_ssa_pointer_analysis(pilot_ssa, pilot_env);
-    std::vector<std::shared_ptr<const SymExpr>> exprs(pilot_ssa.nodes.size());
-    std::vector<std::vector<std::shared_ptr<const SymExpr>>> vec_exprs(pilot_ssa.nodes.size());
-
-    auto get_expr = [&](SsaId id) -> std::shared_ptr<const SymExpr> {
-        if (id == kInvalidSsa || id >= exprs.size()) return nullptr;
-        return exprs[id];
-    };
-
+    PilotFauSummaryVisitor visitor(pilot_ssa, pa, &summary);
     for (const auto& blk : pilot_ssa.blocks) {
         for (SsaId nid : blk.nodes) {
-            const auto& n = pilot_ssa.get(nid);
-            uint64_t cv = 0;
-
-            if (n.op == SsaOp::ConstU32 || n.op == SsaOp::ConstF32 || n.op == SsaOp::ConstS32) {
-                exprs[nid] = SymExpr::make_const_u32(n.imm_u32);
-                continue;
-            }
-            if (n.op == SsaOp::ConstBool) {
-                exprs[nid] = SymExpr::make_const_u32(n.imm_u32 ? 1u : 0u);
-                continue;
-            }
-            if (TrackedValDomain::try_as_const_u64(pa.val(nid), &cv)) {
-                exprs[nid] = SymExpr::make_const_u32(static_cast<uint32_t>(cv));
-                continue;
-            }
-
-            int32_t rack = -1, desc = -1;
-            std::string sym;
-            int64_t off = 0;
-            bool off_known = false;
-            if (try_extract_buffer_addr(pa.val(nid), &rack, &desc, &sym, &off, &off_known)) {
-                exprs[nid] = SymExpr::make_buffer_addr(rack, desc, sym, off, off_known);
-                continue;
-            }
-
-            if ((n.op == SsaOp::Copy || n.op == SsaOp::Bitcast) && !n.args.empty()) {
-                exprs[nid] = get_expr(n.args[0]);
-                if (n.args[0] < vec_exprs.size() && !vec_exprs[n.args[0]].empty()) {
-                    vec_exprs[nid] = vec_exprs[n.args[0]];
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::TupleExtract && !n.args.empty() && n.imm_u32 == 0u) {
-                exprs[nid] = get_expr(n.args[0]);
-                if (n.args[0] < vec_exprs.size() && !vec_exprs[n.args[0]].empty()) {
-                    vec_exprs[nid] = vec_exprs[n.args[0]];
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::PsbLoad && !n.args.empty()) {
-                if (try_extract_buffer_addr(pa.val(n.args[0]), &rack, &desc, &sym, &off, &off_known) &&
-                    off_known && off >= 0) {
-                    uint32_t bytes = (n.imm_u32 > 0) ? n.imm_u32 : 4u;
-                    exprs[nid] = SymExpr::make_buffer_load(rack, desc, sym, off, bytes);
-                }
-                continue;
-            }
-
-            if ((n.op == SsaOp::VecConstruct2 || n.op == SsaOp::VecConstruct4) && !n.args.empty()) {
-                vec_exprs[nid].reserve(n.args.size());
-                for (SsaId a : n.args) {
-                    vec_exprs[nid].push_back(get_expr(a));
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::VecExtract && !n.args.empty()) {
-                SsaId base = n.args[0];
-                if (base < vec_exprs.size() && n.imm_u32 < vec_exprs[base].size()) {
-                    exprs[nid] = vec_exprs[base][n.imm_u32];
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::Pack64 && n.args.size() >= 2) {
-                auto lo = get_expr(n.args[0]);
-                auto hi = get_expr(n.args[1]);
-                if (lo && lo->kind == SymExpr::Kind::BufferAddr) {
-                    exprs[nid] = lo;
-                } else if (hi && hi->kind == SymExpr::Kind::BufferAddr) {
-                    exprs[nid] = hi;
-                }
-                continue;
-            }
-
-            if (is_pure_unary_sym_op(n.op) && !n.args.empty()) {
-                if (auto a = get_expr(n.args[0])) {
-                    exprs[nid] = SymExpr::make_unary(n.op, std::move(a));
-                }
-                continue;
-            }
-
-            if (is_pure_binary_sym_op(n.op) && n.args.size() >= 2) {
-                auto a = get_expr(n.args[0]);
-                auto b = get_expr(n.args[1]);
-                if (a && b) {
-                    exprs[nid] = SymExpr::make_binary(n.op, std::move(a), std::move(b));
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::Select && n.args.size() >= 3) {
-                auto cond = get_expr(n.args[0]);
-                auto tv = get_expr(n.args[1]);
-                auto fv = get_expr(n.args[2]);
-                if (cond && tv && fv) {
-                    exprs[nid] = SymExpr::make_select(std::move(cond), std::move(tv), std::move(fv));
-                }
-                continue;
-            }
-
-            if (n.op == SsaOp::PsbStore && n.args.size() >= 2) {
-                uint32_t fau_off = 0;
-                if (!try_extract_fau_dst_offset(pa.val(n.args[0]), &fau_off)) continue;
-
-                SsaId val_id = n.args[1];
-                if (val_id < vec_exprs.size() && !vec_exprs[val_id].empty()) {
-                    for (size_t i = 0; i < vec_exprs[val_id].size(); ++i) {
-                        if (vec_exprs[val_id][i]) {
-                            summary[fau_off + static_cast<uint32_t>(i * 4u)] = vec_exprs[val_id][i];
-                        }
-                    }
-                } else if (auto e = get_expr(val_id)) {
-                    summary[fau_off] = e;
-                }
-                continue;
-            }
+            dispatch_ssa_transfer(pilot_ssa.get(nid), visitor);
         }
     }
 
-    // Backfill any scalar pointer-analysis PilotFauWrites not captured by vector/scalar exprs.
     for (const auto& kv : pa.pilot_fau_writes) {
         if (summary.count(kv.first)) continue;
         int32_t rack = -1, desc = -1;
@@ -332,7 +383,8 @@ namespace {
 class SymExprMaterializer {
 public:
     explicit SymExprMaterializer(ValhallSsaModule& mod) : mod_(mod) {
-        entry_tok_ = find_or_emit_entry_token();
+        orig_entry_tok_ = find_or_emit_entry_token();
+        entry_tok_ = orig_entry_tok_;
     }
 
     SsaId materialize_u32(const std::shared_ptr<const SymExpr>& e,
@@ -361,7 +413,7 @@ public:
         auto& nodes = mod_.blocks[0].nodes;
         size_t insert_pos = 0;
         for (size_t i = 0; i < nodes.size(); ++i) {
-            if (nodes[i] == entry_tok_) {
+            if (nodes[i] == orig_entry_tok_) {
                 insert_pos = i + 1;
                 break;
             }
@@ -373,6 +425,7 @@ public:
 
 private:
     ValhallSsaModule& mod_;
+    SsaId orig_entry_tok_ = kInvalidSsa;
     SsaId entry_tok_ = kInvalidSsa;
     std::vector<SsaId> emitted_;
     std::unordered_map<std::string, SsaId> memo_;

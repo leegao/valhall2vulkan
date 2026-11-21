@@ -6,6 +6,7 @@
 #include "ssa_sroa.h"
 #include "ssa_opt_pipeline.h"
 #include "ssa_defau_devirt.h"
+#include "ssa_fact_prover.h"
 #include "ssa_opt_utils.h"
 #include "ssa_sccp.h"
 #include "valhall_ssa.h"
@@ -592,6 +593,66 @@ void test_defau_devirt_fcst_loads_exprs_and_fallbacks() {
     std::cout << "[PASS] test_defau_devirt_fcst_loads_exprs_and_fallbacks\n";
 }
 
+void test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel() {
+    ValhallSsaModule mod;
+    SsaBlock b0{}; b0.id = 0; b0.is_conditional_branch = true; b0.branch_target_block = 2; b0.fallthrough_block = 1;
+    SsaBlock b1{}; b1.id = 1; b1.preds = {0}; b1.is_unconditional_branch = true; b1.branch_target_block = 2;
+    SsaBlock b2{}; b2.id = 2; b2.preds = {0, 1}; b2.is_terminated_by_end = true;
+    mod.blocks = {b0, b1, b2};
+    mod.nodes.push_back(SsaNode{});
+
+    auto emit = [&](uint32_t blk, SsaOp op, ValType ty, std::vector<SsaId> args,
+                    uint32_t imm = 0, std::string aux = "") -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm;
+        n.args = std::move(args);
+        n.aux_str = std::move(aux);
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[blk].nodes.push_back(id);
+        return id;
+    };
+
+    // bb0: round-trip bitcast, FCmpUnordNe(x, x), m1 mask unwrap, Bfi/BfeU 16:16, BRANCH lane_id != 0
+    SsaId c0 = emit(0, SsaOp::ConstU32, ValType::U32, {}, 0u);
+    SsaId c16 = emit(0, SsaOp::ConstU32, ValType::U32, {}, 16u);
+    SsaId call1 = emit(0, SsaOp::ConstU32, ValType::U32, {}, 0xFFFFFFFFu);
+    SsaId f0 = emit(0, SsaOp::ConstF32, ValType::F32, {}, 0x3f800000u);
+    SsaId u_rt = emit(0, SsaOp::Bitcast, ValType::U32, {f0});
+    SsaId f_rt = emit(0, SsaOp::Bitcast, ValType::F32, {u_rt});
+    SsaId nan_cmp = emit(0, SsaOp::FCmpUnordNe, ValType::Bool, {f_rt, f_rt});
+    SsaId m1 = emit(0, SsaOp::Select, ValType::U32, {nan_cmp, call1, c0});
+    SsaId unwrapped = emit(0, SsaOp::ICmpNe, ValType::Bool, {m1, c0});
+    (void)unwrapped;
+    SsaId packed = emit(0, SsaOp::Bfi, ValType::U32, {c0, c16, c16, c16});
+    SsaId hi16 = emit(0, SsaOp::BfeU, ValType::U32, {packed, c16, c16});
+    (void)hi16;
+    SsaId lid0 = emit(0, SsaOp::LoadBuiltinInput, ValType::U32, {}, 0x29u, "gl_SubgroupInvocationID");
+    SsaId br_c = emit(0, SsaOp::ICmpNe, ValType::Bool, {lid0, c0});
+    mod.blocks[0].branch_cond = br_c;
+
+    // bb1 (fallthrough where lane_id == 0): 16 | lane_id == 1 -> false -> collapse Select
+    SsaId lid1 = emit(1, SsaOp::LoadBuiltinInput, ValType::U32, {}, 0x29u, "gl_SubgroupInvocationID");
+    SsaId or16 = emit(1, SsaOp::BitOr, ValType::U32, {c16, lid1});
+    SsaId c1 = emit(1, SsaOp::ConstU32, ValType::U32, {}, 1u);
+    SsaId eq1 = emit(1, SsaOp::ICmpEq, ValType::Bool, {or16, c1});
+    SsaId sel = emit(1, SsaOp::Select, ValType::U32, {eq1, c1, c0});
+    (void)sel;
+
+    auto res = run_ssa_fact_prover(mod);
+    CHECK(res.bitcasts_eliminated >= 1u);
+    CHECK(res.isnan_canonicalized == 1u);
+    CHECK(res.bool_masks_unwrapped == 1u);
+    CHECK(res.bfi_bfe_projected == 1u);
+    CHECK(res.path_consts_folded >= 2u);
+    CHECK(res.csel_ladders_collapsed == 1u);
+    CHECK(mod.get(nan_cmp).op == SsaOp::IsNan);
+    std::cout << "[PASS] test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel\n";
+}
+
 int main() {
     test_dce_basic_and_unreachable();
     test_cse_dominator_scoping_and_commutativity();
@@ -604,6 +665,7 @@ int main() {
     test_analysis_cache_and_invalidation();
     test_fp_dual_toggles_tile_vs_cpp();
     test_defau_devirt_fcst_loads_exprs_and_fallbacks();
+    test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel();
     std::cout << "ALL SSA OPT TESTS PASSED!\n";
     return 0;
 }
