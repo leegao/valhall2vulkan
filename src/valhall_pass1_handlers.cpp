@@ -507,26 +507,47 @@ SsaId load_frag_var_idx(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
 }
 
 SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
-    uint32_t special_idx = 2u;  // default frag_w
-    if (auto it = ins.fields.find("index"); it != ins.fields.end()) {
-        special_idx = it->second;
+    // isa-v9-v14.xml encodes LD_VAR_SPECIAL's selector in field "varying_name" (type VaryingNameM).
+    // Fall back to "index" only for synthetic/legacy instruction encodings.
+    auto varying_name = VaryingNameM::frag_w;
+    if (auto it = ins.fields.find("varying_name"); it != ins.fields.end()) {
+        varying_name = static_cast<VaryingNameM>(it->second);
+    } else if (auto it = ins.fields.find("index"); it != ins.fields.end()) {
+        varying_name = static_cast<VaryingNameM>(it->second);
     }
-    if (special_idx == 2u || special_idx == 3u) {
-        SsaId fc = ctx.emit_builtin_input(blk, spirv::BuiltIn::FragCoord, ValType::V4F32, "gl_FragCoord", false);
-        SsaNode ex{};
-        ex.op = SsaOp::VecExtract;
-        ex.type = ValType::F32;
-        ex.imm_u32 = (special_idx == 2u) ? 3u : 2u;  // 2=frag_w (.w), 3=frag_z (.z)
-        ex.args = { fc };
-        return ctx.sb.emit(blk, std::move(ex));
+
+    switch (varying_name) {
+        case VaryingNameM::frag_w:
+        case VaryingNameM::frag_z: {
+            SsaId fc = ctx.emit_builtin_input(blk, spirv::BuiltIn::FragCoord, ValType::V4F32, "gl_FragCoord", false);
+            SsaNode ex{};
+            ex.op = SsaOp::VecExtract;
+            ex.type = ValType::F32;
+            ex.imm_u32 = (varying_name == VaryingNameM::frag_w) ? 3u : 2u;
+            ex.args = { fc };
+            return ctx.sb.emit(blk, std::move(ex));
+        }
+        case VaryingNameM::bary: {
+            // Arch v14+ VaryingNameM::bary -> SPV_KHR_fragment_shader_barycentric BuiltIn BaryCoordKHR (5286).
+            SsaId bc = ctx.emit_builtin_input(blk, static_cast<spirv::BuiltIn>(5286u), ValType::V3U32, "gl_BaryCoordEXT", false);
+            SsaNode ex{};
+            ex.op = SsaOp::VecExtract;
+            ex.type = ValType::F32;
+            ex.imm_u32 = 0u;
+            ex.args = { bc };
+            return ctx.sb.emit(blk, std::move(ex));
+        }
+        case VaryingNameM::point:
+        default: {
+            SsaId pc = ctx.emit_builtin_input(blk, spirv::BuiltIn::PointCoord, ValType::V2F32, "gl_PointCoord", false);
+            SsaNode ex{};
+            ex.op = SsaOp::VecExtract;
+            ex.type = ValType::F32;
+            ex.imm_u32 = 0u;
+            ex.args = { pc };
+            return ctx.sb.emit(blk, std::move(ex));
+        }
     }
-    SsaId pc = ctx.emit_builtin_input(blk, spirv::BuiltIn::PointCoord, ValType::V2F32, "gl_PointCoord", false);
-    SsaNode ex{};
-    ex.op = SsaOp::VecExtract;
-    ex.type = ValType::F32;
-    ex.imm_u32 = (special_idx == 1u) ? 1u : 0u;  // 0=point_x, 1=point_y
-    ex.args = { pc };
-    return ctx.sb.emit(blk, std::move(ex));
 }
 
 SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, SsaId uv, bool is_gather, SsaId tok) {

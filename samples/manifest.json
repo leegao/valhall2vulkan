@@ -1,0 +1,122 @@
+[
+  {
+    "file": "vert_rep_minimal.spv",
+    "source": "dfcec6b07a67ce4848ddc0dac3a8f189451415a0dfaf53655f32f4ab9ea3d123.spv",
+    "stage": "vert",
+    "bytes": 2484,
+    "opcode_count": 27,
+    "reason": "representative minimal vert"
+  },
+  {
+    "file": "frag_rep_minimal.spv",
+    "source": "f89390f6467692240c17f760d727a86c2cc3f4fd24a7f49ae766d23bfe8bc834.spv",
+    "stage": "frag",
+    "bytes": 712,
+    "opcode_count": 22,
+    "reason": "representative minimal frag"
+  },
+  {
+    "file": "comp_rep_minimal.spv",
+    "source": "f2c3d7e3e26d273e024d939bce1f3bd0cd33125eed9d7bb56f0cbb06b10b3234.spv",
+    "stage": "comp",
+    "bytes": 1100,
+    "opcode_count": 24,
+    "reason": "representative minimal comp"
+  },
+  {
+    "file": "etc2_astc_enc.spv",
+    "source": "astc_enc.spv",
+    "stage": "comp",
+    "bytes": 213828,
+    "opcode_count": 81,
+    "reason": "etc2_encode real-world compute encoder"
+  },
+  {
+    "file": "etc2_bc6.spv",
+    "source": "bc6.spv",
+    "stage": "comp",
+    "bytes": 103308,
+    "opcode_count": 79,
+    "reason": "etc2_encode real-world compute encoder"
+  },
+  {
+    "file": "etc2_compress.spv",
+    "source": "compress.spv",
+    "stage": "comp",
+    "bytes": 57072,
+    "opcode_count": 82,
+    "reason": "etc2_encode real-world compute encoder"
+  },
+  {
+    "file": "frag_unique_01_fca361fe.spv",
+    "source": "fca361fe80351540d9bb9772f949ba4c05c85f0712515396be35901e40fe9fc2.spv",
+    "stage": "frag",
+    "bytes": 180628,
+    "opcode_count": 85,
+    "reason": "covers 16 unique ops: OpBitFieldInsert, OpDPdx, OpDPdy, OpFMod, OpFNegate ..."
+  },
+  {
+    "file": "comp_unique_02_d7242030.spv",
+    "source": "d7242030f1969f2b297157373060c45c621c9b18746f7eaed39d7482098a411d.spv",
+    "stage": "comp",
+    "bytes": 16316,
+    "opcode_count": 65,
+    "reason": "covers 7 unique ops: OpAtomicIAdd, OpAtomicUMax, OpAtomicUMin, OpBitCount, OpGroupNonUniformBallot ..."
+  },
+  {
+    "file": "comp_unique_03_fba18fbe.spv",
+    "source": "fba18fbec53f3c0fdc5a4b3f278aa232f322897eeb6fbf8309f7c8ba11e0c2a6.spv",
+    "stage": "comp",
+    "bytes": 35976,
+    "opcode_count": 66,
+    "reason": "covers 4 unique ops: OpFOrdLessThanEqual, OpFOrdNotEqual, OpImageWrite, OpUGreaterThan"
+  },
+  {
+    "file": "frag_unique_04_d7f8c5c4.spv",
+    "source": "d7f8c5c498805ed5129c364eb3837e7928d9b14093b473d4079a0e301534150d.spv",
+    "stage": "frag",
+    "bytes": 14616,
+    "opcode_count": 46,
+    "reason": "covers 2 unique ops: OpImageGather, OpImageSampleDrefImplicitLod"
+  },
+  {
+    "file": "frag_unique_05_d392e446.spv",
+    "source": "d392e446d46435b6ac468319fb3062c87ddf8115eea01839e863a49f1bff69d0.spv",
+    "stage": "frag",
+    "bytes": 3960,
+    "opcode_count": 47,
+    "reason": "covers 1 unique ops: OpImageQueryLod"
+  },
+  {
+    "file": "frag_unique_06_d76537d3.spv",
+    "source": "d76537d3b4b1fdac38a295e094ceaa7bc54ed054ba4c8c597a37c288d723d1d9.spv",
+    "stage": "frag",
+    "bytes": 8504,
+    "opcode_count": 53,
+    "reason": "covers 1 unique ops: OpImageQuerySize"
+  },
+  {
+    "file": "comp_unique_07_dfe7662f.spv",
+    "source": "dfe7662fd03a0e42e1868e9066e1d06a238ffe841f6b65f5218664123307f396.spv",
+    "stage": "comp",
+    "bytes": 21484,
+    "opcode_count": 73,
+    "reason": "covers 1 unique ops: OpImageTexelPointer"
+  },
+  {
+    "file": "vert_unique_08_d49d2903.spv",
+    "source": "d49d2903c4114c75bf3f943ec813fdf8b520cae5c19e1c135412b3a4a431174a.spv",
+    "stage": "vert",
+    "bytes": 38224,
+    "opcode_count": 64,
+    "reason": "covers 1 unique ops: OpGroupNonUniformAll"
+  },
+  {
+    "file": "frag_unique_09_decab8d3.spv",
+    "source": "decab8d3b2890b29c6477c6c5a8170313896bcecf5f4964ff775e27507a5394c.spv",
+    "stage": "frag",
+    "bytes": 64140,
+    "opcode_count": 57,
+    "reason": "covers 1 unique ops: OpGroupNonUniformAny"
+  }
+]

@@ -4,8 +4,20 @@
 #include <spirv/unified1/spirv.h>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 namespace valhall::spirv_parser {
+
+struct SpvWordSpan {
+    const uint32_t* data = nullptr;
+    size_t count = 0;
+
+    uint32_t operator[](size_t i) const { return data[i]; }
+    bool empty() const { return count == 0; }
+    const uint32_t* begin() const { return data; }
+    const uint32_t* end() const { return data + count; }
+};
 
 struct SpvOpInfo {
     uint16_t opcode;
@@ -23,6 +35,14 @@ struct DecodedSpvInst {
     uint32_t result_id = 0;
     uint16_t operand_start = 1;
     const uint32_t* words = nullptr;
+
+    size_t operand_count() const {
+        return (word_count > operand_start) ? static_cast<size_t>(word_count - operand_start) : 0u;
+    }
+    uint32_t operand(size_t i) const { return words[operand_start + i]; }
+    SpvWordSpan operands() const {
+        return {words ? words + operand_start : nullptr, operand_count()};
+    }
 };
 
 const SpvOpInfo* lookup_spv_op_info(uint16_t opcode);
@@ -34,5 +54,1177 @@ const char* spv_decoration_name(uint32_t decoration);
 
 /// Decode a single SPIR-V instruction header and populate result_type / result_id / operand_start.
 bool decode_spv_instruction(const uint32_t* words, size_t remaining_words, DecodedSpvInst* out);
+
+struct SpvBranchView {
+    uint32_t target_label = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvBranchView* out) {
+        if (!words || !out || word_count < 2u) return false;
+        *out = SpvBranchView{};
+        size_t idx = 1u;
+        out->target_label = words[idx++];
+        return true;
+    }
+};
+
+struct SpvBranchConditionalView {
+    uint32_t condition = 0;
+    uint32_t true_label = 0;
+    uint32_t false_label = 0;
+    SpvWordSpan branch_weights{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvBranchConditionalView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvBranchConditionalView{};
+        size_t idx = 1u;
+        out->condition = words[idx++];
+        out->true_label = words[idx++];
+        out->false_label = words[idx++];
+        if (idx < word_count) { out->branch_weights = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvSwitchView {
+    uint32_t selector = 0;
+    uint32_t default_val = 0;
+    SpvWordSpan target{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvSwitchView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvSwitchView{};
+        size_t idx = 1u;
+        out->selector = words[idx++];
+        out->default_val = words[idx++];
+        if (idx < word_count) { out->target = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+
+    std::vector<std::pair<uint64_t, uint32_t>> decode_cases(uint32_t selector_width_bits) const {
+        std::vector<std::pair<uint64_t, uint32_t>> out;
+        if (selector_width_bits == 64u) {
+            for (size_t k = 0; k + 2u < target.count; k += 3u) {
+                uint64_t lit = uint64_t(target[k]) | (uint64_t(target[k + 1u]) << 32);
+                out.emplace_back(lit, target[k + 2u]);
+            }
+        } else {
+            for (size_t k = 0; k + 1u < target.count; k += 2u) {
+                out.emplace_back(uint64_t(target[k]), target[k + 1u]);
+            }
+        }
+        return out;
+    }
+};
+
+struct SpvSelectionMergeView {
+    uint32_t merge_block = 0;
+    uint32_t selection_control = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvSelectionMergeView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvSelectionMergeView{};
+        size_t idx = 1u;
+        out->merge_block = words[idx++];
+        out->selection_control = words[idx++];
+        return true;
+    }
+};
+
+struct SpvLoopMergeView {
+    uint32_t merge_block = 0;
+    uint32_t continue_target = 0;
+    uint32_t loop_control = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvLoopMergeView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvLoopMergeView{};
+        size_t idx = 1u;
+        out->merge_block = words[idx++];
+        out->continue_target = words[idx++];
+        out->loop_control = words[idx++];
+        return true;
+    }
+};
+
+struct SpvReturnValueView {
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvReturnValueView* out) {
+        if (!words || !out || word_count < 2u) return false;
+        *out = SpvReturnValueView{};
+        size_t idx = 1u;
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvVariableView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t storage_class = 0;
+    bool has_initializer = false;
+    uint32_t initializer = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvVariableView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvVariableView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->storage_class = words[idx++];
+        if (idx < word_count) { out->has_initializer = true; out->initializer = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvPhiView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    SpvWordSpan variable{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvPhiView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvPhiView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        if (idx < word_count) { out->variable = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+
+    size_t incoming_count() const { return variable.count / 2u; }
+    uint32_t incoming_value(size_t i) const { return variable[2u * i]; }
+    uint32_t incoming_parent(size_t i) const { return variable[2u * i + 1u]; }
+};
+
+struct SpvAccessChainView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAccessChainView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvAccessChainView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvInBoundsAccessChainView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvInBoundsAccessChainView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvInBoundsAccessChainView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvPtrAccessChainView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    uint32_t element = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvPtrAccessChainView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvPtrAccessChainView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        out->element = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvInBoundsPtrAccessChainView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    uint32_t element = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvInBoundsPtrAccessChainView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvInBoundsPtrAccessChainView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        out->element = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvArrayLengthView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t structure = 0;
+    uint32_t array_member = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvArrayLengthView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvArrayLengthView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->structure = words[idx++];
+        out->array_member = words[idx++];
+        return true;
+    }
+};
+
+struct SpvLoadView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    bool has_memory_access = false;
+    uint32_t memory_access = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvLoadView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvLoadView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        if (idx < word_count) { out->has_memory_access = true; out->memory_access = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvStoreView {
+    uint32_t pointer = 0;
+    uint32_t object = 0;
+    bool has_memory_access = false;
+    uint32_t memory_access = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvStoreView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvStoreView{};
+        size_t idx = 1u;
+        out->pointer = words[idx++];
+        out->object = words[idx++];
+        if (idx < word_count) { out->has_memory_access = true; out->memory_access = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvCopyMemoryView {
+    uint32_t target = 0;
+    uint32_t source = 0;
+    bool has_memory_access = false;
+    uint32_t memory_access = 0;
+    bool has_memory_access_3 = false;
+    uint32_t memory_access_3 = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvCopyMemoryView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvCopyMemoryView{};
+        size_t idx = 1u;
+        out->target = words[idx++];
+        out->source = words[idx++];
+        if (idx < word_count) { out->has_memory_access = true; out->memory_access = words[idx++]; }
+        if (idx < word_count) { out->has_memory_access_3 = true; out->memory_access_3 = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvFunctionCallView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t function = 0;
+    SpvWordSpan argument_0{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvFunctionCallView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvFunctionCallView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->function = words[idx++];
+        if (idx < word_count) { out->argument_0 = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvExtInstView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t set = 0;
+    uint32_t instruction = 0;
+    SpvWordSpan operand_1{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvExtInstView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvExtInstView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->set = words[idx++];
+        out->instruction = words[idx++];
+        if (idx < word_count) { out->operand_1 = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvAtomicLoadView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicLoadView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvAtomicLoadView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicStoreView {
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicStoreView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvAtomicStoreView{};
+        size_t idx = 1u;
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicExchangeView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicExchangeView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicExchangeView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicCompareExchangeView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t equal = 0;
+    uint32_t unequal = 0;
+    uint32_t value = 0;
+    uint32_t comparator = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicCompareExchangeView* out) {
+        if (!words || !out || word_count < 9u) return false;
+        *out = SpvAtomicCompareExchangeView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->equal = words[idx++];
+        out->unequal = words[idx++];
+        out->value = words[idx++];
+        out->comparator = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicCompareExchangeWeakView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t equal = 0;
+    uint32_t unequal = 0;
+    uint32_t value = 0;
+    uint32_t comparator = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicCompareExchangeWeakView* out) {
+        if (!words || !out || word_count < 9u) return false;
+        *out = SpvAtomicCompareExchangeWeakView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->equal = words[idx++];
+        out->unequal = words[idx++];
+        out->value = words[idx++];
+        out->comparator = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicIIncrementView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIIncrementView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvAtomicIIncrementView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicIDecrementView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIDecrementView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvAtomicIDecrementView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicIAddView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIAddView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicIAddView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicISubView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicISubView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicISubView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicSMinView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicSMinView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicSMinView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicUMinView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicUMinView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicUMinView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicSMaxView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicSMaxView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicSMaxView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicUMaxView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicUMaxView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicUMaxView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicAndView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicAndView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicAndView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicOrView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicOrView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicOrView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicXorView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicXorView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicXorView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicFlagTestAndSetView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFlagTestAndSetView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvAtomicFlagTestAndSetView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicFlagClearView {
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFlagClearView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvAtomicFlagClearView{};
+        size_t idx = 1u;
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicFMinEXTView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFMinEXTView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicFMinEXTView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicFMaxEXTView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFMaxEXTView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicFMaxEXTView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvAtomicFAddEXTView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFAddEXTView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvAtomicFAddEXTView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->pointer = words[idx++];
+        out->memory = words[idx++];
+        out->semantics = words[idx++];
+        out->value = words[idx++];
+        return true;
+    }
+};
+
+struct SpvImageSampleImplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleImplicitLodView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvImageSampleImplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageSampleExplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleExplicitLodView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvImageSampleExplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->image_operands = words[idx++];
+        return true;
+    }
+};
+
+struct SpvImageSampleDrefImplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t d_ref = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleDrefImplicitLodView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvImageSampleDrefImplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->d_ref = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageSampleDrefExplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t d_ref = 0;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleDrefExplicitLodView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvImageSampleDrefExplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->d_ref = words[idx++];
+        out->image_operands = words[idx++];
+        return true;
+    }
+};
+
+struct SpvImageSampleProjImplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleProjImplicitLodView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvImageSampleProjImplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageSampleProjExplicitLodView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleProjExplicitLodView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvImageSampleProjExplicitLodView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->image_operands = words[idx++];
+        return true;
+    }
+};
+
+struct SpvImageFetchView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t image = 0;
+    uint32_t coordinate = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageFetchView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvImageFetchView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->image = words[idx++];
+        out->coordinate = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageGatherView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t component = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageGatherView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvImageGatherView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->component = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageDrefGatherView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t sampled_image = 0;
+    uint32_t coordinate = 0;
+    uint32_t d_ref = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageDrefGatherView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvImageDrefGatherView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->sampled_image = words[idx++];
+        out->coordinate = words[idx++];
+        out->d_ref = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageReadView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t image = 0;
+    uint32_t coordinate = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageReadView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvImageReadView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->image = words[idx++];
+        out->coordinate = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvImageWriteView {
+    uint32_t image = 0;
+    uint32_t coordinate = 0;
+    uint32_t texel = 0;
+    bool has_image_operands = false;
+    uint32_t image_operands = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageWriteView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvImageWriteView{};
+        size_t idx = 1u;
+        out->image = words[idx++];
+        out->coordinate = words[idx++];
+        out->texel = words[idx++];
+        if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
+        return true;
+    }
+};
+
+struct SpvVectorShuffleView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t vector_1 = 0;
+    uint32_t vector_2 = 0;
+    SpvWordSpan components{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvVectorShuffleView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvVectorShuffleView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->vector_1 = words[idx++];
+        out->vector_2 = words[idx++];
+        if (idx < word_count) { out->components = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvCompositeConstructView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    SpvWordSpan constituents{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvCompositeConstructView* out) {
+        if (!words || !out || word_count < 3u) return false;
+        *out = SpvCompositeConstructView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        if (idx < word_count) { out->constituents = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvCompositeExtractView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t composite = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvCompositeExtractView* out) {
+        if (!words || !out || word_count < 4u) return false;
+        *out = SpvCompositeExtractView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->composite = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvCompositeInsertView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t object = 0;
+    uint32_t composite = 0;
+    SpvWordSpan indexes{};
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvCompositeInsertView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        *out = SpvCompositeInsertView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->object = words[idx++];
+        out->composite = words[idx++];
+        if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
+        return true;
+    }
+};
+
+struct SpvSelectView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t condition = 0;
+    uint32_t object_1 = 0;
+    uint32_t object_2 = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvSelectView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvSelectView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->condition = words[idx++];
+        out->object_1 = words[idx++];
+        out->object_2 = words[idx++];
+        return true;
+    }
+};
+
+struct SpvBitFieldInsertView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    uint32_t insert = 0;
+    uint32_t offset = 0;
+    uint32_t count = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldInsertView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        *out = SpvBitFieldInsertView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        out->insert = words[idx++];
+        out->offset = words[idx++];
+        out->count = words[idx++];
+        return true;
+    }
+};
+
+struct SpvBitFieldSExtractView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    uint32_t offset = 0;
+    uint32_t count = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldSExtractView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvBitFieldSExtractView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        out->offset = words[idx++];
+        out->count = words[idx++];
+        return true;
+    }
+};
+
+struct SpvBitFieldUExtractView {
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t base = 0;
+    uint32_t offset = 0;
+    uint32_t count = 0;
+
+    static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldUExtractView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        *out = SpvBitFieldUExtractView{};
+        size_t idx = 1u;
+        out->result_type = words[idx++];
+        out->result_id = words[idx++];
+        out->base = words[idx++];
+        out->offset = words[idx++];
+        out->count = words[idx++];
+        return true;
+    }
+};
 
 } // namespace valhall::spirv_parser

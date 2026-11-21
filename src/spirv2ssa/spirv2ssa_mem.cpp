@@ -352,9 +352,28 @@ void SpirvLowerer::register_local_variable(uint32_t blk_id, uint32_t var_id, uin
 
 PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& inst) {
     PointerRef res{};
-    if (inst.words.size() < 4) return res;
-    uint32_t result_ptr_type = inst.words[1];
-    uint32_t base_id = inst.words[3];
+    uint32_t result_ptr_type = 0;
+    uint32_t base_id = 0;
+    bool has_elem_idx = false;
+    uint32_t elem_idx_id = 0;
+    spirv_parser::SpvWordSpan indexes{};
+
+    const auto ac_op = static_cast<SpvOp>(inst.opcode);
+    if (ac_op == SpvOpPtrAccessChain || ac_op == SpvOpInBoundsPtrAccessChain) {
+        spirv_parser::SpvPtrAccessChainView v{};
+        if (!inst.parse_as(&v)) return res;
+        result_ptr_type = v.result_type;
+        base_id = v.base;
+        has_elem_idx = true;
+        elem_idx_id = v.element;
+        indexes = v.indexes;
+    } else {
+        spirv_parser::SpvAccessChainView v{};
+        if (!inst.parse_as(&v)) return res;
+        result_ptr_type = v.result_type;
+        base_id = v.base;
+        indexes = v.indexes;
+    }
 
     auto it = pointers_.find(base_id);
     if (it != pointers_.end()) {
@@ -368,15 +387,10 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
         res.const_offset = 0;
     }
 
-    const auto ac_op = static_cast<SpvOp>(inst.opcode);
-    bool is_ptr_ac = (ac_op == SpvOpPtrAccessChain || ac_op == SpvOpInBoundsPtrAccessChain);
-    size_t first_idx_word = 4;
     uint32_t cur_type = res.pointee_type_id;
 
-    // SPIR-V §3.3.8: OpPtrAccessChain takes an Element index at word 4 before composite Indexes.
-    if (is_ptr_ac && inst.words.size() >= 5 && res.kind == PtrKind::Buffer) {
-        uint32_t elem_idx_id = inst.words[4];
-        first_idx_word = 5;
+    // SPIR-V §3.3.8: OpPtrAccessChain applies the Element index before walking composite Indexes.
+    if (has_elem_idx && res.kind == PtrKind::Buffer) {
         uint32_t elem_stride = mod_.type_byte_size(cur_type);
         if (auto dit = mod_.decorations.find(result_ptr_type);
             dit != mod_.decorations.end() && dit->second.array_stride != 0) {
@@ -398,26 +412,19 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
             }
         } else {
             res.has_const_offset = false;
-            LoweredValue iv = get_value(blk_id, elem_idx_id);
-            const SpirvType* itype = mod_.get_type(iv.spv_type_id);
-            SsaId i64 = (itype && itype->width == 64)
-                            ? iv.scalar()
-                            : emit_op(blk_id, SsaOp::SConvert32To64, ValType::U64, {iv.scalar()});
+            SsaId i64 = emit_to_i64(blk_id, get_value(blk_id, elem_idx_id), /*sign_extend=*/true);
             SsaId delta = emit_op(blk_id, SsaOp::IMul64, ValType::U64, {i64, sb_.emit_const_u64(blk_id, elem_stride)});
             res.byte_offset = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {res.byte_offset, delta});
         }
     }
 
     auto to_signed_i64 = [&](uint32_t idx_id) -> SsaId {
-        LoweredValue iv = get_value(blk_id, idx_id);
-        const SpirvType* itype = mod_.get_type(iv.spv_type_id);
-        if (itype && itype->width == 64) return iv.scalar();
         // SPIR-V §3.3.8: Each index in OpAccessChain is treated as signed.
-        return emit_op(blk_id, SsaOp::SConvert32To64, ValType::U64, {iv.scalar()});
+        return emit_to_i64(blk_id, get_value(blk_id, idx_id), /*sign_extend=*/true);
     };
 
-    for (size_t k = first_idx_word; k < inst.words.size(); ++k) {
-        uint32_t idx_id = inst.words[k];
+    for (size_t k = 0; k < indexes.count; ++k) {
+        uint32_t idx_id = indexes[k];
         const SpirvType* t = mod_.get_type(cur_type);
         if (!t) break;
 
@@ -528,10 +535,13 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
 }
 
 LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
+    spirv_parser::SpvLoadView ld{};
+    if (!inst.parse_as(&ld)) return LoweredValue{};
+    return lower_load_ptr(blk_id, ld.result_type, ld.result_id, ld.pointer);
+}
+
+LoweredValue SpirvLowerer::lower_load_ptr(uint32_t blk_id, uint32_t res_type, uint32_t res_id, uint32_t ptr_id) {
     LoweredValue out{};
-    if (inst.words.size() < 4) return out;
-    uint32_t res_type = inst.words[1];
-    uint32_t ptr_id = inst.words[3];
     out.spv_type_id = res_type;
 
     auto pit = pointers_.find(ptr_id);
@@ -541,7 +551,7 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
     const PointerRef& ptr = pit->second;
 
     if (ptr.kind == PtrKind::ImageVar) {
-        sampled_images_[inst.words[2]] = ptr;
+        if (res_id != 0) sampled_images_[res_id] = ptr;
         out.lanes.push_back(sb_.emit_const_u32(blk_id, ptr.root_var_id));
         return out;
     }
@@ -715,14 +725,15 @@ LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
 }
 
 void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
-    if (inst.words.size() < 3) return;
-    uint32_t ptr_id = inst.words[1];
-    uint32_t val_id = inst.words[2];
+    spirv_parser::SpvStoreView st{};
+    if (!inst.parse_as(&st)) return;
+    lower_store_val(blk_id, st.pointer, get_value(blk_id, st.object));
+}
 
+void SpirvLowerer::lower_store_val(uint32_t blk_id, uint32_t ptr_id, const LoweredValue& val) {
     auto pit = pointers_.find(ptr_id);
     if (pit == pointers_.end()) return;
     const PointerRef& ptr = pit->second;
-    LoweredValue val = get_value(blk_id, val_id);
     if (val.empty()) return;
 
     if (ptr.kind == PtrKind::Buffer) {
@@ -887,50 +898,44 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
 }
 
 void SpirvLowerer::lower_copy_memory(uint32_t blk_id, const SpirvInst& inst) {
-    // OpCopyMemory: [hdr, target_ptr, source_ptr, optional memory_operands...]
-    if (inst.words.size() < 3) return;
-    uint32_t dst_ptr_id = inst.words[1];
-    uint32_t src_ptr_id = inst.words[2];
-    auto sit = pointers_.find(src_ptr_id);
+    spirv_parser::SpvCopyMemoryView cm{};
+    if (!inst.parse_as(&cm)) return;
+    auto sit = pointers_.find(cm.source);
     if (sit == pointers_.end()) return;
-    uint32_t pointee_t = sit->second.pointee_type_id;
-    SpirvInst fake_ld{};
-    fake_ld.opcode = SpvOpLoad;
-    fake_ld.words = {0u, pointee_t, 0u, src_ptr_id};
-    LoweredValue loaded = lower_load(blk_id, fake_ld);
-    // Synthesize store using a temporary value id
-    constexpr uint32_t kTempCopyId = 0xFFFFFFFEu;
-    values_[kTempCopyId] = std::move(loaded);
-    SpirvInst fake_st{};
-    fake_st.opcode = SpvOpStore;
-    fake_st.words = {0u, dst_ptr_id, kTempCopyId};
-    lower_store(blk_id, fake_st);
-    values_.erase(kTempCopyId);
+    LoweredValue loaded = lower_load_ptr(blk_id, sit->second.pointee_type_id, 0u, cm.source);
+    lower_store_val(blk_id, cm.target, loaded);
 }
 
 void SpirvLowerer::lower_atomic_store(uint32_t blk_id, const SpirvInst& inst) {
-    // OpAtomicStore: [hdr, pointer, memory_scope, semantics, value]
-    if (inst.words.size() < 5) return;
-    SpirvInst fake_st{};
-    fake_st.opcode = SpvOpStore;
-    fake_st.words = {0u, inst.words[1], inst.words[4]};
-    lower_store(blk_id, fake_st);
+    const auto op = static_cast<SpvOp>(inst.opcode);
+    if (op == SpvOpAtomicFlagClear) {
+        spirv_parser::SpvAtomicFlagClearView fc{};
+        if (!inst.parse_as(&fc)) return;
+        LoweredValue zero{};
+        zero.lanes.push_back(sb_.emit_const_u32(blk_id, 0u));
+        lower_store_val(blk_id, fc.pointer, zero);
+        return;
+    }
+    spirv_parser::SpvAtomicStoreView as{};
+    if (!inst.parse_as(&as)) return;
+    lower_store_val(blk_id, as.pointer, get_value(blk_id, as.value));
 }
 
 LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) {
     LoweredValue out{};
-    if (inst.words.size() < 6) return out;
     const auto op = static_cast<SpvOp>(inst.opcode);
-    uint32_t res_type = inst.words[1];
-    uint32_t ptr_id = inst.words[3];
-    out.spv_type_id = res_type;
 
     if (op == SpvOpAtomicLoad) {
-        SpirvInst fake_ld{};
-        fake_ld.opcode = SpvOpLoad;
-        fake_ld.words = {0u, res_type, inst.words[2], ptr_id};
-        return lower_load(blk_id, fake_ld);
+        spirv_parser::SpvAtomicLoadView al{};
+        if (!inst.parse_as(&al)) return out;
+        return lower_load_ptr(blk_id, al.result_type, al.result_id, al.pointer);
     }
+
+    spirv_parser::SpvAtomicLoadView hdr{};
+    if (!inst.parse_as(&hdr)) return out;
+    uint32_t res_type = hdr.result_type;
+    uint32_t ptr_id = hdr.pointer;
+    out.spv_type_id = res_type;
 
     auto pit = pointers_.find(ptr_id);
     if (pit == pointers_.end() || pit->second.kind != PtrKind::Buffer) {
@@ -945,22 +950,29 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     at.is_barrier_or_cf = true;
     at.is_side_effect = true;
 
-    if (op == SpvOpAtomicExchange && inst.words.size() >= 7) {
-        SsaId val = get_value(blk_id, inst.words[6]).scalar();
+    if (op == SpvOpAtomicExchange) {
+        spirv_parser::SpvAtomicExchangeView v{};
+        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
         at.op = SsaOp::AtomicExchange;
-        at.args = {addr, val, tok};
-    } else if ((op == SpvOpAtomicCompareExchange || op == SpvOpAtomicCompareExchangeWeak) && inst.words.size() >= 9) {
-        SsaId val = get_value(blk_id, inst.words[7]).scalar();
-        SsaId cmp = get_value(blk_id, inst.words[8]).scalar();
+        at.args = {addr, get_value(blk_id, v.value).scalar(), tok};
+    } else if (op == SpvOpAtomicCompareExchange || op == SpvOpAtomicCompareExchangeWeak) {
+        spirv_parser::SpvAtomicCompareExchangeView v{};
+        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
         at.op = SsaOp::AtomicCmpXchg;
-        at.args = {addr, val, cmp, tok};
+        at.args = {addr, get_value(blk_id, v.value).scalar(), get_value(blk_id, v.comparator).scalar(), tok};
     } else if (op == SpvOpAtomicIIncrement || op == SpvOpAtomicIDecrement) {
-        SsaId one = sb_.emit_const_u32(blk_id, 1u);
+        SsaId one = emit_const_int_for_type(blk_id, res_type, 1u);
         at.op = SsaOp::AtomicRmw;
         at.aux_str = (op == SpvOpAtomicIIncrement) ? "aadd" : "asub";
         at.args = {addr, one, tok};
-    } else if (inst.words.size() >= 7) {
-        SsaId val = get_value(blk_id, inst.words[6]).scalar();
+    } else if (op == SpvOpAtomicFlagTestAndSet) {
+        SsaId one = sb_.emit_const_u32(blk_id, 1u);
+        at.op = SsaOp::AtomicExchange;
+        at.args = {addr, one, tok};
+    } else {
+        spirv_parser::SpvAtomicIAddView v{};
+        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
+        SsaId val = get_value(blk_id, v.value).scalar();
         at.op = SsaOp::AtomicRmw;
         switch (op) {
             case SpvOpAtomicIAdd: at.aux_str = "aadd"; break;
@@ -972,11 +984,12 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
             case SpvOpAtomicAnd: at.aux_str = "aand"; break;
             case SpvOpAtomicOr: at.aux_str = "aor"; break;
             case SpvOpAtomicXor: at.aux_str = "axor"; break;
+            case SpvOpAtomicFAddEXT: at.aux_str = "afadd"; break;
+            case SpvOpAtomicFMinEXT: at.aux_str = "afmin"; break;
+            case SpvOpAtomicFMaxEXT: at.aux_str = "afmax"; break;
             default: at.aux_str = "aadd"; break;
         }
         at.args = {addr, val, tok};
-    } else {
-        return make_zero_value(blk_id, res_type);
     }
 
     SsaId tup = sb_.emit(blk_id, std::move(at));
@@ -989,10 +1002,11 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
 
 LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& inst) {
     LoweredValue out{};
-    if (inst.words.size() < 5) return out;
-    uint32_t res_type = inst.words[1];
-    uint32_t img_id = inst.words[3];
-    uint32_t coord_id = inst.words[4];
+    spirv_parser::SpvImageSampleImplicitLodView img{};
+    if (!inst.parse_as(&img)) return out;
+    uint32_t res_type = img.result_type;
+    uint32_t img_id = img.sampled_image;
+    uint32_t coord_id = img.coordinate;
     out.spv_type_id = res_type;
 
     LoweredValue coord = get_value(blk_id, coord_id);
@@ -1036,11 +1050,11 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
 }
 
 void SpirvLowerer::lower_image_write(uint32_t blk_id, const SpirvInst& inst) {
-    // OpImageWrite: [hdr, image, coordinate, texel, (image_operands...)]
-    if (inst.words.size() < 4) return;
-    uint32_t img_id = inst.words[1];
-    LoweredValue coord = get_value(blk_id, inst.words[2]);
-    LoweredValue texel = get_value(blk_id, inst.words[3]);
+    spirv_parser::SpvImageWriteView iw{};
+    if (!inst.parse_as(&iw)) return;
+    uint32_t img_id = iw.image;
+    LoweredValue coord = get_value(blk_id, iw.coordinate);
+    LoweredValue texel = get_value(blk_id, iw.texel);
 
     std::string img_key = "img:0:0";
     if (auto it = sampled_images_.find(img_id); it != sampled_images_.end()) {

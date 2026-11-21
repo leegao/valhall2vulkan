@@ -1,5 +1,6 @@
 #pragma once
 
+#include "valhall_spirv_parser_generated.h"
 #include "valhall_to_spirv.h"
 
 #include <cstdint>
@@ -15,6 +16,12 @@ namespace valhall::spirv2ssa {
 struct SpirvInst {
     uint16_t opcode = 0;
     std::vector<uint32_t> words; // Full instruction words including header word[0]
+
+    /// Parse this instruction into a grammar-generated typed operand view (e.g. SpvSwitchView).
+    template <typename ViewT>
+    bool parse_as(ViewT* out) const {
+        return ViewT::parse(words.data(), words.size(), out);
+    }
 };
 
 enum class SpirvTypeKind : uint8_t {

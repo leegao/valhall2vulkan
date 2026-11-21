@@ -6,11 +6,11 @@ All-Path Z3 Formal Equivalence Verifier:
   SPIR-V -> libMali-Gxx -> Valhall ISA -> valhall_pass1 -> ValhallSSA
 
 Defeats combinatorial state explosion via:
-  1. Whole-CFG topological DAG path-merging (O(|V|+|E|) instead of O(2^branches))
-  2. Per-buffer disjoint address partitioning + structured constant-offset store maps
-  3. Eager constant folding & syntactic simplification before Z3 emission
-  4. Per-output miter decomposition with strict Z3 solver timeouts
-  5. Theory stratification: exact QF_BV/QF_FP with automatic UF-FP fallback on large FP graphs
+  - Whole-CFG topological DAG path-merging (O(|V|+|E|) instead of O(2^branches))
+  - Per-buffer disjoint address partitioning + structured constant-offset store maps
+  - Eager constant folding & syntactic simplification before Z3 emission
+  - Per-output miter decomposition with strict Z3 solver timeouts
+  - Theory stratification: exact QF_BV/QF_FP with sound UF-FP fallback on large FP graphs
 """
 
 from __future__ import annotations
@@ -240,11 +240,14 @@ class SharedShaderEnv:
         # Pilot FAU bindings: (pf_dict, is_hi_word)
         self.pilot_by_word: Dict[int, Tuple[Dict[str, Any], bool]] = {}
         for pf in self.mbs2.get("pilot_fau", []):
-            if pf.get("resolved") and pf.get("key"):
+            vkind = pf.get("value_kind", "")
+            is_const = (vkind == "const_int" and pf.get("has_const_value", False))
+            if is_const or (pf.get("resolved") and pf.get("key")):
                 w = int(pf["word_idx"])
                 is_hi_word = (int(pf["fau_offset"]) % 8) != 0
                 self.pilot_by_word[w] = (pf, is_hi_word)
-                if not pf.get("is_loaded_value", False) and not is_hi_word and int(pf.get("byte_size", 4)) >= 8:
+                is_buf_addr = (vkind == "buffer_addr") or (not vkind and not pf.get("is_loaded_value", False))
+                if is_buf_addr and not is_hi_word and int(pf.get("byte_size", 4)) >= 8:
                     if (w + 1) not in self.pilot_by_word:
                         self.pilot_by_word[w + 1] = (pf, True)
 
@@ -302,7 +305,30 @@ class SharedShaderEnv:
             self.init_img_mem[key] = tuple(z3.Array(f"img_{safe}_c{c}", BV64, BV32) for c in range(4))
         return self.init_img_mem[key]
 
-    def resolve_addr(self, addr_expr: z3.BitVecRef) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
+    def _find_base_region_in_add(self, expr: z3.ExprRef) -> Optional[str]:
+        """Walk an additive 64-bit address AST to recover a unique registered buffer region base."""
+        found: Set[str] = set()
+        stack: List[z3.ExprRef] = [expr]
+        visited = 0
+        while stack and visited < 64:
+            cur = stack.pop()
+            visited += 1
+            if isinstance(cur, z3.BitVecNumRef) and cur.size() == 64:
+                region = (cur.as_long() >> 32) << 32
+                if region in self.base_to_buf:
+                    found.add(self.base_to_buf[region])
+                    if len(found) > 1:
+                        return None
+            elif z3.is_app(cur) and cur.decl().kind() == z3.Z3_OP_BADD:
+                for ch in cur.children():
+                    stack.append(ch)
+        return next(iter(found)) if len(found) == 1 else None
+
+    def resolve_addr(
+        self,
+        addr_expr: z3.BitVecRef,
+        hint_key: str = "",
+    ) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
         """Decompose a 64-bit address into (buf_key, const_offset_or_None, offset_bv32)."""
         c = _try_const_u64(addr_expr)
         if c is not None:
@@ -310,6 +336,8 @@ class SharedShaderEnv:
             off = c & 0xFFFFFFFF
             if region in self.base_to_buf:
                 return self.base_to_buf[region], off, bv32(off)
+            if hint_key:
+                return hint_key, off, bv32(off)
             return None, c, bv32(off)
 
         # Try extracting high 32 bits to identify buffer region for dynamic offsets
@@ -320,6 +348,19 @@ class SharedShaderEnv:
                 lo = z3.simplify(z3.Extract(31, 0, addr_expr))
                 lo_c = _try_const_u64(lo)
                 return self.base_to_buf[region], lo_c, lo
+
+        # Walk additive chains (e.g. base + SignExt(32, idx * stride) + field_off)
+        bkey = self._find_base_region_in_add(addr_expr)
+        if bkey is not None:
+            lo = z3.simplify(z3.Extract(31, 0, addr_expr))
+            lo_c = _try_const_u64(lo)
+            return bkey, lo_c, lo
+
+        if hint_key:
+            lo = z3.simplify(z3.Extract(31, 0, addr_expr))
+            lo_c = _try_const_u64(lo)
+            return hint_key, lo_c, lo
+
         return None, None, z3.Extract(31, 0, addr_expr)
 
     def get_builtin(self, builtin_id: int, val_type: str) -> Z3Val:
@@ -355,11 +396,21 @@ class SharedShaderEnv:
             return bv32(self.viewport_fau_words[word_idx])
         if word_idx in self.pilot_by_word:
             pf, is_hi = self.pilot_by_word[word_idx]
-            if pf.get("is_loaded_value", False):
+            vkind = pf.get("value_kind", "")
+            if vkind == "const_int" and pf.get("has_const_value", False):
+                cv = int(pf["const_value"])
+                return bv32((cv >> 32) & 0xFFFFFFFF) if is_hi else bv32(cv & 0xFFFFFFFF)
+            if vkind in ("buffer_size", "descriptor_addr", "abi_preload", "unknown"):
+                return z3.Select(self.fau_sym, bv32(word_idx))
+            if vkind == "symbol_value" or pf.get("is_loaded_value", False):
                 if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
                     return z3.Select(self.get_buf_mem(pf["key"]), bv32(int(pf["byte_offset"])))
                 return z3.Select(self.fau_sym, bv32(word_idx))
+            if pf.get("is_derived", False):
+                return z3.Select(self.fau_sym, bv32(word_idx))
             base = self.get_buf_base(pf["key"])
+            if pf.get("has_pointer_offset", False):
+                base = (base + int(pf.get("pointer_offset", 0))) & 0xFFFFFFFFFFFFFFFF
             if not is_hi:
                 return bv32(base & 0xFFFFFFFF)
             return bv32((base >> 32) & 0xFFFFFFFF)
@@ -474,15 +525,31 @@ class DagSsaZ3Evaluator:
         self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
         self.values: Dict[int, Z3Val] = {0: bv32(0)}
         self.has_loops: bool = False
-        self.node_pcs: Dict[int, Set[int]] = {}
 
-    def _collect_pcs(self, node: Dict[str, Any]) -> Set[int]:
+    def collect_pcs_for_nodes(self, root_nids: Set[int], max_visit: int = 2048) -> List[int]:
+        """Lazily collect originating Valhall PCs reachable from sink node IDs (bounded BFS)."""
         pcs: Set[int] = set()
-        if "orig_pc" in node:
-            pcs.add(int(node["orig_pc"]))
-        for aid in node.get("args", []):
-            pcs.update(self.node_pcs.get(int(aid), ()))
-        return pcs
+        seen: Set[int] = set()
+        queue: List[int] = list(root_nids)
+        while queue and len(seen) < max_visit:
+            nid = queue.pop()
+            if nid in seen:
+                continue
+            seen.add(nid)
+            node = self.nodes_by_id.get(nid)
+            if not node:
+                continue
+            if "orig_pc" in node:
+                pcs.add(int(node["orig_pc"]))
+            for aid in node.get("args", []):
+                ia = int(aid)
+                if ia not in seen:
+                    queue.append(ia)
+            for _, vid in node.get("phi", []):
+                iv = int(vid)
+                if iv not in seen:
+                    queue.append(iv)
+        return sorted(pcs)
 
     def _fp_unary(self, op: str, x: z3.BitVecRef) -> z3.BitVecRef:
         if op == "FAbs":
@@ -639,7 +706,9 @@ class DagSsaZ3Evaluator:
             if op == "SDiv": return a / b
             if op == "UMod": return z3.URem(a, b)
             if op == "SRem": return z3.SRem(a, b)
-            if op == "SMod": return z3.SMod(a, b)
+            if op == "SMod":
+                rem = z3.SRem(a, b)
+                return z3.If(z3.And(rem != bv32(0), (rem ^ b) < bv32(0)), rem + b, rem)
         if op in ("BfeU", "BfeS"):
             x, off, w = _as_bv32(args[0]), _as_bv32(args[1]), _as_bv32(args[2])
             if isinstance(off, z3.BitVecNumRef) and isinstance(w, z3.BitVecNumRef):
@@ -741,6 +810,15 @@ class DagSsaZ3Evaluator:
                 ba, bb, bc = _as_bv32(a), _as_bv32(b), _as_bv32(c)
                 if self.fp_mode == "uf":
                     return _hw_uf("fp_Fma", BV32, BV32, BV32, BV32)(ba, bb, bc)
+                # Exact IEEE-754 RNE identity: FMA(x, 1.0, +0.0) == (+0.0 if x == -0.0; qNaN if isNaN(x); else x).
+                bc_is_pos_zero = isinstance(bc, z3.BitVecNumRef) and bc.as_long() == 0
+                if bc_is_pos_zero:
+                    if isinstance(bb, z3.BitVecNumRef) and bb.as_long() == 0x3F800000:
+                        return z3.If(z3.fpIsNaN(bv32_to_fp32(ba)), fp32_to_bv32(z3.fpNaN(FP32_SORT)),
+                                     z3.If(ba == bv32(0x80000000), bv32(0), ba))
+                    if isinstance(ba, z3.BitVecNumRef) and ba.as_long() == 0x3F800000:
+                        return z3.If(z3.fpIsNaN(bv32_to_fp32(bb)), fp32_to_bv32(z3.fpNaN(FP32_SORT)),
+                                     z3.If(bb == bv32(0x80000000), bv32(0), bb))
                 return fp32_to_bv32(z3.fpFMA(z3.RNE(), bv32_to_fp32(ba), bv32_to_fp32(bb), bv32_to_fp32(bc)))
             return _eval_elementwise(vt, args, _ffma)
         if op == "IsNan":
@@ -808,7 +886,7 @@ class DagSsaZ3Evaluator:
 
         if op == "PsbLoad":
             addr = _as_bv64(args[0])
-            bkey, const_off, off32 = self.env.resolve_addr(addr)
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
             if bkey is not None:
                 if const_off is not None and (bkey, const_off) in st.const_stores:
                     w_cond, w_val = st.const_stores[(bkey, const_off)]
@@ -823,25 +901,26 @@ class DagSsaZ3Evaluator:
         if op == "PsbStore":
             addr = _as_bv64(args[0])
             val = _as_bv32(args[1])
-            bkey, const_off, off32 = self.env.resolve_addr(addr)
-            pcs = self._collect_pcs(node)
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+            nid = int(node["id"])
             if bkey is not None:
                 cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
                 st.buf_mems[bkey] = z3.If(reach, z3.Store(cur_mem, off32, val), cur_mem) if not z3.is_true(reach) else z3.Store(cur_mem, off32, val)
                 if const_off is not None:
                     prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off32)))
                     st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, reach), _z3_if(reach, val, prev_v))
-                    st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).update(pcs)
+                    st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
                 else:
-                    st.output_pcs.setdefault(f"{bkey}:dyn", set()).update(pcs)
+                    st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
             else:
                 st.fallback_mem = z3.If(reach, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
+                st.output_pcs.setdefault("fallback_mem", set()).add(nid)
             return args[2] if len(args) > 2 else bv32(0)
 
         if op == "Kill":
             cond = _as_bool(args[0]) if (aux_bool and len(args) >= 2) else z3.BoolVal(True)
             st.discarded = _z3_or(st.discarded, _z3_and(reach, cond))
-            st.output_pcs.setdefault("discarded", set()).update(self._collect_pcs(node))
+            st.output_pcs.setdefault("discarded", set()).add(int(node["id"]))
             return bv32(0)
 
         if op == "StoreFragColor":
@@ -849,7 +928,7 @@ class DagSsaZ3Evaluator:
             vec4 = tuple(_as_bv32(col[c]) if isinstance(col, tuple) and c < len(col) else bv32(0) for c in range(4))
             prev = st.frag_colors.get(imm_u32, (bv32(0),) * 4)
             st.frag_colors[imm_u32] = tuple(_z3_if(reach, n, p) for n, p in zip(vec4, prev))
-            st.output_pcs.setdefault(f"frag_color[{imm_u32}]", set()).update(self._collect_pcs(node))
+            st.output_pcs.setdefault(f"frag_color[{imm_u32}]", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op == "StoreBuiltinOutput":
@@ -858,7 +937,7 @@ class DagSsaZ3Evaluator:
                 st.builtin_outputs[imm_u32] = _z3_if(reach, payload, st.builtin_outputs[imm_u32])
             else:
                 st.builtin_outputs[imm_u32] = payload
-            st.output_pcs.setdefault(f"builtin_out[{imm_u32}]", set()).update(self._collect_pcs(node))
+            st.output_pcs.setdefault(f"builtin_out[{imm_u32}]", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op == "StoreVertVarying":
@@ -867,7 +946,7 @@ class DagSsaZ3Evaluator:
             vec4 = tuple(_as_bv32(vec[c]) if isinstance(vec, tuple) and c < len(vec) else bv32(0) for c in range(4))
             prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
             st.vert_varyings[loc] = tuple(_z3_if(reach, n, p) for n, p in zip(vec4, prev))
-            st.output_pcs.setdefault(f"vert_var[{loc}]", set()).update(self._collect_pcs(node))
+            st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op == "StoreTexel":
@@ -885,7 +964,7 @@ class DagSsaZ3Evaluator:
                 for c in range(4)
             )
             st.image_mems[ikey] = updated
-            st.output_pcs.setdefault(f"img:{ikey}", set()).update(self._collect_pcs(node))
+            st.output_pcs.setdefault(f"img:{ikey}", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op in ("AtomicRmw", "AtomicExchange", "AtomicCmpXchg"):
@@ -963,10 +1042,7 @@ class DagSsaZ3Evaluator:
                     vt = pnode.get("type", "U32")
                     self.values[int(pid)] = z3.BoolVal(False) if vt == "Bool" else bv32(0)
                     continue
-                phi_pcs: Set[int] = set()
-                for _, val_id in fwd:
-                    phi_pcs.update(self.node_pcs.get(val_id, ()))
-                self.node_pcs[int(pid)] = phi_pcs
+                pass
                 if len(fwd) == 1:
                     self.values[int(pid)] = self.values[fwd[0][1]]
                 else:
@@ -981,7 +1057,6 @@ class DagSsaZ3Evaluator:
                 node = self.nodes_by_id.get(int(nid))
                 if not node:
                     continue
-                self.node_pcs[int(nid)] = self._collect_pcs(node)
                 self.values[int(nid)] = self._eval_node(node, cur_st, reach)
 
             blk_out_state[bid] = cur_st
@@ -1106,18 +1181,19 @@ def verify_equivalence_bundle(
     pc_disasm: Dict[str, str] = bundle.get("mbs2_context", {}).get("pc_disasm", {})
 
     def lookup_pcs(key: str) -> List[Tuple[int, str]]:
-        pcs = sorted(v_st.output_pcs.get(key, ()))
+        nids = v_st.output_pcs.get(key, set())
+        pcs = v_eval.collect_pcs_for_nodes(nids) if nids else []
         return [(pc, pc_disasm.get(str(pc), "")) for pc in pcs[-16:]]
 
     checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef], str]] = []
 
-    # 1. Discard equivalence (Fragment)
+    # Discard equivalence (Fragment)
     if stage == "Fragment" or not z3.is_false(d_st.discarded) or not z3.is_false(v_st.discarded):
         checks.append(("discarded", d_st.discarded, v_st.discarded, None, "discarded"))
 
     not_disc = _z3_not(d_st.discarded)
 
-    # 2. Fragment color outputs (guarded by ~discarded)
+    # Fragment color outputs (guarded by ~discarded)
     all_rts = sorted(set(d_st.frag_colors.keys()) | set(v_st.frag_colors.keys()))
     for rt in all_rts:
         dc = d_st.frag_colors.get(rt, (bv32(0),) * 4)
@@ -1125,7 +1201,7 @@ def verify_equivalence_bundle(
         for ch, cname in enumerate(("r", "g", "b", "a")):
             checks.append((f"frag_color[{rt}].{cname}", dc[ch], vc[ch], not_disc, f"frag_color[{rt}]"))
 
-    # 3. Builtin outputs (gl_Position, gl_FragDepth, etc.)
+    # Builtin outputs (gl_Position, gl_FragDepth, etc.)
     all_bis = sorted(set(d_st.builtin_outputs.keys()) | set(v_st.builtin_outputs.keys()))
     for bi in all_bis:
         do = d_st.builtin_outputs.get(bi)
@@ -1149,7 +1225,7 @@ def verify_equivalence_bundle(
         else:
             checks.append((f"builtin_out[{bi}]", _as_bv32(do), _as_bv32(vo), bi_guard, f"builtin_out[{bi}]"))
 
-    # 4. Vertex varying outputs
+    # Vertex varying outputs
     all_vv = sorted(set(d_st.vert_varyings.keys()) | set(v_st.vert_varyings.keys()))
     for loc in all_vv:
         dv = d_st.vert_varyings.get(loc, (bv32(0),) * 4)
@@ -1157,7 +1233,7 @@ def verify_equivalence_bundle(
         for c in range(4):
             checks.append((f"vert_var[{loc}][{c}]", dv[c], vv[c], None, f"vert_var[{loc}]"))
 
-    # 5. Constant-offset buffer stores (SSBO writes; skip private thread-local scratch spills)
+    # Constant-offset buffer stores (SSBO writes; skip private thread-local scratch spills)
     all_cs = sorted(set(d_st.const_stores.keys()) | set(v_st.const_stores.keys()))
     for bkey, off in all_cs:
         if bkey in ("tls_private", "wls_shared"):
@@ -1168,7 +1244,7 @@ def verify_equivalence_bundle(
         checks.append((f"{tag}.written", dw, vw, None, tag))
         checks.append((f"{tag}.value", dv, vv, _z3_or(dw, vw), tag))
 
-    # 6. Symbolic/dynamic-offset buffer stores (SSBO writes via Z3 Array theory)
+    # Symbolic/dynamic-offset buffer stores (SSBO writes via Z3 Array theory)
     const_store_bkeys = {bk for bk, _ in all_cs}
     all_bm_keys = sorted(set(d_st.buf_mems.keys()) | set(v_st.buf_mems.keys()))
     for bkey in all_bm_keys:
@@ -1184,7 +1260,7 @@ def verify_equivalence_bundle(
         env.inputs[probe_name] = probe_off
         checks.append((f"{bkey}[probe_off]", z3.Select(d_mem, probe_off), z3.Select(v_mem, probe_off), None, f"{bkey}:dyn"))
 
-    # 7. Storage image writes (OpImageWrite / StoreTexel)
+    # Storage image writes (OpImageWrite / StoreTexel)
     all_im_keys = sorted(set(d_st.image_mems.keys()) | set(v_st.image_mems.keys()))
     for ikey in all_im_keys:
         d_im = d_st.image_mems.get(ikey, env.get_img_mem(ikey))
@@ -1193,6 +1269,12 @@ def verify_equivalence_bundle(
         env.inputs[f"probe_{ikey.replace(':', '_')}_xy"] = probe_xy
         for c, cname in enumerate(("r", "g", "b", "a")):
             checks.append((f"img:{ikey}[xy].{cname}", z3.Select(d_im[c], probe_xy), z3.Select(v_im[c], probe_xy), None, f"img:{ikey}"))
+
+    # Unresolved-address fallback memory writes (never silently skip)
+    if not d_st.fallback_mem.eq(env.fallback_mem) or not v_st.fallback_mem.eq(env.fallback_mem):
+        probe_addr = z3.BitVec("probe_fallback_addr", 64)
+        env.inputs["probe_fallback_addr"] = probe_addr
+        checks.append(("fallback_mem[probe_addr]", z3.Select(d_st.fallback_mem, probe_addr), z3.Select(v_st.fallback_mem, probe_addr), None, "fallback_mem"))
 
     if not checks:
         res.status = "SKIP"
@@ -1221,7 +1303,11 @@ def verify_equivalence_bundle(
         res.status = "SAT"
     elif any_unknown:
         if fp_mode == "exact" and allow_uf_fallback:
-            return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode="uf", allow_uf_fallback=False)
+            uf_res = verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode="uf", allow_uf_fallback=False)
+            # UF is an over-approximation: UNSAT/BOUNDED_UNSAT is sound, but UF SAT may be spurious.
+            if uf_res.status in ("UNSAT", "BOUNDED_UNSAT"):
+                return uf_res
+            res.notes.append("Exact FP timed out; UF fallback could not prove equivalence")
         res.status = "UNKNOWN"
     else:
         res.status = "BOUNDED_UNSAT" if res.has_loops else "UNSAT"

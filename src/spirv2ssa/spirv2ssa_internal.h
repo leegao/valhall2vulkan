@@ -81,10 +81,14 @@ public:
 
     // Value & type helpers
     compiler::ValType to_val_type(uint32_t spv_type_id) const;
+    uint32_t int_type_width(uint32_t spv_type_id) const;
     uint32_t flat_lane_count(uint32_t spv_type_id) const;
     uint32_t scalar_elem_type(uint32_t spv_type_id) const;
     LoweredValue get_value(uint32_t blk_id, uint32_t spv_id);
     LoweredValue make_zero_value(uint32_t blk_id, uint32_t spv_type_id);
+    compiler::SsaId emit_const_int_for_type(uint32_t blk_id, uint32_t spv_type_id, uint64_t val);
+    compiler::SsaId emit_icmp_eq_const(uint32_t blk_id, const LoweredValue& lhs, uint64_t lit);
+    compiler::SsaId emit_to_i64(uint32_t blk_id, const LoweredValue& val, bool sign_extend);
     compiler::SsaId pack_to_vec4_f32(uint32_t blk_id, const LoweredValue& val, bool fill_alpha_one);
     compiler::SsaId pack_to_vec2_f32(uint32_t blk_id, const LoweredValue& val);
     uint32_t allocate_ssa_block();
@@ -102,7 +106,9 @@ public:
     void register_local_variable(uint32_t blk_id, uint32_t var_id, uint32_t ptr_type_id, uint32_t init_id);
     PointerRef lower_access_chain(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_load(uint32_t blk_id, const SpirvInst& inst);
+    LoweredValue lower_load_ptr(uint32_t blk_id, uint32_t res_type, uint32_t res_id, uint32_t ptr_id);
     void lower_store(uint32_t blk_id, const SpirvInst& inst);
+    void lower_store_val(uint32_t blk_id, uint32_t ptr_id, const LoweredValue& val);
     void lower_copy_memory(uint32_t blk_id, const SpirvInst& inst);
     LoweredValue lower_atomic(uint32_t blk_id, const SpirvInst& inst);
     void lower_atomic_store(uint32_t blk_id, const SpirvInst& inst);

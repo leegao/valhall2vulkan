@@ -257,10 +257,23 @@ bool build_equivalence_bundle_json(
         uint32_t binding = 0;
         bool resolved = lookup_mbs2_buffer_binding(
             extract_res.mbs2, entry.srt_rack, entry.desc_index, entry.symbol_name, &kind, &binding);
+        auto pilot_vk_name = [](PilotValueKind vk) -> const char* {
+            switch (vk) {
+                case PilotValueKind::BufferAddr: return "buffer_addr";
+                case PilotValueKind::BufferSize: return "buffer_size";
+                case PilotValueKind::DescriptorAddr: return "descriptor_addr";
+                case PilotValueKind::SymbolValue: return "symbol_value";
+                case PilotValueKind::ConstInt: return "const_int";
+                case PilotValueKind::AbiPreload: return "abi_preload";
+                default: return "unknown";
+            }
+        };
         os << "{\"fau_offset\":" << off
            << ",\"word_idx\":" << (off / 4u)
            << ",\"byte_size\":" << entry.byte_size
-           << ",\"symbol\":";
+           << ",\"value_kind\":";
+        write_json_str(os, pilot_vk_name(entry.value_kind));
+        os << ",\"symbol\":";
         write_json_str(os, entry.symbol_name);
         os << ",\"expression\":";
         write_json_str(os, entry.expression);
@@ -272,6 +285,10 @@ bool build_equivalence_bundle_json(
            << ",\"has_byte_offset\":" << (entry.has_byte_offset ? "true" : "false")
            << ",\"byte_offset\":" << entry.byte_offset
            << ",\"is_derived\":" << (entry.is_derived ? "true" : "false")
+           << ",\"has_pointer_offset\":" << (entry.has_pointer_offset ? "true" : "false")
+           << ",\"pointer_offset\":" << entry.pointer_offset
+           << ",\"has_const_value\":" << (entry.has_const_value ? "true" : "false")
+           << ",\"const_value\":" << entry.const_value
            << ",\"key\":";
         write_json_str(os, resolved ? (kind + ":0:" + std::to_string(binding)) : "");
         os << '}';

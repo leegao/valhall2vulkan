@@ -10,10 +10,22 @@
 
 namespace valhall::spirv2valhall {
 
+/// Semantic category of a value written into FAU_0 by a Pilot Shader.
+enum class PilotValueKind : uint8_t {
+    Unknown = 0,
+    BufferAddr,     // 64-bit base pointer (plus optional static pointer_offset) into an SSBO/UBO
+    BufferSize,     // 32-bit buffer size word from descriptor
+    DescriptorAddr, // Address of a resource descriptor entry
+    SymbolValue,    // Preloaded UBO/SSBO data word
+    ConstInt,       // Compile-time integer constant folded by the pilot shader
+    AbiPreload,     // Hardware ABI preload register (e.g. workgroup/dispatch metadata)
+};
+
 /// A single FAU slot (byte offset -> semantic description) inferred by chasing the Pilot Shader.
 struct PilotFauEntry {
     uint32_t fau_offset = 0;      // Byte offset inside FAU_0 (0x00, 0x08, 0x10, 0x18, ...)
     uint32_t byte_size = 4;       // 4 or 8 bytes
+    PilotValueKind value_kind = PilotValueKind::Unknown;
     std::string symbol_name;      // e.g. "_83_input_0" or "_43_pushConstants_0.u_TextureDimensions_0.x"
     std::string expression;       // e.g. "&_83_input_0 (SRT[4]->Buf[0].addr)" or "derived(_43_pushConstants_0.u_TextureDimensions_0.x)"
     int32_t srt_rack = -1;        // SRT rack index if sourced from SRT
@@ -22,6 +34,10 @@ struct PilotFauEntry {
     bool has_byte_offset = false; // True when loaded word byte offset inside buffer is statically known
     int64_t byte_offset = 0;      // Byte offset inside UBO/SSBO for preloaded data word
     bool is_derived = false;      // True if arithmetic/transform was applied after loading
+    bool has_pointer_offset = false; // True when a BufferAddr carries a statically known constant byte offset
+    int64_t pointer_offset = 0;      // Constant byte offset added to BufferAddr by the pilot shader
+    bool has_const_value = false;    // True when value_kind == ConstInt
+    int64_t const_value = 0;         // Constant integer value written by the pilot shader
 };
 
 struct PilotAnalysisResult {

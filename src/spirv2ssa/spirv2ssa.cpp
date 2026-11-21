@@ -22,27 +22,41 @@ ShaderStage execution_model_to_stage(uint32_t em) {
     }
 }
 
-std::vector<uint32_t> block_succ_labels(const SpirvBasicBlock& blk) {
+std::vector<uint32_t> block_succ_labels(
+    const SpirvBasicBlock& blk,
+    const std::unordered_map<uint32_t, uint32_t>& id_to_width) {
     std::vector<uint32_t> succs;
     if (blk.insts.empty()) return succs;
     const auto& term = blk.insts.back();
     const auto op = static_cast<SpvOp>(term.opcode);
-    if (op == SpvOpBranch && term.words.size() >= 2) {
-        succs.push_back(term.words[1]);
-    } else if (op == SpvOpBranchConditional && term.words.size() >= 4) {
-        succs.push_back(term.words[2]);
-        if (term.words[3] != term.words[2]) succs.push_back(term.words[3]);
-    } else if (op == SpvOpSwitch && term.words.size() >= 3) {
-        succs.push_back(term.words[2]);
-        for (size_t k = 4; k < term.words.size(); k += 2) {
-            if (std::find(succs.begin(), succs.end(), term.words[k]) == succs.end()) {
-                succs.push_back(term.words[k]);
+    if (op == SpvOpBranch) {
+        spirv_parser::SpvBranchView v{};
+        if (term.parse_as(&v)) succs.push_back(v.target_label);
+    } else if (op == SpvOpBranchConditional) {
+        spirv_parser::SpvBranchConditionalView v{};
+        if (term.parse_as(&v)) {
+            succs.push_back(v.true_label);
+            if (v.false_label != v.true_label) succs.push_back(v.false_label);
+        }
+    } else if (op == SpvOpSwitch) {
+        spirv_parser::SpvSwitchView v{};
+        if (term.parse_as(&v)) {
+            succs.push_back(v.default_val);
+            uint32_t sel_w = 32u;
+            if (auto it = id_to_width.find(v.selector); it != id_to_width.end()) sel_w = it->second;
+            for (const auto& [lit, lbl] : v.decode_cases(sel_w)) {
+                (void)lit;
+                if (std::find(succs.begin(), succs.end(), lbl) == succs.end()) {
+                    succs.push_back(lbl);
+                }
             }
         }
     }
     return succs;
 }
 
+/// Returns true for all value-producing SPIR-V 1.6 §3.3.18 atomic instructions
+/// (void-returning OpAtomicStore and OpAtomicFlagClear are handled separately).
 bool is_atomic_opcode(SpvOp op) {
     switch (op) {
         case SpvOpAtomicLoad:
@@ -60,6 +74,10 @@ bool is_atomic_opcode(SpvOp op) {
         case SpvOpAtomicAnd:
         case SpvOpAtomicOr:
         case SpvOpAtomicXor:
+        case SpvOpAtomicFlagTestAndSet:
+        case SpvOpAtomicFMinEXT:
+        case SpvOpAtomicFMaxEXT:
+        case SpvOpAtomicFAddEXT:
             return true;
         default:
             return false;
@@ -114,6 +132,32 @@ ValType SpirvLowerer::to_val_type(uint32_t spv_type_id) const {
         default:
             return ValType::U32;
     }
+}
+
+uint32_t SpirvLowerer::int_type_width(uint32_t spv_type_id) const {
+    const SpirvType* t = mod_.get_type(spv_type_id);
+    if (t && t->kind == SpirvTypeKind::Int && t->width > 0) return t->width;
+    return 32u;
+}
+
+SsaId SpirvLowerer::emit_const_int_for_type(uint32_t blk_id, uint32_t spv_type_id, uint64_t val) {
+    const SpirvType* t = mod_.get_type(spv_type_id);
+    if (t && t->kind == SpirvTypeKind::Int) {
+        if (t->width == 64u) return sb_.emit_const_u64(blk_id, val);
+        if (t->is_signed) return sb_.emit_const_s32(blk_id, static_cast<int32_t>(val));
+    }
+    return sb_.emit_const_u32(blk_id, static_cast<uint32_t>(val));
+}
+
+SsaId SpirvLowerer::emit_icmp_eq_const(uint32_t blk_id, const LoweredValue& lhs, uint64_t lit) {
+    SsaId rhs = emit_const_int_for_type(blk_id, lhs.spv_type_id, lit);
+    return emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {lhs.scalar(), rhs});
+}
+
+SsaId SpirvLowerer::emit_to_i64(uint32_t blk_id, const LoweredValue& val, bool sign_extend) {
+    if (int_type_width(val.spv_type_id) == 64u) return val.scalar();
+    return emit_op(blk_id, sign_extend ? SsaOp::SConvert32To64 : SsaOp::UConvert32To64,
+                   ValType::U64, {val.scalar()});
 }
 
 uint32_t SpirvLowerer::flat_lane_count(uint32_t spv_type_id) const {
@@ -251,25 +295,16 @@ void SpirvLowerer::lower_switch(
     uint32_t blk_id,
     const SpirvInst& inst,
     const std::unordered_map<uint32_t, uint32_t>& lbl_map) {
-    // OpSwitch: [hdr, selector, default_lbl, lit0, target0, lit1, target1, ...]
-    if (inst.words.size() < 3) return;
-    LoweredValue sel = get_value(blk_id, inst.words[1]);
-    auto dit = lbl_map.find(inst.words[2]);
+    spirv_parser::SpvSwitchView sw{};
+    if (!inst.parse_as(&sw)) return;
+    LoweredValue sel = get_value(blk_id, sw.selector);
+    auto dit = lbl_map.find(sw.default_val);
     int32_t default_blk = (dit != lbl_map.end()) ? static_cast<int32_t>(dit->second) : -1;
 
-    const SpirvType* sel_t = mod_.get_type(sel.spv_type_id);
-    bool is_64 = (sel_t && sel_t->width == 64);
     std::vector<std::pair<uint64_t, uint32_t>> cases;
-    if (is_64) {
-        for (size_t k = 3; k + 2 < inst.words.size(); k += 3) {
-            uint64_t lit64 = uint64_t(inst.words[k]) | (uint64_t(inst.words[k + 1]) << 32);
-            auto tit = lbl_map.find(inst.words[k + 2]);
-            if (tit != lbl_map.end()) cases.push_back({lit64, tit->second});
-        }
-    } else {
-        for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
-            auto tit = lbl_map.find(inst.words[k + 1]);
-            if (tit != lbl_map.end()) cases.push_back({inst.words[k], tit->second});
+    for (const auto& [lit, lbl] : sw.decode_cases(int_type_width(sel.spv_type_id))) {
+        if (auto tit = lbl_map.find(lbl); tit != lbl_map.end()) {
+            cases.emplace_back(lit, tit->second);
         }
     }
 
@@ -286,11 +321,7 @@ void SpirvLowerer::lower_switch(
     for (size_t i = 0; i < cases.size(); ++i) {
         uint64_t lit = cases[i].first;
         uint32_t target_blk = cases[i].second;
-        SsaId cmp = is_64
-                        ? emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
-                                  {sel.scalar(), sb_.emit_const_u64(cur_blk, lit)})
-                        : emit_op(cur_blk, SsaOp::ICmpEq, ValType::Bool,
-                                  {sel.scalar(), sb_.emit_const_u32(cur_blk, static_cast<uint32_t>(lit))});
+        SsaId cmp = emit_icmp_eq_const(cur_blk, sel, lit);
         res_.ssa.blocks[cur_blk].is_conditional_branch = true;
         res_.ssa.blocks[cur_blk].branch_cond = cmp;
         res_.ssa.blocks[cur_blk].branch_target_block = static_cast<int32_t>(target_blk);
@@ -311,11 +342,11 @@ void SpirvLowerer::lower_switch(
 }
 
 bool SpirvLowerer::lower_function_call(uint32_t* io_blk_id, const SpirvInst& inst) {
-    // OpFunctionCall: [hdr, result_type, result_id, function_id, arg0, ...]
-    if (inst.words.size() < 4) return true;
-    uint32_t res_type = inst.words[1];
-    uint32_t res_id = inst.words[2];
-    uint32_t callee_id = inst.words[3];
+    spirv_parser::SpvFunctionCallView call{};
+    if (!inst.parse_as(&call)) return true;
+    uint32_t res_type = call.result_type;
+    uint32_t res_id = call.result_id;
+    uint32_t callee_id = call.function;
 
     const SpirvFunction* callee = mod_.get_function(callee_id);
     if (!callee || callee->blocks.empty() || inline_depth_ >= opts_.max_inline_depth) {
@@ -328,9 +359,9 @@ bool SpirvLowerer::lower_function_call(uint32_t* io_blk_id, const SpirvInst& ins
     // Bind callee parameters (both values and pointer arguments) in a scoped snapshot.
     auto saved_values = values_;
     auto saved_pointers = pointers_;
-    for (size_t i = 0; i < callee->params.size() && (4 + i) < inst.words.size(); ++i) {
+    for (size_t i = 0; i < callee->params.size() && i < call.argument_0.count; ++i) {
         uint32_t param_id = callee->params[i].first;
-        uint32_t arg_id = inst.words[4 + i];
+        uint32_t arg_id = call.argument_0[i];
         if (auto pit = saved_pointers.find(arg_id); pit != saved_pointers.end()) {
             pointers_[param_id] = pit->second;
         } else {
@@ -361,8 +392,22 @@ bool SpirvLowerer::lower_function_body(
     uint32_t* out_exit_blk,
     LoweredValue* out_ret_val) {
     std::unordered_map<uint32_t, const SpirvBasicBlock*> lbl_to_spv;
+    std::unordered_map<uint32_t, uint32_t> id_to_width;
+    for (const auto& [cid, c] : mod_.constants) {
+        id_to_width[cid] = int_type_width(c.type_id);
+    }
+    for (const auto& [pid, pty] : fn.params) {
+        id_to_width[pid] = int_type_width(pty);
+    }
     for (const auto& b : fn.blocks) {
         lbl_to_spv[b.label_id] = &b;
+        for (const auto& ins : b.insts) {
+            spirv_parser::DecodedSpvInst dec{};
+            if (spirv_parser::decode_spv_instruction(ins.words.data(), ins.words.size(), &dec) &&
+                dec.result_id != 0 && dec.result_type != 0) {
+                id_to_width[dec.result_id] = int_type_width(dec.result_type);
+            }
+        }
     }
 
     std::set<uint32_t> visited;
@@ -371,7 +416,7 @@ bool SpirvLowerer::lower_function_body(
         if (!visited.insert(lbl).second) return;
         auto it = lbl_to_spv.find(lbl);
         if (it == lbl_to_spv.end()) return;
-        for (uint32_t succ : block_succ_labels(*it->second)) {
+        for (uint32_t succ : block_succ_labels(*it->second, id_to_width)) {
             dfs(succ);
         }
         postorder.push_back(it->second);
@@ -395,32 +440,43 @@ bool SpirvLowerer::lower_function_body(
         auto& ssa_blk = res_.ssa.blocks[b];
         for (const auto& inst : spv_blk.insts) {
             const auto op = static_cast<SpvOp>(inst.opcode);
-            if (op == SpvOpSelectionMerge && inst.words.size() >= 2) {
-                if (auto it = local_lbl_to_blk.find(inst.words[1]); it != local_lbl_to_blk.end()) {
-                    ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
+            if (op == SpvOpSelectionMerge) {
+                spirv_parser::SpvSelectionMergeView sm{};
+                if (inst.parse_as(&sm)) {
+                    if (auto it = local_lbl_to_blk.find(sm.merge_block); it != local_lbl_to_blk.end()) {
+                        ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
+                    }
                 }
-            } else if (op == SpvOpLoopMerge && inst.words.size() >= 3) {
-                ssa_blk.is_loop_header = true;
-                if (auto it = local_lbl_to_blk.find(inst.words[1]); it != local_lbl_to_blk.end()) {
-                    ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
-                }
-                if (auto it = local_lbl_to_blk.find(inst.words[2]); it != local_lbl_to_blk.end()) {
-                    ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
+            } else if (op == SpvOpLoopMerge) {
+                spirv_parser::SpvLoopMergeView lm{};
+                if (inst.parse_as(&lm)) {
+                    ssa_blk.is_loop_header = true;
+                    if (auto it = local_lbl_to_blk.find(lm.merge_block); it != local_lbl_to_blk.end()) {
+                        ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
+                    }
+                    if (auto it = local_lbl_to_blk.find(lm.continue_target); it != local_lbl_to_blk.end()) {
+                        ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
+                    }
                 }
             }
         }
         if (spv_blk.insts.empty()) continue;
         const auto& term = spv_blk.insts.back();
         const auto top = static_cast<SpvOp>(term.opcode);
-        if (top == SpvOpBranch && term.words.size() >= 2) {
-            if (auto it = local_lbl_to_blk.find(term.words[1]); it != local_lbl_to_blk.end()) {
-                ssa_blk.is_unconditional_branch = true;
-                ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
-                res_.ssa.blocks[it->second].preds.push_back(b);
+        if (top == SpvOpBranch) {
+            spirv_parser::SpvBranchView br{};
+            if (term.parse_as(&br)) {
+                if (auto it = local_lbl_to_blk.find(br.target_label); it != local_lbl_to_blk.end()) {
+                    ssa_blk.is_unconditional_branch = true;
+                    ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
+                    res_.ssa.blocks[it->second].preds.push_back(b);
+                }
             }
-        } else if (top == SpvOpBranchConditional && term.words.size() >= 4) {
-            auto it_t = local_lbl_to_blk.find(term.words[2]);
-            auto it_f = local_lbl_to_blk.find(term.words[3]);
+        } else if (top == SpvOpBranchConditional) {
+            spirv_parser::SpvBranchConditionalView bc{};
+            if (!term.parse_as(&bc)) continue;
+            auto it_t = local_lbl_to_blk.find(bc.true_label);
+            auto it_f = local_lbl_to_blk.find(bc.false_label);
             ssa_blk.is_conditional_branch = true;
             if (it_t != local_lbl_to_blk.end()) {
                 ssa_blk.branch_target_block = static_cast<int32_t>(it_t->second);
@@ -475,25 +531,26 @@ bool SpirvLowerer::lower_function_body(
                 case SpvOpUnreachable:
                     break;
 
-                case SpvOpVariable:
-                    if (inst.words.size() >= 4) {
-                        uint32_t init_id = (inst.words.size() >= 5) ? inst.words[4] : 0u;
-                        register_local_variable(cur_b, inst.words[2], inst.words[1], init_id);
+                case SpvOpVariable: {
+                    spirv_parser::SpvVariableView var{};
+                    if (inst.parse_as(&var)) {
+                        register_local_variable(cur_b, var.result_id, var.result_type,
+                                                var.has_initializer ? var.initializer : 0u);
                     }
                     break;
+                }
 
                 case SpvOpPhi: {
-                    if (inst.words.size() < 3) break;
-                    uint32_t res_type = inst.words[1];
-                    uint32_t res_id = inst.words[2];
-                    uint32_t nlanes = flat_lane_count(res_type);
-                    ValType lane_vt = to_val_type(scalar_elem_type(res_type));
+                    spirv_parser::SpvPhiView pv{};
+                    if (!inst.parse_as(&pv)) break;
+                    uint32_t nlanes = flat_lane_count(pv.result_type);
+                    ValType lane_vt = to_val_type(scalar_elem_type(pv.result_type));
                     PendingSpvPhi p{};
                     p.blk_id = cur_b;
-                    p.result_id = res_id;
-                    p.type_id = res_type;
+                    p.result_id = pv.result_id;
+                    p.type_id = pv.result_type;
                     LoweredValue lv{};
-                    lv.spv_type_id = res_type;
+                    lv.spv_type_id = pv.result_type;
                     for (uint32_t l = 0; l < nlanes; ++l) {
                         SsaNode phi{};
                         phi.op = SsaOp::Phi;
@@ -502,10 +559,10 @@ bool SpirvLowerer::lower_function_body(
                         p.lane_phi_ids.push_back(pid);
                         lv.lanes.push_back(pid);
                     }
-                    for (size_t k = 3; k + 1 < inst.words.size(); k += 2) {
-                        p.raw_incomings.push_back({inst.words[k], inst.words[k + 1]});
+                    for (size_t k = 0; k < pv.incoming_count(); ++k) {
+                        p.raw_incomings.push_back({pv.incoming_value(k), pv.incoming_parent(k)});
                     }
-                    values_[res_id] = std::move(lv);
+                    values_[pv.result_id] = std::move(lv);
                     local_phis.push_back(std::move(p));
                     break;
                 }
@@ -513,17 +570,22 @@ bool SpirvLowerer::lower_function_body(
                 case SpvOpAccessChain:
                 case SpvOpInBoundsAccessChain:
                 case SpvOpPtrAccessChain:
-                case SpvOpInBoundsPtrAccessChain:
-                    if (inst.words.size() >= 4) {
-                        pointers_[inst.words[2]] = lower_access_chain(cur_b, inst);
+                case SpvOpInBoundsPtrAccessChain: {
+                    spirv_parser::DecodedSpvInst dec{};
+                    if (spirv_parser::decode_spv_instruction(inst.words.data(), inst.words.size(), &dec) &&
+                        dec.result_id != 0) {
+                        pointers_[dec.result_id] = lower_access_chain(cur_b, inst);
                     }
                     break;
+                }
 
-                case SpvOpLoad:
-                    if (inst.words.size() >= 4) {
-                        values_[inst.words[2]] = lower_load(cur_b, inst);
+                case SpvOpLoad: {
+                    spirv_parser::SpvLoadView ld{};
+                    if (inst.parse_as(&ld)) {
+                        values_[ld.result_id] = lower_load(cur_b, inst);
                     }
                     break;
+                }
 
                 case SpvOpStore:
                     lower_store(cur_b, inst);
@@ -534,6 +596,7 @@ bool SpirvLowerer::lower_function_body(
                     break;
 
                 case SpvOpAtomicStore:
+                case SpvOpAtomicFlagClear:
                     lower_atomic_store(cur_b, inst);
                     break;
 
@@ -550,11 +613,14 @@ bool SpirvLowerer::lower_function_body(
                 case SpvOpImageFetch:
                 case SpvOpImageGather:
                 case SpvOpImageDrefGather:
-                case SpvOpImageRead:
-                    if (inst.words.size() >= 5) {
-                        values_[inst.words[2]] = lower_image_sample(cur_b, inst);
+                case SpvOpImageRead: {
+                    spirv_parser::DecodedSpvInst dec{};
+                    if (spirv_parser::decode_spv_instruction(inst.words.data(), inst.words.size(), &dec) &&
+                        dec.result_id != 0) {
+                        values_[dec.result_id] = lower_image_sample(cur_b, inst);
                     }
                     break;
+                }
 
                 case SpvOpImageWrite:
                     lower_image_write(cur_b, inst);
@@ -578,12 +644,14 @@ bool SpirvLowerer::lower_function_body(
                     }
                     break;
 
-                case SpvOpBranchConditional:
-                    if (inst.words.size() >= 4) {
-                        LoweredValue cond = get_value(cur_b, inst.words[1]);
+                case SpvOpBranchConditional: {
+                    spirv_parser::SpvBranchConditionalView bc{};
+                    if (inst.parse_as(&bc)) {
+                        LoweredValue cond = get_value(cur_b, bc.condition);
                         res_.ssa.blocks[cur_b].branch_cond = cond.scalar();
                     }
                     break;
+                }
 
                 case SpvOpSwitch:
                     lower_switch(cur_b, inst, local_lbl_to_blk);
@@ -611,17 +679,25 @@ bool SpirvLowerer::lower_function_body(
                     }
                     break;
 
-                case SpvOpReturnValue:
+                case SpvOpReturnValue: {
                     if (is_entry_point) {
                         flush_stage_outputs(cur_b);
-                    } else if (inst.words.size() >= 2) {
-                        return_sites.push_back({cur_b, get_value(cur_b, inst.words[1])});
+                    } else {
+                        spirv_parser::SpvReturnValueView rv{};
+                        if (inst.parse_as(&rv)) {
+                            return_sites.push_back({cur_b, get_value(cur_b, rv.value)});
+                        }
                     }
                     break;
+                }
 
                 default:
                     if (is_atomic_opcode(op)) {
-                        values_[inst.words[2]] = lower_atomic(cur_b, inst);
+                        spirv_parser::DecodedSpvInst dec{};
+                        if (spirv_parser::decode_spv_instruction(inst.words.data(), inst.words.size(), &dec) &&
+                            dec.result_id != 0) {
+                            values_[dec.result_id] = lower_atomic(cur_b, inst);
+                        }
                     } else if (!lower_alu_or_misc_inst(cur_b, inst)) {
                         res_.error_message = std::string("Unsupported SPIR-V opcode ") +
                                              spirv_parser::spv_op_name(inst.opcode);

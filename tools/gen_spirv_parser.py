@@ -9,9 +9,12 @@ generates:
 
 Uses third_party/spirv-reflect/include/spirv/unified1/spirv.h enum definitions
 directly so opcode/decoration/builtin/storage-class constants are never duplicated.
+Also generates zero-allocation typed operand views directly from the grammar's
+operand specifications so consumers never index raw instruction word arrays.
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,6 +31,69 @@ TERMINATOR_OPS = {
     "OpTerminateRayKHR",
     "OpEmitMeshTasksEXT",
 }
+
+# Core SPIR-V instructions for which typed operand view structs + parsers are generated
+# directly from spirv.core.grammar.json operand definitions.
+TYPED_VIEW_OPS = [
+    "OpBranch",
+    "OpBranchConditional",
+    "OpSwitch",
+    "OpSelectionMerge",
+    "OpLoopMerge",
+    "OpReturnValue",
+    "OpVariable",
+    "OpPhi",
+    "OpAccessChain",
+    "OpInBoundsAccessChain",
+    "OpPtrAccessChain",
+    "OpInBoundsPtrAccessChain",
+    "OpArrayLength",
+    "OpLoad",
+    "OpStore",
+    "OpCopyMemory",
+    "OpFunctionCall",
+    "OpExtInst",
+    "OpAtomicLoad",
+    "OpAtomicStore",
+    "OpAtomicExchange",
+    "OpAtomicCompareExchange",
+    "OpAtomicCompareExchangeWeak",
+    "OpAtomicIIncrement",
+    "OpAtomicIDecrement",
+    "OpAtomicIAdd",
+    "OpAtomicISub",
+    "OpAtomicSMin",
+    "OpAtomicUMin",
+    "OpAtomicSMax",
+    "OpAtomicUMax",
+    "OpAtomicAnd",
+    "OpAtomicOr",
+    "OpAtomicXor",
+    "OpAtomicFlagTestAndSet",
+    "OpAtomicFlagClear",
+    "OpAtomicFMinEXT",
+    "OpAtomicFMaxEXT",
+    "OpAtomicFAddEXT",
+    "OpImageSampleImplicitLod",
+    "OpImageSampleExplicitLod",
+    "OpImageSampleDrefImplicitLod",
+    "OpImageSampleDrefExplicitLod",
+    "OpImageSampleProjImplicitLod",
+    "OpImageSampleProjExplicitLod",
+    "OpImageFetch",
+    "OpImageGather",
+    "OpImageDrefGather",
+    "OpImageRead",
+    "OpImageWrite",
+    "OpVectorShuffle",
+    "OpCompositeConstruct",
+    "OpCompositeExtract",
+    "OpCompositeInsert",
+    "OpSelect",
+    "OpBitFieldInsert",
+    "OpBitFieldSExtract",
+    "OpBitFieldUExtract",
+]
 
 
 def _collect_enum_entries(operand_kinds, kind_name):
@@ -48,6 +114,106 @@ def _collect_enum_entries(operand_kinds, kind_name):
     return out
 
 
+def _sanitize_field_name(operand: dict, fallback_idx: int) -> str:
+    kind = operand.get("kind", "")
+    if kind == "IdResultType":
+        return "result_type"
+    if kind == "IdResult":
+        return "result_id"
+    raw = operand.get("name", "")
+    if not raw:
+        raw = kind or f"operand_{fallback_idx}"
+    # Strip trailing variadic ellipses or comma-separated lists like "Operand 1, Operand 2, ..."
+    if "," in raw:
+        raw = raw.split(",")[0].strip()
+    raw = raw.replace("'", "").replace("\n", " ").strip()
+    # Convert CamelCase or spaces to snake_case
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", raw)
+    s = re.sub(r"[^a-zA-Z0-9]+", "_", s).strip("_").lower()
+    if not s or s[0].isdigit():
+        s = f"op_{s}"
+    if s in ("default", "operator", "switch", "return", "register", "signed", "unsigned"):
+        s = f"{s}_val"
+    return s
+
+
+def _build_typed_view(opname: str, ins: dict) -> list[str]:
+    """Generate a typed view struct + static parse() method from a grammar instruction entry."""
+    short = opname[2:] if opname.startswith("Op") else opname
+    struct_name = f"Spv{short}View"
+    operands = ins.get("operands", [])
+
+    fields: list[tuple[str, str, str]] = []  # (kind_tag, field_name, orig_kind)
+    used_names: set[str] = set()
+    for idx, opnd in enumerate(operands):
+        quant = opnd.get("quantifier", "")
+        fname = _sanitize_field_name(opnd, idx)
+        if fname in used_names:
+            fname = f"{fname}_{idx}"
+        used_names.add(fname)
+        if quant == "*":
+            fields.append(("span", fname, opnd.get("kind", "")))
+        elif quant == "?":
+            fields.append(("opt", fname, opnd.get("kind", "")))
+        else:
+            fields.append(("req", fname, opnd.get("kind", "")))
+
+    req_count = sum(1 for k, _, _ in fields if k == "req")
+    lines = [f"struct {struct_name} {{"]
+    for k, fname, _ in fields:
+        if k == "req":
+            lines.append(f"    uint32_t {fname} = 0;")
+        elif k == "opt":
+            lines.append(f"    bool has_{fname} = false;")
+            lines.append(f"    uint32_t {fname} = 0;")
+        else:
+            lines.append(f"    SpvWordSpan {fname}{{}};")
+
+    lines.append("")
+    lines.append(f"    static bool parse(const uint32_t* words, size_t word_count, {struct_name}* out) {{")
+    lines.append(f"        if (!words || !out || word_count < {1 + req_count}u) return false;")
+    lines.append(f"        *out = {struct_name}{{}};")
+    lines.append("        size_t idx = 1u;")
+    for k, fname, _ in fields:
+        if k == "req":
+            lines.append(f"        out->{fname} = words[idx++];")
+        elif k == "opt":
+            lines.append(f"        if (idx < word_count) {{ out->has_{fname} = true; out->{fname} = words[idx++]; }}")
+        else:
+            lines.append(f"        if (idx < word_count) {{ out->{fname} = {{words + idx, word_count - idx}}; idx = word_count; }}")
+    lines.append("        return true;")
+    lines.append("    }")
+
+    # Special helper for OpSwitch: decode (literal, label) pairs using selector bit width.
+    if opname == "OpSwitch":
+        lines.append("")
+        lines.append("    std::vector<std::pair<uint64_t, uint32_t>> decode_cases(uint32_t selector_width_bits) const {")
+        lines.append("        std::vector<std::pair<uint64_t, uint32_t>> out;")
+        lines.append("        if (selector_width_bits == 64u) {")
+        lines.append("            for (size_t k = 0; k + 2u < target.count; k += 3u) {")
+        lines.append("                uint64_t lit = uint64_t(target[k]) | (uint64_t(target[k + 1u]) << 32);")
+        lines.append("                out.emplace_back(lit, target[k + 2u]);")
+        lines.append("            }")
+        lines.append("        } else {")
+        lines.append("            for (size_t k = 0; k + 1u < target.count; k += 2u) {")
+        lines.append("                out.emplace_back(uint64_t(target[k]), target[k + 1u]);")
+        lines.append("            }")
+        lines.append("        }")
+        lines.append("        return out;")
+        lines.append("    }")
+
+    # Special helper for OpPhi: typed (variable, parent) pair accessors.
+    if opname == "OpPhi":
+        lines.append("")
+        lines.append("    size_t incoming_count() const { return variable.count / 2u; }")
+        lines.append("    uint32_t incoming_value(size_t i) const { return variable[2u * i]; }")
+        lines.append("    uint32_t incoming_parent(size_t i) const { return variable[2u * i + 1u]; }")
+
+    lines.append("};")
+    lines.append("")
+    return lines
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     grammar_path = repo_root / "specs" / "spirv" / "spirv.core.grammar.json"
@@ -64,10 +230,12 @@ def main() -> int:
     instructions = grammar["instructions"]
     operand_kinds = grammar["operand_kinds"]
 
-    # Deduplicate by opcode (keep first canonical entry)
+    # Deduplicate by opcode (keep first canonical entry) and index by opname
     by_opcode = {}
+    by_opname = {}
     for ins in instructions:
         op = int(ins["opcode"])
+        by_opname.setdefault(ins["opname"], ins)
         if op in by_opcode:
             continue
         ops = ins.get("operands", [])
@@ -96,8 +264,20 @@ def main() -> int:
         "#include <spirv/unified1/spirv.h>",
         "#include <cstddef>",
         "#include <cstdint>",
+        "#include <utility>",
+        "#include <vector>",
         "",
         "namespace valhall::spirv_parser {",
+        "",
+        "struct SpvWordSpan {",
+        "    const uint32_t* data = nullptr;",
+        "    size_t count = 0;",
+        "",
+        "    uint32_t operator[](size_t i) const { return data[i]; }",
+        "    bool empty() const { return count == 0; }",
+        "    const uint32_t* begin() const { return data; }",
+        "    const uint32_t* end() const { return data + count; }",
+        "};",
         "",
         "struct SpvOpInfo {",
         "    uint16_t opcode;",
@@ -115,6 +295,14 @@ def main() -> int:
         "    uint32_t result_id = 0;",
         "    uint16_t operand_start = 1;",
         "    const uint32_t* words = nullptr;",
+        "",
+        "    size_t operand_count() const {",
+        "        return (word_count > operand_start) ? static_cast<size_t>(word_count - operand_start) : 0u;",
+        "    }",
+        "    uint32_t operand(size_t i) const { return words[operand_start + i]; }",
+        "    SpvWordSpan operands() const {",
+        "        return {words ? words + operand_start : nullptr, operand_count()};",
+        "    }",
         "};",
         "",
         "const SpvOpInfo* lookup_spv_op_info(uint16_t opcode);",
@@ -127,9 +315,21 @@ def main() -> int:
         "/// Decode a single SPIR-V instruction header and populate result_type / result_id / operand_start.",
         "bool decode_spv_instruction(const uint32_t* words, size_t remaining_words, DecodedSpvInst* out);",
         "",
+    ]
+
+    generated_views = 0
+    for opname in TYPED_VIEW_OPS:
+        ins = by_opname.get(opname)
+        if ins is None:
+            print(f"Warning: {opname} not found in grammar", file=sys.stderr)
+            continue
+        h_lines.extend(_build_typed_view(opname, ins))
+        generated_views += 1
+
+    h_lines.extend([
         "} // namespace valhall::spirv_parser",
         "",
-    ]
+    ])
 
     cpp_lines = [
         "// AUTO-GENERATED BY tools/gen_spirv_parser.py -- DO NOT EDIT MANUALLY",
@@ -212,7 +412,7 @@ def main() -> int:
 
     (out_dir / "valhall_spirv_parser_generated.h").write_text("\n".join(h_lines), encoding="utf-8")
     (out_dir / "valhall_spirv_parser_generated.cpp").write_text("\n".join(cpp_lines), encoding="utf-8")
-    print(f"[OK] Generated valhall_spirv_parser_generated.{{h,cpp}} ({len(sorted_ops)} opcodes)")
+    print(f"[OK] Generated valhall_spirv_parser_generated.{{h,cpp}} ({len(sorted_ops)} opcodes, {generated_views} typed views)")
     return 0
 
 

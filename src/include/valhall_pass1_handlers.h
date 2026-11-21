@@ -117,6 +117,9 @@ SsaId atomic_cmpxchg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& 
 SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule);
 SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, bool is_flat);
 SsaId load_frag_var_idx(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, uint32_t var_loc, bool is_flat);
+/// Lower Valhall `LD_VAR_SPECIAL` (special fragment shader built-in varyings).
+/// Decodes the `varying_name` field via `VaryingNameM` (point=0, bary=1, frag_w=2, frag_z=3)
+/// into `LoadBuiltinInput` for `PointCoord`, `BaryCoordKHR`, or `FragCoord.{w,z}`.
 SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule);
 SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId uv, bool is_gather, SsaId tok);
 

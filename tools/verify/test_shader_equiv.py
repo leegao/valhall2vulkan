@@ -459,8 +459,8 @@ class TestShaderEquivVerifier(unittest.TestCase):
             "mbs2_context": {
                 "fcsts": [],
                 "rlocs": [
-                    {"symbol": "gl_mali_ViewportTransform", "fau_offset": 0, "word_idx": 0, "uni_offset": 0, "byte_size": 12},
-                    {"symbol": "gl_mali_ViewportTransform", "fau_offset": 16, "word_idx": 4, "uni_offset": 16, "byte_size": 12},
+                    {"symbol": "gl_mali_ViewportTransform", "reg_offset": 0, "word_idx": 0, "uni_offset": 0, "size": 12},
+                    {"symbol": "gl_mali_ViewportTransform", "reg_offset": 16, "word_idx": 4, "uni_offset": 16, "size": 12},
                 ],
                 "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {},
             },
@@ -469,6 +469,185 @@ class TestShaderEquivVerifier(unittest.TestCase):
         }
         res = verify_equivalence_bundle(bundle, timeout_ms=2000)
         self.assertEqual(res.status, "UNSAT")
+
+
+    def test_smod_and_all_int_bit_fp_eval_paths(self) -> None:
+        """Exercise every integer, bitwise, shift, div/rem/SMod, 64-bit, cmp, conv, and FP evaluator path."""
+        import z3
+        from tools.verify.shader_equiv_verifier import SharedShaderEnv, DagSsaZ3Evaluator, bv32
+
+        # Verify SMod exact SPIR-V §3.3.13 semantics across all 4 sign quadrants.
+        smod_cases = [
+            (7, 3, 1),
+            (-7, 3, 2),
+            (7, -3, -2),
+            (-7, -3, -1),
+            (-6, 3, 0),
+        ]
+        for a_val, b_val, expected in smod_cases:
+            ssa = {
+                "blocks": [{
+                    "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6],
+                    "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                    "is_end": True, "is_discard": False, "is_loop_header": False,
+                    "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+                }],
+                "nodes": [
+                    {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                    {"id": 2, "op": "ConstS32", "type": "S32", "blk": 0, "args": [], "imm_u32": a_val & 0xFFFFFFFF},
+                    {"id": 3, "op": "ConstS32", "type": "S32", "blk": 0, "args": [], "imm_u32": b_val & 0xFFFFFFFF},
+                    {"id": 4, "op": "SMod", "type": "S32", "blk": 0, "args": [2, 3]},
+                    {"id": 5, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                    {"id": 6, "op": "PsbStore", "type": "Token", "blk": 0, "args": [5, 4, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+                ],
+            }
+            env = SharedShaderEnv({"mbs2_context": {}})
+            st = DagSsaZ3Evaluator(ssa, env, is_valhall_side=False, fp_mode="exact").evaluate()
+            _, val_expr = st.const_stores[("ssbo:0:0", 0)]
+            got = z3.simplify(val_expr)
+            self.assertEqual(got.as_long(), expected & 0xFFFFFFFF, f"SMod({a_val}, {b_val}) expected {expected}")
+
+        # Exercise every 32-bit, 64-bit, comparison, conversion, and FP op in a single self-equivalence check.
+        nodes = [
+            {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+            {"id": 2, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 28},
+            {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 7},
+            {"id": 4, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 3},
+            {"id": 5, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+            {"id": 6, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x40000000},
+            {"id": 7, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 0x100},
+        ]
+        nid = 8
+        def add_op(op, vt, args, **kw):
+            nonlocal nid
+            n = {"id": nid, "op": op, "type": vt, "blk": 0, "args": args}
+            n.update(kw)
+            nodes.append(n)
+            nid += 1
+            return nid - 1
+
+        # Unary & binary 32-bit integer / bit ops
+        for op in ("BitNot", "SNeg", "SAbs", "Clz", "BitCount", "BitReverse"):
+            add_op(op, "U32", [2])
+        for op in ("IAdd", "ISub", "IMul", "BitAnd", "BitOr", "BitXor", "Shl", "ShrU", "ShrS",
+                   "RotL", "RotR", "UDiv", "SDiv", "UMod", "SRem", "SMod", "IDot4S", "IDot4SU", "IDot4U"):
+            add_op(op, "U32", [2, 3])
+        add_op("BfeU", "U32", [2, 4, 3])
+        add_op("BfeS", "U32", [2, 4, 3])
+        add_op("Bfi", "U32", [2, 3, 4, 3])
+
+        # 64-bit integer ops
+        u64_a = add_op("UConvert32To64", "U64", [2])
+        add_op("SConvert32To64", "U64", [2])
+        add_op("UConvert64To32", "U32", [u64_a])
+        add_op("BitNot64", "U64", [u64_a])
+        for op in ("IAdd64", "ISub64", "IMul64", "BitAnd64", "BitOr64", "BitXor64", "Shl64", "ShrU64", "ShrS64"):
+            add_op(op, "U64", [u64_a, 7])
+
+        # Comparisons, logical, conversions, FP ops
+        for op in ("ICmpEq", "ICmpNe", "ICmpSLt", "ICmpSLe", "ICmpSGt", "ICmpSGe", "ICmpULt", "ICmpULe", "ICmpUGt", "ICmpUGe"):
+            add_op(op, "Bool", [2, 3])
+        for op in ("FCmpOrdEq", "FCmpOrdGt", "FCmpOrdGe", "FCmpOrdLt", "FCmpOrdLe", "FCmpOrdNe", "FCmpUnordNe", "FCmpTotal"):
+            add_op(op, "Bool", [5, 6])
+        for op in ("FAbs", "FNeg", "Floor", "Ceil", "Trunc", "RoundEven", "Sqrt", "Sin", "Cos", "Exp2", "Log2", "DPdx", "DPdy", "Fwidth"):
+            add_op(op, "F32", [5])
+        for op in ("FAdd", "FSub", "FMul", "FDiv", "FMin", "FMax", "Pow", "Atan2"):
+            add_op(op, "F32", [5, 6])
+        add_op("FClamp", "F32", [5, 5, 6])
+        add_op("Fma", "F32", [5, 5, 6])
+        add_op("IsNan", "Bool", [5])
+        add_op("IsInf", "Bool", [5])
+        for op in ("ConvertFToS", "ConvertFToU", "ConvertSToF", "ConvertUToF"):
+            add_op(op, "U32", [5])
+
+        last_val = add_op("SMod", "S32", [2, 3])
+        base = add_op("LoadSidebandU64", "U64", [], imm_u32=16, aux_str="ssbo:0:0")
+        add_op("PsbStore", "Token", [base, last_val, 1], imm_u32=4, aux_str="ssbo:0:0")
+
+        ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [n["id"] for n in nodes],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": nodes,
+        }
+        bundle = {
+            "spv_path": "synthetic_all_ops.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [], "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": ssa, "valhall_ssa": ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+    def test_nested_additive_resolve_addr_and_pilot_value_kinds(self) -> None:
+        """Dynamic SignExt*stride + const_field_off must resolve to ssbo:0:2 (never SKIP outputs=0)."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:2"},
+                {"id": 3, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 28},
+                {"id": 4, "op": "SConvert32To64", "type": "U64", "blk": 0, "args": [3]},
+                {"id": 5, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 80},
+                {"id": 6, "op": "IMul64", "type": "U64", "blk": 0, "args": [4, 5]},
+                {"id": 7, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 8},
+                {"id": 8, "op": "IAdd64", "type": "U64", "blk": 0, "args": [2, 6]},
+                {"id": 9, "op": "IAdd64", "type": "U64", "blk": 0, "args": [8, 7]},
+                {"id": 10, "op": "PsbStore", "type": "Token", "blk": 0, "args": [9, 3, 1], "imm_u32": 4, "aux_str": "ssbo:0:2"},
+            ],
+        }
+        # Valhall side loads ssbo:0:2 base+8 directly from pilot_fau (pointer_offset=8) and adds idx*80
+        valhall_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadFau", "type": "U32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 3, "op": "LoadFau", "type": "U32", "blk": 0, "args": [], "imm_u32": 1},
+                {"id": 4, "op": "Pack64", "type": "U64", "blk": 0, "args": [2, 3]},
+                {"id": 5, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 28},
+                {"id": 6, "op": "SConvert32To64", "type": "U64", "blk": 0, "args": [5]},
+                {"id": 7, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 80},
+                {"id": 8, "op": "IMul64", "type": "U64", "blk": 0, "args": [6, 7]},
+                {"id": 9, "op": "IAdd64", "type": "U64", "blk": 0, "args": [4, 8]},
+                {"id": 10, "op": "PsbStore", "type": "Token", "blk": 0, "args": [9, 5, 1], "imm_u32": 4, "orig_pc": 64},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_nested_addr.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {
+                "fcsts": [], "rlocs": [],
+                "pilot_fau": [
+                    {
+                        "fau_offset": 0, "word_idx": 0, "byte_size": 8, "value_kind": "buffer_addr",
+                        "symbol": "diag", "expression": "&diag+0x8", "resolved": True, "kind": "ssbo",
+                        "binding": 2, "is_loaded_value": False, "has_byte_offset": False, "byte_offset": 0,
+                        "is_derived": False, "has_pointer_offset": True, "pointer_offset": 8,
+                        "has_const_value": False, "const_value": 0, "key": "ssbo:0:2",
+                    },
+                ],
+                "sinp": [], "sout": [], "pc_disasm": {"64": "STORE.i32"},
+            },
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertIn("ssbo:0:2[probe_off]", res.checked_outputs)
 
 
 if __name__ == "__main__":

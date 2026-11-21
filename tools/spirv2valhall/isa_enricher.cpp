@@ -309,7 +309,16 @@ PilotAnalysisResult analyze_pilot_shaders(
                 entry.symbol_name = ptr->symbol_name;
                 entry.srt_rack = ptr->rack;
                 entry.desc_index = ptr->desc_idx;
+                if (ptr->kind == dataflow::PointerVal::Kind::BufferAddr) {
+                    entry.value_kind = PilotValueKind::BufferAddr;
+                } else if (ptr->kind == dataflow::PointerVal::Kind::DescriptorAddr) {
+                    entry.value_kind = PilotValueKind::DescriptorAddr;
+                }
+                entry.has_pointer_offset = ptr->offset_known;
+                entry.pointer_offset = ptr->byte_offset;
+                entry.is_derived = ptr->derived;
             } else if (const auto* sym = pw.value.inner.get_if<dataflow::SymbolValueDomain>()) {
+                entry.value_kind = PilotValueKind::SymbolValue;
                 entry.symbol_name = sym->symbol_name;
                 entry.srt_rack = sym->rack;
                 entry.desc_index = sym->desc_idx;
@@ -317,11 +326,21 @@ PilotAnalysisResult analyze_pilot_shaders(
                 entry.has_byte_offset = sym->offset_known;
                 entry.byte_offset = sym->byte_offset;
                 entry.is_derived = sym->derived;
+            } else if (const auto* ci = pw.value.inner.get_if<dataflow::ConstIntDomain>();
+                       ci && ci->is_known()) {
+                entry.value_kind = PilotValueKind::ConstInt;
+                entry.has_const_value = true;
+                entry.const_value = ci->value;
             } else if (const auto* atom = pw.value.inner.get_if<dataflow::ShaderAtomDomain>();
                        atom && atom->is_known()) {
                 entry.symbol_name = atom->value.symbol_name;
                 entry.srt_rack = atom->value.rack;
                 entry.desc_index = atom->value.desc_idx;
+                if (atom->value.kind == dataflow::ShaderAtomDomain::Kind::BufferSize) {
+                    entry.value_kind = PilotValueKind::BufferSize;
+                } else if (atom->value.kind == dataflow::ShaderAtomDomain::Kind::AbiPreload) {
+                    entry.value_kind = PilotValueKind::AbiPreload;
+                }
             }
             res.fau_map[entry.fau_offset] = std::move(entry);
         }

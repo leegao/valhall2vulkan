@@ -305,8 +305,47 @@ void test_v24_2_spec_ops() {
 
 } // namespace
 
+void test_typed_parser_views() {
+    // OpSwitch with 64-bit selector: [hdr, sel, default_lbl, lo0, hi0, tgt0]
+    std::vector<uint32_t> sw64 = {
+        (6u << 16) | uint32_t(SpvOpSwitch),
+        10u, 20u,
+        0x11223344u, 0x55667788u, 30u,
+    };
+    spirv_parser::SpvSwitchView sw{};
+    assert(spirv_parser::SpvSwitchView::parse(sw64.data(), sw64.size(), &sw));
+    assert(sw.selector == 10u && sw.default_val == 20u);
+    auto cases64 = sw.decode_cases(64u);
+    assert(cases64.size() == 1u);
+    assert(cases64[0].first == 0x5566778811223344ULL);
+    assert(cases64[0].second == 30u);
+
+    // OpPtrAccessChain: [hdr, res_type, res_id, base, element, idx0, idx1]
+    std::vector<uint32_t> pac = {
+        (7u << 16) | uint32_t(SpvOpPtrAccessChain),
+        100u, 101u, 102u, 103u, 104u, 105u,
+    };
+    spirv_parser::SpvPtrAccessChainView pv{};
+    assert(spirv_parser::SpvPtrAccessChainView::parse(pac.data(), pac.size(), &pv));
+    assert(pv.result_type == 100u && pv.result_id == 101u);
+    assert(pv.base == 102u && pv.element == 103u);
+    assert(pv.indexes.count == 2u && pv.indexes[0] == 104u && pv.indexes[1] == 105u);
+
+    // OpAtomicCompareExchange: [hdr, res_type, res_id, ptr, mem, eq, uneq, val, cmp]
+    std::vector<uint32_t> acx = {
+        (9u << 16) | uint32_t(SpvOpAtomicCompareExchange),
+        1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u,
+    };
+    spirv_parser::SpvAtomicCompareExchangeView av{};
+    assert(spirv_parser::SpvAtomicCompareExchangeView::parse(acx.data(), acx.size(), &av));
+    assert(av.pointer == 3u && av.value == 7u && av.comparator == 8u);
+
+    std::cout << "[PASS] test_typed_parser_views\n";
+}
+
 int main() {
     test_generated_parser_tables();
+    test_typed_parser_views();
     test_compute_lowering();
     test_branching_frag_mem2reg();
     test_switch_desugaring();
