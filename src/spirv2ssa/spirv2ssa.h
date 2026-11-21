@@ -39,6 +39,11 @@ struct Spirv2SsaOptions {
     bool tolerant = true;
     /// Maximum function call inlining depth.
     uint32_t max_inline_depth = 8;
+    /// Run verification-oriented SSA optimization pipeline after lowering.
+    bool run_ssa_opt = false;
+    bool ssa_opt_fp_fast_math = false;
+    bool ssa_opt_fp_tile_rewrites = true;
+    bool ssa_opt_fp_cpp_rewrites = true;
 };
 
 struct Spirv2SsaResult {

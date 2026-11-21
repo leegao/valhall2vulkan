@@ -34,14 +34,25 @@ struct TlsAddrInfo {
 TlsAddrInfo classify_tls_addr(const ValhallSsaModule& mod,
                               SsaId addr_id,
                               uint32_t tls_member,
+                              const PointerAnalysisResult* pa = nullptr,
                               uint32_t depth = 0) {
     TlsAddrInfo res;
     if (addr_id == kInvalidSsa || addr_id >= mod.nodes.size() || depth > 24) {
         return res;
     }
+    if (depth == 0 && pa != nullptr) {
+        const TrackedVal tv = pa->val(addr_id);
+        if (const auto* pv = tv.inner.get_if<PointerDomain>();
+            pv && pv->is_valid_pointer() && pv->kind == PointerVal::Kind::TlsPtr) {
+            res.is_tls = true;
+            res.offset_known = pv->offset_known;
+            res.byte_offset = pv->byte_offset;
+            return res;
+        }
+    }
     const auto& n = mod.get(addr_id);
     if (n.op == SsaOp::Copy && n.args.size() == 1) {
-        return classify_tls_addr(mod, n.args[0], tls_member, depth + 1);
+        return classify_tls_addr(mod, n.args[0], tls_member, nullptr, depth + 1);
     }
     if (n.op == SsaOp::LoadSidebandU64) {
         if (n.imm_u32 == tls_member || n.aux_str == "tls_private") {
@@ -52,7 +63,7 @@ TlsAddrInfo classify_tls_addr(const ValhallSsaModule& mod,
         return res;
     }
     if ((n.op == SsaOp::IAdd64 || n.op == SsaOp::ISub64) && n.args.size() == 2) {
-        TlsAddrInfo lhs = classify_tls_addr(mod, n.args[0], tls_member, depth + 1);
+        TlsAddrInfo lhs = classify_tls_addr(mod, n.args[0], tls_member, nullptr, depth + 1);
         uint64_t rc = 0;
         if (lhs.is_tls) {
             if (lhs.offset_known && try_get_const_u64(mod, n.args[1], &rc)) {
@@ -68,7 +79,7 @@ TlsAddrInfo classify_tls_addr(const ValhallSsaModule& mod,
             return res;
         }
         if (n.op == SsaOp::IAdd64) {
-            TlsAddrInfo rhs = classify_tls_addr(mod, n.args[1], tls_member, depth + 1);
+            TlsAddrInfo rhs = classify_tls_addr(mod, n.args[1], tls_member, nullptr, depth + 1);
             uint64_t lc = 0;
             if (rhs.is_tls) {
                 if (rhs.offset_known && try_get_const_u64(mod, n.args[0], &lc)) {
@@ -333,44 +344,47 @@ std::string format_sym_slot_tag(const std::string& buf_key, uint32_t stride, int
 
 }  // namespace
 
-SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOptions& opts) {
-    SsaPassStats stats;
-    if (mod.blocks.empty()) return stats;
+namespace {
 
-    // Discover all TLS accesses and detect whether any dynamic/unknown-offset
-    // TLS access exists (which conservatively blocks promotion of aliased slots).
+struct TlsSlotAccess {
+    uint32_t block_id = 0;
+    SsaId node_id = kInvalidSsa;
+    bool is_store = false;
+    int64_t offset = 0;
+    uint32_t elem_bytes = 4;
+    ValType val_type = ValType::U32;
+};
+
+struct TlsDiscoveryResult {
     bool has_unknown_tls_access = false;
-    struct SlotAccess {
-        uint32_t block_id = 0;
-        SsaId node_id = kInvalidSsa;
-        bool is_store = false;
-        int64_t offset = 0;
-        uint32_t elem_bytes = 4;
-        ValType val_type = ValType::U32;
-    };
     std::map<int64_t, uint32_t> slot_widths;
     std::set<int64_t> poisoned_slots;
-    std::vector<SlotAccess> accesses;
+    std::vector<TlsSlotAccess> accesses;
+};
 
+TlsDiscoveryResult discover_tls_accesses(const ValhallSsaModule& mod,
+                                         const PointerAnalysisResult& pa,
+                                         uint32_t tls_member) {
+    TlsDiscoveryResult disc;
     for (size_t b = 0; b < mod.blocks.size(); ++b) {
         for (SsaId nid : mod.blocks[b].nodes) {
             const auto& n = mod.get(nid);
             if (n.op != SsaOp::PsbLoad && n.op != SsaOp::PsbStore) continue;
             if (n.args.empty()) continue;
-            TlsAddrInfo info = classify_tls_addr(mod, n.args[0], opts.tls_sideband_member);
+            TlsAddrInfo info = classify_tls_addr(mod, n.args[0], tls_member, &pa);
             if (!info.is_tls) continue;
             if (!info.offset_known || info.byte_offset < 0) {
-                has_unknown_tls_access = true;
+                disc.has_unknown_tls_access = true;
                 continue;
             }
             uint32_t eb = psb_elem_bytes(n);
-            auto it = slot_widths.find(info.byte_offset);
-            if (it == slot_widths.end()) {
-                slot_widths[info.byte_offset] = eb;
+            auto it = disc.slot_widths.find(info.byte_offset);
+            if (it == disc.slot_widths.end()) {
+                disc.slot_widths[info.byte_offset] = eb;
             } else if (it->second != eb) {
-                poisoned_slots.insert(info.byte_offset);
+                disc.poisoned_slots.insert(info.byte_offset);
             }
-            SlotAccess acc;
+            TlsSlotAccess acc;
             acc.block_id = static_cast<uint32_t>(b);
             acc.node_id = nid;
             acc.is_store = (n.op == SsaOp::PsbStore);
@@ -381,67 +395,72 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
             } else {
                 acc.val_type = (eb == 8) ? ValType::U64 : ValType::U32;
             }
-            accesses.push_back(acc);
+            disc.accesses.push_back(acc);
         }
     }
+    return disc;
+}
 
-    if (has_unknown_tls_access || accesses.empty()) {
-        return stats;
+std::set<int64_t> select_promotable_tls_slots(TlsDiscoveryResult& disc) {
+    std::set<int64_t> promotable;
+    if (disc.has_unknown_tls_access || disc.accesses.empty()) {
+        return promotable;
     }
-
-    // Check for overlapping slots (e.g. an 8-byte access at +0 overlapping a 4-byte access at +4).
-    for (const auto& [off_a, w_a] : slot_widths) {
-        for (const auto& [off_b, w_b] : slot_widths) {
+    for (const auto& [off_a, w_a] : disc.slot_widths) {
+        for (const auto& [off_b, w_b] : disc.slot_widths) {
             if (off_a == off_b) continue;
             if (off_a < off_b + static_cast<int64_t>(w_b) &&
                 off_b < off_a + static_cast<int64_t>(w_a)) {
-                poisoned_slots.insert(off_a);
-                poisoned_slots.insert(off_b);
+                disc.poisoned_slots.insert(off_a);
+                disc.poisoned_slots.insert(off_b);
             }
         }
     }
-
-    // Identify promotable slots (must have at least one store and no poison).
-    std::set<int64_t> promotable;
-    for (const auto& acc : accesses) {
-        if (acc.is_store && !poisoned_slots.count(acc.offset)) {
+    for (const auto& acc : disc.accesses) {
+        if (acc.is_store && !disc.poisoned_slots.count(acc.offset)) {
             promotable.insert(acc.offset);
         }
     }
-    if (promotable.empty()) return stats;
+    return promotable;
+}
 
-    // Map each PsbLoad -> its TupleExtract users (elem 0 = value, elem 1 = token).
+struct BraunPromoteResult {
+    std::vector<std::pair<SsaId, SsaId>> replacements;
+    std::vector<SsaId> promoted_loads;
+    std::vector<SsaId> promoted_stores;
     std::unordered_map<SsaId, std::vector<SsaId>> load_val_extracts;
     std::unordered_map<SsaId, std::vector<SsaId>> load_tok_extracts;
+};
+
+BraunPromoteResult promote_tls_slots_braun(ValhallSsaModule& mod,
+                                           const DominatorTree& dt,
+                                           const TlsDiscoveryResult& disc,
+                                           const std::set<int64_t>& promotable) {
+    BraunPromoteResult prom;
     for (const auto& blk : mod.blocks) {
         for (SsaId nid : blk.nodes) {
             const auto& n = mod.get(nid);
             if (n.op == SsaOp::TupleExtract && !n.args.empty()) {
                 SsaId base = n.args[0];
                 if (base != kInvalidSsa && mod.get(base).op == SsaOp::PsbLoad) {
-                    if (n.imm_u32 == 0) load_val_extracts[base].push_back(nid);
-                    else if (n.imm_u32 == 1) load_tok_extracts[base].push_back(nid);
+                    if (n.imm_u32 == 0) prom.load_val_extracts[base].push_back(nid);
+                    else if (n.imm_u32 == 1) prom.load_tok_extracts[base].push_back(nid);
                 }
             }
         }
     }
 
-    DominatorTree dt = build_dominator_tree(mod);
     const size_t num_blocks = mod.blocks.size();
-
-    // Braun-style SSA construction per promotable TLS slot.
-    // current_def[slot][block] = reaching SsaId at end of block.
     std::map<int64_t, std::vector<SsaId>> current_def;
     std::map<int64_t, ValType> slot_type;
     for (int64_t off : promotable) {
         current_def[off].assign(num_blocks, kInvalidSsa);
-        slot_type[off] = (slot_widths[off] == 8) ? ValType::U64 : ValType::U32;
+        slot_type[off] = (disc.slot_widths.at(off) == 8) ? ValType::U64 : ValType::U32;
     }
 
-    // Record per-block final store for each slot first, and collect loads to resolve.
     std::unordered_map<SsaId, int64_t> store_slot;
     std::unordered_map<SsaId, int64_t> load_slot;
-    for (const auto& acc : accesses) {
+    for (const auto& acc : disc.accesses) {
         if (!promotable.count(acc.offset)) continue;
         if (acc.is_store) {
             store_slot[acc.node_id] = acc.offset;
@@ -451,7 +470,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
         }
     }
 
-    // Build reachable predecessor table.
     std::vector<std::vector<uint32_t>> preds(num_blocks);
     for (uint32_t b : dt.rpo_order) {
         for (uint32_t s : get_block_succs(mod.blocks[b])) {
@@ -461,15 +479,12 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
         }
     }
 
-    // Recursive Braun readVariableRecursive(slot, block) with cycle-breaking Phis.
-    std::map<std::pair<int64_t, uint32_t>, SsaId> created_phis;
     std::function<SsaId(int64_t, uint32_t)> read_var = [&](int64_t off, uint32_t b) -> SsaId {
         if (current_def[off][b] != kInvalidSsa) {
             return current_def[off][b];
         }
         const auto& ps = preds[b];
         if (ps.empty()) {
-            // Entry block with no prior store: synthesize a zero constant of the slot type.
             SsaNode z{};
             ValType vt = slot_type[off];
             z.type = vt;
@@ -496,7 +511,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
             current_def[off][b] = v;
             return v;
         }
-        // Multiple predecessors: insert a Phi first to break cycles in loops.
         SsaNode phi{};
         phi.op = SsaOp::Phi;
         phi.type = slot_type[off];
@@ -504,7 +518,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
         SsaId pid = mod.add_node(std::move(phi));
         mod.blocks[b].phis.push_back(pid);
         current_def[off][b] = pid;
-        created_phis[{off, b}] = pid;
 
         std::vector<PhiIncoming> incs;
         incs.reserve(ps.size());
@@ -515,13 +528,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
         return pid;
     };
 
-    // Walk blocks in RPO order, tracking intra-block definitions and resolving loads.
-    std::vector<std::pair<SsaId, SsaId>> replacements;
-    std::vector<SsaId> promoted_loads;
-    std::vector<SsaId> promoted_stores;
-
-    // First pass in RPO: populate local end-of-block definitions for blocks with stores
-    // so back-edges in loops see the store value rather than recursing infinitely.
     for (uint32_t b : dt.rpo_order) {
         for (SsaId nid : mod.blocks[b].nodes) {
             auto sit = store_slot.find(nid);
@@ -534,7 +540,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
         }
     }
 
-    // Second pass in RPO: resolve every load using intra-block last-store or predecessor lookup.
     for (uint32_t b : dt.rpo_order) {
         std::map<int64_t, SsaId> local_def;
         for (SsaId nid : mod.blocks[b].nodes) {
@@ -543,10 +548,9 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
                 const auto& sn = mod.get(nid);
                 if (sn.args.size() >= 2 && sn.args[1] != kInvalidSsa) {
                     local_def[sit->second] = sn.args[1];
-                    promoted_stores.push_back(nid);
-                    // Bypass store token chain: store result -> input token (args[2]).
+                    prom.promoted_stores.push_back(nid);
                     if (sn.args.size() >= 3 && sn.args[2] != kInvalidSsa) {
-                        replacements.emplace_back(nid, sn.args[2]);
+                        prom.replacements.emplace_back(nid, sn.args[2]);
                     }
                 }
                 continue;
@@ -560,8 +564,6 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
                 if (ldit != local_def.end()) {
                     val = ldit->second;
                 } else {
-                    // Save & temporarily clear current_def[off][b] if this block also
-                    // stores to `off` *later* in the same block!
                     SsaId saved = current_def[off][b];
                     current_def[off][b] = kInvalidSsa;
                     val = read_var(off, b);
@@ -571,61 +573,86 @@ SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOpti
                     local_def[off] = val;
                 }
 
-                // Rewrite TupleExtract(load, 0) -> val, and TupleExtract(load, 1) -> input token.
                 const auto& ln = mod.get(nid);
-                auto vit = load_val_extracts.find(nid);
-                if (vit != load_val_extracts.end()) {
+                auto vit = prom.load_val_extracts.find(nid);
+                if (vit != prom.load_val_extracts.end()) {
                     for (SsaId ex_id : vit->second) {
-                        replacements.emplace_back(ex_id, val);
+                        prom.replacements.emplace_back(ex_id, val);
                     }
                 } else {
-                    // Direct use of PsbLoad value (non-tuple form).
-                    replacements.emplace_back(nid, val);
+                    prom.replacements.emplace_back(nid, val);
                 }
-                auto tit = load_tok_extracts.find(nid);
-                if (tit != load_tok_extracts.end() && ln.args.size() >= 2 && ln.args[1] != kInvalidSsa) {
+                auto tit = prom.load_tok_extracts.find(nid);
+                if (tit != prom.load_tok_extracts.end() && ln.args.size() >= 2 && ln.args[1] != kInvalidSsa) {
                     for (SsaId ex_id : tit->second) {
-                        replacements.emplace_back(ex_id, ln.args[1]);
+                        prom.replacements.emplace_back(ex_id, ln.args[1]);
                     }
                 }
-                promoted_loads.push_back(nid);
+                prom.promoted_loads.push_back(nid);
             }
         }
     }
+    return prom;
+}
 
-    if (promoted_loads.empty() && promoted_stores.empty()) {
-        return stats;
+void rewrite_and_erase_promoted_tls_ops(ValhallSsaModule& mod,
+                                        const BraunPromoteResult& prom,
+                                        const SpillMem2RegOptions& opts,
+                                        SsaPassStats& stats) {
+    if (prom.promoted_loads.empty() && prom.promoted_stores.empty()) {
+        return;
     }
-
     std::vector<SsaId> remap(mod.nodes.size(), kInvalidSsa);
     for (size_t i = 0; i < remap.size(); ++i) remap[i] = static_cast<SsaId>(i);
-    for (const auto& [old_id, new_id] : replacements) {
+    for (const auto& [old_id, new_id] : prom.replacements) {
         if (old_id > 0 && old_id < remap.size() && new_id > 0 && new_id < remap.size()) {
             remap[old_id] = new_id;
         }
     }
     apply_value_remap(mod, remap);
 
-    stats.loads_promoted = static_cast<uint32_t>(promoted_loads.size());
+    stats.loads_promoted = static_cast<uint32_t>(prom.promoted_loads.size());
     if (opts.remove_dead_memory_ops) {
         std::vector<uint8_t> dead(mod.nodes.size(), 0);
-        for (SsaId lid : promoted_loads) {
+        for (SsaId lid : prom.promoted_loads) {
             if (lid < dead.size()) dead[lid] = 1;
-            for (SsaId ex : load_val_extracts[lid]) {
-                if (ex < dead.size()) dead[ex] = 1;
+            auto vit = prom.load_val_extracts.find(lid);
+            if (vit != prom.load_val_extracts.end()) {
+                for (SsaId ex : vit->second) {
+                    if (ex < dead.size()) dead[ex] = 1;
+                }
             }
-            for (SsaId ex : load_tok_extracts[lid]) {
-                if (ex < dead.size()) dead[ex] = 1;
+            auto tit = prom.load_tok_extracts.find(lid);
+            if (tit != prom.load_tok_extracts.end()) {
+                for (SsaId ex : tit->second) {
+                    if (ex < dead.size()) dead[ex] = 1;
+                }
             }
         }
-        for (SsaId sid : promoted_stores) {
+        for (SsaId sid : prom.promoted_stores) {
             if (sid < dead.size()) dead[sid] = 1;
         }
-        stats.stores_eliminated = static_cast<uint32_t>(promoted_stores.size());
-        stats.nodes_removed += erase_dead_nodes(mod, dead);
+        stats.stores_eliminated = static_cast<uint32_t>(prom.promoted_stores.size());
+        stats.nodes_removed = erase_dead_nodes(mod, dead);
     }
+    stats.phis_simplified = simplify_trivial_phis(mod);
+}
 
-    stats.phis_simplified += simplify_trivial_phis(mod);
+}  // namespace
+
+SsaPassStats run_ssa_spill_mem2reg(ValhallSsaModule& mod, const SpillMem2RegOptions& opts) {
+    SsaPassStats stats;
+    if (mod.blocks.empty()) return stats;
+
+    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
+    TlsDiscoveryResult disc = discover_tls_accesses(mod, pa, opts.tls_sideband_member);
+    std::set<int64_t> promotable = select_promotable_tls_slots(disc);
+    if (promotable.empty()) return stats;
+
+    // Copy dominator tree before Braun insertion mutates `mod` (invalidating the cache).
+    DominatorTree dt = get_or_build_dominator_tree(mod);
+    BraunPromoteResult prom = promote_tls_slots_braun(mod, dt, disc, promotable);
+    rewrite_and_erase_promoted_tls_ops(mod, prom, opts, stats);
     return stats;
 }
 

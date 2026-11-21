@@ -29,6 +29,13 @@ struct FpOptOptions {
     /// lack of a native `FSub` instruction.
     bool desugar_fsub = true;
 
+    /// Apply declarative FP fusion/elision rules from `specs/lowering/valhall_tiles.json`.
+    bool enable_tile_spec_rewrites = true;
+
+    /// Apply procedural C++ algebraic rewrites (constant-bit rules, sign hoisting,
+    /// power-of-two `Ldexp` scaling, `FSub` desugaring, etc.).
+    bool enable_cpp_rewrites = true;
+
     /// Maximum fixpoint rewrite iterations.
     uint32_t max_iterations = 8;
 };

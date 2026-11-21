@@ -272,6 +272,11 @@ def main():
         start_idx = len(fusion_nodes)
         flatten_pattern(ft["pattern"], fusion_nodes, leaf_vars)
         node_count = len(fusion_nodes) - start_idx
+        ssa_rw = ft.get("ssa_rewrite") or {}
+        has_ssa_rw = bool(ssa_rw)
+        rw_forward = int(ssa_rw.get("forward_leaf", -1))
+        rw_op = ssa_rw.get("op", "Nop")
+        rw_args = [int(x) for x in ssa_rw.get("args", [])]
         fusion_specs.append({
             "name": ft["name"],
             "cost": int(ft["cost"]),
@@ -280,6 +285,11 @@ def main():
             "root_node": start_idx,
             "node_count": node_count,
             "num_leaves": len(leaf_vars),
+            "requires_fast_math": bool(ft.get("fast_math", False)),
+            "has_ssa_rewrite": has_ssa_rw,
+            "ssa_rewrite_forward_leaf": rw_forward,
+            "ssa_rewrite_op": rw_op,
+            "ssa_rewrite_args": rw_args,
         })
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -376,6 +386,12 @@ def main():
         "    uint16_t root_node;",
         "    uint16_t node_count;",
         "    uint8_t num_leaves;",
+        "    bool requires_fast_math;",
+        "    bool has_ssa_rewrite;",
+        "    int8_t ssa_rewrite_forward_leaf;",
+        "    SsaOp ssa_rewrite_op;",
+        "    uint8_t ssa_rewrite_num_args;",
+        "    uint8_t ssa_rewrite_args[3];",
         "};",
         "",
         f"constexpr size_t kNumXmlInstructions = {len(insns)};",
@@ -472,10 +488,15 @@ def main():
     ])
     for fs in fusion_specs:
         cb, eb, exb, fl = parse_effects_mask(fs["effects"])
+        rwa = list(fs["ssa_rewrite_args"]) + [0] * (3 - len(fs["ssa_rewrite_args"]))
         cpp_lines.append(
             f'    {{ "{fs["name"]}", {fs["cost"]}u, TileEmitKind::{fs["emit"]}, '
             f'{{ 0x{cb:x}u, 0x{eb:x}u, 0x{exb:x}u, 0x{fl:x}u }}, '
-            f'{fs["root_node"]}u, {fs["node_count"]}u, {fs["num_leaves"]}u }},'
+            f'{fs["root_node"]}u, {fs["node_count"]}u, {fs["num_leaves"]}u, '
+            f'{"true" if fs["requires_fast_math"] else "false"}, '
+            f'{"true" if fs["has_ssa_rewrite"] else "false"}, '
+            f'{fs["ssa_rewrite_forward_leaf"]}, SsaOp::{fs["ssa_rewrite_op"]}, '
+            f'{len(fs["ssa_rewrite_args"])}u, {{ {rwa[0]}u, {rwa[1]}u, {rwa[2]}u }} }},'
         )
     cpp_lines.extend([
         "};",

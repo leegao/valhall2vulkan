@@ -132,6 +132,121 @@ bool canonicalize_fp_commutativity(ValhallSsaModule& mod, SsaNode& n) {
     return false;
 }
 
+
+SsaId unwrap_copies(const ValhallSsaModule& mod, SsaId id) {
+    uint32_t depth = 0;
+    while (id > 0 && id < mod.nodes.size() && depth < 16) {
+        const auto& n = mod.get(id);
+        if (n.op == SsaOp::Copy && n.args.size() == 1 && n.args[0] != kInvalidSsa) {
+            id = n.args[0];
+            ++depth;
+            continue;
+        }
+        break;
+    }
+    return id;
+}
+
+/// Generic structural matcher for `FusionPatternNode` trees generated from
+/// `specs/lowering/valhall_tiles.json`, allowing SSA-level verification passes
+/// to reuse the exact same declarative rules as the Pass-2 tiler.
+bool match_tile_pattern_ssa(const ValhallSsaModule& mod,
+                            const tables::FusionPatternNode* pnodes,
+                            uint16_t pnode_idx,
+                            SsaId ssa_id,
+                            std::vector<SsaId>& captured_leaves) {
+    if (ssa_id == kInvalidSsa || ssa_id >= mod.nodes.size()) return false;
+    const auto& pn = pnodes[pnode_idx];
+    if (pn.is_leaf) {
+        SsaId unwrapped = unwrap_copies(mod, ssa_id);
+        size_t slot = static_cast<size_t>(pn.leaf_slot);
+        if (slot >= captured_leaves.size()) captured_leaves.resize(slot + 1, kInvalidSsa);
+        if (captured_leaves[slot] != kInvalidSsa && captured_leaves[slot] != unwrapped) {
+            return false;
+        }
+        captured_leaves[slot] = unwrapped;
+        return true;
+    }
+
+    ssa_id = unwrap_copies(mod, ssa_id);
+    if (ssa_id == kInvalidSsa || ssa_id >= mod.nodes.size()) return false;
+    const auto& sn = mod.get(ssa_id);
+    if (sn.op != pn.ssa_op) return false;
+    if (pn.has_imm && sn.imm_u32 != pn.imm_val) return false;
+    if (pn.has_imm_offset && sn.imm_u32 != pn.imm_offset) return false;
+    if (pn.has_imm_width && sn.imm_u32_2 != pn.imm_width) return false;
+    if (sn.args.size() < pn.num_children) return false;
+
+    for (uint8_t c = 0; c < pn.num_children; ++c) {
+        if (pn.children[c] < 0) return false;
+        if (!match_tile_pattern_ssa(mod, pnodes, static_cast<uint16_t>(pn.children[c]),
+                                    sn.args[c], captured_leaves)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool try_apply_tile_spec_rewrite(ValhallSsaModule& mod,
+                                 SsaId nid,
+                                 bool allow_fast_math,
+                                 std::vector<SsaId>& remap,
+                                 std::vector<uint8_t>& dead,
+                                 bool& any_remapped,
+                                 FpOptResult& result) {
+    size_t num_tiles = 0, num_pnodes = 0;
+    const auto* tiles = tables::get_fusion_tiles(&num_tiles);
+    const auto* pnodes = tables::get_fusion_pattern_nodes(&num_pnodes);
+    (void)num_pnodes;
+
+    const SsaOp root_op = mod.get(nid).op;
+    for (size_t ti = 0; ti < num_tiles; ++ti) {
+        const auto& ft = tiles[ti];
+        if (!ft.has_ssa_rewrite) continue;
+        if (ft.requires_fast_math && !allow_fast_math) continue;
+        if (pnodes[ft.root_node].ssa_op != root_op) continue;
+
+        std::vector<SsaId> leaves;
+        if (!match_tile_pattern_ssa(mod, pnodes, ft.root_node, nid, leaves)) {
+            continue;
+        }
+        if (ft.ssa_rewrite_forward_leaf >= 0) {
+            size_t slot = static_cast<size_t>(ft.ssa_rewrite_forward_leaf);
+            if (slot >= leaves.size() || leaves[slot] == kInvalidSsa) continue;
+            remap[nid] = resolve_remap(remap, leaves[slot]);
+            dead[nid] = 1;
+            any_remapped = true;
+            ++result.stats.nodes_replaced;
+        } else if (ft.ssa_rewrite_op != SsaOp::Nop) {
+            std::vector<SsaId> new_args;
+            new_args.reserve(ft.ssa_rewrite_num_args);
+            bool ok = true;
+            for (uint8_t a = 0; a < ft.ssa_rewrite_num_args; ++a) {
+                size_t slot = ft.ssa_rewrite_args[a];
+                if (slot >= leaves.size() || leaves[slot] == kInvalidSsa) {
+                    ok = false;
+                    break;
+                }
+                new_args.push_back(resolve_remap(remap, leaves[slot]));
+            }
+            if (!ok) continue;
+            auto& n = mod.get_mut(nid);
+            n.op = ft.ssa_rewrite_op;
+            n.args = std::move(new_args);
+            n.imm_u32 = 0;
+            n.imm_u32_2 = 0;
+            n.imm_u64 = 0;
+            ++result.stats.nodes_replaced;
+        } else {
+            continue;
+        }
+        ++result.stats.fp_rewrites;
+        ++result.rule_hits[std::string("tile:") + ft.name];
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 FpOptResult run_ssa_fp_canonicalize(ValhallSsaModule& mod, const FpOptOptions& opts) {
@@ -195,6 +310,16 @@ FpOptResult run_ssa_fp_canonicalize(ValhallSsaModule& mod, const FpOptOptions& o
                     if (canonicalize_fp_commutativity(mod, n)) {
                         changed = true;
                     }
+                }
+
+                if (opts.enable_tile_spec_rewrites) {
+                    if (try_apply_tile_spec_rewrite(mod, nid, fast, remap, dead, any_remapped, result)) {
+                        changed = true;
+                        continue;
+                    }
+                }
+                if (!opts.enable_cpp_rewrites) {
+                    continue;
                 }
 
                 const SsaNode n = mod.get(nid);

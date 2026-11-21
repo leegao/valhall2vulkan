@@ -2,6 +2,7 @@
 #include "valhall_pass1_handlers.h"
 #include "valhall_operands.h"
 #include "valhall_tables_generated.h"
+#include "ssa_opt_pipeline.h"
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
@@ -222,6 +223,14 @@ Pass1Result run_pass1_lowering(
     }
 
     ctx.sb.seal_all_phis();
+    if (opts.run_ssa_opt) {
+        dataflow::SsaOptPipelineOptions popts;
+        popts.fp_mode = opts.ssa_opt_fp_fast_math ? dataflow::FpOptMode::FastMath
+                                                  : dataflow::FpOptMode::StrictIEEE;
+        popts.enable_fp_tile_rewrites = opts.ssa_opt_fp_tile_rewrites;
+        popts.enable_fp_cpp_rewrites = opts.ssa_opt_fp_cpp_rewrites;
+        dataflow::run_ssa_opt_pipeline(res.ssa, popts);
+    }
     res.ok = true;
     return res;
 }

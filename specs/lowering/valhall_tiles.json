@@ -103,7 +103,11 @@
                 ]
             },
             "emit": "ForwardInnerArg0",
-            "effects": []
+            "effects": [],
+            "fast_math": false,
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            }
         },
         {
             "name": "elide_bitcast_roundtrip",
@@ -314,6 +318,895 @@
             },
             "emit": "OpBitFieldUExtractMask",
             "effects": []
+        },
+        {
+            "name": "elide_fabs_fabs",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FAbs",
+                "args": [
+                    {
+                        "op": "FAbs",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslFAbs",
+            "ssa_rewrite": {
+                "op": "FAbs",
+                "args": [
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "elide_fabs_fneg",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FAbs",
+                "args": [
+                    {
+                        "op": "FNeg",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslFAbs",
+            "ssa_rewrite": {
+                "op": "FAbs",
+                "args": [
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "elide_fadd_neg_zero_r",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FAdd",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 2147483648
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fadd_neg_zero_l",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FAdd",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 2147483648
+                    },
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fsub_pos_zero",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FSub",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmul_one_r",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmul_one_l",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    },
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmul_neg_one_r",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 3212836864
+                    }
+                ]
+            },
+            "emit": "OpFNegate",
+            "ssa_rewrite": {
+                "op": "FNeg",
+                "args": [
+                    0
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmul_neg_one_l",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 3212836864
+                    },
+                    "$x"
+                ]
+            },
+            "emit": "OpFNegate",
+            "ssa_rewrite": {
+                "op": "FNeg",
+                "args": [
+                    0
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fma_neg_zero",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    "$a",
+                    "$b",
+                    {
+                        "op": "ConstF32",
+                        "imm": 2147483648
+                    }
+                ]
+            },
+            "emit": "OpFMul",
+            "ssa_rewrite": {
+                "op": "FMul",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fma_one_r",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    },
+                    "$c"
+                ]
+            },
+            "emit": "OpFAdd",
+            "ssa_rewrite": {
+                "op": "FAdd",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fma_one_l",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    },
+                    "$x",
+                    "$c"
+                ]
+            },
+            "emit": "OpFAdd",
+            "ssa_rewrite": {
+                "op": "FAdd",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fdiv_one",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FDiv",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fdiv_neg_one",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FDiv",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 3212836864
+                    }
+                ]
+            },
+            "emit": "OpFNegate",
+            "ssa_rewrite": {
+                "op": "FNeg",
+                "args": [
+                    0
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmin_self",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FMin",
+                "args": [
+                    "$x",
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmax_self",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "FMax",
+                "args": [
+                    "$x",
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_nmin_self",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "NMin",
+                "args": [
+                    "$x",
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_nmax_self",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "NMax",
+                "args": [
+                    "$x",
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_ldexp_zero",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 0,
+            "pattern": {
+                "op": "Ldexp",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstS32",
+                        "imm": 0
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "elide_fmul_fneg_fneg",
+            "kind": "fusion",
+            "fast_math": false,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    {
+                        "op": "FNeg",
+                        "args": [
+                            "$a"
+                        ]
+                    },
+                    {
+                        "op": "FNeg",
+                        "args": [
+                            "$b"
+                        ]
+                    }
+                ]
+            },
+            "emit": "OpFMul",
+            "ssa_rewrite": {
+                "op": "FMul",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_fadd_pos_zero_r",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "FAdd",
+                "args": [
+                    "$x",
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    }
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_fadd_pos_zero_l",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "FAdd",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    },
+                    "$x"
+                ]
+            },
+            "emit": "ForwardArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_fma_pos_zero",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    "$a",
+                    "$b",
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    }
+                ]
+            },
+            "emit": "OpFMul",
+            "ssa_rewrite": {
+                "op": "FMul",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_fma_zero_r",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    "$a",
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    },
+                    "$c"
+                ]
+            },
+            "emit": "ForwardArg1",
+            "ssa_rewrite": {
+                "forward_leaf": 1
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_fma_zero_l",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "Fma",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 0
+                    },
+                    "$b",
+                    "$c"
+                ]
+            },
+            "emit": "ForwardArg1",
+            "ssa_rewrite": {
+                "forward_leaf": 1
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_fuse_fmul_rcp_r",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    "$a",
+                    {
+                        "op": "FDiv",
+                        "args": [
+                            {
+                                "op": "ConstF32",
+                                "imm": 1065353216
+                            },
+                            "$b"
+                        ]
+                    }
+                ]
+            },
+            "emit": "OpFDiv",
+            "ssa_rewrite": {
+                "op": "FDiv",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_fuse_fmul_rcp_l",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    {
+                        "op": "FDiv",
+                        "args": [
+                            {
+                                "op": "ConstF32",
+                                "imm": 1065353216
+                            },
+                            "$b"
+                        ]
+                    },
+                    "$a"
+                ]
+            },
+            "emit": "OpFDivSwapped",
+            "ssa_rewrite": {
+                "op": "FDiv",
+                "args": [
+                    1,
+                    0
+                ]
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_rcp_rcp",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "FDiv",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    },
+                    {
+                        "op": "FDiv",
+                        "args": [
+                            {
+                                "op": "ConstF32",
+                                "imm": 1065353216
+                            },
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "ForwardInnerArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_fuse_rcp_rsqrt",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FDiv",
+                "args": [
+                    {
+                        "op": "ConstF32",
+                        "imm": 1065353216
+                    },
+                    {
+                        "op": "InverseSqrt",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslSqrt",
+            "ssa_rewrite": {
+                "op": "Sqrt",
+                "args": [
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "fast_fuse_fmul_rsqrt_r",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    "$x",
+                    {
+                        "op": "InverseSqrt",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslSqrt",
+            "ssa_rewrite": {
+                "op": "Sqrt",
+                "args": [
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "fast_fuse_fmul_rsqrt_l",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FMul",
+                "args": [
+                    {
+                        "op": "InverseSqrt",
+                        "args": [
+                            "$x"
+                        ]
+                    },
+                    "$x"
+                ]
+            },
+            "emit": "GlslSqrt",
+            "ssa_rewrite": {
+                "op": "Sqrt",
+                "args": [
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "fast_elide_exp2_log2",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "Exp2",
+                "args": [
+                    {
+                        "op": "Log2",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "ForwardInnerArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_elide_log2_exp2",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 0,
+            "pattern": {
+                "op": "Log2",
+                "args": [
+                    {
+                        "op": "Exp2",
+                        "args": [
+                            "$x"
+                        ]
+                    }
+                ]
+            },
+            "emit": "ForwardInnerArg0",
+            "ssa_rewrite": {
+                "forward_leaf": 0
+            },
+            "effects": []
+        },
+        {
+            "name": "fast_fuse_exp2_mul_log2_r",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "Exp2",
+                "args": [
+                    {
+                        "op": "FMul",
+                        "args": [
+                            "$b",
+                            {
+                                "op": "Log2",
+                                "args": [
+                                    "$a"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslPowSwapped",
+            "ssa_rewrite": {
+                "op": "Pow",
+                "args": [
+                    1,
+                    0
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "fast_fuse_exp2_mul_log2_l",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "Exp2",
+                "args": [
+                    {
+                        "op": "FMul",
+                        "args": [
+                            {
+                                "op": "Log2",
+                                "args": [
+                                    "$a"
+                                ]
+                            },
+                            "$b"
+                        ]
+                    }
+                ]
+            },
+            "emit": "GlslPow",
+            "ssa_rewrite": {
+                "op": "Pow",
+                "args": [
+                    0,
+                    1
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
+        },
+        {
+            "name": "fast_fuse_fminmax_fclamp",
+            "kind": "fusion",
+            "fast_math": true,
+            "cost": 1,
+            "pattern": {
+                "op": "FMin",
+                "args": [
+                    {
+                        "op": "FMax",
+                        "args": [
+                            "$x",
+                            "$lo"
+                        ]
+                    },
+                    "$hi"
+                ]
+            },
+            "emit": "GlslFClamp",
+            "ssa_rewrite": {
+                "op": "FClamp",
+                "args": [
+                    0,
+                    1,
+                    2
+                ]
+            },
+            "effects": [
+                "uses_glsl_std450"
+            ]
         },
         {
             "name": "canon_nop",

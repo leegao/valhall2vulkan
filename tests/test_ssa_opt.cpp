@@ -358,9 +358,9 @@ void test_fp_canonicalizer_strict_and_fastmath() {
         fopts.mode = FpOptMode::StrictIEEE;
         FpOptResult res = run_ssa_fp_canonicalize(mod, fopts);
 
-        CHECK(res.rule_hits["I6_fma_neg0"] == 1);
-        CHECK(res.rule_hits["I1_fadd_neg0"] == 1);
-        CHECK(res.rule_hits["M1_fneg_fneg"] == 1);
+        CHECK(res.rule_hits["tile:elide_fma_neg_zero"] == 1);
+        CHECK(res.rule_hits["tile:elide_fadd_neg_zero_r"] + res.rule_hits["tile:elide_fadd_neg_zero_l"] == 1);
+        CHECK(res.rule_hits["tile:elide_fneg_fneg"] == 1);
         CHECK(res.rule_hits["C2_nested_fclamp"] == 1);
         CHECK(res.rule_hits.count("I2_fadd_pos0") == 0);
         CHECK(mod.get(fma_mul).op == SsaOp::FMul);
@@ -399,8 +399,8 @@ void test_fp_canonicalizer_strict_and_fastmath() {
         fopts.mode = FpOptMode::FastMath;
         FpOptResult res = run_ssa_fp_canonicalize(mod, fopts);
 
-        CHECK(res.rule_hits["R1_fmul_rcp"] == 1);
-        CHECK(res.rule_hits["R2_rcp_rsqrt"] == 1);
+        CHECK(res.rule_hits["tile:fast_fuse_fmul_rcp_r"] + res.rule_hits["tile:fast_fuse_fmul_rcp_l"] == 1);
+        CHECK(res.rule_hits["tile:fast_fuse_rcp_rsqrt"] == 1);
         CHECK(res.rule_hits["S2_ldexp_to_fmul"] == 1);
         CHECK(res.rule_hits["F2_fuse_fma"] == 1);
         CHECK(mod.get(div_ab).op == SsaOp::FDiv);
@@ -456,6 +456,89 @@ void test_full_opt_pipeline() {
 
 }  // namespace
 
+
+void test_analysis_cache_and_invalidation() {
+    ValhallSsaModule mod;
+    mod.blocks.emplace_back();
+    mod.blocks[0].id = 0;
+    SsaId c1 = emit_op(mod, 0, SsaOp::ConstU32, ValType::U32, {}, 7u);
+    SsaId c2 = emit_op(mod, 0, SsaOp::ConstU32, ValType::U32, {}, 5u);
+    SsaId sum = emit_op(mod, 0, SsaOp::IAdd, ValType::U32, {c1, c2});
+    emit_op(mod, 0, SsaOp::StoreFragColor, ValType::Void, {sum}, 0u, 0u, "", true);
+    mod.blocks[0].is_terminated_by_end = true;
+
+    const DominatorTree& dt1 = get_or_build_dominator_tree(mod);
+    const DominatorTree& dt2 = get_or_build_dominator_tree(mod);
+    CHECK(&dt1 == &dt2);
+    const auto* cache = get_ssa_analysis_cache(mod);
+    CHECK(cache != nullptr && cache->dom_tree_builds == 1);
+
+    const PointerAnalysisResult& pa1 = get_or_run_pointer_analysis(mod);
+    const PointerAnalysisResult& pa2 = get_or_run_pointer_analysis(mod);
+    CHECK(&pa1 == &pa2);
+    CHECK(cache->ptr_analysis_runs == 1);
+
+    uint32_t folded_sum = 0;
+    CHECK(try_get_const_u32(mod, sum, &folded_sum));
+    CHECK(folded_sum == 12u);
+
+    SsaNode extra{};
+    extra.op = SsaOp::ConstU32;
+    extra.type = ValType::U32;
+    extra.imm_u32 = 99u;
+    insert_node_before(mod, 0, kInvalidSsa, std::move(extra));
+    CHECK(get_ssa_analysis_cache(mod) == nullptr);
+    std::cout << "[PASS] test_analysis_cache_and_invalidation\n";
+}
+
+void test_fp_dual_toggles_tile_vs_cpp() {
+    auto build_sample = []() {
+        ValhallSsaModule mod;
+        mod.blocks.emplace_back();
+        mod.blocks[0].id = 0;
+        SsaId a = emit_op(mod, 0, SsaOp::LoadFau, ValType::F32, {}, 0u);
+        SsaId b = emit_op(mod, 0, SsaOp::LoadFau, ValType::F32, {}, 1u);
+        SsaId neg0 = emit_op(mod, 0, SsaOp::ConstF32, ValType::F32, {}, f32_to_bits(-0.0f));
+        SsaId fma = emit_op(mod, 0, SsaOp::Fma, ValType::F32, {a, b, neg0});
+        emit_op(mod, 0, SsaOp::StoreFragColor, ValType::Void, {fma}, 0u, 0u, "", true);
+        mod.blocks[0].is_terminated_by_end = true;
+        return mod;
+    };
+
+    {
+        ValhallSsaModule mod = build_sample();
+        FpOptOptions fopts;
+        fopts.mode = FpOptMode::StrictIEEE;
+        fopts.enable_tile_spec_rewrites = true;
+        fopts.enable_cpp_rewrites = false;
+        FpOptResult res = run_ssa_fp_canonicalize(mod, fopts);
+        CHECK(res.rule_hits["tile:elide_fma_neg_zero"] == 1);
+        CHECK(res.rule_hits["I6_fma_neg0"] == 0);
+    }
+
+    {
+        ValhallSsaModule mod = build_sample();
+        FpOptOptions fopts;
+        fopts.mode = FpOptMode::StrictIEEE;
+        fopts.enable_tile_spec_rewrites = false;
+        fopts.enable_cpp_rewrites = true;
+        FpOptResult res = run_ssa_fp_canonicalize(mod, fopts);
+        CHECK(res.rule_hits["tile:elide_fma_neg_zero"] == 0);
+        CHECK(res.rule_hits["I6_fma_neg0"] == 1);
+    }
+
+    {
+        std::vector<SsaId> args = {9u, 3u};
+        canonicalize_commutative_args(SsaOp::IAdd, args);
+        CHECK(args[0] == 3u && args[1] == 9u);
+
+        std::vector<SsaId> fma_args = {7u, 2u, 1u};
+        canonicalize_commutative_args(SsaOp::Fma, fma_args);
+        CHECK(fma_args[0] == 2u && fma_args[1] == 7u && fma_args[2] == 1u);
+    }
+    std::cout << "[PASS] test_fp_dual_toggles_tile_vs_cpp\n";
+}
+
 int main() {
     test_dce_basic_and_unreachable();
     test_cse_dominator_scoping_and_commutativity();
@@ -465,6 +548,8 @@ int main() {
     test_buffer_symbolization_fixed_stride();
     test_fp_canonicalizer_strict_and_fastmath();
     test_full_opt_pipeline();
+    test_analysis_cache_and_invalidation();
+    test_fp_dual_toggles_tile_vs_cpp();
     std::cout << "ALL SSA OPT TESTS PASSED!\n";
     return 0;
 }

@@ -1,6 +1,8 @@
 #include "ssa_sccp.h"
 
+#include "abstract_domain.h"
 #include "ssa_dce.h"
+#include "transfer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -88,6 +90,42 @@ SccpVal meet_sccp(const SccpVal& a, const SccpVal& b) {
     return SccpVal::overdefined();
 }
 
+/// Lattice domain for Wegman-Zadeck SCCP (`Undef < Constant < Overdefined`),
+/// conforming to `ValidateLatticeDomain<SccpDomain>` so SCCP reuses
+/// `AbstractState<SccpDomain>` and `SsaDomainTransferVisitor<SccpDomain>`.
+struct SccpDomain {
+    using Value = SccpVal;
+
+    static Value bottom() { return SccpVal::undef(); }
+    static Value top() { return SccpVal::overdefined(); }
+
+    static Value join(const Value& a, const Value& b) { return meet_sccp(a, b); }
+
+    static Value meet(const Value& a, const Value& b) {
+        if (a.is_overdefined()) return b;
+        if (b.is_overdefined()) return a;
+        if (a.is_undef() || b.is_undef()) return SccpVal::undef();
+        if (a.bits == b.bits) return a;
+        return SccpVal::undef();
+    }
+
+    static bool leq(const Value& a, const Value& b) {
+        if (a.is_undef() || b.is_overdefined()) return true;
+        if (a.is_overdefined() || b.is_undef()) return false;
+        return a.bits == b.bits;
+    }
+
+    static bool equals(const Value& a, const Value& b) { return a == b; }
+
+    static std::string format(const Value& v) {
+        if (v.is_undef()) return "Undef";
+        if (v.is_overdefined()) return "Overdefined";
+        return "Const(" + std::to_string(v.bits) + ")";
+    }
+};
+
+static_assert(ValidateLatticeDomain<SccpDomain>::valid, "SccpDomain must satisfy ValidateLatticeDomain");
+
 uint32_t clz32(uint32_t x) {
     if (x == 0) return 32;
     return static_cast<uint32_t>(__builtin_clz(x));
@@ -138,13 +176,13 @@ bool is_const_op(SsaOp op) {
 /// Evaluates a single non-Phi SSA node under the current SCCP lattice map.
 SccpVal eval_node_sccp(const ValhallSsaModule& mod,
                        const SsaNode& n,
-                       const std::vector<SccpVal>& lat,
+                       const AbstractState<SccpDomain>& state,
                        bool fold_fp) {
     auto get = [&](size_t idx) -> SccpVal {
         if (idx >= n.args.size()) return SccpVal::overdefined();
         SsaId id = n.args[idx];
-        if (id == kInvalidSsa || id >= lat.size()) return SccpVal::overdefined();
-        return lat[id];
+        if (id == kInvalidSsa) return SccpVal::overdefined();
+        return state.val(id);
     };
 
     switch (n.op) {
@@ -188,8 +226,8 @@ SccpVal eval_node_sccp(const ValhallSsaModule& mod,
             if ((vn.op == SsaOp::VecConstruct2 || vn.op == SsaOp::VecConstruct3 || vn.op == SsaOp::VecConstruct4) &&
                 n.imm_u32 < vn.args.size()) {
                 SsaId elem = vn.args[n.imm_u32];
-                if (elem != kInvalidSsa && elem < lat.size()) {
-                    return lat[elem];
+                if (elem != kInvalidSsa) {
+                    return state.val(elem);
                 }
             }
             return SccpVal::overdefined();
@@ -211,8 +249,8 @@ SccpVal eval_node_sccp(const ValhallSsaModule& mod,
             const auto& tn = mod.get(tup_id);
             if (tn.op == SsaOp::Split64 && !tn.args.empty()) {
                 SsaId src64 = tn.args[0];
-                if (src64 != kInvalidSsa && src64 < lat.size()) {
-                    const auto& s = lat[src64];
+                if (src64 != kInvalidSsa) {
+                    const SccpVal s = state.val(src64);
                     if (!s.is_const()) return s;
                     uint32_t lane = (n.imm_u32 == 0)
                                         ? static_cast<uint32_t>(s.bits & 0xFFFFFFFFULL)
@@ -653,6 +691,61 @@ void materialize_const_in_place(SsaNode& n, const SccpVal& v) {
     }
 }
 
+
+/// Transfer visitor adapting `eval_node_sccp` into the `SsaDomainTransferVisitor`
+/// framework (`dispatch_ssa_transfer`).
+class SccpTransferVisitor : public SsaDomainTransferVisitor<SccpDomain> {
+public:
+    SccpTransferVisitor(const ValhallSsaModule& mod,
+                        AbstractState<SccpDomain>* st,
+                        bool fold_fp,
+                        std::queue<SsaId>* ssa_wl)
+        : SsaDomainTransferVisitor<SccpDomain>(st),
+          mod_(mod),
+          fold_fp_(fold_fp),
+          ssa_wl_(ssa_wl) {}
+
+    void on_other(SsaId dst, const SsaNode& node) override {
+        if (dst == kInvalidSsa || !state()) return;
+        SccpVal nv = eval_node_sccp(mod_, node, *state(), fold_fp_);
+        if (state()->join_val(dst, nv) && ssa_wl_) {
+            ssa_wl_->push(dst);
+        }
+    }
+
+    void on_const(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+    void on_copy(SsaId dst, SsaId /*src*/, const SsaNode& node) override { on_other(dst, node); }
+    void on_select(SsaId dst, SsaId /*c*/, SsaId /*t*/, SsaId /*f*/, const SsaNode& node) override { on_other(dst, node); }
+    void on_iadd(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_isub(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_imul(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_and(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_or(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_xor(SsaId dst, SsaId, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_not(SsaId dst, SsaId, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_shift(SsaId dst, SsaId, SsaId, ShiftKind, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_pack64(SsaId dst, SsaId, SsaId, const SsaNode& node) override { on_other(dst, node); }
+    void on_split64(SsaId dst, SsaId, const SsaNode& node) override { on_other(dst, node); }
+    void on_tuple_extract(SsaId dst, SsaId, uint32_t, const SsaNode& node) override { on_other(dst, node); }
+    void on_convert(SsaId dst, SsaId, const SsaNode& node) override { on_other(dst, node); }
+    void on_vec(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+    void on_load_fau(SsaId dst, uint32_t, const SsaNode& node) override { on_other(dst, node); }
+    void on_load_builtin(SsaId dst, uint32_t, const SsaNode& node) override { on_other(dst, node); }
+    void on_load_sideband(SsaId dst, uint32_t, bool, const SsaNode& node) override { on_other(dst, node); }
+    void on_psb_load(SsaId dst, SsaId, uint32_t, const SsaNode& node) override { on_other(dst, node); }
+    void on_psb_store(SsaId, SsaId, uint32_t, const SsaNode& node) override { on_other(node.id, node); }
+    void on_load_vert_attr(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+    void on_load_frag_varying(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+    void on_tex_sample(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+    void on_store_output(const SsaNode& node) override { on_other(node.id, node); }
+    void on_atomic(SsaId dst, const SsaNode& node) override { on_other(dst, node); }
+
+private:
+    const ValhallSsaModule& mod_;
+    bool fold_fp_ = true;
+    std::queue<SsaId>* ssa_wl_ = nullptr;
+};
+
 }  // namespace
 
 SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
@@ -707,12 +800,13 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
         }
     }
 
-    std::vector<SccpVal> lat(num_nodes, SccpVal::undef());
+    AbstractState<SccpDomain> state(num_nodes);
     std::vector<uint8_t> block_exec(num_blocks, 0);
     std::set<std::pair<uint32_t, uint32_t>> exec_edges;
 
     std::queue<std::pair<uint32_t, uint32_t>> cfg_wl;
     std::queue<SsaId> ssa_wl;
+    SccpTransferVisitor transfer(mod, &state, opts.fold_fp, &ssa_wl);
 
     auto mark_edge = [&](uint32_t from, uint32_t to) {
         if (to >= num_blocks) return;
@@ -723,22 +817,20 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
 
     auto update_lat = [&](SsaId id, const SccpVal& nv) {
         if (id == kInvalidSsa || id >= num_nodes) return;
-        SccpVal merged = meet_sccp(lat[id], nv);
-        if (merged != lat[id]) {
-            lat[id] = merged;
+        if (state.join_val(id, nv)) {
             ssa_wl.push(id);
         }
     };
 
     auto visit_phi = [&](SsaId pid) {
         const auto& phi = mod.get(pid);
-        SccpVal acc = SccpVal::undef();
+        SccpVal acc = SccpDomain::bottom();
         for (const auto& inc : phi.phi_incomings) {
             if (exec_edges.count({inc.pred_block, phi.block_id})) {
                 if (inc.value > 0 && inc.value < num_nodes) {
-                    acc = meet_sccp(acc, lat[inc.value]);
+                    acc = SccpDomain::join(acc, state.val(inc.value));
                 } else {
-                    acc = SccpVal::overdefined();
+                    acc = SccpDomain::top();
                 }
             }
         }
@@ -750,7 +842,7 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
         const auto& blk = mod.blocks[b];
         if (blk.is_terminated_by_end || blk.is_terminated_by_discard) return;
         if (blk.is_conditional_branch && blk.branch_cond > 0 && blk.branch_cond < num_nodes) {
-            const auto& cv = lat[blk.branch_cond];
+            const SccpVal cv = state.val(blk.branch_cond);
             if (cv.is_const()) {
                 if (cv.bits != 0) {
                     if (blk.branch_target_block >= 0) mark_edge(b, static_cast<uint32_t>(blk.branch_target_block));
@@ -770,7 +862,7 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
     block_exec[0] = 1;
     for (SsaId pid : mod.blocks[0].phis) visit_phi(pid);
     for (SsaId nid : mod.blocks[0].nodes) {
-        update_lat(nid, eval_node_sccp(mod, mod.get(nid), lat, opts.fold_fp));
+        dispatch_ssa_transfer(mod.get(nid), transfer);
     }
     visit_terminator(0);
 
@@ -788,7 +880,7 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
             }
             if (first_visit) {
                 for (SsaId nid : mod.blocks[to].nodes) {
-                    update_lat(nid, eval_node_sccp(mod, mod.get(nid), lat, opts.fold_fp));
+                    dispatch_ssa_transfer(mod.get(nid), transfer);
                 }
                 visit_terminator(to);
             }
@@ -803,7 +895,7 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
                 if (un.op == SsaOp::Phi) {
                     visit_phi(u);
                 } else {
-                    update_lat(u, eval_node_sccp(mod, un, lat, opts.fold_fp));
+                    dispatch_ssa_transfer(un, transfer);
                 }
             }
             for (uint32_t b : cond_users[def_id]) {
@@ -825,13 +917,13 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
         uint32_t phi_const_count = 0;
 
         for (SsaId pid : blk.phis) {
-            if (pid < lat.size() && lat[pid].is_const() &&
+            if (pid < num_nodes && state.val(pid).is_const() &&
                 is_materializable_scalar_type(mod.get(pid).type)) {
                 SsaNode cnode{};
                 cnode.type = mod.get(pid).type;
                 cnode.orig_inst_idx = mod.get(pid).orig_inst_idx;
                 cnode.orig_pc = mod.get(pid).orig_pc;
-                materialize_const_in_place(cnode, lat[pid]);
+                materialize_const_in_place(cnode, state.val(pid));
                 SsaId before = blk.nodes.empty() ? kInvalidSsa : blk.nodes.front();
                 SsaId cid = insert_node_before(mod, static_cast<uint32_t>(b), before, std::move(cnode));
                 remap.resize(mod.nodes.size(), kInvalidSsa);
@@ -850,11 +942,11 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
         }
 
         for (SsaId nid : mod.blocks[b].nodes) {
-            if (nid >= lat.size() || !lat[nid].is_const()) continue;
+            if (nid >= num_nodes || !state.val(nid).is_const()) continue;
             auto& n = mod.get_mut(nid);
             if (is_const_op(n.op) || !is_pure_ssa_op(n, opts.fau_is_readonly)) continue;
             if (!is_materializable_scalar_type(n.type)) continue;
-            materialize_const_in_place(n, lat[nid]);
+            materialize_const_in_place(n, state.val(nid));
             ++stats.nodes_folded;
         }
     }
@@ -865,8 +957,8 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
             if (!block_exec[b]) continue;
             auto& blk = mod.blocks[b];
             if (!blk.is_conditional_branch || blk.branch_cond == kInvalidSsa) continue;
-            if (blk.branch_cond < lat.size() && lat[blk.branch_cond].is_const()) {
-                bool taken = (lat[blk.branch_cond].bits != 0);
+            if (blk.branch_cond < num_nodes && state.val(blk.branch_cond).is_const()) {
+                bool taken = (state.val(blk.branch_cond).bits != 0);
                 int32_t target = taken ? blk.branch_target_block : blk.fallthrough_block;
                 blk.is_conditional_branch = false;
                 blk.is_unconditional_branch = true;
@@ -878,6 +970,9 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
         }
     }
 
+    if (stats.nodes_folded > 0 || stats.branches_folded > 0) {
+        invalidate_ssa_analyses(mod);
+    }
     stats.blocks_pruned += rebuild_cfg_preds_and_prune_phis(mod);
     stats.phis_simplified += simplify_trivial_phis(mod);
 

@@ -88,6 +88,13 @@ struct ValhallTranslateOptions {
     // Optional debug/reflection symbol names for OpName emission (empty = default generated names)
     ValhallSymbolBindings symbol_bindings;
     bool tolerant_ssa = false;
+
+    // Pass-2 tiler & optional SSA optimization pipeline controls (strict by default)
+    bool enable_fast_math_tiles = false;
+    bool run_ssa_opt = false;
+    bool ssa_opt_fp_fast_math = false;
+    bool ssa_opt_fp_tile_rewrites = true;
+    bool ssa_opt_fp_cpp_rewrites = true;
 };
 
 struct ValhallTranslationResult {

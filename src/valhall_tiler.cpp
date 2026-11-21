@@ -286,6 +286,51 @@ struct EmitContext {
                     spv_ids[id] = b.emit_glsl_ext(GlslStd450::FClamp, rt, { x, lo, hi });
                     return spv_ids[id];
                 }
+                case TileEmitKind::GlslFAbs: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.emit_glsl_ext(GlslStd450::FAbs, rt, { get_spv(ch.leaf_args[0]) });
+                    return spv_ids[id];
+                }
+                case TileEmitKind::OpFNegate: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.op_FNegate(rt, get_spv(ch.leaf_args[0]));
+                    return spv_ids[id];
+                }
+                case TileEmitKind::OpFMul: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.op_FMul(rt, get_spv(ch.leaf_args[0]), get_spv(ch.leaf_args[1]));
+                    return spv_ids[id];
+                }
+                case TileEmitKind::OpFAdd: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.op_FAdd(rt, get_spv(ch.leaf_args[0]), get_spv(ch.leaf_args[1]));
+                    return spv_ids[id];
+                }
+                case TileEmitKind::OpFDiv: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.op_FDiv(rt, get_spv(ch.leaf_args[0]), get_spv(ch.leaf_args[1]));
+                    return spv_ids[id];
+                }
+                case TileEmitKind::OpFDivSwapped: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.op_FDiv(rt, get_spv(ch.leaf_args[1]), get_spv(ch.leaf_args[0]));
+                    return spv_ids[id];
+                }
+                case TileEmitKind::GlslSqrt: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.emit_glsl_ext(GlslStd450::Sqrt, rt, { get_spv(ch.leaf_args[0]) });
+                    return spv_ids[id];
+                }
+                case TileEmitKind::GlslPow: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.emit_glsl_ext(GlslStd450::Pow, rt, { get_spv(ch.leaf_args[0]), get_spv(ch.leaf_args[1]) });
+                    return spv_ids[id];
+                }
+                case TileEmitKind::GlslPowSwapped: {
+                    uint32_t rt = to_spv_type(n.type);
+                    spv_ids[id] = b.emit_glsl_ext(GlslStd450::Pow, rt, { get_spv(ch.leaf_args[1]), get_spv(ch.leaf_args[0]) });
+                    return spv_ids[id];
+                }
                 default:
                     break;
             }
@@ -722,6 +767,9 @@ TilerResult run_pass2_tiler_and_emit(
         // Try fusion tiles
         for (size_t ft_idx = 0; ft_idx < num_fusion; ++ft_idx) {
             const auto& ft = fusion_tiles[ft_idx];
+            if (ft.requires_fast_math && !opts.enable_fast_math_tiles) {
+                continue;
+            }
             std::vector<SsaId> leaves;
             std::unordered_map<SsaId, uint32_t> internal_uses;
             if (!match_fusion_pattern(mod, pnodes, ft.root_node, static_cast<SsaId>(i),

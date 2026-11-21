@@ -76,6 +76,8 @@ SsaOptPipelineResult run_ssa_opt_pipeline(compiler::ValhallSsaModule& mod,
         if (opts.run_fp_canonicalize) {
             FpOptOptions fopts;
             fopts.mode = opts.fp_mode;
+            fopts.enable_tile_spec_rewrites = opts.enable_fp_tile_rewrites;
+            fopts.enable_cpp_rewrites = opts.enable_fp_cpp_rewrites;
             FpOptResult fres = run_ssa_fp_canonicalize(mod, fopts);
             round_stats.merge(fres.stats);
             for (const auto& [rule, cnt] : fres.rule_hits) {

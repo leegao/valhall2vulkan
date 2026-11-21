@@ -1,4 +1,5 @@
 #include "spirv2ssa_internal.h"
+#include "ssa_opt_pipeline.h"
 
 #include <algorithm>
 #include <functional>
@@ -799,6 +800,14 @@ Spirv2SsaResult lower_spirv_to_valhall_ssa(
     }
     SpirvLowerer lowerer(mod, opts, res);
     lowerer.run();
+    if (res.ok && opts.run_ssa_opt) {
+        dataflow::SsaOptPipelineOptions popts;
+        popts.fp_mode = opts.ssa_opt_fp_fast_math ? dataflow::FpOptMode::FastMath
+                                                  : dataflow::FpOptMode::StrictIEEE;
+        popts.enable_fp_tile_rewrites = opts.ssa_opt_fp_tile_rewrites;
+        popts.enable_fp_cpp_rewrites = opts.ssa_opt_fp_cpp_rewrites;
+        dataflow::run_ssa_opt_pipeline(res.ssa, popts);
+    }
     return res;
 }
 

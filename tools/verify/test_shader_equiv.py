@@ -195,7 +195,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         }
         bundle = {
             "spv_path": "synthetic_ssbo.spv",
-            "stage": "Compute",
+            "stage": "Fragment",
             "arch": 10,
             "direct_ok": True,
             "valhall_ok": True,
@@ -1097,6 +1097,64 @@ class TestShaderEquivVerifier(unittest.TestCase):
         res = verify_equivalence_bundle(bundle, timeout_ms=2000)
         self.assertEqual(res.status, "UNSAT")
         self.assertGreaterEqual(len(res.checked_outputs), 3)
+
+
+
+    def test_v26_1_verbose_mode_diagnostics(self):
+        """Verify verbose=True emits Tier-1 Z3 and Layer-2 backend diagnostics to stderr."""
+        import io
+        from contextlib import redirect_stderr
+        import z3
+
+        nodes = [
+            {"id": 1, "op": "LoadFau", "type": "U32", "blk": 0, "args": [], "imm_u32": 0},
+            {"id": 2, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 1},
+            {"id": 3, "op": "IAdd", "type": "U32", "blk": 0, "args": [1, 2]},
+            {"id": 4, "op": "StoreFragColor", "type": "Void", "blk": 0, "args": [3], "imm_u32": 0},
+        ]
+        ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": nodes,
+        }
+        bundle = {
+            "spv_path": "verbose_smoke.spv",
+            "stage": "Fragment",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {"local_size": [1, 1, 1], "fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": ssa,
+            "valhall_ssa": ssa,
+        }
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            r = verify_equivalence_bundle(bundle, verbose=True)
+        self.assertEqual(r.status, "UNSAT")
+        self.assertIn("[equiv] start shader=verbose_smoke.spv", buf.getvalue())
+
+        from tools.verify.fp_proof_discharger import FpObligation, FpProofDischargerRegistry, OrToolsCpSatBackend
+        x = z3.BitVec("x", 32)
+        ob = FpObligation(
+            obligation_id="verbose_ob",
+            output_name="out0",
+            kind="bit_exact_fp",
+            lhs=(x + x),
+            rhs=(x << 1),
+            preconditions=[z3.ULE(x, 100)],
+            ulp_bound=0,
+        )
+        reg = FpProofDischargerRegistry(backends=[OrToolsCpSatBackend()])
+        buf2 = io.StringIO()
+        with redirect_stderr(buf2):
+            dres = reg.submit(ob, timeout_ms=500, verbose=True)
+        self.assertEqual(dres.status, "DISCHARGED")
+        self.assertIn("[equiv][layer2] ob=verbose_ob backend=ortools_cpsat status=DISCHARGED", buf2.getvalue())
 
 
 if __name__ == "__main__":

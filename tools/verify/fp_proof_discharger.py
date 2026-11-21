@@ -558,12 +558,28 @@ class FpProofDischargerRegistry:
     def register_backend(self, backend: FpProofBackend) -> None:
         self.backends.append(backend)
 
-    def submit(self, obligation: FpObligation, timeout_ms: int = 1000) -> DischargeResult:
+    def submit(
+        self,
+        obligation: FpObligation,
+        timeout_ms: int = 1000,
+        verbose: bool = False,
+        log_fn=None,
+    ) -> DischargeResult:
         """Record an obligation and attempt to discharge it across registered backends."""
         self.obligations.append(obligation)
         last_res = DischargeResult("UNAVAILABLE", "none", 0.0, "No backends registered")
         for backend in self.backends:
             res = backend.discharge(obligation, timeout_ms=timeout_ms)
+            if verbose:
+                msg = (
+                    f"[equiv][layer2] ob={obligation.obligation_id} backend={backend.name} "
+                    f"status={res.status} elapsed={res.elapsed_ms:.1f}ms detail={res.detail}"
+                )
+                if log_fn is not None:
+                    log_fn(msg)
+                else:
+                    import sys as _sys
+                    print(msg, file=_sys.stderr)
             last_res = res
             if res.status in ("DISCHARGED", "COUNTEREXAMPLE"):
                 self.results[obligation.obligation_id] = res

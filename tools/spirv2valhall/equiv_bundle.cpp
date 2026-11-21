@@ -99,7 +99,8 @@ bool build_equivalence_bundle_json(
     const std::string& spv_path,
     const ExtractResult& extract_res,
     std::string* out_json,
-    std::string* err) {
+    std::string* err,
+    const EquivBundleOptions& opt) {
     if (!out_json) {
         if (err) *err = "Null out_json pointer";
         return false;
@@ -110,6 +111,10 @@ bool build_equivalence_bundle_json(
     if (!read_spirv_words(spv_path, &spv_words, err)) return false;
     spirv2ssa::Spirv2SsaOptions dopts;
     dopts.tolerant = true;
+    dopts.run_ssa_opt = opt.run_ssa_opt;
+    dopts.ssa_opt_fp_fast_math = opt.fp_fast_math;
+    dopts.ssa_opt_fp_tile_rewrites = opt.enable_fp_tile_rewrites;
+    dopts.ssa_opt_fp_cpp_rewrites = opt.enable_fp_cpp_rewrites;
     auto direct_res = spirv2ssa::lower_spirv_to_valhall_ssa(spv_words, dopts);
 
     // 2. Reference Valhall ISA -> valhall_pass1 -> ValhallSSA lowering
@@ -145,6 +150,10 @@ bool build_equivalence_bundle_json(
     vopts.stage = to_compiler_stage(extract_res.stage_info.stage);
     vopts.arch = extract_res.arch;
     vopts.tolerant_ssa = true;
+    vopts.run_ssa_opt = opt.run_ssa_opt;
+    vopts.ssa_opt_fp_fast_math = opt.fp_fast_math;
+    vopts.ssa_opt_fp_tile_rewrites = opt.enable_fp_tile_rewrites;
+    vopts.ssa_opt_fp_cpp_rewrites = opt.enable_fp_cpp_rewrites;
     if (extract_res.mbs2.has_kern && extract_res.mbs2.kern.has_workgroup_size) {
         vopts.local_size_x = extract_res.mbs2.kern.wg_x;
         vopts.local_size_y = extract_res.mbs2.kern.wg_y;

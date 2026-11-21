@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -120,6 +121,12 @@ struct ValhallSsaModule {
     SsaNode& get_mut(SsaId id) { return nodes[id]; }
 
     void recompute_use_counts();
+
+    /// Lazily populated analysis cache (e.g. dominator tree, tracked-value /
+    /// pointer analysis) owned by the module and invalidated on IR mutation.
+    mutable std::shared_ptr<void> analysis_cache;
+
+    void invalidate_analyses() const { analysis_cache.reset(); }
 };
 
 // Sub-block splitting on cfg::ControlFlowGraph for Pass 0

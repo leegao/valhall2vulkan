@@ -121,6 +121,65 @@ DominatorTree build_dominator_tree(const ValhallSsaModule& mod) {
     return dt;
 }
 
+
+namespace {
+
+SsaModuleAnalysisCache& ensure_analysis_cache(const ValhallSsaModule& mod) {
+    if (!mod.analysis_cache) {
+        mod.analysis_cache = std::make_shared<SsaModuleAnalysisCache>();
+    }
+    return *static_cast<SsaModuleAnalysisCache*>(mod.analysis_cache.get());
+}
+
+}  // namespace
+
+const DominatorTree& get_or_build_dominator_tree(const ValhallSsaModule& mod) {
+    auto& cache = ensure_analysis_cache(mod);
+    if (!cache.dom_tree.has_value()) {
+        cache.dom_tree = build_dominator_tree(mod);
+        ++cache.dom_tree_builds;
+    }
+    return *cache.dom_tree;
+}
+
+const PointerAnalysisResult& get_or_run_pointer_analysis(
+    const ValhallSsaModule& mod,
+    const PointerAnalysisEnv& env) {
+    auto& cache = ensure_analysis_cache(mod);
+    if (!cache.ptr_analysis.has_value()) {
+        cache.ptr_analysis = run_ssa_pointer_analysis(mod, env);
+        ++cache.ptr_analysis_runs;
+    }
+    return *cache.ptr_analysis;
+}
+
+const PointerAnalysisResult* get_cached_pointer_analysis(const ValhallSsaModule& mod) {
+    if (!mod.analysis_cache) return nullptr;
+    const auto* cache = static_cast<const SsaModuleAnalysisCache*>(mod.analysis_cache.get());
+    return cache->ptr_analysis.has_value() ? &(*cache->ptr_analysis) : nullptr;
+}
+
+const SsaModuleAnalysisCache* get_ssa_analysis_cache(const ValhallSsaModule& mod) {
+    if (!mod.analysis_cache) return nullptr;
+    return static_cast<const SsaModuleAnalysisCache*>(mod.analysis_cache.get());
+}
+
+void invalidate_ssa_analyses(const ValhallSsaModule& mod) {
+    mod.invalidate_analyses();
+}
+
+void canonicalize_commutative_args(SsaOp op, std::vector<SsaId>& args) {
+    if (is_commutative_ssa_op(op) && args.size() == 2) {
+        if (args[1] < args[0]) {
+            std::swap(args[0], args[1]);
+        }
+    } else if (op == SsaOp::Fma && args.size() == 3) {
+        if (args[1] < args[0]) {
+            std::swap(args[0], args[1]);
+        }
+    }
+}
+
 bool is_pure_ssa_op(const SsaNode& node, bool fau_is_readonly) {
     if (node.is_side_effect || node.is_barrier_or_cf) {
         return false;
@@ -401,6 +460,13 @@ uint32_t run_ssa_copy_prop(ValhallSsaModule& mod) {
 }
 
 bool try_get_const_u32(const ValhallSsaModule& mod, SsaId id, uint32_t* out) {
+    if (const auto* pa = get_cached_pointer_analysis(mod)) {
+        uint64_t cv = 0;
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out) *out = static_cast<uint32_t>(cv);
+            return true;
+        }
+    }
     uint32_t depth = 0;
     while (id > 0 && id < mod.nodes.size() && depth < 16) {
         const auto& n = mod.get(id);
@@ -449,6 +515,13 @@ bool try_get_const_f32_bits(const ValhallSsaModule& mod, SsaId id, uint32_t* out
 }
 
 bool try_get_const_u64(const ValhallSsaModule& mod, SsaId id, uint64_t* out) {
+    if (const auto* pa = get_cached_pointer_analysis(mod)) {
+        uint64_t cv = 0;
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out) *out = cv;
+            return true;
+        }
+    }
     uint32_t depth = 0;
     while (id > 0 && id < mod.nodes.size() && depth < 16) {
         const auto& n = mod.get(id);
@@ -518,6 +591,7 @@ float bits_to_f32(uint32_t bits) {
 }
 
 SsaId insert_node_before(ValhallSsaModule& mod, uint32_t blk_id, SsaId before_node_id, SsaNode node) {
+    mod.invalidate_analyses();
     node.block_id = blk_id;
     SsaId id = mod.add_node(std::move(node));
     auto& blk = mod.blocks[blk_id];

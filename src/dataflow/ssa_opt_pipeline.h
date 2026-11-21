@@ -27,6 +27,8 @@ struct SsaOptPipelineOptions {
     bool run_dce = true;
 
     FpOptMode fp_mode = FpOptMode::StrictIEEE;
+    bool enable_fp_tile_rewrites = true;
+    bool enable_fp_cpp_rewrites = true;
     bool fau_is_readonly = true;
     uint32_t tls_sideband_member = 6;
     uint32_t max_fixpoint_rounds = 4;

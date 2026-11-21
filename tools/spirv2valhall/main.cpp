@@ -21,6 +21,10 @@ static void print_usage(const char* argv0) {
         << "  --dump-spirv                Lift Valhall ISA back to SPIR-V via valhall2spirv and dump\n"
         << "  --out-spirv <PREFIX>        Write lifted SPIR-V binary(ies) to <PREFIX>_0.spv, ...\n"
         << "  --dump-equiv-json <FILE>    Write dual ValhallSSA equivalence bundle JSON\n"
+        << "  --opt-ssa                   Run verification SSA optimization pipeline on both ValhallSSA & spirv2ssa\n"
+        << "  --opt-fp-mode <strict|fast> FP algebraic canonicalization mode (default: strict)\n"
+        << "  --no-fp-tile-rewrites       Disable declarative valhall_tiles.json FP rewrites in SSA opt\n"
+        << "  --no-fp-cpp-rewrites        Disable procedural C++ FP rewrites in SSA opt\n"
         << "  --no-context                Omit the CSF Execution Context & Descriptor Graph header\n"
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
@@ -38,6 +42,7 @@ int main(int argc, char** argv) {
     std::string out_bin_prefix;
     std::string out_spirv_prefix;
     std::string dump_equiv_json_path;
+    valhall::spirv2valhall::EquivBundleOptions equiv_opts;
     bool include_mods = false;
     bool show_context = true;
     bool context_only = false;
@@ -66,6 +71,15 @@ int main(int argc, char** argv) {
             opts.lift_to_spirv = true;
         } else if (arg == "--dump-equiv-json" && i + 1 < argc) {
             dump_equiv_json_path = argv[++i];
+        } else if (arg == "--opt-ssa") {
+            equiv_opts.run_ssa_opt = true;
+        } else if (arg == "--opt-fp-mode" && i + 1 < argc) {
+            std::string m = argv[++i];
+            equiv_opts.fp_fast_math = (m == "fast" || m == "fast_math");
+        } else if (arg == "--no-fp-tile-rewrites") {
+            equiv_opts.enable_fp_tile_rewrites = false;
+        } else if (arg == "--no-fp-cpp-rewrites") {
+            equiv_opts.enable_fp_cpp_rewrites = false;
         } else if (arg == "--no-context") {
             show_context = false;
         } else if (arg == "--context-only") {
@@ -135,7 +149,7 @@ int main(int argc, char** argv) {
     if (!dump_equiv_json_path.empty()) {
         std::string bundle_json;
         std::string berr;
-        if (!valhall::spirv2valhall::build_equivalence_bundle_json(spv_path, res, &bundle_json, &berr)) {
+        if (!valhall::spirv2valhall::build_equivalence_bundle_json(spv_path, res, &bundle_json, &berr, equiv_opts)) {
             std::cerr << "[spirv2valhall] ERROR: " << berr << "\n";
             return 1;
         }

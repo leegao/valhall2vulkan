@@ -1520,6 +1520,7 @@ def _solve_miter_eq(
     preconditions: Optional[List[z3.BoolRef]] = None,
     smt2_out: Optional[List[str]] = None,
     check_name: str = "",
+    verbose: bool = False,
 ) -> Tuple[str, Optional[Tuple[str, str, str]]]:
     """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
     if _is_real2bv(lhs) or _is_real2bv(rhs):
@@ -1554,10 +1555,16 @@ def _solve_miter_eq(
     s.add(query)
     if smt2_out is not None:
         smt2_out.append(f"; === Output Miter Check: {check_name} ===\n(push 1)\n{s.to_smt2()}(check-sat)\n(pop 1)\n")
+    t_chk = time.perf_counter()
     rc = s.check()
+    dt_chk = (time.perf_counter() - t_chk) * 1000.0
     if rc == z3.unsat:
+        if verbose:
+            print(f"[equiv][tier1] check={check_name} result=UNSAT elapsed={dt_chk:.1f}ms", file=sys.stderr)
         return "UNSAT", None
     if rc == z3.sat:
+        if verbose:
+            print(f"[equiv][tier1] check={check_name} result=SAT elapsed={dt_chk:.1f}ms", file=sys.stderr)
         m = s.model()
         lv = m.eval(lhs, model_completion=True)
         rv = m.eval(rhs, model_completion=True)
@@ -1571,6 +1578,16 @@ def _solve_miter_eq(
             else:
                 in_parts.append(f"{k}={ev}")
         return "SAT", (lhex, rhex, ", ".join(in_parts))
+    if verbose:
+        reason = s.reason_unknown()
+        lhs_kind = lhs.sort().kind() if hasattr(lhs, "sort") else "unknown"
+        rhs_kind = rhs.sort().kind() if hasattr(rhs, "sort") else "unknown"
+        print(
+            f"[equiv][tier1] check={check_name} result=UNKNOWN reason='{reason}' "
+            f"elapsed={dt_chk:.1f}ms timeout_ms={timeout_ms} rlimit=2000000 "
+            f"lhs_sort={lhs_kind} rhs_sort={rhs_kind}",
+            file=sys.stderr,
+        )
     return "UNKNOWN", None
 
 
@@ -1582,6 +1599,7 @@ def verify_equivalence_bundle(
     max_unroll: int = 1,
     dump_smt2_path: Optional[str] = None,
     fp_discharger: Optional[FpProofDischargerRegistry] = None,
+    verbose: bool = False,
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -1773,6 +1791,14 @@ def verify_equivalence_bundle(
             f"(set-logic ALL)\n\n"
         )
 
+    if verbose:
+        print(
+            f"[equiv] start shader={os.path.basename(spv_path)} stage={stage} fp_mode={fp_mode} "
+            f"direct=({res.direct_blocks}B/{res.direct_nodes}N) valhall=({res.valhall_blocks}B/{res.valhall_nodes}N) "
+            f"checks={len(checks)} preconditions={len(preconditions)} sym_slots={len(getattr(env, 'sym_buf_slot_fns', {}))} "
+            f"buf_arrays={len(getattr(env, 'buf_mems', {}))}",
+            file=sys.stderr,
+        )
     discharger = fp_discharger if fp_discharger is not None else FpProofDischargerRegistry()
     any_unknown = False
     for idx_chk, (name, lhs, rhs, guard, pc_key) in enumerate(checks):
@@ -1786,6 +1812,7 @@ def verify_equivalence_bundle(
             preconditions=preconditions,
             smt2_out=smt2_chunks,
             check_name=name,
+            verbose=verbose,
         )
         if st_rc == "SAT" and cex is not None:
             res.mismatches.append(
@@ -1812,7 +1839,7 @@ def verify_equivalence_bundle(
                 ulp_bound=0,
                 source_hint=pc_key,
             )
-            d_res = discharger.submit(ob, timeout_ms=min(timeout_ms, 1000))
+            d_res = discharger.submit(ob, timeout_ms=min(timeout_ms, 1000), verbose=verbose)
             res.fp_obligations += 1
             if d_res.status == "DISCHARGED":
                 res.notes.append(f"Layer-2 discharged {name} via {d_res.backend_name}")
@@ -1828,6 +1855,12 @@ def verify_equivalence_bundle(
         res.status = "SAT"
     elif any_unknown:
         if fp_mode == "exact" and allow_uf_fallback:
+            if verbose:
+                print(
+                    f"[equiv][fallback] shader={os.path.basename(spv_path)} exact FP left UNKNOWN; "
+                    f"escalating to Tier-3 fp_mode=real",
+                    file=sys.stderr,
+                )
             real_res = verify_equivalence_bundle(
                 bundle,
                 timeout_ms=timeout_ms,
@@ -1836,10 +1869,17 @@ def verify_equivalence_bundle(
                 max_unroll=max_unroll,
                 dump_smt2_path=dump_smt2_path,
                 fp_discharger=discharger,
+                verbose=verbose,
             )
             if real_res.status in ("UNSAT", "BOUNDED_UNSAT"):
                 real_res.fp_obligations = res.fp_obligations
                 return real_res
+            if verbose:
+                print(
+                    f"[equiv][fallback] Tier-3 fp_mode=real returned {real_res.status}; "
+                    f"escalating to Tier-4 fp_mode=uf",
+                    file=sys.stderr,
+                )
             uf_res = verify_equivalence_bundle(
                 bundle,
                 timeout_ms=timeout_ms,
@@ -1848,6 +1888,7 @@ def verify_equivalence_bundle(
                 max_unroll=max_unroll,
                 dump_smt2_path=dump_smt2_path,
                 fp_discharger=discharger,
+                verbose=verbose,
             )
             # UF is an over-approximation: UNSAT/BOUNDED_UNSAT is sound, but UF SAT may be spurious.
             if uf_res.status in ("UNSAT", "BOUNDED_UNSAT"):
@@ -1869,6 +1910,7 @@ def verify_spv_file(
     fp_mode: str = "exact",
     max_unroll: int = 1,
     dump_smt2_path: Optional[str] = None,
+    verbose: bool = False,
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -1892,7 +1934,7 @@ def verify_spv_file(
             )
         with open(tmp_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path)
+        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose)
     finally:
         if os.path.exists(tmp_json):
             os.remove(tmp_json)
@@ -1906,6 +1948,7 @@ def main() -> int:
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
+    ap.add_argument("-v", "--verbose", action="store_true", help="Emit detailed tier-by-tier Z3/Layer-2 diagnostics to stderr")
     args = ap.parse_args()
 
     if args.spv_or_json.endswith(".json"):
@@ -1917,6 +1960,7 @@ def main() -> int:
             fp_mode=args.fp_mode,
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
+            verbose=args.verbose,
         )
     else:
         r = verify_spv_file(
@@ -1926,6 +1970,7 @@ def main() -> int:
             fp_mode=args.fp_mode,
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
+            verbose=args.verbose,
         )
 
     print(f"[{r.status}] {os.path.basename(r.spv_path)} stage={r.stage} fp={r.fp_mode} "
