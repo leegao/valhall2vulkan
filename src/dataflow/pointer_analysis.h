@@ -33,6 +33,7 @@ struct PointerAnalysisEnv {
     ///   member 3 = `pilot_fau_dst_va`
     uint32_t srt_base_sideband_member = 2;
     uint32_t fau_dst_sideband_member = 3;
+    uint32_t tls_base_sideband_member = 6;
 
     bool is_srt_base_va(uint32_t member_idx) const {
         return role == StageRole::Pilot && member_idx == srt_base_sideband_member;
@@ -40,6 +41,10 @@ struct PointerAnalysisEnv {
 
     bool is_fau_dst_va(uint32_t member_idx) const {
         return role == StageRole::Pilot && member_idx == fau_dst_sideband_member;
+    }
+
+    bool is_tls_base_va(uint32_t member_idx) const {
+        return member_idx == tls_base_sideband_member;
     }
 
     /// Optional pre-seeded FAU values (e.g. from Pilot shader analysis or MBS2 RLOCs).

@@ -460,120 +460,47 @@ uint32_t run_ssa_copy_prop(ValhallSsaModule& mod) {
 }
 
 bool try_get_const_u32(const ValhallSsaModule& mod, SsaId id, uint32_t* out) {
-    if (const auto* pa = get_cached_pointer_analysis(mod)) {
-        uint64_t cv = 0;
-        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
-            if (out) *out = static_cast<uint32_t>(cv);
-            return true;
-        }
-    }
-    uint32_t depth = 0;
-    while (id > 0 && id < mod.nodes.size() && depth < 16) {
-        const auto& n = mod.get(id);
-        if (n.op == SsaOp::Copy && n.args.size() == 1) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::Bitcast && n.args.size() == 1 &&
-            (n.type == ValType::U32 || n.type == ValType::S32 || n.type == ValType::F32)) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::ConstU32 || n.op == SsaOp::ConstS32 ||
-            n.op == SsaOp::ConstF32 || n.op == SsaOp::ConstBool) {
-            if (out) *out = n.imm_u32;
-            return true;
-        }
-        return false;
+    if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
+    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
+    uint64_t cv = 0;
+    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+        if (out) *out = static_cast<uint32_t>(cv);
+        return true;
     }
     return false;
 }
 
 bool try_get_const_f32_bits(const ValhallSsaModule& mod, SsaId id, uint32_t* out_bits) {
-    uint32_t depth = 0;
-    while (id > 0 && id < mod.nodes.size() && depth < 16) {
-        const auto& n = mod.get(id);
-        if (n.op == SsaOp::Copy && n.args.size() == 1) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::Bitcast && n.args.size() == 1 && n.type == ValType::F32) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::ConstF32 || n.op == SsaOp::ConstU32 || n.op == SsaOp::ConstS32) {
-            if (out_bits) *out_bits = n.imm_u32;
-            return true;
-        }
-        return false;
+    if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
+    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
+    uint64_t cv = 0;
+    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+        if (out_bits) *out_bits = static_cast<uint32_t>(cv);
+        return true;
     }
     return false;
 }
 
 bool try_get_const_u64(const ValhallSsaModule& mod, SsaId id, uint64_t* out) {
-    if (const auto* pa = get_cached_pointer_analysis(mod)) {
-        uint64_t cv = 0;
-        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
-            if (out) *out = cv;
-            return true;
-        }
-    }
-    uint32_t depth = 0;
-    while (id > 0 && id < mod.nodes.size() && depth < 16) {
-        const auto& n = mod.get(id);
-        if (n.op == SsaOp::Copy && n.args.size() == 1) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::ConstU64) {
-            if (out) *out = n.imm_u64;
-            return true;
-        }
-        if (n.op == SsaOp::Pack64 && n.args.size() == 2) {
-            uint32_t lo = 0, hi = 0;
-            if (try_get_const_u32(mod, n.args[0], &lo) && try_get_const_u32(mod, n.args[1], &hi)) {
-                if (out) *out = (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
-                return true;
-            }
-        }
-        if (n.op == SsaOp::UConvert32To64 && n.args.size() == 1) {
-            uint32_t v = 0;
-            if (try_get_const_u32(mod, n.args[0], &v)) {
-                if (out) *out = static_cast<uint64_t>(v);
-                return true;
-            }
-        }
-        if (n.op == SsaOp::SConvert32To64 && n.args.size() == 1) {
-            uint32_t v = 0;
-            if (try_get_const_u32(mod, n.args[0], &v)) {
-                if (out) *out = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(v)));
-                return true;
-            }
-        }
-        return false;
+    if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
+    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
+    uint64_t cv = 0;
+    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+        if (out) *out = cv;
+        return true;
     }
     return false;
 }
 
 bool try_get_const_bool(const ValhallSsaModule& mod, SsaId id, bool* out) {
-    uint32_t depth = 0;
-    while (id > 0 && id < mod.nodes.size() && depth < 16) {
-        const auto& n = mod.get(id);
-        if (n.op == SsaOp::Copy && n.args.size() == 1) {
-            id = n.args[0];
-            ++depth;
-            continue;
-        }
-        if (n.op == SsaOp::ConstBool) {
-            if (out) *out = (n.imm_u32 != 0);
-            return true;
-        }
-        return false;
+    if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
+    const auto& n = mod.get(id);
+    if (n.type != ValType::Bool && n.op != SsaOp::ConstBool) return false;
+    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
+    uint64_t cv = 0;
+    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+        if (out) *out = (cv != 0);
+        return true;
     }
     return false;
 }

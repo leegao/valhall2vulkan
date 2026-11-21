@@ -1,5 +1,9 @@
 #include "spirv2valhall.h"
 #include "equiv_bundle.h"
+#include "spirv2ssa.h"
+#include "valhall_cfg.h"
+#include "valhall_pass1.h"
+#include "valhall_ssa_json.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -20,8 +24,11 @@ static void print_usage(const char* argv0) {
         << "  --out-bin <PREFIX>          Write raw EBIN bytecode to <PREFIX>_0.bin, ...\n"
         << "  --dump-spirv                Lift Valhall ISA back to SPIR-V via valhall2spirv and dump\n"
         << "  --out-spirv <PREFIX>        Write lifted SPIR-V binary(ies) to <PREFIX>_0.spv, ...\n"
+        << "  --dump-ssa                  Lower Valhall ISA to ValhallSSA and print SSA instead of ISA\n"
+        << "  --dump-ssa-json <FILE>      Write lowered (and optionally optimized) ValhallSSA JSON to FILE\n"
+        << "  --direct-ssa                Lower input .spv directly via spirv2ssa (bypassing libMali) and output SSA\n"
         << "  --dump-equiv-json <FILE>    Write dual ValhallSSA equivalence bundle JSON\n"
-        << "  --opt-ssa                   Run verification SSA optimization pipeline on both ValhallSSA & spirv2ssa\n"
+        << "  --opt-ssa                   Run verification SSA optimization pipeline on ValhallSSA / spirv2ssa\n"
         << "  --opt-fp-mode <strict|fast> FP algebraic canonicalization mode (default: strict)\n"
         << "  --no-fp-tile-rewrites       Disable declarative valhall_tiles.json FP rewrites in SSA opt\n"
         << "  --no-fp-cpp-rewrites        Disable procedural C++ FP rewrites in SSA opt\n"
@@ -36,13 +43,26 @@ static void print_usage(const char* argv0) {
         << "  -h, --help                  Show this help message\n";
 }
 
+static valhall::ShaderStage to_compiler_stage(valhall::spirv2valhall::ShaderStage st) {
+    using valhall::spirv2valhall::ShaderStage;
+    switch (st) {
+        case ShaderStage::Vertex: return valhall::ShaderStage::Vertex;
+        case ShaderStage::Fragment: return valhall::ShaderStage::Fragment;
+        case ShaderStage::Compute:
+        default: return valhall::ShaderStage::Compute;
+    }
+}
+
 int main(int argc, char** argv) {
     valhall::spirv2valhall::ExtractOptions opts;
     std::string spv_path;
     std::string out_bin_prefix;
     std::string out_spirv_prefix;
     std::string dump_equiv_json_path;
+    std::string dump_ssa_json_path;
     valhall::spirv2valhall::EquivBundleOptions equiv_opts;
+    bool dump_ssa = false;
+    bool direct_ssa = false;
     bool include_mods = false;
     bool show_context = true;
     bool context_only = false;
@@ -69,6 +89,12 @@ int main(int argc, char** argv) {
         } else if (arg == "--out-spirv" && i + 1 < argc) {
             out_spirv_prefix = argv[++i];
             opts.lift_to_spirv = true;
+        } else if (arg == "--dump-ssa") {
+            dump_ssa = true;
+        } else if (arg == "--dump-ssa-json" && i + 1 < argc) {
+            dump_ssa_json_path = argv[++i];
+        } else if (arg == "--direct-ssa") {
+            direct_ssa = true;
         } else if (arg == "--dump-equiv-json" && i + 1 < argc) {
             dump_equiv_json_path = argv[++i];
         } else if (arg == "--opt-ssa") {
@@ -109,6 +135,40 @@ int main(int argc, char** argv) {
     if (spv_path.empty()) {
         print_usage(argv[0]);
         return 2;
+    }
+
+    // Direct SPIR-V -> ValhallSSA mode (bypasses libMali compilation).
+    if (direct_ssa) {
+        std::vector<uint32_t> spv_words;
+        std::string rerr;
+        if (!valhall::spirv2valhall::read_spirv_words(spv_path, &spv_words, &rerr)) {
+            std::cerr << "[spirv2valhall] ERROR: " << rerr << "\n";
+            return 1;
+        }
+        valhall::spirv2ssa::Spirv2SsaOptions sopts;
+        sopts.tolerant = true;
+        sopts.run_ssa_opt = equiv_opts.run_ssa_opt;
+        sopts.ssa_opt_fp_fast_math = equiv_opts.fp_fast_math;
+        sopts.ssa_opt_fp_tile_rewrites = equiv_opts.enable_fp_tile_rewrites;
+        sopts.ssa_opt_fp_cpp_rewrites = equiv_opts.enable_fp_cpp_rewrites;
+
+        auto dres = valhall::spirv2ssa::lower_spirv_to_valhall_ssa(spv_words, sopts);
+        if (!dres.ok) {
+            std::cerr << "[spirv2valhall] ERROR: direct spirv2ssa failed: " << dres.error_message << "\n";
+            return 1;
+        }
+        if (!dump_ssa_json_path.empty()) {
+            std::ofstream ofs(dump_ssa_json_path, std::ios::binary);
+            if (!ofs.good()) {
+                std::cerr << "[spirv2valhall] ERROR: Failed to write " << dump_ssa_json_path << "\n";
+                return 1;
+            }
+            ofs << valhall::compiler::serialize_ssa_module_json(dres.ssa);
+        }
+        if (!quiet) {
+            std::cout << valhall::compiler::format_ssa_module_text(dres.ssa);
+        }
+        return 0;
     }
 
     valhall::spirv2valhall::ExtractResult res;
@@ -161,6 +221,70 @@ int main(int argc, char** argv) {
         ofs << bundle_json;
     }
 
+    if (dump_ssa || !dump_ssa_json_path.empty()) {
+        using valhall::spirv2valhall::EbinRole;
+        using valhall::spirv2valhall::ExtractedEbin;
+        using valhall::spirv2valhall::ShaderStage;
+        const ExtractedEbin* primary_eb = nullptr;
+        const ExtractedEbin* secondary_eb = nullptr;
+        if (res.stage_info.stage == ShaderStage::Vertex) {
+            for (const auto& eb : res.ebins) {
+                if (eb.role == EbinRole::VertexVarying && !secondary_eb) secondary_eb = &eb;
+                else if (!primary_eb) primary_eb = &eb;
+            }
+        } else {
+            for (const auto& eb : res.ebins) {
+                if (eb.role != EbinRole::Pilot) {
+                    primary_eb = &eb;
+                    break;
+                }
+            }
+        }
+        if (!primary_eb) {
+            std::cerr << "[spirv2valhall] ERROR: No primary EBIN found for --dump-ssa\n";
+            return 1;
+        }
+
+        valhall::ValhallTranslateOptions vopts;
+        vopts.stage = to_compiler_stage(res.stage_info.stage);
+        vopts.arch = res.arch;
+        vopts.tolerant_ssa = true;
+        vopts.run_ssa_opt = equiv_opts.run_ssa_opt;
+        vopts.ssa_opt_fp_fast_math = equiv_opts.fp_fast_math;
+        vopts.ssa_opt_fp_tile_rewrites = equiv_opts.enable_fp_tile_rewrites;
+        vopts.ssa_opt_fp_cpp_rewrites = equiv_opts.enable_fp_cpp_rewrites;
+        if (res.mbs2.has_kern && res.mbs2.kern.has_workgroup_size) {
+            vopts.local_size_x = res.mbs2.kern.wg_x;
+            vopts.local_size_y = res.mbs2.kern.wg_y;
+            vopts.local_size_z = res.mbs2.kern.wg_z;
+        }
+
+        valhall::cfg::ControlFlowGraph pri_cfg = valhall::cfg::build_cfg(primary_eb->instructions);
+        valhall::cfg::ControlFlowGraph sec_cfg;
+        if (secondary_eb) {
+            sec_cfg = valhall::cfg::build_cfg(secondary_eb->instructions);
+        }
+        valhall::compiler::Pass1Result p1 = valhall::compiler::run_pass1_lowering(pri_cfg, sec_cfg, vopts);
+        if (!p1.ok) {
+            std::cerr << "[spirv2valhall] ERROR: valhall_pass1 failed: " << p1.error_message << "\n";
+            return 1;
+        }
+        if (!dump_ssa_json_path.empty()) {
+            std::ofstream ofs(dump_ssa_json_path, std::ios::binary);
+            if (!ofs.good()) {
+                std::cerr << "[spirv2valhall] ERROR: Failed to write " << dump_ssa_json_path << "\n";
+                return 1;
+            }
+            ofs << valhall::compiler::serialize_ssa_module_json(p1.ssa);
+        }
+        if (dump_ssa && !quiet) {
+            std::cout << valhall::compiler::format_ssa_module_text(p1.ssa);
+        }
+        if (dump_ssa) {
+            return 0;
+        }
+    }
+
     if (!quiet) {
         if (show_context) {
             std::cout << valhall::spirv2valhall::format_context(res);
@@ -172,5 +296,6 @@ int main(int argc, char** argv) {
             std::cout << valhall::spirv2valhall::format_lifted_spirv_dump(res.lifted_spirv);
         }
     }
+
     return 0;
 }

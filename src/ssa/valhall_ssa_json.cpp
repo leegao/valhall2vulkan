@@ -132,4 +132,80 @@ std::string serialize_ssa_module_json(const ValhallSsaModule& mod) {
     return os.str();
 }
 
+
+std::string format_ssa_module_text(const ValhallSsaModule& mod) {
+    std::ostringstream os;
+    os << "; ValhallSSA (" << mod.blocks.size() << " blocks, "
+       << (mod.nodes.size() > 0 ? mod.nodes.size() - 1 : 0) << " nodes)\n";
+    for (const auto& blk : mod.blocks) {
+        os << "bb" << blk.id << ":";
+        if (!blk.preds.empty()) {
+            os << "  ; preds=[";
+            for (size_t i = 0; i < blk.preds.size(); ++i) {
+                if (i > 0) os << ", ";
+                os << "bb" << blk.preds[i];
+            }
+            os << "]";
+        }
+        os << "\n";
+
+        auto emit_node_line = [&](SsaId nid) {
+            if (nid == kInvalidSsa || nid >= mod.nodes.size()) return;
+            const auto& n = mod.get(nid);
+            os << "  %" << n.id << " : " << val_type_name(n.type) << " = "
+               << tables::ssa_op_to_string(n.op);
+            if (n.op == tables::SsaOp::Phi) {
+                os << "(";
+                for (size_t i = 0; i < n.phi_incomings.size(); ++i) {
+                    if (i > 0) os << ", ";
+                    os << "bb" << n.phi_incomings[i].pred_block << ": %" << n.phi_incomings[i].value;
+                }
+                os << ")";
+            } else {
+                os << "(";
+                for (size_t i = 0; i < n.args.size(); ++i) {
+                    if (i > 0) os << ", ";
+                    os << "%" << n.args[i];
+                }
+                os << ")";
+            }
+            if (n.imm_u64 != 0) {
+                os << " imm64=0x" << std::hex << n.imm_u64 << std::dec;
+            }
+            if (n.imm_u32 != 0 || n.op == tables::SsaOp::ConstU32 ||
+                n.op == tables::SsaOp::ConstS32 || n.op == tables::SsaOp::ConstF32 ||
+                n.op == tables::SsaOp::ConstBool) {
+                os << " imm32=0x" << std::hex << n.imm_u32 << std::dec;
+            }
+            if (n.imm_u32_2 != 0) {
+                os << " imm32_2=" << n.imm_u32_2;
+            }
+            if (n.aux_index != 0) {
+                os << " aux_idx=" << n.aux_index;
+            }
+            if (!n.aux_str.empty()) {
+                os << " \"" << n.aux_str << "\"";
+            }
+            os << "\n";
+        };
+
+        for (SsaId pid : blk.phis) emit_node_line(pid);
+        for (SsaId nid : blk.nodes) emit_node_line(nid);
+
+        if (blk.is_terminated_by_discard) {
+            os << "  discard\n";
+        } else if (blk.is_conditional_branch) {
+            os << "  cond_br %" << blk.branch_cond << ", bb" << blk.branch_target_block
+               << ", bb" << blk.fallthrough_block << "\n";
+        } else if (blk.is_unconditional_branch) {
+            os << "  br bb" << blk.branch_target_block << "\n";
+        } else if (blk.is_terminated_by_end) {
+            os << "  return\n";
+        } else if (blk.fallthrough_block >= 0) {
+            os << "  fallthrough bb" << blk.fallthrough_block << "\n";
+        }
+    }
+    return os.str();
+}
+
 } // namespace valhall::compiler

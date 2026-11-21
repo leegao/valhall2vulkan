@@ -111,13 +111,17 @@ public:
     }
 
     void on_load_sideband(compiler::SsaId dst, uint32_t member_idx, bool /*is_64bit*/,
-                          const compiler::SsaNode&) override {
+                          const compiler::SsaNode& node) override {
         if (env_.is_fau_dst_va(member_idx)) {
             assign(dst, TrackedValDomain::make_fau_dst(0, true));
             return;
         }
         if (env_.is_srt_base_va(member_idx)) {
             assign(dst, TrackedValDomain::make_srt_base(0, true));
+            return;
+        }
+        if (node.aux_str == "tls_private" || env_.is_tls_base_va(member_idx)) {
+            assign(dst, TrackedValDomain::make_tls_ptr(0, true));
             return;
         }
         assign(dst, TrackedValDomain::make_sideband(member_idx));
