@@ -27,6 +27,10 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import z3
 
+from tools.verify.fp_proof_discharger import (
+    FpObligation,
+    FpProofDischargerRegistry,
+)
 from tools.verify.panfrost_z3_model import (
     BV8,
     BV32,
@@ -73,6 +77,9 @@ class ShaderEquivResult:
     direct_blocks: int = 0
     valhall_blocks: int = 0
     has_loops: bool = False
+    max_unroll_depth: int = 0
+    fp_obligations: int = 0
+    asymmetric_outputs: List[str] = dataclasses.field(default_factory=list)
 
 
 def _as_bv32(v: Z3Val) -> z3.BitVecRef:
@@ -212,11 +219,30 @@ class SharedShaderEnv:
         self.base_to_buf: Dict[int, str] = {}
         self._next_region = 1
 
+        # Compute workgroup LocalSize (from MBS2 KERN or SPIR-V OpExecutionMode)
+        ls_raw = self.mbs2.get("local_size")
+        if isinstance(ls_raw, list) and len(ls_raw) == 3 and all(int(x) > 0 for x in ls_raw):
+            self.local_size: Optional[Tuple[int, int, int]] = (int(ls_raw[0]), int(ls_raw[1]), int(ls_raw[2]))
+        else:
+            self.local_size = None
+
         # Pre-allocate regions for all direct_bindings and pilot_fau keys
         for b in self.direct_bindings:
             key = b.get("key", "")
             if b.get("kind") in ("UBO", "SSBO", "PushConstant") and key:
                 self.get_buf_base(key)
+
+        # Unify Valhall wls_shared with a unique SPIR-V workgroup:<id> shared variable
+        wg_keys: List[str] = []
+        for n in bundle.get("direct_ssa", {}).get("nodes", []):
+            astr = n.get("aux_str", "")
+            if n.get("op") == "LoadSidebandU64" and astr.startswith("workgroup:"):
+                if astr not in wg_keys:
+                    wg_keys.append(astr)
+        self.unique_workgroup_key: Optional[str] = wg_keys[0] if len(wg_keys) == 1 else None
+        if self.unique_workgroup_key is not None:
+            wg_base = self.get_buf_base(self.unique_workgroup_key)
+            self.buf_base_map["wls_shared"] = wg_base
         for pf in self.mbs2.get("pilot_fau", []):
             key = pf.get("key", "")
             if pf.get("resolved") and key:
@@ -258,6 +284,9 @@ class SharedShaderEnv:
             nwords = max(1, (int(rl.get("size", 4)) + 3) // 4)
             uoff = int(rl.get("uni_offset", 0))
             if sym == "gl_mali_ViewportTransform":
+                # TODO(leegao@): Lift symbolic gl_mali_ViewportTransform epilogue onto direct_ssa
+                # (ndc.xyz = clip.xyz / clip.w; win.xyz = ndc.xyz * vp_scale.xyz + vp_bias.xyz)
+                # so Vertex gl_Position equivalence holds for arbitrary non-identity viewports and clip.w != 1.0.
                 # Identity viewport precondition: scale = (1,1,1,1) at uni+0..0xc, bias = (0,0,0,0) at uni+0x10..0x1c.
                 for k in range(nwords):
                     off = uoff + k * 4
@@ -294,10 +323,37 @@ class SharedShaderEnv:
         return self.buf_base_map[key]
 
     def get_buf_mem(self, key: str) -> z3.ArrayRef:
+        if key == "wls_shared" and self.unique_workgroup_key is not None:
+            key = self.unique_workgroup_key
         if key not in self.init_buf_mem:
             safe = key.replace(":", "_")
             self.init_buf_mem[key] = z3.Array(f"mem_{safe}", BV32, BV32)
         return self.init_buf_mem[key]
+
+    def build_preconditions(self) -> List[z3.BoolRef]:
+        """Build semantic execution-environment preconditions (e.g. Compute LocalSize bounds)."""
+        conds: List[z3.BoolRef] = []
+        if self.stage == "Compute" and self.local_size is not None:
+            lx, ly, lz = self.local_size
+            for c, lim in enumerate((lx, ly, lz)):
+                lid_k = f"bi_27_{c}"
+                if lid_k in self.inputs:
+                    conds.append(z3.ULT(self.inputs[lid_k], bv32(lim)))
+                gid_k = f"bi_28_{c}"
+                wg_k = f"bi_26_{c}"
+                if gid_k in self.inputs and lid_k in self.inputs and wg_k in self.inputs:
+                    conds.append(self.inputs[gid_k] == self.inputs[wg_k] * bv32(lim) + self.inputs[lid_k])
+            if "bi_29" in self.inputs:
+                if all(f"bi_27_{c}" in self.inputs for c in range(3)):
+                    lidx_expr = (
+                        self.inputs["bi_27_2"] * bv32(lx * ly)
+                        + self.inputs["bi_27_1"] * bv32(lx)
+                        + self.inputs["bi_27_0"]
+                    )
+                    conds.append(self.inputs["bi_29"] == lidx_expr)
+                else:
+                    conds.append(z3.ULT(self.inputs["bi_29"], bv32(lx * ly * lz)))
+        return conds
 
     def get_img_mem(self, key: str) -> Tuple[z3.ArrayRef, ...]:
         if key not in self.init_img_mem:
@@ -425,6 +481,8 @@ class BlockEffectState:
     """Symbolic observable state at the end of a basic block."""
 
     discarded: z3.BoolRef
+    terminated: z3.BoolRef
+    demoted: z3.BoolRef
     frag_colors: Dict[int, Tuple[z3.BitVecRef, ...]]
     builtin_outputs: Dict[int, Z3Val]
     vert_varyings: Dict[int, Tuple[z3.BitVecRef, ...]]
@@ -435,6 +493,8 @@ class BlockEffectState:
     # Image write arrays: img_key -> Tuple[Array(BV64, BV32) x 4]
     image_mems: Dict[str, Tuple[z3.ArrayRef, ...]]
     fallback_mem: z3.ArrayRef
+    # Ordered per-buffer atomic RMW event log: buf_key -> [(active_cond, op_tag, off_or_addr, arg, cmp)]
+    atomic_events: Dict[str, List[Tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]]]
     # Track originating PCs per output for counterexample localization
     output_pcs: Dict[str, Set[int]]
 
@@ -442,6 +502,8 @@ class BlockEffectState:
 def _clone_state(st: BlockEffectState) -> BlockEffectState:
     return BlockEffectState(
         discarded=st.discarded,
+        terminated=st.terminated,
+        demoted=st.demoted,
         frag_colors=dict(st.frag_colors),
         builtin_outputs=dict(st.builtin_outputs),
         vert_varyings=dict(st.vert_varyings),
@@ -449,6 +511,7 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
         buf_mems=dict(st.buf_mems),
         image_mems=dict(st.image_mems),
         fallback_mem=st.fallback_mem,
+        atomic_events={k: list(v) for k, v in st.atomic_events.items()},
         output_pcs={k: set(v) for k, v in st.output_pcs.items()},
     )
 
@@ -465,7 +528,9 @@ def _merge_states(
     for cond, st in incoming[1:]:
         if z3.is_false(cond):
             continue
-        base_st.discarded = _z3_if(cond, st.discarded, base_st.discarded)
+        base_st.terminated = _z3_if(cond, st.terminated, base_st.terminated)
+        base_st.demoted = _z3_if(cond, st.demoted, base_st.demoted)
+        base_st.discarded = _z3_or(base_st.terminated, base_st.demoted)
         all_rts = set(base_st.frag_colors.keys()) | set(st.frag_colors.keys())
         for rt in all_rts:
             a = base_st.frag_colors.get(rt, (bv32(0),) * 4)
@@ -502,6 +567,27 @@ def _merge_states(
             )
         if not base_st.fallback_mem.eq(st.fallback_mem):
             base_st.fallback_mem = z3.If(cond, st.fallback_mem, base_st.fallback_mem)
+        all_ae = set(base_st.atomic_events.keys()) | set(st.atomic_events.keys())
+        for akey in all_ae:
+            ev_a = base_st.atomic_events.get(akey, [])
+            ev_b = st.atomic_events.get(akey, [])
+            if len(ev_a) == len(ev_b):
+                merged_ev = []
+                for ea, eb in zip(ev_a, ev_b):
+                    merged_ev.append((
+                        _z3_if(cond, eb[0], ea[0]),
+                        eb[1] if ea[1] == eb[1] else f"{ea[1]}|{eb[1]}",
+                        _z3_if(cond, eb[2], ea[2]),
+                        _z3_if(cond, eb[3], ea[3]),
+                        _z3_if(cond, eb[4], ea[4]),
+                    ))
+                base_st.atomic_events[akey] = merged_ev
+            else:
+                # Preserve events from both branches guarded by their respective branch condition
+                ncond = _z3_not(cond)
+                combined = [(_z3_and(ncond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_a]
+                combined.extend((_z3_and(cond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_b)
+                base_st.atomic_events[akey] = combined
         for k, pcs in st.output_pcs.items():
             base_st.output_pcs.setdefault(k, set()).update(pcs)
     return base_st
@@ -516,15 +602,18 @@ class DagSsaZ3Evaluator:
         env: SharedShaderEnv,
         is_valhall_side: bool,
         fp_mode: str = "exact",
+        max_unroll: int = 1,
     ):
         self.ssa = ssa_json
         self.env = env
         self.is_valhall = is_valhall_side
         self.fp_mode = fp_mode
+        self.max_unroll = max(1, int(max_unroll))
         self.blocks: List[Dict[str, Any]] = ssa_json.get("blocks", [])
         self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
         self.values: Dict[int, Z3Val] = {0: bv32(0)}
         self.has_loops: bool = False
+        self.max_unroll_depth: int = 0
 
     def collect_pcs_for_nodes(self, root_nids: Set[int], max_visit: int = 2048) -> List[int]:
         """Lazily collect originating Valhall PCs reachable from sink node IDs (bounded BFS)."""
@@ -887,6 +976,8 @@ class DagSsaZ3Evaluator:
         if op == "PsbLoad":
             addr = _as_bv64(args[0])
             bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+            if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
+                bkey = self.env.unique_workgroup_key
             if bkey is not None:
                 if const_off is not None and (bkey, const_off) in st.const_stores:
                     w_cond, w_val = st.const_stores[(bkey, const_off)]
@@ -901,40 +992,75 @@ class DagSsaZ3Evaluator:
         if op == "PsbStore":
             addr = _as_bv64(args[0])
             val = _as_bv32(args[1])
-            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             nid = int(node["id"])
+            # Normalize OpImageWrite (emitted as PsbStore on img:* with packed xy + c*4) into image_mems
+            if aux_str.startswith("img:"):
+                ikey = aux_str
+                ch_idx = 0
+                xy_addr = addr
+                if z3.is_app(addr) and addr.decl().kind() == z3.Z3_OP_BADD and len(addr.children()) == 2:
+                    c0, c1 = addr.children()
+                    if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
+                        ch_idx = c1.as_long() // 4
+                        xy_addr = c0
+                cur_im = list(st.image_mems.get(ikey, self.env.get_img_mem(ikey)))
+                cur_im[ch_idx] = (
+                    z3.If(store_mask, z3.Store(cur_im[ch_idx], xy_addr, val), cur_im[ch_idx])
+                    if not z3.is_true(store_mask)
+                    else z3.Store(cur_im[ch_idx], xy_addr, val)
+                )
+                st.image_mems[ikey] = tuple(cur_im)
+                st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
+                return args[2] if len(args) > 2 else bv32(0)
+
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+            if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
+                bkey = self.env.unique_workgroup_key
             if bkey is not None:
                 cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-                st.buf_mems[bkey] = z3.If(reach, z3.Store(cur_mem, off32, val), cur_mem) if not z3.is_true(reach) else z3.Store(cur_mem, off32, val)
+                st.buf_mems[bkey] = (
+                    z3.If(store_mask, z3.Store(cur_mem, off32, val), cur_mem)
+                    if not z3.is_true(store_mask)
+                    else z3.Store(cur_mem, off32, val)
+                )
                 if const_off is not None:
                     prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off32)))
-                    st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, reach), _z3_if(reach, val, prev_v))
+                    st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v))
                     st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
                 else:
                     st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
             else:
-                st.fallback_mem = z3.If(reach, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
+                st.fallback_mem = z3.If(store_mask, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
                 st.output_pcs.setdefault("fallback_mem", set()).add(nid)
             return args[2] if len(args) > 2 else bv32(0)
 
         if op == "Kill":
             cond = _as_bool(args[0]) if (aux_bool and len(args) >= 2) else z3.BoolVal(True)
-            st.discarded = _z3_or(st.discarded, _z3_and(reach, cond))
+            is_demote = bool(node.get("aux_bool2", False))
+            eff = _z3_and(reach, cond)
+            if is_demote:
+                st.demoted = _z3_or(st.demoted, eff)
+            else:
+                st.terminated = _z3_or(st.terminated, eff)
+            st.discarded = _z3_or(st.terminated, st.demoted)
             st.output_pcs.setdefault("discarded", set()).add(int(node["id"]))
             return bv32(0)
 
         if op == "StoreFragColor":
             col = args[0]
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             vec4 = tuple(_as_bv32(col[c]) if isinstance(col, tuple) and c < len(col) else bv32(0) for c in range(4))
             prev = st.frag_colors.get(imm_u32, (bv32(0),) * 4)
-            st.frag_colors[imm_u32] = tuple(_z3_if(reach, n, p) for n, p in zip(vec4, prev))
+            st.frag_colors[imm_u32] = tuple(_z3_if(store_mask, n, p) for n, p in zip(vec4, prev))
             st.output_pcs.setdefault(f"frag_color[{imm_u32}]", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op == "StoreBuiltinOutput":
             payload = args[0]
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             if imm_u32 in st.builtin_outputs:
-                st.builtin_outputs[imm_u32] = _z3_if(reach, payload, st.builtin_outputs[imm_u32])
+                st.builtin_outputs[imm_u32] = _z3_if(store_mask, payload, st.builtin_outputs[imm_u32])
             else:
                 st.builtin_outputs[imm_u32] = payload
             st.output_pcs.setdefault(f"builtin_out[{imm_u32}]", set()).add(int(node["id"]))
@@ -942,15 +1068,17 @@ class DagSsaZ3Evaluator:
 
         if op == "StoreVertVarying":
             loc = self.env.sout_addr_to_loc.get(imm_u32, imm_u32) if self.is_valhall else imm_u32
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             vec = args[0]
             vec4 = tuple(_as_bv32(vec[c]) if isinstance(vec, tuple) and c < len(vec) else bv32(0) for c in range(4))
             prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
-            st.vert_varyings[loc] = tuple(_z3_if(reach, n, p) for n, p in zip(vec4, prev))
+            st.vert_varyings[loc] = tuple(_z3_if(store_mask, n, p) for n, p in zip(vec4, prev))
             st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(int(node["id"]))
             return args[-1] if args else bv32(0)
 
         if op == "StoreTexel":
             coord = args[0]
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             texel = args[1] if len(args) > 1 else (bv32(0),) * 4
             cx = _as_bv32(coord[0]) if isinstance(coord, tuple) and len(coord) > 0 else _as_bv32(coord)
             cy = _as_bv32(coord[1]) if isinstance(coord, tuple) and len(coord) > 1 else bv32(0)
@@ -959,7 +1087,7 @@ class DagSsaZ3Evaluator:
             ikey = aux_str or f"img_{imm_u32}"
             cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
             updated = tuple(
-                z3.If(reach, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c]) if not z3.is_true(reach)
+                z3.If(store_mask, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c]) if not z3.is_true(store_mask)
                 else z3.Store(cur_im[c], xy, vec4[c])
                 for c in range(4)
             )
@@ -970,8 +1098,61 @@ class DagSsaZ3Evaluator:
         if op in ("AtomicRmw", "AtomicExchange", "AtomicCmpXchg"):
             addr = _as_bv64(args[0])
             arg = _as_bv32(args[1]) if len(args) > 1 else bv32(0)
-            uf = _hw_uf(f"atomic_{op}_{aux_str}", BV64, BV32, BV32)
-            return (uf(addr, arg), args[-1] if args else bv32(0))
+            cmp_val = _as_bv32(args[2]) if (op == "AtomicCmpXchg" and len(args) > 2) else bv32(0)
+            store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
+            op_tag = aux_str.lower() if aux_str else op.lower()
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key="")
+            if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
+                bkey = self.env.unique_workgroup_key
+            nid = int(node["id"])
+            if bkey is not None:
+                cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
+                old_val = z3.Select(cur_mem, off32)
+            else:
+                old_val = z3.Select(st.fallback_mem, addr)
+
+            # Compute exact single-invocation RMW post-state value
+            if op == "AtomicExchange":
+                new_val = arg
+            elif op == "AtomicCmpXchg":
+                new_val = z3.If(old_val == cmp_val, arg, old_val)
+            elif op_tag in ("aadd", "add"):
+                new_val = old_val + arg
+            elif op_tag in ("asub", "sub"):
+                new_val = old_val - arg
+            elif op_tag in ("aand", "and"):
+                new_val = old_val & arg
+            elif op_tag in ("aor", "or"):
+                new_val = old_val | arg
+            elif op_tag in ("axor", "xor"):
+                new_val = old_val ^ arg
+            elif op_tag in ("asmin", "smin"):
+                new_val = z3.If(old_val < arg, old_val, arg)
+            elif op_tag in ("aumin", "umin"):
+                new_val = z3.If(z3.ULT(old_val, arg), old_val, arg)
+            elif op_tag in ("asmax", "smax"):
+                new_val = z3.If(old_val > arg, old_val, arg)
+            elif op_tag in ("aumax", "umax"):
+                new_val = z3.If(z3.UGT(old_val, arg), old_val, arg)
+            else:
+                new_val = _hw_uf(f"atomic_post_{op_tag}", BV32, BV32, BV32)(old_val, arg)
+
+            if bkey is not None:
+                cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
+                st.buf_mems[bkey] = (
+                    z3.If(store_mask, z3.Store(cur_mem, off32, new_val), cur_mem)
+                    if not z3.is_true(store_mask)
+                    else z3.Store(cur_mem, off32, new_val)
+                )
+                st.atomic_events.setdefault(bkey, []).append((store_mask, op_tag, off32, arg, cmp_val))
+                st.output_pcs.setdefault(f"atomic:{bkey}", set()).add(nid)
+                st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
+            else:
+                st.fallback_mem = z3.If(store_mask, z3.Store(st.fallback_mem, addr, new_val), st.fallback_mem)
+                st.atomic_events.setdefault("fallback_mem", []).append((store_mask, op_tag, addr, arg, cmp_val))
+                st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
+                st.output_pcs.setdefault("fallback_mem", set()).add(nid)
+            return (old_val, args[-1] if args else bv32(0))
 
         if op in ("ControlBarrier", "Branch", "BranchCond", "Return"):
             return args[-1] if args else bv32(0)
@@ -984,9 +1165,11 @@ class DagSsaZ3Evaluator:
         return bv32(0)
 
     def evaluate(self) -> BlockEffectState:
-        """Evaluate all blocks in topological order using DAG path-merging."""
+        """Evaluate all blocks in topological order using DAG path-merging (with configurable bounded loop unrolling)."""
         init_state = BlockEffectState(
             discarded=z3.BoolVal(False),
+            terminated=z3.BoolVal(False),
+            demoted=z3.BoolVal(False),
             frag_colors={},
             builtin_outputs={},
             vert_varyings={},
@@ -994,6 +1177,7 @@ class DagSsaZ3Evaluator:
             buf_mems={},
             image_mems={},
             fallback_mem=self.env.fallback_mem,
+            atomic_events={},
             output_pcs={},
         )
         if not self.blocks:
@@ -1001,93 +1185,115 @@ class DagSsaZ3Evaluator:
 
         blk_reach: Dict[int, z3.BoolRef] = {}
         blk_out_state: Dict[int, BlockEffectState] = {}
-        # Incoming edges per block: dst -> list of (src_blk, edge_cond)
         edge_conds: Dict[int, List[Tuple[int, z3.BoolRef]]] = {b["id"]: [] for b in self.blocks}
         exit_states: List[Tuple[z3.BoolRef, BlockEffectState]] = []
 
-        for blk in self.blocks:
-            bid = int(blk["id"])
-            if bid == 0:
-                reach = z3.BoolVal(True)
-                cur_st = _clone_state(init_state)
-            else:
-                inc_edges = [(p, c) for (p, c) in edge_conds.get(bid, []) if p in blk_out_state]
-                if not inc_edges:
-                    # Unreachable block
-                    blk_reach[bid] = z3.BoolVal(False)
-                    blk_out_state[bid] = _clone_state(init_state)
-                    continue
-                reach = z3.BoolVal(False)
-                for _, c in inc_edges:
-                    reach = _z3_or(reach, c)
-                cur_st = _merge_states([(c, blk_out_state[p]) for (p, c) in inc_edges], self.env)
-
-            blk_reach[bid] = reach
-
-            # Detect loop headers (any predecessor >= bid)
-            for p in blk.get("preds", []):
-                if int(p) >= bid:
-                    self.has_loops = True
-
-            # Resolve Phis via active incoming edge predicates
-            inc_cond_map = {p: c for (p, c) in edge_conds.get(bid, [])}
-            for pid in blk.get("phis", []):
-                pnode = self.nodes_by_id.get(int(pid))
-                if not pnode:
-                    continue
-                incomings = pnode.get("phi", [])
-                # Filter to already-evaluated forward predecessors
-                fwd = [(int(p), int(v)) for p, v in incomings if int(p) in blk_out_state and int(v) in self.values]
-                if not fwd:
-                    vt = pnode.get("type", "U32")
-                    self.values[int(pid)] = z3.BoolVal(False) if vt == "Bool" else bv32(0)
-                    continue
-                pass
-                if len(fwd) == 1:
-                    self.values[int(pid)] = self.values[fwd[0][1]]
+        def _eval_block_slice(block_list: List[Dict[str, Any]], allow_backedges: bool) -> List[Tuple[int, int, z3.BoolRef]]:
+            backedges: List[Tuple[int, int, z3.BoolRef]] = []
+            for blk in block_list:
+                bid = int(blk["id"])
+                if bid == 0 and not allow_backedges:
+                    reach = z3.BoolVal(True)
+                    cur_st = _clone_state(init_state)
                 else:
-                    acc = self.values[fwd[0][1]]
-                    for pred_b, val_id in fwd[1:]:
-                        ec = inc_cond_map.get(pred_b, z3.BoolVal(False))
-                        acc = _z3_if(ec, self.values[val_id], acc)
-                    self.values[int(pid)] = acc
+                    inc_edges = [(p, c) for (p, c) in edge_conds.get(bid, []) if p in blk_out_state]
+                    if not inc_edges:
+                        blk_reach[bid] = z3.BoolVal(False)
+                        blk_out_state[bid] = _clone_state(init_state)
+                        continue
+                    reach = z3.BoolVal(False)
+                    for _, c in inc_edges:
+                        reach = _z3_or(reach, c)
+                    cur_st = _merge_states([(c, blk_out_state[p]) for (p, c) in inc_edges], self.env)
 
-            # Evaluate block nodes in order
-            for nid in blk.get("nodes", []):
-                node = self.nodes_by_id.get(int(nid))
-                if not node:
-                    continue
-                self.values[int(nid)] = self._eval_node(node, cur_st, reach)
+                blk_reach[bid] = reach
 
-            blk_out_state[bid] = cur_st
+                for p in blk.get("preds", []):
+                    if int(p) >= bid:
+                        self.has_loops = True
 
-            # Propagate outgoing CFG edges
-            bt = int(blk.get("branch_target", -1))
-            ft = int(blk.get("fallthrough", -1))
-            is_cond = bool(blk.get("is_cond", False))
-            is_end = bool(blk.get("is_end", False))
-            is_discard = bool(blk.get("is_discard", False))
+                inc_cond_map = {p: c for (p, c) in edge_conds.get(bid, [])}
+                for pid in blk.get("phis", []):
+                    pnode = self.nodes_by_id.get(int(pid))
+                    if not pnode:
+                        continue
+                    incomings = pnode.get("phi", [])
+                    fwd = [(int(p), int(v)) for p, v in incomings if int(p) in blk_out_state and int(v) in self.values]
+                    if not fwd:
+                        vt = pnode.get("type", "U32")
+                        self.values[int(pid)] = z3.BoolVal(False) if vt == "Bool" else bv32(0)
+                        continue
+                    if len(fwd) == 1:
+                        self.values[int(pid)] = self.values[fwd[0][1]]
+                    else:
+                        acc = self.values[fwd[0][1]]
+                        for pred_b, val_id in fwd[1:]:
+                            ec = inc_cond_map.get(pred_b, z3.BoolVal(False))
+                            acc = _z3_if(ec, self.values[val_id], acc)
+                        self.values[int(pid)] = acc
 
-            if is_cond and bt >= 0 and ft >= 0:
-                bcond_id = int(blk.get("branch_cond", 0))
-                bcond = _as_bool(self.values.get(bcond_id, z3.BoolVal(False)))
-                if bt > bid:
-                    edge_conds.setdefault(bt, []).append((bid, _z3_and(reach, bcond)))
-                else:
+                for nid in blk.get("nodes", []):
+                    node = self.nodes_by_id.get(int(nid))
+                    if not node:
+                        continue
+                    self.values[int(nid)] = self._eval_node(node, cur_st, reach)
+
+                blk_out_state[bid] = cur_st
+
+                # Hard OpKill / OpTerminateInvocation suppresses outgoing control-flow reachability;
+                # OpDemoteToHelperInvocation continues executing with stores masked.
+                cf_reach = _z3_and(reach, _z3_not(cur_st.terminated))
+
+                bt = int(blk.get("branch_target", -1))
+                ft = int(blk.get("fallthrough", -1))
+                is_cond = bool(blk.get("is_cond", False))
+                is_end = bool(blk.get("is_end", False))
+                is_discard = bool(blk.get("is_discard", False))
+
+                if is_cond and bt >= 0 and ft >= 0:
+                    bcond_id = int(blk.get("branch_cond", 0))
+                    bcond = _as_bool(self.values.get(bcond_id, z3.BoolVal(False)))
+                    t_cond = _z3_and(cf_reach, bcond)
+                    f_cond = _z3_and(cf_reach, _z3_not(bcond))
+                    if bt > bid:
+                        edge_conds.setdefault(bt, []).append((bid, t_cond))
+                    else:
+                        self.has_loops = True
+                        if not z3.is_false(t_cond):
+                            backedges.append((bid, bt, t_cond))
+                    if ft > bid:
+                        edge_conds.setdefault(ft, []).append((bid, f_cond))
+                    else:
+                        self.has_loops = True
+                        if not z3.is_false(f_cond):
+                            backedges.append((bid, ft, f_cond))
+                elif bt >= 0 and bt > bid:
+                    edge_conds.setdefault(bt, []).append((bid, cf_reach))
+                elif ft >= 0 and ft > bid:
+                    edge_conds.setdefault(ft, []).append((bid, cf_reach))
+                elif bt >= 0 and bt <= bid:
                     self.has_loops = True
-                if ft > bid:
-                    edge_conds.setdefault(ft, []).append((bid, _z3_and(reach, _z3_not(bcond))))
-                else:
-                    self.has_loops = True
-            elif bt >= 0 and bt > bid:
-                edge_conds.setdefault(bt, []).append((bid, reach))
-            elif ft >= 0 and ft > bid:
-                edge_conds.setdefault(ft, []).append((bid, reach))
-            elif bt >= 0 and bt <= bid:
-                self.has_loops = True
+                    if not z3.is_false(cf_reach):
+                        backedges.append((bid, bt, cf_reach))
 
-            if is_end or is_discard or (bt < 0 and ft < 0):
-                exit_states.append((reach, cur_st))
+                if is_end or is_discard or (bt < 0 and ft < 0):
+                    exit_states.append((reach, cur_st))
+            return backedges
+
+        backedges = _eval_block_slice(self.blocks, allow_backedges=False)
+        self.max_unroll_depth = 1 if self.has_loops else 0
+
+        # Configurable bounded loop unrolling when max_unroll > 1
+        unroll_iter = 1
+        while backedges and unroll_iter < self.max_unroll:
+            unroll_iter += 1
+            self.max_unroll_depth = unroll_iter
+            min_hdr = min(hdr for _, hdr, _ in backedges)
+            for src, hdr, bcond in backedges:
+                edge_conds.setdefault(hdr, []).append((src, bcond))
+            loop_slice = [b for b in self.blocks if int(b["id"]) >= min_hdr]
+            exit_states.clear()
+            backedges = _eval_block_slice(loop_slice, allow_backedges=True)
 
         if not exit_states:
             return blk_out_state.get(len(self.blocks) - 1, init_state)
@@ -1100,18 +1306,27 @@ def _solve_miter_eq(
     guard: Optional[z3.BoolRef],
     timeout_ms: int,
     env: SharedShaderEnv,
+    preconditions: Optional[List[z3.BoolRef]] = None,
+    smt2_out: Optional[List[str]] = None,
+    check_name: str = "",
 ) -> Tuple[str, Optional[Tuple[str, str, str]]]:
-    """Check whether `guard => (lhs == rhs)` holds for all inputs."""
+    """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
     if lhs.eq(rhs):
+        if smt2_out is not None:
+            smt2_out.append(f"; --- {check_name}: syntactically identical (UNSAT) ---\n")
         return "UNSAT", None
 
     # Fast constant-simplification check before invoking SMT
     diff = z3.simplify(lhs != rhs)
     if z3.is_false(diff):
+        if smt2_out is not None:
+            smt2_out.append(f"; --- {check_name}: simplified to false (UNSAT) ---\n")
         return "UNSAT", None
     if guard is not None:
         query = z3.simplify(_z3_and(guard, diff))
         if z3.is_false(query):
+            if smt2_out is not None:
+                smt2_out.append(f"; --- {check_name}: guarded query simplified to false (UNSAT) ---\n")
             return "UNSAT", None
     else:
         query = diff
@@ -1119,7 +1334,12 @@ def _solve_miter_eq(
     s = z3.Solver()
     s.set("timeout", timeout_ms)
     s.set("rlimit", 2_000_000)
+    if preconditions:
+        for pre in preconditions:
+            s.add(pre)
     s.add(query)
+    if smt2_out is not None:
+        smt2_out.append(f"; === Output Miter Check: {check_name} ===\n(push 1)\n{s.to_smt2()}(check-sat)\n(pop 1)\n")
     rc = s.check()
     if rc == z3.unsat:
         return "UNSAT", None
@@ -1145,6 +1365,9 @@ def verify_equivalence_bundle(
     timeout_ms: int = 3000,
     fp_mode: str = "exact",
     allow_uf_fallback: bool = True,
+    max_unroll: int = 1,
+    dump_smt2_path: Optional[str] = None,
+    fp_discharger: Optional[FpProofDischargerRegistry] = None,
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -1172,12 +1395,14 @@ def verify_equivalence_bundle(
         return res
 
     env = SharedShaderEnv(bundle)
-    d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode)
-    v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode)
+    d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll)
+    v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll)
 
     d_st = d_eval.evaluate()
     v_st = v_eval.evaluate()
     res.has_loops = d_eval.has_loops or v_eval.has_loops
+    res.max_unroll_depth = max(d_eval.max_unroll_depth, v_eval.max_unroll_depth)
+    preconditions = env.build_preconditions()
     pc_disasm: Dict[str, str] = bundle.get("mbs2_context", {}).get("pc_disasm", {})
 
     def lookup_pcs(key: str) -> List[Tuple[int, str]]:
@@ -1201,14 +1426,21 @@ def verify_equivalence_bundle(
         for ch, cname in enumerate(("r", "g", "b", "a")):
             checks.append((f"frag_color[{rt}].{cname}", dc[ch], vc[ch], not_disc, f"frag_color[{rt}]"))
 
-    # Builtin outputs (gl_Position, gl_FragDepth, etc.)
+    # Builtin outputs (gl_Position, gl_FragDepth, etc.) — fail-closed on asymmetric presence
     all_bis = sorted(set(d_st.builtin_outputs.keys()) | set(v_st.builtin_outputs.keys()))
     for bi in all_bis:
         do = d_st.builtin_outputs.get(bi)
         vo = v_st.builtin_outputs.get(bi)
         if do is None or vo is None:
+            side = "direct" if do is not None else "valhall"
+            msg = f"Asymmetric builtin_out[{bi}]: emitted only by {side}"
+            res.asymmetric_outputs.append(f"builtin_out[{bi}]")
+            res.notes.append(msg)
+            # Fail-closed check: require missing side to match (unless always discarded)
+            checks.append((f"builtin_out[{bi}].present", z3.BoolVal(do is not None), z3.BoolVal(vo is not None), not_disc, f"builtin_out[{bi}]"))
             continue
         bi_guard = not_disc
+        # TODO(leegao@): Replace identity viewport precondition with symbolic gl_mali_ViewportTransform epilogue on direct_ssa.
         # Under Valhall's folded gl_mali_ViewportTransform + perspective divide,
         # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
         if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
@@ -1228,15 +1460,22 @@ def verify_equivalence_bundle(
     # Vertex varying outputs
     all_vv = sorted(set(d_st.vert_varyings.keys()) | set(v_st.vert_varyings.keys()))
     for loc in all_vv:
+        if (loc in d_st.vert_varyings) != (loc in v_st.vert_varyings):
+            side = "direct" if loc in d_st.vert_varyings else "valhall"
+            res.asymmetric_outputs.append(f"vert_var[{loc}]")
+            res.notes.append(f"Asymmetric vert_var[{loc}]: emitted only by {side}")
         dv = d_st.vert_varyings.get(loc, (bv32(0),) * 4)
         vv = v_st.vert_varyings.get(loc, (bv32(0),) * 4)
         for c in range(4):
             checks.append((f"vert_var[{loc}][{c}]", dv[c], vv[c], None, f"vert_var[{loc}]"))
 
-    # Constant-offset buffer stores (SSBO writes; skip private thread-local scratch spills)
+    def _is_scratch_region(bk: str) -> bool:
+        return bk in ("tls_private", "wls_shared") or bk.startswith("workgroup:")
+
+    # Constant-offset buffer stores (SSBO writes; skip thread/workgroup-local scratch spills)
     all_cs = sorted(set(d_st.const_stores.keys()) | set(v_st.const_stores.keys()))
     for bkey, off in all_cs:
-        if bkey in ("tls_private", "wls_shared"):
+        if _is_scratch_region(bkey):
             continue
         dw, dv = d_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
         vw, vv = v_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
@@ -1248,7 +1487,7 @@ def verify_equivalence_bundle(
     const_store_bkeys = {bk for bk, _ in all_cs}
     all_bm_keys = sorted(set(d_st.buf_mems.keys()) | set(v_st.buf_mems.keys()))
     for bkey in all_bm_keys:
-        if bkey in ("tls_private", "wls_shared"):
+        if _is_scratch_region(bkey):
             continue
         has_dyn = (f"{bkey}:dyn" in d_st.output_pcs) or (f"{bkey}:dyn" in v_st.output_pcs)
         if not has_dyn and bkey in const_store_bkeys:
@@ -1270,6 +1509,22 @@ def verify_equivalence_bundle(
         for c, cname in enumerate(("r", "g", "b", "a")):
             checks.append((f"img:{ikey}[xy].{cname}", z3.Select(d_im[c], probe_xy), z3.Select(v_im[c], probe_xy), None, f"img:{ikey}"))
 
+    # Ordered per-buffer atomic RMW event logs (prevents SKIP on atomic-only compute shaders)
+    all_ae_keys = sorted(set(d_st.atomic_events.keys()) | set(v_st.atomic_events.keys()))
+    for akey in all_ae_keys:
+        if _is_scratch_region(akey):
+            continue
+        d_evs = d_st.atomic_events.get(akey, [])
+        v_evs = v_st.atomic_events.get(akey, [])
+        if len(d_evs) != len(v_evs):
+            checks.append((f"atomic:{akey}.count", bv32(len(d_evs)), bv32(len(v_evs)), None, f"atomic:{akey}"))
+        for idx in range(min(len(d_evs), len(v_evs))):
+            de, ve = d_evs[idx], v_evs[idx]
+            checks.append((f"atomic:{akey}[{idx}].active", de[0], ve[0], None, f"atomic:{akey}"))
+            ev_guard = _z3_or(de[0], ve[0])
+            checks.append((f"atomic:{akey}[{idx}].addr", _as_bv64(de[2]), _as_bv64(ve[2]), ev_guard, f"atomic:{akey}"))
+            checks.append((f"atomic:{akey}[{idx}].arg", de[3], ve[3], ev_guard, f"atomic:{akey}"))
+
     # Unresolved-address fallback memory writes (never silently skip)
     if not d_st.fallback_mem.eq(env.fallback_mem) or not v_st.fallback_mem.eq(env.fallback_mem):
         probe_addr = z3.BitVec("probe_fallback_addr", 64)
@@ -1282,10 +1537,30 @@ def verify_equivalence_bundle(
         res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return res
 
+    smt2_chunks: Optional[List[str]] = [] if dump_smt2_path else None
+    if smt2_chunks is not None:
+        smt2_chunks.append(
+            f"; Shader Equivalence Verification SMT-LIB2 Model\n"
+            f"; Shader: {os.path.basename(spv_path)} | Stage: {stage} | FP Mode: {fp_mode}\n"
+            f"; Direct SSA: {res.direct_blocks}B/{res.direct_nodes}N | Valhall SSA: {res.valhall_blocks}B/{res.valhall_nodes}N\n"
+            f"; LocalSize: {env.local_size} | MaxUnroll: {max_unroll} | Preconditions: {len(preconditions)}\n"
+            f"(set-logic ALL)\n\n"
+        )
+
+    discharger = fp_discharger if fp_discharger is not None else FpProofDischargerRegistry()
     any_unknown = False
-    for name, lhs, rhs, guard, pc_key in checks:
+    for idx_chk, (name, lhs, rhs, guard, pc_key) in enumerate(checks):
         res.checked_outputs.append(name)
-        st_rc, cex = _solve_miter_eq(lhs, rhs, guard, timeout_ms, env)
+        st_rc, cex = _solve_miter_eq(
+            lhs,
+            rhs,
+            guard,
+            timeout_ms,
+            env,
+            preconditions=preconditions,
+            smt2_out=smt2_chunks,
+            check_name=name,
+        )
         if st_rc == "SAT" and cex is not None:
             res.mismatches.append(
                 OutputMismatch(
@@ -1297,15 +1572,48 @@ def verify_equivalence_bundle(
                 )
             )
         elif st_rc == "UNKNOWN":
-            any_unknown = True
+            # Submit to Layer-2 pluggable FP proof-obligation discharger
+            ob_pre = list(preconditions)
+            if guard is not None:
+                ob_pre.append(guard)
+            ob = FpObligation(
+                obligation_id=f"{os.path.basename(spv_path)}#{idx_chk}:{name}",
+                output_name=name,
+                kind="bit_exact_fp" if fp_mode == "exact" else "uf_refinement",
+                lhs=lhs,
+                rhs=rhs,
+                preconditions=ob_pre,
+                ulp_bound=0,
+                source_hint=pc_key,
+            )
+            d_res = discharger.submit(ob, timeout_ms=min(timeout_ms, 1000))
+            res.fp_obligations += 1
+            if d_res.status == "DISCHARGED":
+                res.notes.append(f"Layer-2 discharged {name} via {d_res.backend_name}")
+            else:
+                any_unknown = True
+
+    if smt2_chunks is not None and dump_smt2_path:
+        os.makedirs(os.path.dirname(os.path.abspath(dump_smt2_path)), exist_ok=True)
+        with open(dump_smt2_path, "w", encoding="utf-8") as sf:
+            sf.write("".join(smt2_chunks))
 
     if res.mismatches:
         res.status = "SAT"
     elif any_unknown:
         if fp_mode == "exact" and allow_uf_fallback:
-            uf_res = verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode="uf", allow_uf_fallback=False)
+            uf_res = verify_equivalence_bundle(
+                bundle,
+                timeout_ms=timeout_ms,
+                fp_mode="uf",
+                allow_uf_fallback=False,
+                max_unroll=max_unroll,
+                dump_smt2_path=dump_smt2_path,
+                fp_discharger=discharger,
+            )
             # UF is an over-approximation: UNSAT/BOUNDED_UNSAT is sound, but UF SAT may be spurious.
             if uf_res.status in ("UNSAT", "BOUNDED_UNSAT"):
+                uf_res.fp_obligations = res.fp_obligations
                 return uf_res
             res.notes.append("Exact FP timed out; UF fallback could not prove equivalence")
         res.status = "UNKNOWN"
@@ -1321,6 +1629,8 @@ def verify_spv_file(
     spirv2valhall_bin: str = "./build/spirv2valhall",
     timeout_ms: int = 3000,
     fp_mode: str = "exact",
+    max_unroll: int = 1,
+    dump_smt2_path: Optional[str] = None,
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -1344,7 +1654,7 @@ def verify_spv_file(
             )
         with open(tmp_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode)
+        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path)
     finally:
         if os.path.exists(tmp_json):
             os.remove(tmp_json)
@@ -1356,17 +1666,33 @@ def main() -> int:
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--timeout-ms", type=int, default=3000, help="Per-output Z3 timeout in ms")
     ap.add_argument("--fp-mode", choices=["exact", "uf"], default="exact")
+    ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
+    ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
     args = ap.parse_args()
 
     if args.spv_or_json.endswith(".json"):
         with open(args.spv_or_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        r = verify_equivalence_bundle(bundle, timeout_ms=args.timeout_ms, fp_mode=args.fp_mode)
+        r = verify_equivalence_bundle(
+            bundle,
+            timeout_ms=args.timeout_ms,
+            fp_mode=args.fp_mode,
+            max_unroll=args.max_unroll,
+            dump_smt2_path=args.dump_smt2,
+        )
     else:
-        r = verify_spv_file(args.spv_or_json, spirv2valhall_bin=args.bin, timeout_ms=args.timeout_ms, fp_mode=args.fp_mode)
+        r = verify_spv_file(
+            args.spv_or_json,
+            spirv2valhall_bin=args.bin,
+            timeout_ms=args.timeout_ms,
+            fp_mode=args.fp_mode,
+            max_unroll=args.max_unroll,
+            dump_smt2_path=args.dump_smt2,
+        )
 
     print(f"[{r.status}] {os.path.basename(r.spv_path)} stage={r.stage} fp={r.fp_mode} "
-          f"outputs={len(r.checked_outputs)} direct=({r.direct_blocks}B/{r.direct_nodes}N) "
+          f"outputs={len(r.checked_outputs)} unroll={r.max_unroll_depth} "
+          f"direct=({r.direct_blocks}B/{r.direct_nodes}N) "
           f"valhall=({r.valhall_blocks}B/{r.valhall_nodes}N) elapsed={r.elapsed_ms:.1f}ms")
     for mm in r.mismatches[:5]:
         print(f"  MISMATCH {mm.output_name}: direct={mm.direct_hex} valhall={mm.valhall_hex} ({mm.model_summary})")

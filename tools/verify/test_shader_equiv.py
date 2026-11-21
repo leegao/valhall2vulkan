@@ -650,5 +650,280 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertIn("ssbo:0:2[probe_off]", res.checked_outputs)
 
 
+    def test_v25_1_local_size_preconditions(self) -> None:
+        """Compute LocalSize constraints eliminate out-of-range LocalInvocationId counterexamples."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadBuiltinInput", "type": "V3U32", "blk": 0, "args": [], "imm_u32": 27},
+                {"id": 3, "op": "VecExtract", "type": "U32", "blk": 0, "args": [2], "imm_u32": 0},
+                {"id": 4, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 7},
+                {"id": 5, "op": "BitAnd", "type": "U32", "blk": 0, "args": [3, 4]},
+                {"id": 6, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 7, "op": "PsbStore", "type": "Token", "blk": 0, "args": [6, 5, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+            ],
+        }
+        # Valhall side omits the redundant `& 7` because LocalSize.x == 8 guarantees lid.x < 8
+        valhall_ssa = copy.deepcopy(direct_ssa)
+        valhall_ssa["nodes"][6]["args"] = [6, 3, 1]
+        bundle = {
+            "spv_path": "synthetic_localsize.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {
+                "local_size": [8, 8, 1],
+                "fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {},
+            },
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+    def test_v25_1_wls_shared_workgroup_unification(self) -> None:
+        """Valhall wls_shared (sideband 7) must unify with unique SPIR-V workgroup:<id>."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 7, "aux_str": "workgroup:3254"},
+                {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 0x1234},
+                {"id": 4, "op": "PsbStore", "type": "Token", "blk": 0, "args": [2, 3, 1], "imm_u32": 4, "aux_str": "workgroup:3254"},
+                {"id": 5, "op": "PsbLoad", "type": "TupleValToken", "blk": 0, "args": [2, 4], "imm_u32": 4, "aux_str": "workgroup:3254"},
+                {"id": 6, "op": "TupleExtract", "type": "U32", "blk": 0, "args": [5], "imm_u32": 0},
+                {"id": 7, "op": "TupleExtract", "type": "Token", "blk": 0, "args": [5], "imm_u32": 1},
+                {"id": 8, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 9, "op": "PsbStore", "type": "Token", "blk": 0, "args": [8, 6, 7], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+            ],
+        }
+        valhall_ssa = copy.deepcopy(direct_ssa)
+        valhall_ssa["nodes"][1]["aux_str"] = ""
+        valhall_ssa["nodes"][3]["aux_str"] = ""
+        valhall_ssa["nodes"][4]["aux_str"] = ""
+        bundle = {
+            "spv_path": "synthetic_wls_unify.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertIn("ssbo:0:0+0x0.value", res.checked_outputs)
+
+    def test_v25_1_atomic_rmw_state_and_events(self) -> None:
+        """Atomic-only compute shader must verify atomic RMW state & event log (never SKIP)."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 1},
+                {"id": 4, "op": "AtomicRmw", "type": "TupleValToken", "blk": 0, "args": [2, 3, 1], "aux_str": "aadd"},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_atomic.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": copy.deepcopy(direct_ssa),
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertIn("atomic:ssbo:0:0[0].arg", res.checked_outputs)
+
+        # Mutate valhall atomic argument -> must catch SAT
+        bundle["valhall_ssa"]["nodes"][2]["imm_u32"] = 2
+        res_sat = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res_sat.status, "SAT")
+
+    def test_v25_1_asymmetric_builtin_fail_closed(self) -> None:
+        """Asymmetric builtin_outputs must warn and fail-closed instead of silently skipping."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3F000000},
+                {"id": 3, "op": "StoreBuiltinOutput", "type": "Token", "blk": 0, "args": [2, 1], "imm_u32": 22},
+            ],
+        }
+        valhall_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [{"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []}],
+        }
+        bundle = {
+            "spv_path": "synthetic_asym_bi.spv",
+            "stage": "Fragment", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "SAT")
+        self.assertIn("builtin_out[22]", res.asymmetric_outputs)
+
+    def test_v25_1_demote_masks_stores_but_preserves_cf(self) -> None:
+        """OpDemoteToHelperInvocation (aux_bool2=True) masks stores without halting control flow."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "ConstBool", "type": "Bool", "blk": 0, "args": [], "imm_u32": 1},
+                {"id": 3, "op": "Kill", "type": "Void", "blk": 0, "args": [2, 1], "aux_bool": True, "aux_bool2": True},
+                {"id": 4, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 5, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 99},
+                {"id": 6, "op": "PsbStore", "type": "Token", "blk": 0, "args": [4, 5, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+            ],
+        }
+        # Valhall side does not emit the post-demote store at all -> both must agree ssbo:0:0+0x0.written == False!
+        valhall_ssa = copy.deepcopy(direct_ssa)
+        valhall_ssa["blocks"][0]["nodes"] = [1, 2, 3]
+        valhall_ssa["nodes"] = valhall_ssa["nodes"][:3]
+        bundle = {
+            "spv_path": "synthetic_demote.spv",
+            "stage": "Fragment", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+
+    def test_v25_1_image_write_psbstore_vs_storetexel_normalization(self) -> None:
+        """OpImageWrite (PsbStore on img:0:0) must normalize to match StoreTexel."""
+        direct_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 3},
+                {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 5},
+                {"id": 4, "op": "Pack64", "type": "U64", "blk": 0, "args": [2, 3]},
+                {"id": 5, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+                {"id": 6, "op": "PsbStore", "type": "Token", "blk": 0, "args": [4, 5, 1], "imm_u32": 4, "aux_str": "img:0:0"},
+            ],
+        }
+        valhall_ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 3},
+                {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 5},
+                {"id": 4, "op": "VecConstruct2", "type": "V2U32", "blk": 0, "args": [2, 3]},
+                {"id": 5, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+                {"id": 6, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 0},
+                {"id": 7, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [5, 6, 6, 6]},
+                {"id": 8, "op": "StoreTexel", "type": "Token", "blk": 0, "args": [4, 7, 1], "aux_str": "img:0:0"},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_img_write.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [],
+            "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        # Channel r matches, channels g/b/a differ because direct wrote only channel 0 while StoreTexel wrote 0 to g/b/a
+        self.assertIn("img:img:0:0[xy].r", res.checked_outputs)
+        self.assertFalse(any(m.output_name == "img:img:0:0[xy].r" for m in res.mismatches))
+
+    def test_v25_1_fp_proof_discharger_and_smt2_dump(self) -> None:
+        """Layer-2 FpProofDischargerRegistry and --dump-smt2 export must work cleanly."""
+        import tempfile, os, z3
+        from tools.verify.fp_proof_discharger import FpObligation, FpProofDischargerRegistry
+
+        reg = FpProofDischargerRegistry()
+        x = z3.BitVec("x", 32)
+        ob = FpObligation(
+            obligation_id="ob_neg_neg",
+            output_name="frag_color[0].r",
+            kind="bit_exact_fp",
+            lhs=(x ^ z3.BitVecVal(0x80000000, 32)) ^ z3.BitVecVal(0x80000000, 32),
+            rhs=x,
+        )
+        dr = reg.submit(ob, timeout_ms=1000)
+        self.assertEqual(dr.status, "DISCHARGED")
+        self.assertEqual(dr.backend_name, "z3_fp_exact")
+        self.assertEqual(reg.summary()["discharged"], 1)
+
+        # Verify SMT2 dump on a minimal bundle
+        ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "is_loop_header": False,
+                "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 29},
+                {"id": 3, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "imm_u32": 16, "aux_str": "ssbo:0:0"},
+                {"id": 4, "op": "PsbStore", "type": "Token", "blk": 0, "args": [3, 2, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
+            ],
+        }
+        bundle = {
+            "spv_path": "synthetic_smt2.spv",
+            "stage": "Compute", "arch": 10, "direct_ok": True, "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "sideband_slot": 16, "set": 0, "binding": 0, "key": "ssbo:0:0"}],
+            "mbs2_context": {"local_size": [4, 1, 1], "fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": ssa,
+            "valhall_ssa": copy.deepcopy(ssa),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            smt_path = os.path.join(tmp, "out.smt2")
+            res = verify_equivalence_bundle(bundle, timeout_ms=2000, dump_smt2_path=smt_path)
+            self.assertEqual(res.status, "UNSAT")
+            self.assertTrue(os.path.isfile(smt_path))
+            txt = open(smt_path, "r", encoding="utf-8").read()
+            self.assertIn("(set-logic ALL)", txt)
+            self.assertIn("ssbo:0:0+0x0.value", txt)
+
 if __name__ == "__main__":
     unittest.main()
