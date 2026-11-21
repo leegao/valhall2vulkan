@@ -925,5 +925,130 @@ class TestShaderEquivVerifier(unittest.TestCase):
             self.assertIn("(set-logic ALL)", txt)
             self.assertIn("ssbo:0:0+0x0.value", txt)
 
+
+    def test_v25_2_real_fp_mode_identities_and_refutation(self) -> None:
+        """fp_mode='real' must prove algebraic & transcendental lowering identities UNSAT and refute real divergences."""
+        def _mk_bundle(d_nodes, v_nodes):
+            return {
+                "spv_path": "synthetic_real_mode.spv",
+                "stage": "Fragment", "arch": 10, "direct_ok": True, "valhall_ok": True,
+                "direct_bindings": [],
+                "mbs2_context": {"fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+                "direct_ssa": {
+                    "blocks": [{
+                        "id": 0, "preds": [], "phis": [], "nodes": [n["id"] for n in d_nodes],
+                        "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                        "is_end": True, "is_discard": False, "is_loop_header": False,
+                        "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+                    }],
+                    "nodes": d_nodes,
+                },
+                "valhall_ssa": {
+                    "blocks": [{
+                        "id": 0, "preds": [], "phis": [], "nodes": [n["id"] for n in v_nodes],
+                        "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                        "is_end": True, "is_discard": False, "is_loop_header": False,
+                        "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+                    }],
+                    "nodes": v_nodes,
+                },
+            }
+
+        # 1. Direct: (r * g + b), Pow(r, 2.0), InverseSqrt(r), Exp(r)
+        #    Valhall: Fma(r, g, b), r * r, 1.0 / Sqrt(r), Exp2(r * log2(e))
+        d_nodes = [
+            {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+            {"id": 2, "op": "LoadFragVarying", "type": "V4F32", "blk": 0, "args": [], "imm_u32": 0},
+            {"id": 3, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 0},
+            {"id": 4, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 1},
+            {"id": 5, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 2},
+            {"id": 6, "op": "FMul", "type": "F32", "blk": 0, "args": [3, 4]},
+            {"id": 7, "op": "FAdd", "type": "F32", "blk": 0, "args": [6, 5]},
+            {"id": 8, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x40000000},
+            {"id": 9, "op": "Pow", "type": "F32", "blk": 0, "args": [3, 8]},
+            {"id": 10, "op": "InverseSqrt", "type": "F32", "blk": 0, "args": [3]},
+            {"id": 11, "op": "Exp", "type": "F32", "blk": 0, "args": [3]},
+            {"id": 12, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [7, 9, 10, 11]},
+            {"id": 13, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [12, 1], "imm_u32": 0},
+        ]
+        v_nodes = [
+            {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+            {"id": 2, "op": "LoadFragVarying", "type": "V4F32", "blk": 0, "args": [], "imm_u32": 0},
+            {"id": 3, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 0},
+            {"id": 4, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 1},
+            {"id": 5, "op": "VecExtract", "type": "F32", "blk": 0, "args": [2], "imm_u32": 2},
+            {"id": 6, "op": "Fma", "type": "F32", "blk": 0, "args": [3, 4, 5]},
+            {"id": 7, "op": "FMul", "type": "F32", "blk": 0, "args": [3, 3]},
+            {"id": 8, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3F800000},
+            {"id": 9, "op": "Sqrt", "type": "F32", "blk": 0, "args": [3]},
+            {"id": 10, "op": "FDiv", "type": "F32", "blk": 0, "args": [8, 9]},
+            {"id": 11, "op": "ConstF32", "type": "F32", "blk": 0, "args": [], "imm_u32": 0x3FB8AA3B},
+            {"id": 12, "op": "FMul", "type": "F32", "blk": 0, "args": [3, 11]},
+            {"id": 13, "op": "Exp2", "type": "F32", "blk": 0, "args": [12]},
+            {"id": 14, "op": "VecConstruct4", "type": "V4F32", "blk": 0, "args": [6, 7, 10, 13]},
+            {"id": 15, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [14, 1], "imm_u32": 0},
+        ]
+        res = verify_equivalence_bundle(_mk_bundle(d_nodes, v_nodes), timeout_ms=2000, fp_mode="real")
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(res.fp_mode, "real")
+
+        # 2. Mutate Valhall Fma(r, g, b) -> Fma(r, g, r): must catch SAT even in real mode
+        v_bad = copy.deepcopy(v_nodes)
+        v_bad[5]["args"] = [3, 4, 3]
+        res_bad = verify_equivalence_bundle(_mk_bundle(d_nodes, v_bad), timeout_ms=2000, fp_mode="real")
+        self.assertEqual(res_bad.status, "SAT")
+        self.assertTrue(any(m.output_name == "frag_color[0].r" for m in res_bad.mismatches))
+
+    def test_v25_2_ortools_cpsat_backend(self) -> None:
+        """OrToolsCpSatBackend must discharge valid bounded BV / ULP obligations and refute invalid ones."""
+        import z3
+        from tools.verify.fp_proof_discharger import FpObligation, OrToolsCpSatBackend
+
+        backend = OrToolsCpSatBackend()
+        if not backend.is_available():
+            self.skipTest("ortools not available in environment")
+
+        x = z3.BitVec("x", 32)
+        y = z3.BitVec("y", 32)
+        pre = [z3.ULE(x, z3.BitVecVal(255, 32)), z3.ULE(y, z3.BitVecVal(255, 32))]
+
+        # 1. Exact algebraic identity over bounded 8-bit quantized inputs: (x + y) * 2 == (x << 1) + (y << 1)
+        ob_ok = FpObligation(
+            obligation_id="cpsat_ok",
+            output_name="q_out",
+            kind="bit_exact_fp",
+            lhs=(x + y) * z3.BitVecVal(2, 32),
+            rhs=(x << 1) + (y << 1),
+            preconditions=pre,
+        )
+        r_ok = backend.discharge(ob_ok, timeout_ms=2000)
+        self.assertEqual(r_ok.status, "DISCHARGED")
+
+        # 2. Approximate ULP-tolerance obligation: |((x * 2 + 1) >> 1) - x| <= 1 -> DISCHARGED with ulp_bound=1
+        ob_ulp = FpObligation(
+            obligation_id="cpsat_ulp",
+            output_name="q_ulp",
+            kind="approx_ulp_fp",
+            lhs=z3.LShR(x * z3.BitVecVal(2, 32) + z3.BitVecVal(1, 32), z3.BitVecVal(1, 32)),
+            rhs=x + z3.BitVecVal(1, 32),
+            preconditions=[z3.ULE(x, z3.BitVecVal(255, 32))],
+            ulp_bound=1,
+        )
+        r_ulp = backend.discharge(ob_ulp, timeout_ms=2000)
+        self.assertEqual(r_ulp.status, "DISCHARGED")
+
+        # 3. Genuine counterexample: x + 2 != x with ulp_bound=1 -> COUNTEREXAMPLE
+        ob_bad = FpObligation(
+            obligation_id="cpsat_bad",
+            output_name="q_bad",
+            kind="approx_ulp_fp",
+            lhs=x + z3.BitVecVal(2, 32),
+            rhs=x,
+            preconditions=[z3.ULE(x, z3.BitVecVal(255, 32))],
+            ulp_bound=1,
+        )
+        r_bad = backend.discharge(ob_bad, timeout_ms=2000)
+        self.assertEqual(r_bad.status, "COUNTEREXAMPLE")
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -154,6 +155,7 @@ public:
     uint32_t inline_depth_ = 0;
     std::vector<uint32_t> output_var_ids_;
     std::set<uint32_t> written_output_vars_;
+    std::unordered_set<uint64_t> written_output_slots_;
 
     // Per-block mem2reg state: block_id -> (slot_key -> SsaId)
     std::vector<std::unordered_map<uint64_t, compiler::SsaId>> blk_slot_defs_;

@@ -1,12 +1,5 @@
 # Formal Specification & Architecture of `shader_equiv_verifier`
 
-**Module**: `tools/verify/shader_equiv_verifier.py` + `tools/verify/fp_proof_discharger.py` + `tools/spirv2valhall/equiv_bundle.cpp`  
-**Target Architecture**: ARM Mali Valhall (Arch 10 / G610 / G710 / Immortalis-G715)  
-**Verification Engine**: Z3 SMT Solver (QF_BV / QF_FP / Arrays / UF) + Pluggable Layer-2 FP Proof-Obligation Discharger  
-**Revision**: Checkpoint v25.1
-
----
-
 ## Table of Contents
 
 1. [Executive Overview & Threat Model](#1-executive-overview--threat-model)
@@ -85,11 +78,11 @@ Let $\mathcal{P}_D$ denote `direct_ssa` and $\mathcal{P}_V$ denote `valhall_ssa`
 
 For every externally observable output channel $o \in \mathcal{O}(\mathcal{P}_D) \cup \mathcal{O}(\mathcal{P}_V)$ with active guard $G_o(\mathcal{I})$, the verifier checks the validity of the miter implication:
 
-$$\forall \mathcal{I}.\; \Phi(\mathcal{I}) \land G_o(\mathcal{I}) \implies \llbracket \mathcal{P}_D \rrbracket_o(\mathcal{I}) = \llbracket \mathcal{P}_V \rrbracket_o(\mathcal{I})$$
+$$\forall \mathcal{I}.\; \Phi(\mathcal{I}) \land G_o(\mathcal{I}) \implies [\![ \mathcal{P}_D ]\!]_o(\mathcal{I}) = [\![ \mathcal{P}_V ]\!]_o(\mathcal{I})$$
 
 Equivalently, Z3 searches for a satisfying assignment (counterexample) to the negated formula:
 
-$$\exists \mathcal{I}.\; \Phi(\mathcal{I}) \land G_o(\mathcal{I}) \land \left(\llbracket \mathcal{P}_D \rrbracket_o(\mathcal{I}) \neq \llbracket \mathcal{P}_V \rrbracket_o(\mathcal{I})\right)$$
+$$\exists \mathcal{I}.\; \Phi(\mathcal{I}) \land G_o(\mathcal{I}) \land \left([\![ \mathcal{P}_D ]\!]_o(\mathcal{I}) \neq [\![ \mathcal{P}_V ]\!]_o(\mathcal{I})\right)$$
 
 ### Verdict Lattice
 
@@ -98,7 +91,7 @@ The verifier returns one of six mutually exclusive verdicts:
 | Verdict | Mathematical Meaning | Soundness Guarantee |
 |---|---|---|
 | **`UNSAT`** | Every output miter is unsatisfiable on loop-free CFGs in exact QF_BV/QF_FP (or sound UF-FP). | **Complete & sound** equivalence for all inputs satisfying $\Phi(\mathcal{I})$. |
-| **`BOUNDED_UNSAT`** | Every output miter is unsatisfiable, and at least one CFG contains a backedge unrolled to depth $K = \text{max\_unroll}$. | **Sound up to $K$ loop iterations**; divergences requiring $> K$ iterations are not ruled out. |
+| **`BOUNDED_UNSAT`** | Every output miter is unsatisfiable, and at least one CFG contains a backedge unrolled to depth $K = \text{max\\_unroll}$. | **Sound up to $K$ loop iterations**; divergences requiring $> K$ iterations are not ruled out. |
 | **`SAT`** | At least one output miter has a concrete counterexample $\mathcal{I}^*$ in exact theory. | **True refutation** under the modeled environment $\Phi(\mathcal{I})$ (either a real compiler/lifter bug or a missing environment precondition). |
 | **`UNKNOWN`** | At least one output timed out / hit `rlimit` in exact QF_FP, and neither Layer-2 FP discharge nor UF-FP fallback proved `UNSAT`. | Inconclusive; exact SMT-LIB2 queries are exportable via `--dump-smt2` for offline analysis. |
 | **`SKIP`** | No comparable observable outputs were extracted on either side. | Vacuous; hardened in v25.1 so atomic-only and image-write-only shaders never `SKIP`. |
@@ -131,7 +124,7 @@ A serialized `ValhallSsaModule` is a tuple $M = (B, N)$ where:
   - `phis`: SSA node IDs of $\phi$-nodes at block entry.
   - `nodes`: ordered SSA node IDs in the block body.
   - Terminator metadata: `is_cond`, `branch_cond`, `branch_target`, `fallthrough`, `is_end`, `is_discard`.
-- $N$ is a map from integer `SsaId` to node records $n = \langle \text{id}, \text{op}, \text{type}, \text{args}, \text{imm\_u32}, \text{imm\_u32\_2}, \text{imm\_u64}, \text{aux\_bool}, \text{aux\_bool2}, \text{aux\_str}, \text{phi}, \text{orig\_pc} \rangle$.
+- $N$ is a map from integer `SsaId` to node records $n = \langle \text{id}, \text{op}, \text{type}, \text{args}, \text{imm\\_u32}, \text{imm\\_u32\\_2}, \text{imm\\_u64}, \text{aux\\_bool}, \text{aux\\_bool2}, \text{aux\\_str}, \text{phi}, \text{orig\\_pc} \rangle$.
 
 ### Value Sort Domain
 
@@ -213,7 +206,7 @@ Naive path-by-path symbolic execution explores $\mathcal{O}(2^k)$ paths on a sha
      $$R(b_i) = \bigvee_{(p_j, e_j) \in E_{\text{in}}(b_i)} e_j, \qquad \sigma_{\text{in}}(b_i) = \text{Merge}\bigl([(e_j, \sigma_{\text{out}}(p_j))]\bigr)$$
 2. **$\phi$-Node Resolution**:
    For each $\phi$-node $v = \phi[(p_1, v_1), \dots, (p_r, v_r)]$ in $b_i$, restricted to already-evaluated predecessors, its symbolic value is folded over the incoming edge predicates $e_{p_j \to b_i}$:
-   $$\llbracket v \rrbracket = \text{If}(e_{p_r \to b_i}, \llbracket v_r \rrbracket, \dots \text{If}(e_{p_2 \to b_i}, \llbracket v_2 \rrbracket, \llbracket v_1 \rrbracket)\dots)$$
+   $$[\![ v ]\!] = \text{If}(e_{p_r \to b_i}, [\![ v_r ]\!], \dots \text{If}(e_{p_2 \to b_i}, [\![ v_2 ]\!], [\![ v_1 ]\!])\dots)$$
 3. **Node Evaluation & Outgoing Edges**:
    Every node in $b_i$ is evaluated once in program order. Outgoing edges are guarded by the non-terminated control-flow mask:
    $$R_{\text{cf}}(b_i) = R(b_i) \land \neg \sigma_{\text{out}}(b_i).\tau$$
@@ -303,10 +296,10 @@ SPIR-V 1.6 distinguishes two fundamentally different fragment discard instructio
 
 `BlockEffectState` models both predicates cleanly:
 
-$$\text{active\_store\_mask}(b) = R(b) \land \neg(\tau \lor \delta)$$
+$$\text{active\\_store\\_mask}(b) = R(b) \land \neg(\tau \lor \delta)$$
 $$R_{\text{cf}}(b) = R(b) \land \neg \tau$$
 
-Every observable store (`PsbStore`, `StoreTexel`, `StoreFragColor`, `StoreBuiltinOutput`, `StoreVertVarying`, `Atomic*`) is predicated by $\text{active\_store\_mask}(b)$, while outgoing CFG edges are predicated by $R_{\text{cf}}(b)$. Fragment discard equivalence compares $\text{discarded} = \tau \lor \delta$.
+Every observable store (`PsbStore`, `StoreTexel`, `StoreFragColor`, `StoreBuiltinOutput`, `StoreVertVarying`, `Atomic*`) is predicated by $\text{active\\_store\\_mask}(b)$, while outgoing CFG edges are predicated by $R_{\text{cf}}(b)$. Fragment discard equivalence compares $\text{discarded} = \tau \lor \delta$.
 
 ---
 
@@ -314,7 +307,7 @@ Every observable store (`PsbStore`, `StoreTexel`, `StoreFragColor`, `StoreBuilti
 
 Prior to v25.1, `AtomicRmw`, `AtomicExchange`, and `AtomicCmpXchg` returned an uninterpreted function value without modifying `buf_mems` or recording any observable effect — causing atomic-only compute shaders (e.g., `comp_unique_02_d7242030.spv`) to terminate with `[SKIP] outputs=0`.
 
-In v25.1, every atomic instruction performs two synchronized state updates under $m = \text{active\_store\_mask}(b)$:
+In v25.1, every atomic instruction performs two synchronized state updates under $m = \text{active\\_store\\_mask}(b)$:
 
 1. **Exact Single-Invocation RMW Memory Transition**:
    Reads $v_{\text{old}} = \text{Select}(M[k], \text{off})$, computes $v_{\text{new}}$:
@@ -325,7 +318,7 @@ In v25.1, every atomic instruction performs two synchronized state updates under
    - Float atomics (`afadd`, `afmin`, `afmax`): `_hw_uf("atomic_post_<tag>", BV32, BV32, BV32)(v_old, arg)`
    And updates $M[k] \leftarrow \text{If}(m, \text{Store}(M[k], \text{off}, v_{\text{new}}), M[k])$, returning $(v_{\text{old}}, \text{tok})$.
 2. **Ordered Per-Buffer Atomic Event Log**:
-   Appends $(m, \text{op\_tag}, \text{off\_or\_addr}, \text{arg}, \text{cmp})$ to `st.atomic_events[k]`. At verification time, for every non-scratch buffer $k$, the verifier checks event count equality and per-event `(active, addr, arg)` equivalence — guaranteeing that atomic-only compute shaders are rigorously checked and never `SKIP`.
+   Appends $(m, \text{op\\_tag}, \text{off\\_or\\_addr}, \text{arg}, \text{cmp})$ to `st.atomic_events[k]`. At verification time, for every non-scratch buffer $k$, the verifier checks event count equality and per-event `(active, addr, arg)` equivalence — guaranteeing that atomic-only compute shaders are rigorously checked and never `SKIP`.
 
 ---
 
@@ -341,7 +334,7 @@ In v25.1, `DagSsaZ3Evaluator._eval_node` intercepts `PsbStore` whenever `aux_str
 
 ARM Mali's vertex shader compiler folds the fixed-function Vulkan viewport transform and perspective division directly into the vertex position shader via the hidden uniform `gl_mali_ViewportTransform`:
 
-$$\text{win}.xyz = \text{FMA}\!\left(\frac{\text{clip}.xyz}{\text{clip}.w},\; \text{vp\_scale}.xyz,\; \text{vp\_bias}.xyz\right)$$
+$$\text{win}.xyz = \text{FMA}\!\left(\frac{\text{clip}.xyz}{\text{clip}.w},\; \text{vp\\_scale}.xyz,\; \text{vp\\_bias}.xyz\right)$$
 
 Currently, `shader_equiv_verifier.py` handles this via an **identity viewport precondition**:
 - `vp_scale = (1.0f, 1.0f, 1.0f, 1.0f)`, `vp_bias = (0.0f, 0.0f, 0.0f, 0.0f)`.
@@ -355,18 +348,21 @@ As tracked in `TODO.md` §1.1 (`TODO(leegao@)`), lifting the symbolic viewport e
 
 Exact IEEE-754 bit-blasting in Z3 (`QF_FP`) is decidable but exponentially expensive on deep floating-point DAGs (e.g., BC6/BC7/ASTC encoders and PBR fragment shaders). The verifier therefore uses a **two-layer stratified architecture**:
 
-### Layer 1: Exact QF_BV/QF_FP + Sound UF-FP Fallback (`shader_equiv_verifier.py`)
-1. Every output miter is first checked in **exact** mode (`fp_mode="exact"`, `timeout_ms`, `rlimit=2,000,000`) with fast algebraic identities (e.g., `FAbs`, `FNeg`, `FMA(x, 1.0, +0.0)`).
-2. If any output returns `SAT`, exact counterexamples are reported immediately.
-3. If an output returns `UNKNOWN` (timeout/rlimit), Layer 1 emits an `FpObligation` to **Layer 2**.
-4. If Layer 2 leaves obligations undischarged, Layer 1 runs a **sound UF-FP fallback** (`fp_mode="uf"`), replacing transcendental and IEEE-754 FP operations with uninterpreted functions (`fp_FAdd`, `fp_FMul`, `fp_Fma`, etc.). Because UF is a sound over-approximation of equality:
-   - `UF UNSAT` $\implies$ **exact `UNSAT`** (sound!).
-   - `UF SAT` $\implies$ **may be spurious** (e.g., `FMA(a,b,c)` vs `FAdd(FMul(a,b),c)`), so the verifier conservatively reports **`UNKNOWN`**, never a false `SAT`.
+### Layer 1: 3-Tier Theory Stratification (`exact` $\rightarrow$ `real` $\rightarrow$ `uf`)
+1. **Tier 1 (`fp_mode="exact"`)**: Every output miter is first checked in exact IEEE-754 `QF_BV`/`QF_FP` (`timeout_ms`, `rlimit=2,000,000`) with bit-exact identities (`FAbs`, `FNeg`, `FMA(x, 1.0, +0.0)`). Any `SAT` counterexample is reported immediately.
+2. **Layer-2 Obligation Dispatch**: If an output returns `UNKNOWN`, Layer 1 submits an `FpObligation` to `FpProofDischargerRegistry`.
+3. **Tier 2 (`fp_mode="real"`, v25.2)**: If exact mode times out, the verifier retries in **exact real arithmetic** (`RealSort()` bridged to `BV32` via cancelling `bv2real`/`real2bv` functions with exact binary32 rational constant decoding). This verifies **lowering equivalence** over $\mathbb{R}$ (ignoring IEEE-754 rounding / NaN / `-0.0` differences) with baked-in algebraic and transcendental reductions:
+   - `Fma(a, b, c) = a * b + c` (unifies Mali FMA contraction with `FAdd(FMul(a, b), c)`).
+   - `InverseSqrt(x) = 1 / real\_sqrt(x)`, `Exp(x) = real\_exp2(x * log2(e))`, `Log(x) = real\_log2(x) * ln(2)`.
+   - `Pow(x, y)` reduces concrete exponents (`0 -> 1`, `1 -> x`, `2 -> x*x`, `0.5 -> real\_sqrt(x)`, `-0.5 -> 1/real\_sqrt(x)`, `-1 -> 1/x`) and general `Pow(x, y) = real\_exp2(y * real\_log2(x))`.
+   - Exact base points: `Sqrt(0)=0`, `Sqrt(1)=1`, `Exp2(0)=1`, `Exp2(1)=2`, `Log2(1)=0`, `Log2(2)=1`, `Sin(0)=0`, `Cos(0)=1`.
+   - `real UNSAT` proves algebraic lowering equivalence over $\mathbb{R}$; `real SAT` during automatic fallback is logged as diagnostic evidence without emitting a false exact `SAT`.
+4. **Tier 3 (`fp_mode="uf"`)**: If `real` also cannot prove equivalence, Layer 1 runs the **sound UF-FP fallback**, replacing FP ops with uninterpreted functions (`fp_FAdd`, `fp_FMul`, `fp_Fma`, etc.). `UF UNSAT` implies exact `UNSAT`; `UF SAT` conservatively reports **`UNKNOWN`**.
 
 ### Layer 2: Pluggable `FpProofDischargerRegistry` (`tools/verify/fp_proof_discharger.py`)
 Defines the `FpProofBackend` abstract interface (`name`, `is_available()`, `discharge(obligation, timeout_ms)`) and registers three ordered backends:
-1. **`Z3FpExactBackend`**: Fast local QF_FP check (`rlimit=500,000`) for bit-exact (`ulp_bound == 0`) algebraic/identity lemmas.
-2. **`OrToolsCpSatBackend`** (`TODO(leegao@)`): Hook for discharging interval-bounded / quantized fixed-point FP lemmas via Google OR-Tools CP-SAT.
+1. **`Z3FpExactBackend`**: Fast local `QF_FP` check (`rlimit=500,000`) for bit-exact (`ulp_bound == 0`) algebraic/identity lemmas.
+2. **`OrToolsCpSatBackend`** *(Implemented in v25.2)*: Extracts variable interval bounds `[lo, hi]` from Z3 preconditions (`ULT`/`ULE`/`UGT`/`UGE`) and translates bounded `BitVec`/`Bool` expressions (`BVAdd`, `BVSub`, `BVMul`, power-of-two `Band`, constant shifts, `ZeroExt`, `Extract`, `If`, comparisons) into `ortools.sat.python.cp_model.CpModel`. Supports both exact equality (`lhs != rhs`) and approximate ULP-tolerance checks (`|lhs - rhs| > ulp_bound`), returning `DISCHARGED` on `INFEASIBLE` and `COUNTEREXAMPLE` on `FEASIBLE`/`OPTIMAL`.
 3. **`ExternalSmtProverBackend`** (`TODO(leegao@)`): Subprocess adapter hook for Bitwuzla, CVC5, or Gappa on `obligation.to_smt2()`.
 
 ---
@@ -395,18 +391,18 @@ When a miter returns `SAT`, `v_eval.collect_pcs_for_nodes(v_st.output_pcs[pc_key
 
 ## 16. SMT-LIB2 Model Export & Reproducibility
 
-Passing `--dump-smt2 <path>` (or `dump_smt2_path` in Python) exports every non-trivial miter query into a standalone, solver-agnostic SMT-LIB2 file wrapped in `(push 1) ... (check-sat) (pop 1)` scopes with header metadata (shader name, stage, FP mode, SSA sizes, `LocalSize`, `MaxUnroll`, and precondition count). Every sample in `samples/` has its corresponding v25.1 model archived in `samples/models/<name>.smt2` (indexed in `samples/models/README.md`) so any counterexample or timeout can be replayed directly with `z3`, `bitwuzla`, or `cvc5`.
+Passing `--dump-smt2 <path>` (or `dump_smt2_path` in Python) exports every non-trivial miter query into a standalone, solver-agnostic SMT-LIB2 file wrapped in `(push 1) ... (check-sat) (pop 1)` scopes with header metadata (shader name, stage, FP mode, SSA sizes, `LocalSize`, `MaxUnroll`, and precondition count). Every sample in `samples/` has its corresponding v25.2 model archived in `samples/models/<name>.smt2` (indexed in `samples/models/README.md`) so any counterexample or timeout can be replayed directly with `z3`, `bitwuzla`, or `cvc5`.
 
 ---
 
 ## 17. Empirical Evaluation on the 25-Sample Corpus
 
-On the expanded 25-sample stress corpus (`--timeout-ms 5000`, `max_unroll=1`):
-- **`UNSAT`**: 2 (`frag_rep_minimal.spv` in 1.5 ms; `frag_stress_discard_f814d888.spv` in 9.4 ms).
-- **`BOUNDED_UNSAT`**: 1 (`etc2_compress.spv` in 1,965.1 ms).
-- **`SAT`**: 8 — all 8 expose concrete, actionable lowering/ABI gaps (asymmetric unused `gl_PerVertex` builtins on 3 vertex shaders; unresolved Pilot FAU SSBO/atomic base addresses on 4 compute shaders; Mali `BLEND` `.a = 1.0f` fill on 1 fragment shader).
-- **`UNKNOWN`**: 14 — large FP/texture/BCn encoders hitting exact QF_FP `rlimit=2,000,000` where `FMA` contraction / descriptor key naming prevents pure UF-FP unification.
-- **`SKIP` / `ERROR`**: **0 / 0** (down from 1 `SKIP` in v25).
+On the expanded 25-sample stress corpus (`--timeout-ms 5000`, `max_unroll=1`, Checkpoint v25.2):
+- **`UNSAT`**: **3** (up from 2 in v25.1): `frag_rep_minimal.spv` (3.6 ms), `comp_rep_minimal.spv` (6.0 ms — flipped from `SAT` after the 64-bit `BufferAddr` high-word fix), and `frag_stress_discard_f814d888.spv` (13.3 ms).
+- **`BOUNDED_UNSAT`**: **1**: `etc2_compress.spv` (2,192.9 ms).
+- **`SAT`**: **7** (down from 8 in v25.1) — all 7 expose concrete, actionable lowering/ABI gaps (`builtin_out[1]` `gl_PointSize` on 3 vertex shaders after `ClipDistance`/`CullDistance` were eliminated; `atomic:ssbo:0:1.count` on `comp_unique_02_d7242030.spv` after all 159 atomics resolved from `fallback_mem` to `ssbo:0:1`; `fallback_mem` on 2 image/texel-pointer compute shaders; Mali `BLEND` `.a = 1.0f` fill on `frag_unique_01_fca361fe.spv`).
+- **`UNKNOWN`**: **14** — large FP/texture/BCn encoders hitting exact `QF_FP` `rlimit=2,000,000` (with Tier-2 `fp_mode="real"` now separating genuine algebraic divergences on 3 fragment shaders from integer/loop-heavy `UNKNOWN` on BCn encoders).
+- **`SKIP` / `ERROR`**: **0 / 0**.
 
 ---
 

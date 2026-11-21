@@ -796,6 +796,7 @@ void SpirvLowerer::lower_store_val(uint32_t blk_id, uint32_t ptr_id, const Lower
                                 {ptr.dynamic_index, sb_.emit_const_u32(blk_id, e)});
             for (uint32_t lane = 0; lane < nlanes; ++lane) {
                 uint64_t sk = make_slot_key(ptr.root_var_id, base_flat + e * nlanes + lane);
+                if (ptr.kind == PtrKind::OutputVar) written_output_slots_.insert(sk);
                 ValType vt = res_.ssa.get(val.lanes[lane]).type;
                 SsaId prev = read_slot(blk_id, sk, vt);
                 SsaId sel = emit_op(blk_id, SsaOp::Select, vt, {cmp, val.lanes[lane], prev});
@@ -806,7 +807,9 @@ void SpirvLowerer::lower_store_val(uint32_t blk_id, uint32_t ptr_id, const Lower
     }
 
     for (uint32_t i = 0; i < val.lanes.size(); ++i) {
-        write_slot(blk_id, make_slot_key(ptr.root_var_id, base_flat + i), val.lanes[i]);
+        uint64_t sk = make_slot_key(ptr.root_var_id, base_flat + i);
+        if (ptr.kind == PtrKind::OutputVar) written_output_slots_.insert(sk);
+        write_slot(blk_id, sk, val.lanes[i]);
     }
 }
 
@@ -824,6 +827,17 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
                 uint32_t mt = pt->member_types[m];
                 uint32_t ml = flat_lane_count(mt);
                 if (m < pt->member_builtins.size() && pt->member_builtins[m] >= 0) {
+                    bool member_written = false;
+                    for (uint32_t k = 0; k < ml; ++k) {
+                        if (written_output_slots_.count(make_slot_key(vid, flat_off + k))) {
+                            member_written = true;
+                            break;
+                        }
+                    }
+                    if (!member_written) {
+                        flat_off += ml;
+                        continue;
+                    }
                     uint32_t bi = static_cast<uint32_t>(pt->member_builtins[m]);
                     LoweredValue lv{};
                     lv.spv_type_id = mt;

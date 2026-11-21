@@ -180,7 +180,7 @@ struct SymbolicMemoryLoc {
                 res.offset_known = true;
                 if (field == 4 && elem_bytes == 4) {
                     res.kind = MemoryDerefResult::Kind::BufferSize;
-                } else if (field == 8 || elem_bytes == 8) {
+                } else if (field == 8 || field == 12 || elem_bytes == 8) {
                     res.kind = MemoryDerefResult::Kind::BufferAddr;
                     res.byte_offset = 0;
                 } else {

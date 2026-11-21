@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import fractions
 import json
+import math
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -51,6 +54,93 @@ from tools.verify.panfrost_z3_model import (
 )
 
 Z3Val = Union[z3.ExprRef, Tuple[Any, ...]]
+
+REAL_SORT = z3.RealSort()
+_REAL_ZERO = z3.RealVal(0)
+_REAL_ONE = z3.RealVal(1)
+_REAL_TWO = z3.RealVal(2)
+_REAL_HALF = z3.Q(1, 2)
+_REAL_NEG_HALF = z3.Q(-1, 2)
+_REAL_NEG_ONE = z3.RealVal(-1)
+
+
+def _f32_bits_to_real_const(u32: int) -> Optional[z3.ArithRef]:
+    f = struct.unpack("<f", struct.pack("<I", u32 & 0xFFFFFFFF))[0]
+    if not math.isfinite(f):
+        return None
+    if f == 0.0:
+        return _REAL_ZERO
+    frac = fractions.Fraction(f)
+    return z3.Q(frac.numerator, frac.denominator)
+
+
+_LOG2_E_REAL = _f32_bits_to_real_const(0x3FB8AA3B)  # log2(e) in binary32
+_LN_2_REAL = _f32_bits_to_real_const(0x3F317218)    # ln(2) in binary32
+
+
+def _is_real2bv(x: z3.ExprRef) -> bool:
+    return z3.is_app(x) and x.decl() == _hw_uf("real2bv", REAL_SORT, BV32) and len(x.children()) == 1
+
+
+def _bv32_to_real(x: z3.BitVecRef) -> z3.ArithRef:
+    """Decode BV32 to exact Z3 Real, cancelling real2bv wrappers and pushing through ITEs."""
+    if _is_real2bv(x):
+        return x.children()[0]
+    if z3.is_app(x) and x.decl().kind() == z3.Z3_OP_ITE and len(x.children()) == 3:
+        c, t, e = x.children()
+        return z3.If(c, _bv32_to_real(t), _bv32_to_real(e))
+    if isinstance(x, z3.BitVecNumRef):
+        rc = _f32_bits_to_real_const(x.as_long())
+        if rc is not None:
+            return rc
+    return _hw_uf("bv2real", BV32, REAL_SORT)(x)
+
+
+def _real_to_bv32(r: z3.ArithRef) -> z3.BitVecRef:
+    """Wrap a Z3 Real expression back into BV32 via the canonical real2bv bridge."""
+    return _hw_uf("real2bv", REAL_SORT, BV32)(r)
+
+
+def _real_sqrt(rx: z3.ArithRef) -> z3.ArithRef:
+    if isinstance(rx, z3.RatNumRef):
+        num, den = rx.numerator_as_long(), rx.denominator_as_long()
+        if num == 0:
+            return _REAL_ZERO
+        if num == den:
+            return _REAL_ONE
+    return _hw_uf("real_sqrt", REAL_SORT, REAL_SORT)(rx)
+
+
+def _real_exp2(rx: z3.ArithRef) -> z3.ArithRef:
+    if isinstance(rx, z3.RatNumRef):
+        num, den = rx.numerator_as_long(), rx.denominator_as_long()
+        if num == 0:
+            return _REAL_ONE
+        if num == den:
+            return _REAL_TWO
+    return _hw_uf("real_exp2", REAL_SORT, REAL_SORT)(rx)
+
+
+def _real_log2(rx: z3.ArithRef) -> z3.ArithRef:
+    if isinstance(rx, z3.RatNumRef):
+        num, den = rx.numerator_as_long(), rx.denominator_as_long()
+        if num == den:
+            return _REAL_ZERO
+        if num == 2 * den:
+            return _REAL_ONE
+    return _hw_uf("real_log2", REAL_SORT, REAL_SORT)(rx)
+
+
+def _real_sin(rx: z3.ArithRef) -> z3.ArithRef:
+    if isinstance(rx, z3.RatNumRef) and rx.numerator_as_long() == 0:
+        return _REAL_ZERO
+    return _hw_uf("real_sin", REAL_SORT, REAL_SORT)(rx)
+
+
+def _real_cos(rx: z3.ArithRef) -> z3.ArithRef:
+    if isinstance(rx, z3.RatNumRef) and rx.numerator_as_long() == 0:
+        return _REAL_ONE
+    return _hw_uf("real_cos", REAL_SORT, REAL_SORT)(rx)
 
 
 @dataclasses.dataclass
@@ -641,6 +731,29 @@ class DagSsaZ3Evaluator:
         return sorted(pcs)
 
     def _fp_unary(self, op: str, x: z3.BitVecRef) -> z3.BitVecRef:
+        if self.fp_mode == "real":
+            rx = _bv32_to_real(x)
+            if op == "FAbs":
+                return _real_to_bv32(z3.If(rx < _REAL_ZERO, -rx, rx))
+            if op == "FNeg":
+                return _real_to_bv32(-rx)
+            if op == "Sqrt":
+                return _real_to_bv32(_real_sqrt(rx))
+            if op == "InverseSqrt":
+                return _real_to_bv32(_REAL_ONE / _real_sqrt(rx))
+            if op == "Exp2":
+                return _real_to_bv32(_real_exp2(rx))
+            if op == "Exp":
+                return _real_to_bv32(_real_exp2(rx * _LOG2_E_REAL))
+            if op == "Log2":
+                return _real_to_bv32(_real_log2(rx))
+            if op == "Log":
+                return _real_to_bv32(_real_log2(rx) * _LN_2_REAL)
+            if op == "Sin":
+                return _real_to_bv32(_real_sin(rx))
+            if op == "Cos":
+                return _real_to_bv32(_real_cos(rx))
+            return _real_to_bv32(_hw_uf(f"real_{op}", REAL_SORT, REAL_SORT)(rx))
         if op == "FAbs":
             return x & bv32(0x7FFFFFFF)
         if op == "FNeg":
@@ -661,6 +774,37 @@ class DagSsaZ3Evaluator:
         return _hw_uf(f"fp_{op}", BV32, BV32)(x)
 
     def _fp_binary(self, op: str, a: z3.BitVecRef, b: z3.BitVecRef) -> z3.BitVecRef:
+        if self.fp_mode == "real":
+            ra, rb = _bv32_to_real(a), _bv32_to_real(b)
+            if op == "FAdd":
+                return _real_to_bv32(ra + rb)
+            if op == "FSub":
+                return _real_to_bv32(ra - rb)
+            if op == "FMul":
+                return _real_to_bv32(ra * rb)
+            if op == "FDiv":
+                return _real_to_bv32(ra / rb)
+            if op in ("FMin", "NMin"):
+                return _real_to_bv32(z3.If(ra <= rb, ra, rb))
+            if op in ("FMax", "NMax"):
+                return _real_to_bv32(z3.If(ra >= rb, ra, rb))
+            if op == "Pow":
+                if isinstance(rb, z3.RatNumRef):
+                    num, den = rb.numerator_as_long(), rb.denominator_as_long()
+                    if num == 0:
+                        return _real_to_bv32(_REAL_ONE)
+                    if num == den:
+                        return _real_to_bv32(ra)
+                    if num == 2 * den:
+                        return _real_to_bv32(ra * ra)
+                    if 2 * num == den:
+                        return _real_to_bv32(_real_sqrt(ra))
+                    if 2 * num == -den:
+                        return _real_to_bv32(_REAL_ONE / _real_sqrt(ra))
+                    if num == -den:
+                        return _real_to_bv32(_REAL_ONE / ra)
+                return _real_to_bv32(_real_exp2(rb * _real_log2(ra)))
+            return _real_to_bv32(_hw_uf(f"real_{op}", REAL_SORT, REAL_SORT, REAL_SORT)(ra, rb))
         if self.fp_mode == "uf" or op in ("Pow", "Ldexp", "Atan2"):
             return _hw_uf(f"fp_{op}", BV32, BV32, BV32)(a, b)
         fa, fb = bv32_to_fp32(a), bv32_to_fp32(b)
@@ -679,6 +823,23 @@ class DagSsaZ3Evaluator:
         return _hw_uf(f"fp_{op}", BV32, BV32, BV32)(a, b)
 
     def _fp_cmp(self, op: str, a: z3.BitVecRef, b: z3.BitVecRef) -> z3.BoolRef:
+        if self.fp_mode == "real":
+            ra, rb = _bv32_to_real(a), _bv32_to_real(b)
+            if op == "FCmpOrdEq":
+                return ra == rb
+            if op == "FCmpOrdGt":
+                return ra > rb
+            if op == "FCmpOrdGe":
+                return ra >= rb
+            if op == "FCmpOrdLt":
+                return ra < rb
+            if op == "FCmpOrdLe":
+                return ra <= rb
+            if op in ("FCmpOrdNe", "FCmpUnordNe"):
+                return ra != rb
+            if op == "FCmpTotal":
+                return ra <= rb
+            return _hw_uf(f"realcmp_{op}", REAL_SORT, REAL_SORT, z3.BoolSort())(ra, rb)
         if self.fp_mode == "uf":
             return _hw_uf(f"fpcmp_{op}", BV32, BV32, z3.BoolSort())(a, b)
         fa, fb = bv32_to_fp32(a), bv32_to_fp32(b)
@@ -890,6 +1051,9 @@ class DagSsaZ3Evaluator:
         if op == "FClamp":
             def _fclamp(x: Z3Val, lo: Z3Val, hi: Z3Val) -> z3.BitVecRef:
                 bx, blo, bhi = _as_bv32(x), _as_bv32(lo), _as_bv32(hi)
+                if self.fp_mode == "real":
+                    rx, rlo, rhi = _bv32_to_real(bx), _bv32_to_real(blo), _bv32_to_real(bhi)
+                    return _real_to_bv32(z3.If(rx < rlo, rlo, z3.If(rx > rhi, rhi, rx)))
                 if self.fp_mode == "uf":
                     return _hw_uf("fp_FClamp", BV32, BV32, BV32, BV32)(bx, blo, bhi)
                 return fp32_to_bv32(z3.fpMin(z3.fpMax(bv32_to_fp32(bx), bv32_to_fp32(blo)), bv32_to_fp32(bhi)))
@@ -897,6 +1061,8 @@ class DagSsaZ3Evaluator:
         if op == "Fma":
             def _ffma(a: Z3Val, b: Z3Val, c: Z3Val) -> z3.BitVecRef:
                 ba, bb, bc = _as_bv32(a), _as_bv32(b), _as_bv32(c)
+                if self.fp_mode == "real":
+                    return _real_to_bv32(_bv32_to_real(ba) * _bv32_to_real(bb) + _bv32_to_real(bc))
                 if self.fp_mode == "uf":
                     return _hw_uf("fp_Fma", BV32, BV32, BV32, BV32)(ba, bb, bc)
                 # Exact IEEE-754 RNE identity: FMA(x, 1.0, +0.0) == (+0.0 if x == -0.0; qNaN if isNaN(x); else x).
@@ -922,15 +1088,27 @@ class DagSsaZ3Evaluator:
         # Conversions
         if op == "ConvertFToS":
             x = _as_bv32(args[0])
+            if self.fp_mode == "real":
+                return _hw_uf("real_FToS", REAL_SORT, BV32)(_bv32_to_real(x))
             return _fp_to_int_sat(bv32_to_fp32(x), 32, True, z3.RTZ()) if self.fp_mode == "exact" else _hw_uf("fp_FToS", BV32, BV32)(x)
         if op == "ConvertFToU":
             x = _as_bv32(args[0])
+            if self.fp_mode == "real":
+                return _hw_uf("real_FToU", REAL_SORT, BV32)(_bv32_to_real(x))
             return _fp_to_int_sat(bv32_to_fp32(x), 32, False, z3.RTZ()) if self.fp_mode == "exact" else _hw_uf("fp_FToU", BV32, BV32)(x)
         if op == "ConvertSToF":
             x = _as_bv32(args[0])
+            if self.fp_mode == "real":
+                if isinstance(x, z3.BitVecNumRef):
+                    return _real_to_bv32(z3.RealVal(x.as_signed_long()))
+                return _real_to_bv32(_hw_uf("real_SToF", BV32, REAL_SORT)(x))
             return fp32_to_bv32(z3.fpSignedToFP(z3.RNE(), x, FP32_SORT)) if self.fp_mode == "exact" else _hw_uf("fp_SToF", BV32, BV32)(x)
         if op == "ConvertUToF":
             x = _as_bv32(args[0])
+            if self.fp_mode == "real":
+                if isinstance(x, z3.BitVecNumRef):
+                    return _real_to_bv32(z3.RealVal(x.as_long()))
+                return _real_to_bv32(_hw_uf("real_UToF", BV32, REAL_SORT)(x))
             return fp32_to_bv32(z3.fpUnsignedToFP(z3.RNE(), x, FP32_SORT)) if self.fp_mode == "exact" else _hw_uf("fp_UToF", BV32, BV32)(x)
         if op == "SConvert32To64":
             return z3.SignExt(32, _as_bv32(args[0]))
@@ -1311,6 +1489,9 @@ def _solve_miter_eq(
     check_name: str = "",
 ) -> Tuple[str, Optional[Tuple[str, str, str]]]:
     """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
+    if _is_real2bv(lhs) or _is_real2bv(rhs):
+        lhs = _bv32_to_real(lhs) if isinstance(lhs, z3.BitVecRef) else lhs
+        rhs = _bv32_to_real(rhs) if isinstance(rhs, z3.BitVecRef) else rhs
     if lhs.eq(rhs):
         if smt2_out is not None:
             smt2_out.append(f"; --- {check_name}: syntactically identical (UNSAT) ---\n")
@@ -1444,12 +1625,15 @@ def verify_equivalence_bundle(
         # Under Valhall's folded gl_mali_ViewportTransform + perspective divide,
         # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
         if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
-            vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
-            for c in range(3):
-                dbv = _as_bv32(do[c])
-                # FMA(x, 1.0, +0.0) == x bit-for-bit iff x is not NaN and x != -0.0
-                vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
-                vp_conds.append(dbv != bv32(0x80000000))
+            if fp_mode == "real":
+                vp_conds = [_bv32_to_real(_as_bv32(do[3])) == _REAL_ONE]
+            else:
+                vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
+                for c in range(3):
+                    dbv = _as_bv32(do[c])
+                    # FMA(x, 1.0, +0.0) == x bit-for-bit iff x is not NaN and x != -0.0
+                    vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
+                    vp_conds.append(dbv != bv32(0x80000000))
             bi_guard = _z3_and(bi_guard, z3.And(*vp_conds))
         if isinstance(do, tuple) and isinstance(vo, tuple):
             for c in range(min(len(do), len(vo))):
@@ -1602,6 +1786,18 @@ def verify_equivalence_bundle(
         res.status = "SAT"
     elif any_unknown:
         if fp_mode == "exact" and allow_uf_fallback:
+            real_res = verify_equivalence_bundle(
+                bundle,
+                timeout_ms=timeout_ms,
+                fp_mode="real",
+                allow_uf_fallback=False,
+                max_unroll=max_unroll,
+                dump_smt2_path=dump_smt2_path,
+                fp_discharger=discharger,
+            )
+            if real_res.status in ("UNSAT", "BOUNDED_UNSAT"):
+                real_res.fp_obligations = res.fp_obligations
+                return real_res
             uf_res = verify_equivalence_bundle(
                 bundle,
                 timeout_ms=timeout_ms,
@@ -1615,7 +1811,7 @@ def verify_equivalence_bundle(
             if uf_res.status in ("UNSAT", "BOUNDED_UNSAT"):
                 uf_res.fp_obligations = res.fp_obligations
                 return uf_res
-            res.notes.append("Exact FP timed out; UF fallback could not prove equivalence")
+            res.notes.append(f"Exact FP timed out; real ({real_res.status}) and UF ({uf_res.status}) fallbacks could not prove equivalence")
         res.status = "UNKNOWN"
     else:
         res.status = "BOUNDED_UNSAT" if res.has_loops else "UNSAT"
@@ -1665,7 +1861,7 @@ def main() -> int:
     ap.add_argument("spv_or_json", help="Path to .spv shader or pre-dumped equivalence bundle .json")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--timeout-ms", type=int, default=3000, help="Per-output Z3 timeout in ms")
-    ap.add_argument("--fp-mode", choices=["exact", "uf"], default="exact")
+    ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
     args = ap.parse_args()
