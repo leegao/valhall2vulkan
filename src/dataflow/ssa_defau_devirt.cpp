@@ -276,6 +276,29 @@ public:
 
     void on_other(SsaId dst, const SsaNode& node) override {
         if (try_seed_from_pa(dst)) return;
+        if ((node.op == SsaOp::BfeU || node.op == SsaOp::BfeS) && node.args.size() >= 3) {
+            auto eb = get_expr(node.args[0]);
+            auto eo = get_expr(node.args[1]);
+            auto ew = get_expr(node.args[2]);
+            if (eb && eo && ew &&
+                eb->kind == SymExpr::Kind::ConstU32 &&
+                eo->kind == SymExpr::Kind::ConstU32 &&
+                ew->kind == SymExpr::Kind::ConstU32) {
+                uint32_t off = eo->const_u32;
+                uint32_t width = ew->const_u32;
+                uint32_t out = 0;
+                if (width > 0 && off < 32u) {
+                    uint32_t eff_w = (off + width > 32u) ? (32u - off) : width;
+                    uint32_t mask = (eff_w >= 32u) ? 0xFFFFFFFFu : ((1u << eff_w) - 1u);
+                    out = (eb->const_u32 >> off) & mask;
+                    if (node.op == SsaOp::BfeS && eff_w < 32u && (out & (1u << (eff_w - 1u)))) {
+                        out |= ~mask;
+                    }
+                }
+                exprs_[dst] = SymExpr::make_const_u32(out);
+                return;
+            }
+        }
         if (is_pure_unary_sym_op(node.op) && !node.args.empty()) {
             handle_unary(dst, node.args[0], node.op);
         } else if (is_pure_binary_sym_op(node.op) && node.args.size() >= 2) {

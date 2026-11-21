@@ -3,6 +3,7 @@
 #include "liveness.h"
 #include "memory_domain.h"
 #include "pointer_analysis.h"
+#include "ssa_defau_devirt.h"
 #include "tracked_val.h"
 #include "transfer.h"
 #include "valhall_ssa.h"
@@ -641,9 +642,9 @@ void test_sym_expr_domain_and_mixins() {
     CHECK(joined.is_top());
     CHECK(SymExprDomain::equals(SymExprDomain::join(buf, SymExprDomain::bottom()), buf));
 
-    // Verify bounded depth cap (kMaxSymExprDepth == 4).
+    // Verify bounded depth cap (kMaxSymExprDepth).
     auto e = SymExpr::make_const_u32(1u);
-    for (int i = 0; i < 4; ++i) {
+    for (uint8_t i = 0; i < kMaxSymExprDepth; ++i) {
         e = SymExpr::make_unary(SsaOp::FNeg, e);
         CHECK(e != nullptr);
     }
@@ -683,6 +684,62 @@ void test_known_bits_domain() {
 
 }  // namespace
 
+void test_pilot_bfe_const_fold_and_deep_expr() {
+    ValhallSsaModule mod;
+    mod.blocks.emplace_back();
+    mod.blocks[0].id = 0;
+    auto add = [&](SsaOp op, ValType ty, std::vector<SsaId> args = {},
+                   uint32_t imm32 = 0, uint64_t imm64 = 0) -> SsaId {
+        SsaNode n{};
+        n.op = op;
+        n.type = ty;
+        n.block_id = 0;
+        n.args = std::move(args);
+        n.imm_u32 = imm32;
+        n.imm_u64 = imm64;
+        SsaId id = mod.add_node(std::move(n));
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+
+    SsaId tok = add(SsaOp::Nop, ValType::Token);
+    SsaId fau_dst = add(SsaOp::LoadSidebandU64, ValType::U64, {}, 0);
+    SsaId srt_base = add(SsaOp::LoadSidebandU64, ValType::U64, {}, 1);
+    SsaId ld_rack = add(SsaOp::PsbLoad, ValType::TupleValToken, {srt_base, tok}, 8);
+    SsaId rack_ptr = add(SsaOp::TupleExtract, ValType::U64, {ld_rack}, 0);
+    SsaId c8 = add(SsaOp::ConstU64, ValType::U64, {}, 0, 8);
+    SsaId desc_addr = add(SsaOp::IAdd64, ValType::U64, {rack_ptr, c8});
+    SsaId ld_buf = add(SsaOp::PsbLoad, ValType::TupleValToken, {desc_addr, tok}, 8);
+    SsaId buf_ptr = add(SsaOp::TupleExtract, ValType::U64, {ld_buf}, 0);
+    SsaId ld_fmt = add(SsaOp::PsbLoad, ValType::TupleValToken, {buf_ptr, tok}, 4);
+    SsaId fmt = add(SsaOp::TupleExtract, ValType::U32, {ld_fmt}, 0);
+
+    // BfeU(0xc0b0a090, 0, 8) -> 0x90, then ICmpEq(fmt, 0x90) stored to FAU+0x1c.
+    SsaId packed_k = add(SsaOp::ConstU32, ValType::U32, {}, 0xc0b0a090u);
+    SsaId c0 = add(SsaOp::ConstU32, ValType::U32, {}, 0u);
+    SsaId c8_u32 = add(SsaOp::ConstU32, ValType::U32, {}, 8u);
+    SsaId byte0 = add(SsaOp::BfeU, ValType::U32, {packed_k, c0, c8_u32});
+    SsaId eq = add(SsaOp::ICmpEq, ValType::Bool, {fmt, byte0});
+    SsaId off1c = add(SsaOp::ConstU64, ValType::U64, {}, 0, 0x1c);
+    SsaId dst1c = add(SsaOp::IAdd64, ValType::U64, {fau_dst, off1c});
+    add(SsaOp::PsbStore, ValType::Token, {dst1c, eq, tok}, 4);
+
+    PointerAnalysisEnv env;
+    env.role = PointerAnalysisEnv::StageRole::Pilot;
+    env.fau_dst_sideband_member = 0;
+    env.srt_base_sideband_member = 1;
+    env.lookup_srt_symbol = [](uint8_t, uint32_t) { return std::string("_2862_registers"); };
+
+    FauSummaryMap summary = run_pilot_fau_summary(mod, env);
+    CHECK(summary.count(0x1c) == 1);
+    CHECK(summary[0x1c] != nullptr);
+    CHECK(summary[0x1c]->kind == SymExpr::Kind::BinaryOp);
+    CHECK(summary[0x1c]->op == SsaOp::ICmpEq);
+    CHECK(summary[0x1c]->b != nullptr && summary[0x1c]->b->kind == SymExpr::Kind::ConstU32);
+    CHECK(summary[0x1c]->b->const_u32 == 0x90u);
+    std::cout << "[PASS] test_pilot_bfe_const_fold_and_deep_expr\n";
+}
+
 int main() {
     std::cout << "=== [Test] Valhall SSA Dataflow Combinators, Worklist, Liveness & Pointer Analysis ===\n";
     test_domain_combinators_and_memory_disjointness();
@@ -695,6 +752,7 @@ int main() {
     test_flat_float_domains_algebraic_mixins_and_auto_convert();
     test_sym_expr_domain_and_mixins();
     test_known_bits_domain();
+    test_pilot_bfe_const_fold_and_deep_expr();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

@@ -459,35 +459,83 @@ uint32_t run_ssa_copy_prop(ValhallSsaModule& mod) {
     return replaced;
 }
 
+namespace {
+
+bool try_get_direct_const_u64(const ValhallSsaModule& mod, SsaId id, uint64_t* out) {
+    for (uint32_t hops = 0; hops < 8 && id != kInvalidSsa && id < mod.nodes.size(); ++hops) {
+        const auto& n = mod.get(id);
+        switch (n.op) {
+            case SsaOp::ConstU64:
+                if (out) *out = n.imm_u64;
+                return true;
+            case SsaOp::ConstS32:
+                if (out) *out = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(n.imm_u32)));
+                return true;
+            case SsaOp::ConstU32:
+            case SsaOp::ConstF32:
+            case SsaOp::ConstBool:
+                if (out) *out = static_cast<uint64_t>(n.imm_u32);
+                return true;
+            case SsaOp::Copy:
+            case SsaOp::Bitcast:
+                if (n.args.size() == 1 && n.args[0] != id) {
+                    id = n.args[0];
+                    continue;
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
 bool try_get_const_u32(const ValhallSsaModule& mod, SsaId id, uint32_t* out) {
     if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
-    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
     uint64_t cv = 0;
-    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+    if (try_get_direct_const_u64(mod, id, &cv)) {
         if (out) *out = static_cast<uint32_t>(cv);
         return true;
+    }
+    if (const PointerAnalysisResult* pa = get_cached_pointer_analysis(mod)) {
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out) *out = static_cast<uint32_t>(cv);
+            return true;
+        }
     }
     return false;
 }
 
 bool try_get_const_f32_bits(const ValhallSsaModule& mod, SsaId id, uint32_t* out_bits) {
     if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
-    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
     uint64_t cv = 0;
-    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+    if (try_get_direct_const_u64(mod, id, &cv)) {
         if (out_bits) *out_bits = static_cast<uint32_t>(cv);
         return true;
+    }
+    if (const PointerAnalysisResult* pa = get_cached_pointer_analysis(mod)) {
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out_bits) *out_bits = static_cast<uint32_t>(cv);
+            return true;
+        }
     }
     return false;
 }
 
 bool try_get_const_u64(const ValhallSsaModule& mod, SsaId id, uint64_t* out) {
     if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
-    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
     uint64_t cv = 0;
-    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+    if (try_get_direct_const_u64(mod, id, &cv)) {
         if (out) *out = cv;
         return true;
+    }
+    if (const PointerAnalysisResult* pa = get_cached_pointer_analysis(mod)) {
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out) *out = cv;
+            return true;
+        }
     }
     return false;
 }
@@ -496,11 +544,16 @@ bool try_get_const_bool(const ValhallSsaModule& mod, SsaId id, bool* out) {
     if (id == kInvalidSsa || id >= mod.nodes.size()) return false;
     const auto& n = mod.get(id);
     if (n.type != ValType::Bool && n.op != SsaOp::ConstBool) return false;
-    const PointerAnalysisResult& pa = get_or_run_pointer_analysis(mod);
     uint64_t cv = 0;
-    if (TrackedValDomain::try_as_const_u64(pa.val(id), &cv)) {
+    if (try_get_direct_const_u64(mod, id, &cv)) {
         if (out) *out = (cv != 0);
         return true;
+    }
+    if (const PointerAnalysisResult* pa = get_cached_pointer_analysis(mod)) {
+        if (TrackedValDomain::try_as_const_u64(pa->val(id), &cv)) {
+            if (out) *out = (cv != 0);
+            return true;
+        }
     }
     return false;
 }

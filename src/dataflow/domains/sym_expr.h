@@ -14,7 +14,7 @@
 namespace valhall::dataflow {
 
 /// Maximum AST depth for bounded symbolic expressions (guarantees finite lattice height).
-static constexpr uint8_t kMaxSymExprDepth = 4;
+static constexpr uint8_t kMaxSymExprDepth = 8;
 
 /// Immutable, structurally-comparable symbolic expression node capturing
 /// buffer base addresses, UBO/SSBO scalar loads, constants, and bounded pure

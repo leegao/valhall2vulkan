@@ -504,6 +504,28 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
         break;
     }
 
+    // Seed direct MBS2 RLOC uniform/push-constant relocations (4-byte words)
+    // without overwriting Pilot-computed FAU entries.
+    auto seed_rlocs = [&](const std::vector<Mbs2Symbol>& list) {
+        for (const auto& sym : list) {
+            for (const auto& r : sym.rlocs) {
+                uint32_t words = std::max<uint32_t>(1u, (r.size + 3u) / 4u);
+                for (uint32_t w = 0; w < words; ++w) {
+                    uint32_t fau_off = r.reg_offset + w * 4u;
+                    if (summary.count(fau_off)) continue;
+                    summary[fau_off] = dataflow::SymExpr::make_buffer_load(
+                        static_cast<int32_t>(sym.rack_index),
+                        static_cast<int32_t>(sym.address),
+                        sym.name,
+                        static_cast<int64_t>(r.uni_offset + w * 4u),
+                        4u);
+                }
+            }
+        }
+    };
+    seed_rlocs(mbs2.cmmn.suni);
+    seed_rlocs(mbs2.cmmn.s3bo);
+
     std::map<uint32_t, uint32_t> fcst_words;
     for (const auto& kv : lut.fcst_by_fau_off) {
         fcst_words[kv.first] = kv.second.value;

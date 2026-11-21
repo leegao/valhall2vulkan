@@ -905,43 +905,50 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
     }
 
     // Materialize folded scalar constants.
+    // Batch all constant-Phi remaps across the module into a single pass to
+    // avoid O(blocks * nodes) remapping overhead on large shaders.
+    std::vector<SsaId> phi_remap;
+    std::vector<uint8_t> dead_phis;
+    uint32_t total_phi_consts = 0;
+
     for (size_t b = 0; b < num_blocks; ++b) {
         if (!block_exec[b]) continue;
         auto& blk = mod.blocks[b];
 
-        // Promote constant Phis by creating a constant node at the top of `blk.nodes`
-        // and remapping the Phi ID to it.
-        std::vector<SsaId> remap(mod.nodes.size(), kInvalidSsa);
-        for (size_t i = 0; i < remap.size(); ++i) remap[i] = static_cast<SsaId>(i);
-        std::vector<uint8_t> dead_phis(mod.nodes.size(), 0);
-        uint32_t phi_const_count = 0;
-
+        std::vector<SsaId> new_const_nodes;
         for (SsaId pid : blk.phis) {
             if (pid < num_nodes && state.val(pid).is_const() &&
                 is_materializable_scalar_type(mod.get(pid).type)) {
+                if (phi_remap.empty()) {
+                    phi_remap.resize(mod.nodes.size());
+                    for (size_t i = 0; i < phi_remap.size(); ++i) {
+                        phi_remap[i] = static_cast<SsaId>(i);
+                    }
+                    dead_phis.assign(mod.nodes.size(), 0);
+                }
                 SsaNode cnode{};
                 cnode.type = mod.get(pid).type;
+                cnode.block_id = static_cast<uint32_t>(b);
                 cnode.orig_inst_idx = mod.get(pid).orig_inst_idx;
                 cnode.orig_pc = mod.get(pid).orig_pc;
                 materialize_const_in_place(cnode, state.val(pid));
-                SsaId before = blk.nodes.empty() ? kInvalidSsa : blk.nodes.front();
-                SsaId cid = insert_node_before(mod, static_cast<uint32_t>(b), before, std::move(cnode));
-                remap.resize(mod.nodes.size(), kInvalidSsa);
-                remap[cid] = cid;
+                SsaId cid = mod.add_node(std::move(cnode));
+                new_const_nodes.push_back(cid);
+                phi_remap.resize(mod.nodes.size(), kInvalidSsa);
+                phi_remap[cid] = cid;
                 dead_phis.resize(mod.nodes.size(), 0);
-                remap[pid] = cid;
+                phi_remap[pid] = cid;
                 dead_phis[pid] = 1;
-                ++phi_const_count;
+                ++total_phi_consts;
                 ++stats.nodes_folded;
                 ++stats.phis_simplified;
             }
         }
-        if (phi_const_count > 0) {
-            apply_value_remap(mod, remap);
-            stats.nodes_removed += erase_dead_nodes(mod, dead_phis);
+        if (!new_const_nodes.empty()) {
+            blk.nodes.insert(blk.nodes.begin(), new_const_nodes.begin(), new_const_nodes.end());
         }
 
-        for (SsaId nid : mod.blocks[b].nodes) {
+        for (SsaId nid : blk.nodes) {
             if (nid >= num_nodes || !state.val(nid).is_const()) continue;
             auto& n = mod.get_mut(nid);
             if (is_const_op(n.op) || !is_pure_ssa_op(n, opts.fau_is_readonly)) continue;
@@ -949,6 +956,10 @@ SsaPassStats run_ssa_sccp(ValhallSsaModule& mod, const SccpOptions& opts) {
             materialize_const_in_place(n, state.val(nid));
             ++stats.nodes_folded;
         }
+    }
+    if (total_phi_consts > 0) {
+        apply_value_remap(mod, phi_remap);
+        stats.nodes_removed += erase_dead_nodes(mod, dead_phis);
     }
 
     // Fold conditional branches with constant conditions.
