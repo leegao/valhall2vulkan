@@ -412,6 +412,14 @@ class SharedShaderEnv:
             self.base_to_buf[base] = key
         return self.buf_base_map[key]
 
+    def get_sym_buf_slot(self, sym_tag: str, off32: z3.BitVecRef) -> z3.BitVecRef:
+        if not hasattr(self, "sym_buf_ufs"):
+            self.sym_buf_ufs: Dict[str, z3.FuncDeclRef] = {}
+        if sym_tag not in self.sym_buf_ufs:
+            safe = "".join(c if c.isalnum() or c == "_" else "_" for c in sym_tag)
+            self.sym_buf_ufs[sym_tag] = z3.Function(f"sym_slot_{safe}", BV32, BV32)
+        return self.sym_buf_ufs[sym_tag](off32)
+
     def get_buf_mem(self, key: str) -> z3.ArrayRef:
         if key == "wls_shared" and self.unique_workgroup_key is not None:
             key = self.unique_workgroup_key
@@ -578,6 +586,8 @@ class BlockEffectState:
     vert_varyings: Dict[int, Tuple[z3.BitVecRef, ...]]
     # Constant-offset buffer writes: (buf_key, offset) -> (written_cond, val_bv32)
     const_stores: Dict[Tuple[str, int], Tuple[z3.BoolRef, z3.BitVecRef]]
+    # Symbolized fixed-stride SSBO/UBO stores: sym_tag -> (written_cond, val_bv32, off_bv32)
+    sym_buf_stores: Dict[str, Tuple[z3.BoolRef, z3.BitVecRef, z3.BitVecRef]]
     # Dynamic buffer memory arrays: buf_key -> Array(BV32, BV32)
     buf_mems: Dict[str, z3.ArrayRef]
     # Image write arrays: img_key -> Tuple[Array(BV64, BV32) x 4]
@@ -598,6 +608,7 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
         builtin_outputs=dict(st.builtin_outputs),
         vert_varyings=dict(st.vert_varyings),
         const_stores=dict(st.const_stores),
+        sym_buf_stores=dict(st.sym_buf_stores),
         buf_mems=dict(st.buf_mems),
         image_mems=dict(st.image_mems),
         fallback_mem=st.fallback_mem,
@@ -637,6 +648,11 @@ def _merge_states(
             a = base_st.vert_varyings.get(loc, (bv32(0),) * 4)
             b = st.vert_varyings.get(loc, (bv32(0),) * 4)
             base_st.vert_varyings[loc] = tuple(_z3_if(cond, bi, ai) for ai, bi in zip(a, b))
+        all_sym = set(base_st.sym_buf_stores.keys()) | set(st.sym_buf_stores.keys())
+        for stag in all_sym:
+            wa, va, oa = base_st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
+            wb, vb, ob = st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
+            base_st.sym_buf_stores[stag] = (_z3_if(cond, wb, wa), _z3_if(cond, vb, va), _z3_if(cond, ob, oa))
         all_cs = set(base_st.const_stores.keys()) | set(st.const_stores.keys())
         for key in all_cs:
             w_a, v_a = base_st.const_stores.get(key, (z3.BoolVal(False), z3.Select(env.get_buf_mem(key[0]), bv32(key[1]))))
@@ -1153,6 +1169,15 @@ class DagSsaZ3Evaluator:
 
         if op == "PsbLoad":
             addr = _as_bv64(args[0])
+            if aux_str.startswith("sym:"):
+                bkey_hint = aux_str[4:].split("[", 1)[0]
+                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
+                if aux_str in st.sym_buf_stores:
+                    w_cond, w_val, w_off = st.sym_buf_stores[aux_str]
+                    val = _z3_if(_z3_and(w_cond, off32 == w_off), w_val, self.env.get_sym_buf_slot(aux_str, off32))
+                else:
+                    val = self.env.get_sym_buf_slot(aux_str, off32)
+                return (val, args[1] if len(args) > 1 else bv32(0))
             bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
             if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
                 bkey = self.env.unique_workgroup_key
@@ -1172,6 +1197,13 @@ class DagSsaZ3Evaluator:
             val = _as_bv32(args[1])
             store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             nid = int(node["id"])
+            if aux_str.startswith("sym:"):
+                bkey_hint = aux_str[4:].split("[", 1)[0]
+                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
+                prev_w, prev_v, prev_o = st.sym_buf_stores.get(aux_str, (z3.BoolVal(False), self.env.get_sym_buf_slot(aux_str, off32), off32))
+                st.sym_buf_stores[aux_str] = (_z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v), _z3_if(store_mask, off32, prev_o))
+                st.output_pcs.setdefault(aux_str, set()).add(nid)
+                return args[2] if len(args) > 2 else bv32(0)
             # Normalize OpImageWrite (emitted as PsbStore on img:* with packed xy + c*4) into image_mems
             if aux_str.startswith("img:"):
                 ikey = aux_str
@@ -1352,6 +1384,7 @@ class DagSsaZ3Evaluator:
             builtin_outputs={},
             vert_varyings={},
             const_stores={},
+            sym_buf_stores={},
             buf_mems={},
             image_mems={},
             fallback_mem=self.env.fallback_mem,
@@ -1655,6 +1688,15 @@ def verify_equivalence_bundle(
 
     def _is_scratch_region(bk: str) -> bool:
         return bk in ("tls_private", "wls_shared") or bk.startswith("workgroup:")
+
+    # Symbolized fixed-stride buffer stores (scalar/UF reasoning without Z3 Array theory)
+    all_sym = sorted(set(d_st.sym_buf_stores.keys()) | set(v_st.sym_buf_stores.keys()))
+    for stag in all_sym:
+        dw, dv, doff = d_st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
+        vw, vv, voff = v_st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
+        checks.append((f"{stag}.written", dw, vw, None, stag))
+        checks.append((f"{stag}.off", doff, voff, _z3_or(dw, vw), stag))
+        checks.append((f"{stag}.value", dv, vv, _z3_or(dw, vw), stag))
 
     # Constant-offset buffer stores (SSBO writes; skip thread/workgroup-local scratch spills)
     all_cs = sorted(set(d_st.const_stores.keys()) | set(v_st.const_stores.keys()))

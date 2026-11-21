@@ -1050,5 +1050,54 @@ class TestShaderEquivVerifier(unittest.TestCase):
         r_bad = backend.discharge(ob_bad, timeout_ms=2000)
         self.assertEqual(r_bad.status, "COUNTEREXAMPLE")
 
+
+    def test_v26_symbolized_fixed_stride_ssbo_scalar_reasoning(self):
+        """Symbolized fixed-stride SSBO loads/stores (aux_str=sym:...) prove UNSAT via scalar/UF slots without Z3 Array theory."""
+        def make_mod(use_shift: bool):
+            nodes = [
+                {"id": 1, "op": "ConstU32", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "aux_str": "ssbo:0:1"},
+                {"id": 3, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 28},
+                {"id": 4, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 4 if use_shift else 16},
+                {"id": 5, "op": "Shl" if use_shift else "IMul", "type": "U32", "blk": 0, "args": [3, 4]},
+                {"id": 6, "op": "UConvert32To64", "type": "U64", "blk": 0, "args": [5]},
+                {"id": 7, "op": "IAdd64", "type": "U64", "blk": 0, "args": [2, 6]},
+                {"id": 8, "op": "ConstU64", "type": "U64", "blk": 0, "args": [], "imm_u64": 4},
+                {"id": 9, "op": "IAdd64", "type": "U64", "blk": 0, "args": [7, 8]},
+                {"id": 10, "op": "PsbLoad", "type": "TupleValToken", "blk": 0, "args": [9, 1], "imm_u32": 4,
+                 "imm_u32_2": 16, "aux_index": 4, "aux_bool": True, "aux_str": "sym:ssbo:0:1[stride=16,off=4]"},
+                {"id": 11, "op": "TupleExtract", "type": "U32", "blk": 0, "args": [10], "imm_u32": 0},
+                {"id": 12, "op": "TupleExtract", "type": "Token", "blk": 0, "args": [10], "imm_u32": 1},
+                {"id": 13, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 1},
+                {"id": 14, "op": "IAdd", "type": "U32", "blk": 0, "args": [11, 13]},
+                {"id": 15, "op": "PsbStore", "type": "Token", "blk": 0, "args": [9, 14, 12], "imm_u32": 4,
+                 "imm_u32_2": 16, "aux_index": 4, "aux_bool": True, "aux_str": "sym:ssbo:0:1[stride=16,off=4]"},
+            ]
+            return {
+                "blocks": [{
+                    "id": 0, "preds": [], "phis": [], "nodes": [n["id"] for n in nodes],
+                    "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                    "is_end": True, "is_discard": False, "is_loop_header": False,
+                    "loop_backedge": -1, "loop_merge": -1, "sel_merge": -1, "branch_cond": 0,
+                }],
+                "nodes": nodes,
+            }
+
+        bundle = {
+            "spv_path": "sym_ssbo_test.spv",
+            "stage": "Compute",
+            "arch": 10,
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_bindings": [{"kind": "SSBO", "set": 0, "binding": 1, "key": "ssbo:0:1"}],
+            "mbs2_context": {"local_size": [64, 1, 1], "fcsts": [], "rlocs": [], "pilot_fau": [], "sinp": [], "sout": [], "pc_disasm": {}},
+            "direct_ssa": make_mod(use_shift=False),
+            "valhall_ssa": make_mod(use_shift=True),
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertGreaterEqual(len(res.checked_outputs), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -155,6 +155,13 @@ add_library(valhall2spirv STATIC
     src/dataflow/tracked_val.cpp
     src/dataflow/transfer.cpp
     src/dataflow/pointer_analysis.cpp
+    src/dataflow/ssa_opt_utils.cpp
+    src/dataflow/ssa_dce.cpp
+    src/dataflow/ssa_cse.cpp
+    src/dataflow/ssa_sccp.cpp
+    src/dataflow/ssa_mem_opt.cpp
+    src/dataflow/ssa_fp_opt.cpp
+    src/dataflow/ssa_opt_pipeline.cpp
     src/valhall_to_spirv.cpp
     src/valhall_csf_pipeline.cpp
 )
@@ -220,7 +227,7 @@ add_executable(spirv2valhall
 target_compile_options(spirv2valhall PRIVATE -Wall -Wextra -Wno-unused-parameter)
 target_link_libraries(spirv2valhall PRIVATE spirv2valhall_lib)
 
-foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow test_spirv2ssa)
+foreach(test_name IN ITEMS test_isa_decoder test_csf_descriptors test_spirv_builder test_two_pass_compiler test_dataflow test_ssa_opt test_spirv2ssa)
     add_executable(${test_name} "tests/${test_name}.cpp")
     target_include_directories(${test_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     target_compile_options(${test_name} PRIVATE -Wall -Wextra -Wno-unused-parameter)
