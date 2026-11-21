@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -17,10 +18,17 @@ struct SpirvInst {
     uint16_t opcode = 0;
     std::vector<uint32_t> words; // Full instruction words including header word[0]
 
-    /// Parse this instruction into a grammar-generated typed operand view (e.g. SpvSwitchView).
+    /// Speculatively parse this instruction into a typed operand view when the opcode may differ.
     template <typename ViewT>
     bool parse_as(ViewT* out) const {
         return ViewT::parse(words.data(), words.size(), out);
+    }
+
+    /// Fail-loud implicit conversion when the caller is certain of the instruction opcode.
+    /// Asserts opcode and minimum word count match; aborts loudly on violation.
+    template <typename ViewT, typename = std::enable_if_t<ViewT::kIsSpvView>>
+    operator ViewT() const {
+        return ViewT::must_parse(words.data(), words.size());
     }
 };
 

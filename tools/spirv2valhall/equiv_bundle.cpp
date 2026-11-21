@@ -205,8 +205,13 @@ bool build_equivalence_bundle_json(
     }
     os << ']';
 
-    // MBS2 execution context (FCSTs, RLOCs, Pilot FAU, sinp/sout, pc_disasm)
+    // MBS2 execution context (local_size, FCSTs, RLOCs, Pilot FAU, sinp/sout, pc_disasm)
     os << ",\"mbs2_context\":{";
+    if (extract_res.mbs2.has_kern && extract_res.mbs2.kern.has_workgroup_size) {
+        os << "\"local_size\":[" << extract_res.mbs2.kern.wg_x
+           << ',' << extract_res.mbs2.kern.wg_y
+           << ',' << extract_res.mbs2.kern.wg_z << "],";
+    }
 
     // FAU FCSTs (module-level + primary EBIN dbug)
     os << "\"fcsts\":[";

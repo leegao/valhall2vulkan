@@ -1,4 +1,5 @@
 #include "spirv2ssa.h"
+#include "spirv_module.h"
 #include "valhall_spirv_builder.h"
 #include "valhall_spirv_parser_generated.h"
 #include "valhall_ssa_json.h"
@@ -339,6 +340,17 @@ void test_typed_parser_views() {
     spirv_parser::SpvAtomicCompareExchangeView av{};
     assert(spirv_parser::SpvAtomicCompareExchangeView::parse(acx.data(), acx.size(), &av));
     assert(av.pointer == 3u && av.value == 7u && av.comparator == 8u);
+
+    // Implicit fail-loud converting constructor on SpirvInst (certain opcode)
+    valhall::spirv2ssa::SpirvInst lm_inst{};
+    lm_inst.opcode = uint16_t(SpvOpLoopMerge);
+    lm_inst.words = {(4u << 16) | uint32_t(SpvOpLoopMerge), 42u, 43u, 0u};
+    spirv_parser::SpvLoopMergeView lm = lm_inst;
+    assert(lm.merge_block == 42u && lm.continue_target == 43u);
+
+    // parse_as must return false when opcode does not match (speculative parse)
+    spirv_parser::SpvSelectionMergeView sm{};
+    assert(!lm_inst.parse_as(&sm));
 
     std::cout << "[PASS] test_typed_parser_views\n";
 }

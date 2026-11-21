@@ -360,16 +360,14 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
 
     const auto ac_op = static_cast<SpvOp>(inst.opcode);
     if (ac_op == SpvOpPtrAccessChain || ac_op == SpvOpInBoundsPtrAccessChain) {
-        spirv_parser::SpvPtrAccessChainView v{};
-        if (!inst.parse_as(&v)) return res;
+        spirv_parser::SpvPtrAccessChainView v = inst;
         result_ptr_type = v.result_type;
         base_id = v.base;
         has_elem_idx = true;
         elem_idx_id = v.element;
         indexes = v.indexes;
     } else {
-        spirv_parser::SpvAccessChainView v{};
-        if (!inst.parse_as(&v)) return res;
+        spirv_parser::SpvAccessChainView v = inst;
         result_ptr_type = v.result_type;
         base_id = v.base;
         indexes = v.indexes;
@@ -535,8 +533,7 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
 }
 
 LoweredValue SpirvLowerer::lower_load(uint32_t blk_id, const SpirvInst& inst) {
-    spirv_parser::SpvLoadView ld{};
-    if (!inst.parse_as(&ld)) return LoweredValue{};
+    spirv_parser::SpvLoadView ld = inst;
     return lower_load_ptr(blk_id, ld.result_type, ld.result_id, ld.pointer);
 }
 
@@ -725,8 +722,7 @@ LoweredValue SpirvLowerer::lower_load_ptr(uint32_t blk_id, uint32_t res_type, ui
 }
 
 void SpirvLowerer::lower_store(uint32_t blk_id, const SpirvInst& inst) {
-    spirv_parser::SpvStoreView st{};
-    if (!inst.parse_as(&st)) return;
+    spirv_parser::SpvStoreView st = inst;
     lower_store_val(blk_id, st.pointer, get_value(blk_id, st.object));
 }
 
@@ -898,8 +894,7 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
 }
 
 void SpirvLowerer::lower_copy_memory(uint32_t blk_id, const SpirvInst& inst) {
-    spirv_parser::SpvCopyMemoryView cm{};
-    if (!inst.parse_as(&cm)) return;
+    spirv_parser::SpvCopyMemoryView cm = inst;
     auto sit = pointers_.find(cm.source);
     if (sit == pointers_.end()) return;
     LoweredValue loaded = lower_load_ptr(blk_id, sit->second.pointee_type_id, 0u, cm.source);
@@ -909,15 +904,13 @@ void SpirvLowerer::lower_copy_memory(uint32_t blk_id, const SpirvInst& inst) {
 void SpirvLowerer::lower_atomic_store(uint32_t blk_id, const SpirvInst& inst) {
     const auto op = static_cast<SpvOp>(inst.opcode);
     if (op == SpvOpAtomicFlagClear) {
-        spirv_parser::SpvAtomicFlagClearView fc{};
-        if (!inst.parse_as(&fc)) return;
+        spirv_parser::SpvAtomicFlagClearView fc = inst;
         LoweredValue zero{};
         zero.lanes.push_back(sb_.emit_const_u32(blk_id, 0u));
         lower_store_val(blk_id, fc.pointer, zero);
         return;
     }
-    spirv_parser::SpvAtomicStoreView as{};
-    if (!inst.parse_as(&as)) return;
+    spirv_parser::SpvAtomicStoreView as = inst;
     lower_store_val(blk_id, as.pointer, get_value(blk_id, as.value));
 }
 
@@ -926,13 +919,11 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     const auto op = static_cast<SpvOp>(inst.opcode);
 
     if (op == SpvOpAtomicLoad) {
-        spirv_parser::SpvAtomicLoadView al{};
-        if (!inst.parse_as(&al)) return out;
+        spirv_parser::SpvAtomicLoadView al = inst;
         return lower_load_ptr(blk_id, al.result_type, al.result_id, al.pointer);
     }
 
-    spirv_parser::SpvAtomicLoadView hdr{};
-    if (!inst.parse_as(&hdr)) return out;
+    spirv_parser::SpvAtomicHeaderView hdr = inst;
     uint32_t res_type = hdr.result_type;
     uint32_t ptr_id = hdr.pointer;
     out.spv_type_id = res_type;
@@ -951,13 +942,11 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     at.is_side_effect = true;
 
     if (op == SpvOpAtomicExchange) {
-        spirv_parser::SpvAtomicExchangeView v{};
-        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
+        spirv_parser::SpvAtomicExchangeView v = inst;
         at.op = SsaOp::AtomicExchange;
         at.args = {addr, get_value(blk_id, v.value).scalar(), tok};
     } else if (op == SpvOpAtomicCompareExchange || op == SpvOpAtomicCompareExchangeWeak) {
-        spirv_parser::SpvAtomicCompareExchangeView v{};
-        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
+        spirv_parser::SpvAtomicCompareExchangeView v = inst;
         at.op = SsaOp::AtomicCmpXchg;
         at.args = {addr, get_value(blk_id, v.value).scalar(), get_value(blk_id, v.comparator).scalar(), tok};
     } else if (op == SpvOpAtomicIIncrement || op == SpvOpAtomicIDecrement) {
@@ -970,8 +959,7 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
         at.op = SsaOp::AtomicExchange;
         at.args = {addr, one, tok};
     } else {
-        spirv_parser::SpvAtomicIAddView v{};
-        if (!inst.parse_as(&v)) return make_zero_value(blk_id, res_type);
+        spirv_parser::SpvAtomicRmwView v = inst;
         SsaId val = get_value(blk_id, v.value).scalar();
         at.op = SsaOp::AtomicRmw;
         switch (op) {
@@ -1002,10 +990,9 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
 
 LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& inst) {
     LoweredValue out{};
-    spirv_parser::SpvImageSampleImplicitLodView img{};
-    if (!inst.parse_as(&img)) return out;
+    spirv_parser::SpvImageOpHeaderView img = inst;
     uint32_t res_type = img.result_type;
-    uint32_t img_id = img.sampled_image;
+    uint32_t img_id = img.image;
     uint32_t coord_id = img.coordinate;
     out.spv_type_id = res_type;
 
@@ -1050,8 +1037,7 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
 }
 
 void SpirvLowerer::lower_image_write(uint32_t blk_id, const SpirvInst& inst) {
-    spirv_parser::SpvImageWriteView iw{};
-    if (!inst.parse_as(&iw)) return;
+    spirv_parser::SpvImageWriteView iw = inst;
     uint32_t img_id = iw.image;
     LoweredValue coord = get_value(blk_id, iw.coordinate);
     LoweredValue texel = get_value(blk_id, iw.texel);

@@ -4,6 +4,8 @@
 #include <spirv/unified1/spirv.h>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <utility>
 #include <vector>
 
@@ -56,25 +58,48 @@ const char* spv_decoration_name(uint32_t decoration);
 bool decode_spv_instruction(const uint32_t* words, size_t remaining_words, DecodedSpvInst* out);
 
 struct SpvBranchView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpBranch;
+
     uint32_t target_label = 0;
+
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpBranch); }
 
     static bool parse(const uint32_t* words, size_t word_count, SpvBranchView* out) {
         if (!words || !out || word_count < 2u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvBranchView{};
         size_t idx = 1u;
         out->target_label = words[idx++];
         return true;
     }
+
+    static SpvBranchView must_parse(const uint32_t* words, size_t word_count) {
+        SpvBranchView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvBranchView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=2)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvBranchConditionalView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpBranchConditional;
+
     uint32_t condition = 0;
     uint32_t true_label = 0;
     uint32_t false_label = 0;
     SpvWordSpan branch_weights{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpBranchConditional); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvBranchConditionalView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvBranchConditionalView{};
         size_t idx = 1u;
         out->condition = words[idx++];
@@ -83,21 +108,49 @@ struct SpvBranchConditionalView {
         if (idx < word_count) { out->branch_weights = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvBranchConditionalView must_parse(const uint32_t* words, size_t word_count) {
+        SpvBranchConditionalView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvBranchConditionalView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvSwitchView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpSwitch;
+
     uint32_t selector = 0;
     uint32_t default_val = 0;
     SpvWordSpan target{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpSwitch); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvSwitchView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvSwitchView{};
         size_t idx = 1u;
         out->selector = words[idx++];
         out->default_val = words[idx++];
         if (idx < word_count) { out->target = {words + idx, word_count - idx}; idx = word_count; }
         return true;
+    }
+
+    static SpvSwitchView must_parse(const uint32_t* words, size_t word_count) {
+        SpvSwitchView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvSwitchView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
     }
 
     std::vector<std::pair<uint64_t, uint32_t>> decode_cases(uint32_t selector_width_bits) const {
@@ -117,26 +170,49 @@ struct SpvSwitchView {
 };
 
 struct SpvSelectionMergeView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpSelectionMerge;
+
     uint32_t merge_block = 0;
     uint32_t selection_control = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpSelectionMerge); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvSelectionMergeView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvSelectionMergeView{};
         size_t idx = 1u;
         out->merge_block = words[idx++];
         out->selection_control = words[idx++];
         return true;
     }
+
+    static SpvSelectionMergeView must_parse(const uint32_t* words, size_t word_count) {
+        SpvSelectionMergeView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvSelectionMergeView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvLoopMergeView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpLoopMerge;
+
     uint32_t merge_block = 0;
     uint32_t continue_target = 0;
     uint32_t loop_control = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpLoopMerge); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvLoopMergeView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvLoopMergeView{};
         size_t idx = 1u;
         out->merge_block = words[idx++];
@@ -144,29 +220,63 @@ struct SpvLoopMergeView {
         out->loop_control = words[idx++];
         return true;
     }
+
+    static SpvLoopMergeView must_parse(const uint32_t* words, size_t word_count) {
+        SpvLoopMergeView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvLoopMergeView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvReturnValueView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpReturnValue;
+
     uint32_t value = 0;
+
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpReturnValue); }
 
     static bool parse(const uint32_t* words, size_t word_count, SpvReturnValueView* out) {
         if (!words || !out || word_count < 2u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvReturnValueView{};
         size_t idx = 1u;
         out->value = words[idx++];
         return true;
     }
+
+    static SpvReturnValueView must_parse(const uint32_t* words, size_t word_count) {
+        SpvReturnValueView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvReturnValueView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=2)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvVariableView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpVariable;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t storage_class = 0;
     bool has_initializer = false;
     uint32_t initializer = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpVariable); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvVariableView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvVariableView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -175,15 +285,32 @@ struct SpvVariableView {
         if (idx < word_count) { out->has_initializer = true; out->initializer = words[idx++]; }
         return true;
     }
+
+    static SpvVariableView must_parse(const uint32_t* words, size_t word_count) {
+        SpvVariableView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvVariableView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvPhiView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpPhi;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     SpvWordSpan variable{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpPhi); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvPhiView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvPhiView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -192,19 +319,36 @@ struct SpvPhiView {
         return true;
     }
 
+    static SpvPhiView must_parse(const uint32_t* words, size_t word_count) {
+        SpvPhiView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvPhiView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
+
     size_t incoming_count() const { return variable.count / 2u; }
     uint32_t incoming_value(size_t i) const { return variable[2u * i]; }
     uint32_t incoming_parent(size_t i) const { return variable[2u * i + 1u]; }
 };
 
 struct SpvAccessChainView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAccessChain;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAccessChain) || op == static_cast<uint16_t>(SpvOpInBoundsAccessChain); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAccessChainView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAccessChainView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -213,16 +357,33 @@ struct SpvAccessChainView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvAccessChainView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAccessChainView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAccessChainView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvInBoundsAccessChainView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpInBoundsAccessChain;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpInBoundsAccessChain); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvInBoundsAccessChainView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvInBoundsAccessChainView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -231,17 +392,34 @@ struct SpvInBoundsAccessChainView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvInBoundsAccessChainView must_parse(const uint32_t* words, size_t word_count) {
+        SpvInBoundsAccessChainView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvInBoundsAccessChainView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvPtrAccessChainView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpPtrAccessChain;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     uint32_t element = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpPtrAccessChain) || op == static_cast<uint16_t>(SpvOpInBoundsPtrAccessChain); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvPtrAccessChainView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvPtrAccessChainView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -251,17 +429,34 @@ struct SpvPtrAccessChainView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvPtrAccessChainView must_parse(const uint32_t* words, size_t word_count) {
+        SpvPtrAccessChainView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvPtrAccessChainView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvInBoundsPtrAccessChainView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpInBoundsPtrAccessChain;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     uint32_t element = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpInBoundsPtrAccessChain); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvInBoundsPtrAccessChainView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvInBoundsPtrAccessChainView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -271,16 +466,33 @@ struct SpvInBoundsPtrAccessChainView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvInBoundsPtrAccessChainView must_parse(const uint32_t* words, size_t word_count) {
+        SpvInBoundsPtrAccessChainView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvInBoundsPtrAccessChainView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvArrayLengthView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpArrayLength;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t structure = 0;
     uint32_t array_member = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpArrayLength); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvArrayLengthView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvArrayLengthView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -289,17 +501,34 @@ struct SpvArrayLengthView {
         out->array_member = words[idx++];
         return true;
     }
+
+    static SpvArrayLengthView must_parse(const uint32_t* words, size_t word_count) {
+        SpvArrayLengthView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvArrayLengthView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvLoadView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpLoad;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
     bool has_memory_access = false;
     uint32_t memory_access = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpLoad); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvLoadView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvLoadView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -308,16 +537,33 @@ struct SpvLoadView {
         if (idx < word_count) { out->has_memory_access = true; out->memory_access = words[idx++]; }
         return true;
     }
+
+    static SpvLoadView must_parse(const uint32_t* words, size_t word_count) {
+        SpvLoadView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvLoadView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvStoreView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpStore;
+
     uint32_t pointer = 0;
     uint32_t object = 0;
     bool has_memory_access = false;
     uint32_t memory_access = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpStore); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvStoreView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvStoreView{};
         size_t idx = 1u;
         out->pointer = words[idx++];
@@ -325,9 +571,23 @@ struct SpvStoreView {
         if (idx < word_count) { out->has_memory_access = true; out->memory_access = words[idx++]; }
         return true;
     }
+
+    static SpvStoreView must_parse(const uint32_t* words, size_t word_count) {
+        SpvStoreView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvStoreView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvCopyMemoryView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpCopyMemory;
+
     uint32_t target = 0;
     uint32_t source = 0;
     bool has_memory_access = false;
@@ -335,8 +595,11 @@ struct SpvCopyMemoryView {
     bool has_memory_access_3 = false;
     uint32_t memory_access_3 = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpCopyMemory); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvCopyMemoryView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvCopyMemoryView{};
         size_t idx = 1u;
         out->target = words[idx++];
@@ -345,16 +608,33 @@ struct SpvCopyMemoryView {
         if (idx < word_count) { out->has_memory_access_3 = true; out->memory_access_3 = words[idx++]; }
         return true;
     }
+
+    static SpvCopyMemoryView must_parse(const uint32_t* words, size_t word_count) {
+        SpvCopyMemoryView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvCopyMemoryView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvFunctionCallView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpFunctionCall;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t function = 0;
     SpvWordSpan argument_0{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpFunctionCall); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvFunctionCallView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvFunctionCallView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -363,17 +643,34 @@ struct SpvFunctionCallView {
         if (idx < word_count) { out->argument_0 = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvFunctionCallView must_parse(const uint32_t* words, size_t word_count) {
+        SpvFunctionCallView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvFunctionCallView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvExtInstView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpExtInst;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t set = 0;
     uint32_t instruction = 0;
     SpvWordSpan operand_1{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpExtInst); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvExtInstView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvExtInstView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -383,17 +680,34 @@ struct SpvExtInstView {
         if (idx < word_count) { out->operand_1 = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvExtInstView must_parse(const uint32_t* words, size_t word_count) {
+        SpvExtInstView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvExtInstView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicLoadView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicLoad;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicLoad); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicLoadView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicLoadView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -403,16 +717,33 @@ struct SpvAtomicLoadView {
         out->semantics = words[idx++];
         return true;
     }
+
+    static SpvAtomicLoadView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicLoadView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicLoadView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicStoreView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicStore;
+
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicStore); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicStoreView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicStoreView{};
         size_t idx = 1u;
         out->pointer = words[idx++];
@@ -421,9 +752,23 @@ struct SpvAtomicStoreView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicStoreView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicStoreView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicStoreView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicExchangeView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicExchange;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -431,8 +776,11 @@ struct SpvAtomicExchangeView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicExchange); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicExchangeView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicExchangeView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -443,9 +791,23 @@ struct SpvAtomicExchangeView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicExchangeView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicExchangeView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicExchangeView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicCompareExchangeView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicCompareExchange;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -455,8 +817,11 @@ struct SpvAtomicCompareExchangeView {
     uint32_t value = 0;
     uint32_t comparator = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicCompareExchange) || op == static_cast<uint16_t>(SpvOpAtomicCompareExchangeWeak); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicCompareExchangeView* out) {
         if (!words || !out || word_count < 9u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicCompareExchangeView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -469,9 +834,23 @@ struct SpvAtomicCompareExchangeView {
         out->comparator = words[idx++];
         return true;
     }
+
+    static SpvAtomicCompareExchangeView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicCompareExchangeView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicCompareExchangeView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=9)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicCompareExchangeWeakView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicCompareExchangeWeak;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -481,8 +860,11 @@ struct SpvAtomicCompareExchangeWeakView {
     uint32_t value = 0;
     uint32_t comparator = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicCompareExchangeWeak); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicCompareExchangeWeakView* out) {
         if (!words || !out || word_count < 9u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicCompareExchangeWeakView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -495,17 +877,34 @@ struct SpvAtomicCompareExchangeWeakView {
         out->comparator = words[idx++];
         return true;
     }
+
+    static SpvAtomicCompareExchangeWeakView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicCompareExchangeWeakView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicCompareExchangeWeakView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=9)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicIIncrementView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicIIncrement;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicIIncrement); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIIncrementView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicIIncrementView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -515,17 +914,34 @@ struct SpvAtomicIIncrementView {
         out->semantics = words[idx++];
         return true;
     }
+
+    static SpvAtomicIIncrementView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicIIncrementView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicIIncrementView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicIDecrementView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicIDecrement;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicIDecrement); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIDecrementView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicIDecrementView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -535,9 +951,23 @@ struct SpvAtomicIDecrementView {
         out->semantics = words[idx++];
         return true;
     }
+
+    static SpvAtomicIDecrementView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicIDecrementView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicIDecrementView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicIAddView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicIAdd;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -545,8 +975,11 @@ struct SpvAtomicIAddView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicIAdd); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicIAddView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicIAddView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -557,9 +990,23 @@ struct SpvAtomicIAddView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicIAddView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicIAddView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicIAddView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicISubView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicISub;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -567,8 +1014,11 @@ struct SpvAtomicISubView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicISub); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicISubView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicISubView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -579,9 +1029,23 @@ struct SpvAtomicISubView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicISubView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicISubView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicISubView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicSMinView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicSMin;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -589,8 +1053,11 @@ struct SpvAtomicSMinView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicSMin); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicSMinView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicSMinView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -601,9 +1068,23 @@ struct SpvAtomicSMinView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicSMinView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicSMinView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicSMinView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicUMinView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicUMin;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -611,8 +1092,11 @@ struct SpvAtomicUMinView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicUMin); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicUMinView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicUMinView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -623,9 +1107,23 @@ struct SpvAtomicUMinView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicUMinView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicUMinView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicUMinView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicSMaxView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicSMax;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -633,8 +1131,11 @@ struct SpvAtomicSMaxView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicSMax); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicSMaxView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicSMaxView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -645,9 +1146,23 @@ struct SpvAtomicSMaxView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicSMaxView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicSMaxView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicSMaxView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicUMaxView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicUMax;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -655,8 +1170,11 @@ struct SpvAtomicUMaxView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicUMax); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicUMaxView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicUMaxView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -667,9 +1185,23 @@ struct SpvAtomicUMaxView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicUMaxView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicUMaxView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicUMaxView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicAndView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicAnd;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -677,8 +1209,11 @@ struct SpvAtomicAndView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicAnd); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicAndView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicAndView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -689,9 +1224,23 @@ struct SpvAtomicAndView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicAndView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicAndView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicAndView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicOrView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicOr;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -699,8 +1248,11 @@ struct SpvAtomicOrView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicOr); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicOrView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicOrView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -711,9 +1263,23 @@ struct SpvAtomicOrView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicOrView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicOrView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicOrView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicXorView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicXor;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -721,8 +1287,11 @@ struct SpvAtomicXorView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicXor); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicXorView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicXorView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -733,17 +1302,34 @@ struct SpvAtomicXorView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicXorView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicXorView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicXorView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicFlagTestAndSetView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicFlagTestAndSet;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicFlagTestAndSet); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFlagTestAndSetView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicFlagTestAndSetView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -753,15 +1339,32 @@ struct SpvAtomicFlagTestAndSetView {
         out->semantics = words[idx++];
         return true;
     }
+
+    static SpvAtomicFlagTestAndSetView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicFlagTestAndSetView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicFlagTestAndSetView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicFlagClearView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicFlagClear;
+
     uint32_t pointer = 0;
     uint32_t memory = 0;
     uint32_t semantics = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicFlagClear); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFlagClearView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicFlagClearView{};
         size_t idx = 1u;
         out->pointer = words[idx++];
@@ -769,9 +1372,23 @@ struct SpvAtomicFlagClearView {
         out->semantics = words[idx++];
         return true;
     }
+
+    static SpvAtomicFlagClearView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicFlagClearView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicFlagClearView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicFMinEXTView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicFMinEXT;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -779,8 +1396,11 @@ struct SpvAtomicFMinEXTView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicFMinEXT); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFMinEXTView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicFMinEXTView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -791,9 +1411,23 @@ struct SpvAtomicFMinEXTView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicFMinEXTView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicFMinEXTView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicFMinEXTView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicFMaxEXTView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicFMaxEXT;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -801,8 +1435,11 @@ struct SpvAtomicFMaxEXTView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicFMaxEXT); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFMaxEXTView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicFMaxEXTView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -813,9 +1450,23 @@ struct SpvAtomicFMaxEXTView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicFMaxEXTView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicFMaxEXTView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicFMaxEXTView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvAtomicFAddEXTView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpAtomicFAddEXT;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t pointer = 0;
@@ -823,8 +1474,11 @@ struct SpvAtomicFAddEXTView {
     uint32_t semantics = 0;
     uint32_t value = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpAtomicFAddEXT); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvAtomicFAddEXTView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvAtomicFAddEXTView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -835,9 +1489,23 @@ struct SpvAtomicFAddEXTView {
         out->value = words[idx++];
         return true;
     }
+
+    static SpvAtomicFAddEXTView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicFAddEXTView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvAtomicFAddEXTView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleImplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleImplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -845,8 +1513,11 @@ struct SpvImageSampleImplicitLodView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleImplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleImplicitLodView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleImplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -856,17 +1527,34 @@ struct SpvImageSampleImplicitLodView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageSampleImplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleImplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleImplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleExplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleExplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
     uint32_t coordinate = 0;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleExplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleExplicitLodView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleExplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -876,9 +1564,23 @@ struct SpvImageSampleExplicitLodView {
         out->image_operands = words[idx++];
         return true;
     }
+
+    static SpvImageSampleExplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleExplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleExplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleDrefImplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleDrefImplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -887,8 +1589,11 @@ struct SpvImageSampleDrefImplicitLodView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleDrefImplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleDrefImplicitLodView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleDrefImplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -899,9 +1604,23 @@ struct SpvImageSampleDrefImplicitLodView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageSampleDrefImplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleDrefImplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleDrefImplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleDrefExplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleDrefExplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -909,8 +1628,11 @@ struct SpvImageSampleDrefExplicitLodView {
     uint32_t d_ref = 0;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleDrefExplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleDrefExplicitLodView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleDrefExplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -921,9 +1643,23 @@ struct SpvImageSampleDrefExplicitLodView {
         out->image_operands = words[idx++];
         return true;
     }
+
+    static SpvImageSampleDrefExplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleDrefExplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleDrefExplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleProjImplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleProjImplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -931,8 +1667,11 @@ struct SpvImageSampleProjImplicitLodView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleProjImplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleProjImplicitLodView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleProjImplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -942,17 +1681,34 @@ struct SpvImageSampleProjImplicitLodView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageSampleProjImplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleProjImplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleProjImplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageSampleProjExplicitLodView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageSampleProjExplicitLod;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
     uint32_t coordinate = 0;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageSampleProjExplicitLod); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageSampleProjExplicitLodView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageSampleProjExplicitLodView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -962,9 +1718,23 @@ struct SpvImageSampleProjExplicitLodView {
         out->image_operands = words[idx++];
         return true;
     }
+
+    static SpvImageSampleProjExplicitLodView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageSampleProjExplicitLodView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageSampleProjExplicitLodView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageFetchView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageFetch;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t image = 0;
@@ -972,8 +1742,11 @@ struct SpvImageFetchView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageFetch); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageFetchView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageFetchView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -983,9 +1756,23 @@ struct SpvImageFetchView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageFetchView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageFetchView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageFetchView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageGatherView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageGather;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -994,8 +1781,11 @@ struct SpvImageGatherView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageGather); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageGatherView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageGatherView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1006,9 +1796,23 @@ struct SpvImageGatherView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageGatherView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageGatherView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageGatherView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageDrefGatherView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageDrefGather;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t sampled_image = 0;
@@ -1017,8 +1821,11 @@ struct SpvImageDrefGatherView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageDrefGather); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageDrefGatherView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageDrefGatherView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1029,9 +1836,23 @@ struct SpvImageDrefGatherView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageDrefGatherView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageDrefGatherView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageDrefGatherView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageReadView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageRead;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t image = 0;
@@ -1039,8 +1860,11 @@ struct SpvImageReadView {
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageRead); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageReadView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageReadView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1050,17 +1874,34 @@ struct SpvImageReadView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageReadView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageReadView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageReadView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvImageWriteView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpImageWrite;
+
     uint32_t image = 0;
     uint32_t coordinate = 0;
     uint32_t texel = 0;
     bool has_image_operands = false;
     uint32_t image_operands = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpImageWrite); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvImageWriteView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvImageWriteView{};
         size_t idx = 1u;
         out->image = words[idx++];
@@ -1069,17 +1910,34 @@ struct SpvImageWriteView {
         if (idx < word_count) { out->has_image_operands = true; out->image_operands = words[idx++]; }
         return true;
     }
+
+    static SpvImageWriteView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageWriteView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageWriteView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvVectorShuffleView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpVectorShuffle;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t vector_1 = 0;
     uint32_t vector_2 = 0;
     SpvWordSpan components{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpVectorShuffle); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvVectorShuffleView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvVectorShuffleView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1089,15 +1947,32 @@ struct SpvVectorShuffleView {
         if (idx < word_count) { out->components = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvVectorShuffleView must_parse(const uint32_t* words, size_t word_count) {
+        SpvVectorShuffleView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvVectorShuffleView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvCompositeConstructView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpCompositeConstruct;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     SpvWordSpan constituents{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpCompositeConstruct); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvCompositeConstructView* out) {
         if (!words || !out || word_count < 3u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvCompositeConstructView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1105,16 +1980,33 @@ struct SpvCompositeConstructView {
         if (idx < word_count) { out->constituents = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvCompositeConstructView must_parse(const uint32_t* words, size_t word_count) {
+        SpvCompositeConstructView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvCompositeConstructView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=3)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvCompositeExtractView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpCompositeExtract;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t composite = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpCompositeExtract); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvCompositeExtractView* out) {
         if (!words || !out || word_count < 4u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvCompositeExtractView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1123,17 +2015,34 @@ struct SpvCompositeExtractView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvCompositeExtractView must_parse(const uint32_t* words, size_t word_count) {
+        SpvCompositeExtractView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvCompositeExtractView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=4)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvCompositeInsertView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpCompositeInsert;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t object = 0;
     uint32_t composite = 0;
     SpvWordSpan indexes{};
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpCompositeInsert); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvCompositeInsertView* out) {
         if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvCompositeInsertView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1143,17 +2052,34 @@ struct SpvCompositeInsertView {
         if (idx < word_count) { out->indexes = {words + idx, word_count - idx}; idx = word_count; }
         return true;
     }
+
+    static SpvCompositeInsertView must_parse(const uint32_t* words, size_t word_count) {
+        SpvCompositeInsertView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvCompositeInsertView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=5)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvSelectView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpSelect;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t condition = 0;
     uint32_t object_1 = 0;
     uint32_t object_2 = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpSelect); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvSelectView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvSelectView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1163,9 +2089,23 @@ struct SpvSelectView {
         out->object_2 = words[idx++];
         return true;
     }
+
+    static SpvSelectView must_parse(const uint32_t* words, size_t word_count) {
+        SpvSelectView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvSelectView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvBitFieldInsertView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpBitFieldInsert;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
@@ -1173,8 +2113,11 @@ struct SpvBitFieldInsertView {
     uint32_t offset = 0;
     uint32_t count = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpBitFieldInsert); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldInsertView* out) {
         if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvBitFieldInsertView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1185,17 +2128,34 @@ struct SpvBitFieldInsertView {
         out->count = words[idx++];
         return true;
     }
+
+    static SpvBitFieldInsertView must_parse(const uint32_t* words, size_t word_count) {
+        SpvBitFieldInsertView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvBitFieldInsertView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=7)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvBitFieldSExtractView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpBitFieldSExtract;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     uint32_t offset = 0;
     uint32_t count = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpBitFieldSExtract); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldSExtractView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvBitFieldSExtractView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1205,17 +2165,34 @@ struct SpvBitFieldSExtractView {
         out->count = words[idx++];
         return true;
     }
+
+    static SpvBitFieldSExtractView must_parse(const uint32_t* words, size_t word_count) {
+        SpvBitFieldSExtractView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvBitFieldSExtractView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
 };
 
 struct SpvBitFieldUExtractView {
+    static constexpr bool kIsSpvView = true;
+    static constexpr SpvOp kOpcode = SpvOpBitFieldUExtract;
+
     uint32_t result_type = 0;
     uint32_t result_id = 0;
     uint32_t base = 0;
     uint32_t offset = 0;
     uint32_t count = 0;
 
+    static constexpr bool matches_opcode(uint16_t op) { return op == static_cast<uint16_t>(SpvOpBitFieldUExtract); }
+
     static bool parse(const uint32_t* words, size_t word_count, SpvBitFieldUExtractView* out) {
         if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
         *out = SpvBitFieldUExtractView{};
         size_t idx = 1u;
         out->result_type = words[idx++];
@@ -1224,6 +2201,135 @@ struct SpvBitFieldUExtractView {
         out->offset = words[idx++];
         out->count = words[idx++];
         return true;
+    }
+
+    static SpvBitFieldUExtractView must_parse(const uint32_t* words, size_t word_count) {
+        SpvBitFieldUExtractView out{};
+        if (!parse(words, word_count, &out)) {
+            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvBitFieldUExtractView::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words=6)\n",
+                         unsigned(got_op), word_count, unsigned(kOpcode));
+            std::abort();
+        }
+        return out;
+    }
+};
+
+/// Shared prefix view for all value-producing SPIR-V atomic instructions.
+struct SpvAtomicHeaderView {
+    static constexpr bool kIsSpvView = true;
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+
+    static constexpr bool matches_opcode(uint16_t op) {
+        switch (static_cast<SpvOp>(op)) {
+            case SpvOpAtomicLoad: case SpvOpAtomicExchange:
+            case SpvOpAtomicCompareExchange: case SpvOpAtomicCompareExchangeWeak:
+            case SpvOpAtomicIIncrement: case SpvOpAtomicIDecrement:
+            case SpvOpAtomicIAdd: case SpvOpAtomicISub:
+            case SpvOpAtomicSMin: case SpvOpAtomicUMin:
+            case SpvOpAtomicSMax: case SpvOpAtomicUMax:
+            case SpvOpAtomicAnd: case SpvOpAtomicOr: case SpvOpAtomicXor:
+            case SpvOpAtomicFlagTestAndSet:
+            case SpvOpAtomicFMinEXT: case SpvOpAtomicFMaxEXT: case SpvOpAtomicFAddEXT:
+                return true;
+            default: return false;
+        }
+    }
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicHeaderView* out) {
+        if (!words || !out || word_count < 6u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
+        out->result_type = words[1]; out->result_id = words[2];
+        out->pointer = words[3]; out->memory = words[4]; out->semantics = words[5];
+        return true;
+    }
+    static SpvAtomicHeaderView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicHeaderView out{};
+        if (!parse(words, word_count, &out)) {
+            std::fprintf(stderr, "FATAL: SpvAtomicHeaderView::must_parse failed (word_count=%zu)\n", word_count);
+            std::abort();
+        }
+        return out;
+    }
+};
+
+/// Shared operand view for binary read-modify-write SPIR-V atomic instructions.
+struct SpvAtomicRmwView {
+    static constexpr bool kIsSpvView = true;
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t pointer = 0;
+    uint32_t memory = 0;
+    uint32_t semantics = 0;
+    uint32_t value = 0;
+
+    static constexpr bool matches_opcode(uint16_t op) {
+        switch (static_cast<SpvOp>(op)) {
+            case SpvOpAtomicIAdd: case SpvOpAtomicISub:
+            case SpvOpAtomicSMin: case SpvOpAtomicUMin:
+            case SpvOpAtomicSMax: case SpvOpAtomicUMax:
+            case SpvOpAtomicAnd: case SpvOpAtomicOr: case SpvOpAtomicXor:
+            case SpvOpAtomicFMinEXT: case SpvOpAtomicFMaxEXT: case SpvOpAtomicFAddEXT:
+                return true;
+            default: return false;
+        }
+    }
+    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicRmwView* out) {
+        if (!words || !out || word_count < 7u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
+        out->result_type = words[1]; out->result_id = words[2];
+        out->pointer = words[3]; out->memory = words[4]; out->semantics = words[5];
+        out->value = words[6];
+        return true;
+    }
+    static SpvAtomicRmwView must_parse(const uint32_t* words, size_t word_count) {
+        SpvAtomicRmwView out{};
+        if (!parse(words, word_count, &out)) {
+            std::fprintf(stderr, "FATAL: SpvAtomicRmwView::must_parse failed (word_count=%zu)\n", word_count);
+            std::abort();
+        }
+        return out;
+    }
+};
+
+/// Shared prefix view for image sample/fetch/gather/read instructions.
+struct SpvImageOpHeaderView {
+    static constexpr bool kIsSpvView = true;
+    uint32_t result_type = 0;
+    uint32_t result_id = 0;
+    uint32_t image = 0;
+    uint32_t coordinate = 0;
+
+    static constexpr bool matches_opcode(uint16_t op) {
+        switch (static_cast<SpvOp>(op)) {
+            case SpvOpImageSampleImplicitLod: case SpvOpImageSampleExplicitLod:
+            case SpvOpImageSampleDrefImplicitLod: case SpvOpImageSampleDrefExplicitLod:
+            case SpvOpImageSampleProjImplicitLod: case SpvOpImageSampleProjExplicitLod:
+            case SpvOpImageFetch: case SpvOpImageGather:
+            case SpvOpImageDrefGather: case SpvOpImageRead:
+                return true;
+            default: return false;
+        }
+    }
+    static bool parse(const uint32_t* words, size_t word_count, SpvImageOpHeaderView* out) {
+        if (!words || !out || word_count < 5u) return false;
+        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;
+        out->result_type = words[1]; out->result_id = words[2];
+        out->image = words[3]; out->coordinate = words[4];
+        return true;
+    }
+    static SpvImageOpHeaderView must_parse(const uint32_t* words, size_t word_count) {
+        SpvImageOpHeaderView out{};
+        if (!parse(words, word_count, &out)) {
+            uint16_t got_op = (words && word_count > 0) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;
+            std::fprintf(stderr, "FATAL: SpvImageOpHeaderView parse failed (got opcode=%u [%s], words=%zu)\n",
+                         static_cast<unsigned>(got_op), spv_op_name(got_op), word_count);
+            std::abort();
+        }
+        return out;
     }
 };
 

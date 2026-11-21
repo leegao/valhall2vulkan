@@ -68,6 +68,7 @@ class CppIf:
     cond: Any
     then_body: List[Any]
     else_body: Optional[List[Any]] = None
+    init: Optional[Any] = None
 
 
 @dataclasses.dataclass
@@ -87,6 +88,16 @@ class CppSwitch:
 @dataclasses.dataclass
 class CppBreak:
     pass
+
+
+@dataclasses.dataclass
+class CppContinue:
+    pass
+
+
+@dataclasses.dataclass
+class CppBlock:
+    stmts: List[Any]
 
 
 @dataclasses.dataclass
@@ -274,10 +285,12 @@ def _convert_stmt(node: Dict[str, Any]) -> Any:
         return CppReturn(_convert_expr(node.get("expr")))
     if kind == "if":
         else_b = node.get("else_body")
+        init_node = node.get("init")
         return CppIf(
             cond=_convert_expr(node["cond"]),
             then_body=[_convert_stmt(s) for s in node.get("then_body", [])],
             else_body=[_convert_stmt(s) for s in else_b] if else_b is not None else None,
+            init=_convert_stmt(init_node) if init_node is not None else None,
         )
     if kind == "for":
         init_node = node.get("init")
@@ -305,6 +318,22 @@ def _convert_stmt(node: Dict[str, Any]) -> Any:
         )
     if kind == "expr_stmt":
         return CppExprStmt(_convert_expr(node["expr"]))
+    if kind == "block":
+        return CppBlock([_convert_stmt(s) for s in node.get("stmts", [])])
+    if kind == "break":
+        return CppBreak()
+    if kind == "continue":
+        return CppContinue()
+    if kind == "null":
+        return CppBlock([])
+    if kind == "switch":
+        cases = []
+        for c in node.get("cases", []):
+            cval_node = c.get("value")
+            cval = _convert_expr(cval_node) if cval_node is not None else None
+            cbody = [_convert_stmt(s) for s in c.get("body", [])]
+            cases.append((cval, cbody))
+        return CppSwitch(expr=_convert_expr(node["expr"]), cases=cases)
     raise ValueError(f"Unsupported Clang AST JSON stmt kind: {kind!r} ({node})")
 
 
@@ -517,6 +546,10 @@ class _BreakSignal(Exception):
     pass
 
 
+class _ContinueSignal(Exception):
+    pass
+
+
 class _DictRef:
     def __init__(self, d: dict, key: Any) -> None:
         self.d = d
@@ -718,7 +751,13 @@ class CppSymbolicEvaluator:
             raise _ReturnSignal(val)
         elif isinstance(st, CppBreak):
             raise _BreakSignal()
+        elif isinstance(st, CppContinue):
+            raise _ContinueSignal()
+        elif isinstance(st, CppBlock):
+            self._exec_stmts(st.stmts, env, ssa, ins)
         elif isinstance(st, CppIf):
+            if st.init is not None:
+                self._exec_stmt(st.init, env, ssa, ins)
             if self._eval_expr(st.cond, env, ssa, ins):
                 self._exec_stmts(st.then_body, env, ssa, ins)
             elif st.else_body is not None:
@@ -741,12 +780,18 @@ class CppSymbolicEvaluator:
                         self._eval_expr(st.step, env, ssa, ins)
         elif isinstance(st, CppSwitch):
             val = self._eval_expr(st.expr, env, ssa, ins)
-            matched = False
-            for cval, cstmts in st.cases:
-                if not matched:
-                    if cval is None or val == self._eval_expr(cval, env, ssa, ins):
-                        matched = True
-                if matched:
+            start_idx: Optional[int] = None
+            default_idx: Optional[int] = None
+            for idx, (cval, _cstmts) in enumerate(st.cases):
+                if cval is None:
+                    default_idx = idx
+                elif val == self._eval_expr(cval, env, ssa, ins):
+                    start_idx = idx
+                    break
+            if start_idx is None:
+                start_idx = default_idx
+            if start_idx is not None:
+                for _cval, cstmts in st.cases[start_idx:]:
                     try:
                         self._exec_stmts(cstmts, env, ssa, ins)
                     except _BreakSignal:
@@ -819,6 +864,10 @@ class CppSymbolicEvaluator:
                     return ("res", ssa)
             return expr.name
         if isinstance(expr, CppScopedIdent):
+            if len(expr.parts) >= 2 and expr.parts[-2] == "VaryingNameM":
+                _vmap = {"point": 0, "bary": 1, "frag_w": 2, "frag_z": 3}
+                if expr.parts[-1] in _vmap:
+                    return _vmap[expr.parts[-1]]
             return expr.parts[-1]
         if isinstance(expr, CppInitList):
             return [self._eval_expr(x, env, ssa, ins) for x in expr.items]

@@ -159,7 +159,17 @@ def _build_typed_view(opname: str, ins: dict) -> list[str]:
             fields.append(("req", fname, opnd.get("kind", "")))
 
     req_count = sum(1 for k, _, _ in fields if k == "req")
-    lines = [f"struct {struct_name} {{"]
+    extra_opcodes = {
+        "OpAccessChain": ["SpvOpInBoundsAccessChain"],
+        "OpPtrAccessChain": ["SpvOpInBoundsPtrAccessChain"],
+        "OpAtomicCompareExchange": ["SpvOpAtomicCompareExchangeWeak"],
+    }.get(opname, [])
+    lines = [
+        f"struct {struct_name} {{",
+        "    static constexpr bool kIsSpvView = true;",
+        f"    static constexpr SpvOp kOpcode = Spv{opname};",
+        "",
+    ]
     for k, fname, _ in fields:
         if k == "req":
             lines.append(f"    uint32_t {fname} = 0;")
@@ -170,8 +180,14 @@ def _build_typed_view(opname: str, ins: dict) -> list[str]:
             lines.append(f"    SpvWordSpan {fname}{{}};")
 
     lines.append("")
+    match_expr = f"op == static_cast<uint16_t>(Spv{opname})"
+    for eo in extra_opcodes:
+        match_expr += f" || op == static_cast<uint16_t>({eo})"
+    lines.append(f"    static constexpr bool matches_opcode(uint16_t op) {{ return {match_expr}; }}")
+    lines.append("")
     lines.append(f"    static bool parse(const uint32_t* words, size_t word_count, {struct_name}* out) {{")
     lines.append(f"        if (!words || !out || word_count < {1 + req_count}u) return false;")
+    lines.append("        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;")
     lines.append(f"        *out = {struct_name}{{}};")
     lines.append("        size_t idx = 1u;")
     for k, fname, _ in fields:
@@ -182,6 +198,17 @@ def _build_typed_view(opname: str, ins: dict) -> list[str]:
         else:
             lines.append(f"        if (idx < word_count) {{ out->{fname} = {{words + idx, word_count - idx}}; idx = word_count; }}")
     lines.append("        return true;")
+    lines.append("    }")
+    lines.append("")
+    lines.append(f"    static {struct_name} must_parse(const uint32_t* words, size_t word_count) {{")
+    lines.append(f"        {struct_name} out{{}};")
+    lines.append("        if (!parse(words, word_count, &out)) {")
+    lines.append("            const uint16_t got_op = (words && word_count > 0u) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;")
+    lines.append(f'            std::fprintf(stderr, "FATAL: {struct_name}::must_parse failed (got_op=%u, word_count=%zu, expected_op=%u, min_words={1 + req_count})\\n",')
+    lines.append(f"                         unsigned(got_op), word_count, unsigned(kOpcode));")
+    lines.append("            std::abort();")
+    lines.append("        }")
+    lines.append("        return out;")
     lines.append("    }")
 
     # Special helper for OpSwitch: decode (literal, label) pairs using selector bit width.
@@ -264,6 +291,8 @@ def main() -> int:
         "#include <spirv/unified1/spirv.h>",
         "#include <cstddef>",
         "#include <cstdint>",
+        "#include <cstdio>",
+        "#include <cstdlib>",
         "#include <utility>",
         "#include <vector>",
         "",
@@ -327,6 +356,124 @@ def main() -> int:
         generated_views += 1
 
     h_lines.extend([
+        "/// Shared prefix view for all value-producing SPIR-V atomic instructions.",
+        "struct SpvAtomicHeaderView {",
+        "    static constexpr bool kIsSpvView = true;",
+        "    uint32_t result_type = 0;",
+        "    uint32_t result_id = 0;",
+        "    uint32_t pointer = 0;",
+        "    uint32_t memory = 0;",
+        "    uint32_t semantics = 0;",
+        "",
+        "    static constexpr bool matches_opcode(uint16_t op) {",
+        "        switch (static_cast<SpvOp>(op)) {",
+        "            case SpvOpAtomicLoad: case SpvOpAtomicExchange:",
+        "            case SpvOpAtomicCompareExchange: case SpvOpAtomicCompareExchangeWeak:",
+        "            case SpvOpAtomicIIncrement: case SpvOpAtomicIDecrement:",
+        "            case SpvOpAtomicIAdd: case SpvOpAtomicISub:",
+        "            case SpvOpAtomicSMin: case SpvOpAtomicUMin:",
+        "            case SpvOpAtomicSMax: case SpvOpAtomicUMax:",
+        "            case SpvOpAtomicAnd: case SpvOpAtomicOr: case SpvOpAtomicXor:",
+        "            case SpvOpAtomicFlagTestAndSet:",
+        "            case SpvOpAtomicFMinEXT: case SpvOpAtomicFMaxEXT: case SpvOpAtomicFAddEXT:",
+        "                return true;",
+        "            default: return false;",
+        "        }",
+        "    }",
+        "    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicHeaderView* out) {",
+        "        if (!words || !out || word_count < 6u) return false;",
+        "        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;",
+        "        out->result_type = words[1]; out->result_id = words[2];",
+        "        out->pointer = words[3]; out->memory = words[4]; out->semantics = words[5];",
+        "        return true;",
+        "    }",
+        "    static SpvAtomicHeaderView must_parse(const uint32_t* words, size_t word_count) {",
+        "        SpvAtomicHeaderView out{};",
+        "        if (!parse(words, word_count, &out)) {",
+        '            std::fprintf(stderr, "FATAL: SpvAtomicHeaderView::must_parse failed (word_count=%zu)\\n", word_count);',
+        "            std::abort();",
+        "        }",
+        "        return out;",
+        "    }",
+        "};",
+        "",
+        "/// Shared operand view for binary read-modify-write SPIR-V atomic instructions.",
+        "struct SpvAtomicRmwView {",
+        "    static constexpr bool kIsSpvView = true;",
+        "    uint32_t result_type = 0;",
+        "    uint32_t result_id = 0;",
+        "    uint32_t pointer = 0;",
+        "    uint32_t memory = 0;",
+        "    uint32_t semantics = 0;",
+        "    uint32_t value = 0;",
+        "",
+        "    static constexpr bool matches_opcode(uint16_t op) {",
+        "        switch (static_cast<SpvOp>(op)) {",
+        "            case SpvOpAtomicIAdd: case SpvOpAtomicISub:",
+        "            case SpvOpAtomicSMin: case SpvOpAtomicUMin:",
+        "            case SpvOpAtomicSMax: case SpvOpAtomicUMax:",
+        "            case SpvOpAtomicAnd: case SpvOpAtomicOr: case SpvOpAtomicXor:",
+        "            case SpvOpAtomicFMinEXT: case SpvOpAtomicFMaxEXT: case SpvOpAtomicFAddEXT:",
+        "                return true;",
+        "            default: return false;",
+        "        }",
+        "    }",
+        "    static bool parse(const uint32_t* words, size_t word_count, SpvAtomicRmwView* out) {",
+        "        if (!words || !out || word_count < 7u) return false;",
+        "        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;",
+        "        out->result_type = words[1]; out->result_id = words[2];",
+        "        out->pointer = words[3]; out->memory = words[4]; out->semantics = words[5];",
+        "        out->value = words[6];",
+        "        return true;",
+        "    }",
+        "    static SpvAtomicRmwView must_parse(const uint32_t* words, size_t word_count) {",
+        "        SpvAtomicRmwView out{};",
+        "        if (!parse(words, word_count, &out)) {",
+        '            std::fprintf(stderr, "FATAL: SpvAtomicRmwView::must_parse failed (word_count=%zu)\\n", word_count);',
+        "            std::abort();",
+        "        }",
+        "        return out;",
+        "    }",
+        "};",
+        "",
+        "/// Shared prefix view for image sample/fetch/gather/read instructions.",
+        "struct SpvImageOpHeaderView {",
+        "    static constexpr bool kIsSpvView = true;",
+        "    uint32_t result_type = 0;",
+        "    uint32_t result_id = 0;",
+        "    uint32_t image = 0;",
+        "    uint32_t coordinate = 0;",
+        "",
+        "    static constexpr bool matches_opcode(uint16_t op) {",
+        "        switch (static_cast<SpvOp>(op)) {",
+        "            case SpvOpImageSampleImplicitLod: case SpvOpImageSampleExplicitLod:",
+        "            case SpvOpImageSampleDrefImplicitLod: case SpvOpImageSampleDrefExplicitLod:",
+        "            case SpvOpImageSampleProjImplicitLod: case SpvOpImageSampleProjExplicitLod:",
+        "            case SpvOpImageFetch: case SpvOpImageGather:",
+        "            case SpvOpImageDrefGather: case SpvOpImageRead:",
+        "                return true;",
+        "            default: return false;",
+        "        }",
+        "    }",
+        "    static bool parse(const uint32_t* words, size_t word_count, SpvImageOpHeaderView* out) {",
+        "        if (!words || !out || word_count < 5u) return false;",
+        "        if (!matches_opcode(static_cast<uint16_t>(words[0] & 0xFFFFu))) return false;",
+        "        out->result_type = words[1]; out->result_id = words[2];",
+        "        out->image = words[3]; out->coordinate = words[4];",
+        "        return true;",
+        "    }",
+        "    static SpvImageOpHeaderView must_parse(const uint32_t* words, size_t word_count) {",
+        "        SpvImageOpHeaderView out{};",
+        "        if (!parse(words, word_count, &out)) {",
+        "            uint16_t got_op = (words && word_count > 0) ? static_cast<uint16_t>(words[0] & 0xFFFFu) : 0u;",
+        "            std::fprintf(stderr, \"FATAL: SpvImageOpHeaderView parse failed (got opcode=%u [%s], words=%zu)\\n\",",
+        "                         static_cast<unsigned>(got_op), spv_op_name(got_op), word_count);",
+        "            std::abort();",
+        "        }",
+        "        return out;",
+        "    }",
+        "};",
+        "",
         "} // namespace valhall::spirv_parser",
         "",
     ])

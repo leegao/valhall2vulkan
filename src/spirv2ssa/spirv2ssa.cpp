@@ -30,25 +30,21 @@ std::vector<uint32_t> block_succ_labels(
     const auto& term = blk.insts.back();
     const auto op = static_cast<SpvOp>(term.opcode);
     if (op == SpvOpBranch) {
-        spirv_parser::SpvBranchView v{};
-        if (term.parse_as(&v)) succs.push_back(v.target_label);
+        spirv_parser::SpvBranchView v = term;
+        succs.push_back(v.target_label);
     } else if (op == SpvOpBranchConditional) {
-        spirv_parser::SpvBranchConditionalView v{};
-        if (term.parse_as(&v)) {
-            succs.push_back(v.true_label);
-            if (v.false_label != v.true_label) succs.push_back(v.false_label);
-        }
+        spirv_parser::SpvBranchConditionalView v = term;
+        succs.push_back(v.true_label);
+        if (v.false_label != v.true_label) succs.push_back(v.false_label);
     } else if (op == SpvOpSwitch) {
-        spirv_parser::SpvSwitchView v{};
-        if (term.parse_as(&v)) {
-            succs.push_back(v.default_val);
-            uint32_t sel_w = 32u;
-            if (auto it = id_to_width.find(v.selector); it != id_to_width.end()) sel_w = it->second;
-            for (const auto& [lit, lbl] : v.decode_cases(sel_w)) {
-                (void)lit;
-                if (std::find(succs.begin(), succs.end(), lbl) == succs.end()) {
-                    succs.push_back(lbl);
-                }
+        spirv_parser::SpvSwitchView v = term;
+        succs.push_back(v.default_val);
+        uint32_t sel_w = 32u;
+        if (auto it = id_to_width.find(v.selector); it != id_to_width.end()) sel_w = it->second;
+        for (const auto& [lit, lbl] : v.decode_cases(sel_w)) {
+            (void)lit;
+            if (std::find(succs.begin(), succs.end(), lbl) == succs.end()) {
+                succs.push_back(lbl);
             }
         }
     }
@@ -295,8 +291,7 @@ void SpirvLowerer::lower_switch(
     uint32_t blk_id,
     const SpirvInst& inst,
     const std::unordered_map<uint32_t, uint32_t>& lbl_map) {
-    spirv_parser::SpvSwitchView sw{};
-    if (!inst.parse_as(&sw)) return;
+    spirv_parser::SpvSwitchView sw = inst;
     LoweredValue sel = get_value(blk_id, sw.selector);
     auto dit = lbl_map.find(sw.default_val);
     int32_t default_blk = (dit != lbl_map.end()) ? static_cast<int32_t>(dit->second) : -1;
@@ -342,8 +337,7 @@ void SpirvLowerer::lower_switch(
 }
 
 bool SpirvLowerer::lower_function_call(uint32_t* io_blk_id, const SpirvInst& inst) {
-    spirv_parser::SpvFunctionCallView call{};
-    if (!inst.parse_as(&call)) return true;
+    spirv_parser::SpvFunctionCallView call = inst;
     uint32_t res_type = call.result_type;
     uint32_t res_id = call.result_id;
     uint32_t callee_id = call.function;
@@ -441,22 +435,18 @@ bool SpirvLowerer::lower_function_body(
         for (const auto& inst : spv_blk.insts) {
             const auto op = static_cast<SpvOp>(inst.opcode);
             if (op == SpvOpSelectionMerge) {
-                spirv_parser::SpvSelectionMergeView sm{};
-                if (inst.parse_as(&sm)) {
-                    if (auto it = local_lbl_to_blk.find(sm.merge_block); it != local_lbl_to_blk.end()) {
-                        ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
-                    }
+                spirv_parser::SpvSelectionMergeView sm = inst;
+                if (auto it = local_lbl_to_blk.find(sm.merge_block); it != local_lbl_to_blk.end()) {
+                    ssa_blk.selection_merge_block = static_cast<int32_t>(it->second);
                 }
             } else if (op == SpvOpLoopMerge) {
-                spirv_parser::SpvLoopMergeView lm{};
-                if (inst.parse_as(&lm)) {
-                    ssa_blk.is_loop_header = true;
-                    if (auto it = local_lbl_to_blk.find(lm.merge_block); it != local_lbl_to_blk.end()) {
-                        ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
-                    }
-                    if (auto it = local_lbl_to_blk.find(lm.continue_target); it != local_lbl_to_blk.end()) {
-                        ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
-                    }
+                spirv_parser::SpvLoopMergeView lm = inst;
+                ssa_blk.is_loop_header = true;
+                if (auto it = local_lbl_to_blk.find(lm.merge_block); it != local_lbl_to_blk.end()) {
+                    ssa_blk.loop_merge_block = static_cast<int32_t>(it->second);
+                }
+                if (auto it = local_lbl_to_blk.find(lm.continue_target); it != local_lbl_to_blk.end()) {
+                    ssa_blk.loop_backedge_block = static_cast<int32_t>(it->second);
                 }
             }
         }
@@ -464,17 +454,14 @@ bool SpirvLowerer::lower_function_body(
         const auto& term = spv_blk.insts.back();
         const auto top = static_cast<SpvOp>(term.opcode);
         if (top == SpvOpBranch) {
-            spirv_parser::SpvBranchView br{};
-            if (term.parse_as(&br)) {
-                if (auto it = local_lbl_to_blk.find(br.target_label); it != local_lbl_to_blk.end()) {
-                    ssa_blk.is_unconditional_branch = true;
-                    ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
-                    res_.ssa.blocks[it->second].preds.push_back(b);
-                }
+            spirv_parser::SpvBranchView br = term;
+            if (auto it = local_lbl_to_blk.find(br.target_label); it != local_lbl_to_blk.end()) {
+                ssa_blk.is_unconditional_branch = true;
+                ssa_blk.branch_target_block = static_cast<int32_t>(it->second);
+                res_.ssa.blocks[it->second].preds.push_back(b);
             }
         } else if (top == SpvOpBranchConditional) {
-            spirv_parser::SpvBranchConditionalView bc{};
-            if (!term.parse_as(&bc)) continue;
+            spirv_parser::SpvBranchConditionalView bc = term;
             auto it_t = local_lbl_to_blk.find(bc.true_label);
             auto it_f = local_lbl_to_blk.find(bc.false_label);
             ssa_blk.is_conditional_branch = true;
@@ -532,17 +519,14 @@ bool SpirvLowerer::lower_function_body(
                     break;
 
                 case SpvOpVariable: {
-                    spirv_parser::SpvVariableView var{};
-                    if (inst.parse_as(&var)) {
-                        register_local_variable(cur_b, var.result_id, var.result_type,
-                                                var.has_initializer ? var.initializer : 0u);
-                    }
+                    spirv_parser::SpvVariableView var = inst;
+                    register_local_variable(cur_b, var.result_id, var.result_type,
+                                            var.has_initializer ? var.initializer : 0u);
                     break;
                 }
 
                 case SpvOpPhi: {
-                    spirv_parser::SpvPhiView pv{};
-                    if (!inst.parse_as(&pv)) break;
+                    spirv_parser::SpvPhiView pv = inst;
                     uint32_t nlanes = flat_lane_count(pv.result_type);
                     ValType lane_vt = to_val_type(scalar_elem_type(pv.result_type));
                     PendingSpvPhi p{};
@@ -580,10 +564,8 @@ bool SpirvLowerer::lower_function_body(
                 }
 
                 case SpvOpLoad: {
-                    spirv_parser::SpvLoadView ld{};
-                    if (inst.parse_as(&ld)) {
-                        values_[ld.result_id] = lower_load(cur_b, inst);
-                    }
+                    spirv_parser::SpvLoadView ld = inst;
+                    values_[ld.result_id] = lower_load(cur_b, inst);
                     break;
                 }
 
@@ -645,11 +627,9 @@ bool SpirvLowerer::lower_function_body(
                     break;
 
                 case SpvOpBranchConditional: {
-                    spirv_parser::SpvBranchConditionalView bc{};
-                    if (inst.parse_as(&bc)) {
-                        LoweredValue cond = get_value(cur_b, bc.condition);
-                        res_.ssa.blocks[cur_b].branch_cond = cond.scalar();
-                    }
+                    spirv_parser::SpvBranchConditionalView bc = inst;
+                    LoweredValue cond = get_value(cur_b, bc.condition);
+                    res_.ssa.blocks[cur_b].branch_cond = cond.scalar();
                     break;
                 }
 
@@ -664,6 +644,7 @@ bool SpirvLowerer::lower_function_body(
                     k.op = SsaOp::Kill;
                     k.type = ValType::Void;
                     k.aux_bool = true;
+                    k.aux_bool2 = (op == SpvOpDemoteToHelperInvocation);
                     k.args = {sb_.emit_const_bool(cur_b, true), sb_.current_token(cur_b)};
                     k.is_barrier_or_cf = true;
                     k.is_side_effect = true;
@@ -683,10 +664,8 @@ bool SpirvLowerer::lower_function_body(
                     if (is_entry_point) {
                         flush_stage_outputs(cur_b);
                     } else {
-                        spirv_parser::SpvReturnValueView rv{};
-                        if (inst.parse_as(&rv)) {
-                            return_sites.push_back({cur_b, get_value(cur_b, rv.value)});
-                        }
+                        spirv_parser::SpvReturnValueView rv = inst;
+                        return_sites.push_back({cur_b, get_value(cur_b, rv.value)});
                     }
                     break;
                 }
