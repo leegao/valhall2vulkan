@@ -118,5 +118,85 @@
     "bytes": 64140,
     "opcode_count": 57,
     "reason": "covers 1 unique ops: OpGroupNonUniformAny"
+  },
+  {
+    "file": "bcn_bc7.spv",
+    "source": "bcn_bc7.spv",
+    "stage": "comp",
+    "bytes": 50248,
+    "opcode_count": 66,
+    "reason": "bcn_layer BC7 texture compression compute shader"
+  },
+  {
+    "file": "bcn_bc6_iv.spv",
+    "source": "bcn_bc6_iv.spv",
+    "stage": "comp",
+    "bytes": 94152,
+    "opcode_count": 68,
+    "reason": "bcn_layer BC6H HDR compression compute shader (imageView output)"
+  },
+  {
+    "file": "bcn_rgtc.spv",
+    "source": "bcn_rgtc.spv",
+    "stage": "comp",
+    "bytes": 8852,
+    "opcode_count": 65,
+    "reason": "bcn_layer RGTC/BC4-BC5 compression compute shader"
+  },
+  {
+    "file": "bcn_s3tc.spv",
+    "source": "bcn_s3tc.spv",
+    "stage": "comp",
+    "bytes": 14612,
+    "opcode_count": 71,
+    "reason": "bcn_layer S3TC/BC1-BC3 compression compute shader"
+  },
+  {
+    "file": "bcn_watermark.spv",
+    "source": "bcn_watermark.spv",
+    "stage": "comp",
+    "bytes": 8488,
+    "opcode_count": 60,
+    "reason": "bcn_layer storage-image watermark compute shader"
+  },
+  {
+    "file": "frag_stress_discard_f814d888.spv",
+    "source": "f814d88872fcd13ec99539efc4cad45a67a51368f9115491c43621db7b82918c.spv",
+    "stage": "frag",
+    "bytes": 4032,
+    "opcode_count": 36,
+    "reason": "stress test (frag stress discard)"
+  },
+  {
+    "file": "frag_stress_branch_d38c3ea1.spv",
+    "source": "d38c3ea1aa126b2470bb5978bcdf96b86f3002e7049fbc4436e8d1be1303a49d.spv",
+    "stage": "frag",
+    "bytes": 5976,
+    "opcode_count": 50,
+    "reason": "stress test (frag stress branch)"
+  },
+  {
+    "file": "vert_stress_xform_f6bc0cf0.spv",
+    "source": "f6bc0cf071deebae7228eda47fbfeac6ffd23001697e30f5198ae410ec91f256.spv",
+    "stage": "vert",
+    "bytes": 7004,
+    "opcode_count": 35,
+    "reason": "stress test (vert stress xform)"
+  },
+  {
+    "file": "bcn_bc6.spv",
+    "source": "bcn_bc6.spv",
+    "stage": "comp",
+    "bytes": 94420,
+    "opcode_count": 65,
+    "reason": "bcn_layer BC6H HDR compression compute shader (SSBO output)"
+  },
+  {
+    "file": "comp_stress_general_d59ce674.spv",
+    "source": "d59ce6746a6e08360aa1d4293b4d110c558d74b657a013b01af6d05d6c5bbf29.spv",
+    "stage": "comp",
+    "bytes": 19472,
+    "opcode_count": 63,
+    "reason": "stress test (compute shader from corpus)"
   }
 ]
