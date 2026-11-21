@@ -65,7 +65,8 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
-docs/
+docs/*
+!docs/shader-equiv-verifier.md
 predownloaded/
 archives/
 .clangd
@@ -76,3 +77,5 @@ __pycache__/
 llvm-21
 tools/mali_csf_dump_layer/bringup_notes.md
 codereviews/
+TODO.md
+mkarchive.sh
