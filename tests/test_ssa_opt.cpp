@@ -5,6 +5,7 @@
 #include "ssa_spill_mem2reg.h"
 #include "ssa_sroa.h"
 #include "ssa_opt_pipeline.h"
+#include "ssa_defau_devirt.h"
 #include "ssa_opt_utils.h"
 #include "ssa_sccp.h"
 #include "valhall_ssa.h"
@@ -541,6 +542,56 @@ void test_fp_dual_toggles_tile_vs_cpp() {
     std::cout << "[PASS] test_fp_dual_toggles_tile_vs_cpp\n";
 }
 
+void test_defau_devirt_fcst_loads_exprs_and_fallbacks() {
+    ValhallSsaModule mod;
+    SsaBlock blk{}; blk.id = 0; mod.blocks.push_back(blk);
+    mod.nodes.push_back(SsaNode{});
+
+    auto emit = [&](SsaOp op, ValType ty, std::vector<SsaId> args, uint32_t imm = 0) -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm;
+        n.args = std::move(args);
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+
+    SsaId tok = emit(SsaOp::Nop, ValType::Token, {});
+    (void)tok;
+    SsaId fau_fcst = emit(SsaOp::LoadFau, ValType::U32, {}, 8u);   // FAU+0x20 -> FCST 0x0ffe0000
+    SsaId fau_ubo = emit(SsaOp::LoadFau, ValType::U32, {}, 2u);    // FAU+0x08 -> ubo:0:0+0xd0
+    SsaId fau_pred = emit(SsaOp::LoadFau, ValType::U32, {}, 0u);   // FAU+0x00 -> Select(ubo==1.0f, ~0, 0)
+    SsaId fau_lo = emit(SsaOp::LoadFau, ValType::U32, {}, 6u);     // FAU+0x18 -> &ssbo:0:1
+    SsaId fau_hi = emit(SsaOp::LoadFau, ValType::U32, {}, 7u);
+    SsaId addr64 = emit(SsaOp::Pack64, ValType::U64, {fau_lo, fau_hi});
+    SsaId fau_unk = emit(SsaOp::LoadFau, ValType::U32, {}, 30u);   // Unresolved -> fallback
+    emit(SsaOp::BitAnd, ValType::U32, {fau_fcst, fau_ubo});
+    emit(SsaOp::BitOr, ValType::U32, {fau_pred, fau_unk});
+    emit(SsaOp::PsbLoad, ValType::TupleValToken, {addr64, tok}, 4u);
+
+    FauSummaryMap summary;
+    seed_fcst_into_fau_summary({{0x20u, 0x0ffe0000u}}, summary);
+    auto ubo_ld = SymExpr::make_buffer_load(4, 0, "ubo:0:0", 0xd0, 4);
+    summary[0x08u] = ubo_ld;
+    auto cmp = SymExpr::make_binary(SsaOp::FCmpOrdEq, ubo_ld, SymExpr::make_const_u32(0x3f800000u));
+    summary[0x00u] = SymExpr::make_select(cmp, SymExpr::make_const_u32(0xFFFFFFFFu), SymExpr::make_const_u32(0u));
+    summary[0x18u] = SymExpr::make_buffer_addr(4, 1, "ssbo:0:1", 0, true);
+
+    auto res = run_ssa_defau_devirt(mod, summary);
+    CHECK(res.fau_consts_materialized == 1u);
+    CHECK(res.fau_loads_materialized == 1u);
+    CHECK(res.fau_exprs_materialized == 1u);
+    CHECK(res.fau_addrs_materialized == 1u);
+    CHECK(res.fallbacks.size() == 1u);
+    CHECK(res.fallbacks[0].reason == FallbackReason::UnresolvedFauSlot);
+    CHECK(mod.get(fau_fcst).op == SsaOp::ConstU32 && mod.get(fau_fcst).imm_u32 == 0x0ffe0000u);
+    std::cout << "[PASS] test_defau_devirt_fcst_loads_exprs_and_fallbacks\n";
+}
+
 int main() {
     test_dce_basic_and_unreachable();
     test_cse_dominator_scoping_and_commutativity();
@@ -552,6 +603,7 @@ int main() {
     test_full_opt_pipeline();
     test_analysis_cache_and_invalidation();
     test_fp_dual_toggles_tile_vs_cpp();
+    test_defau_devirt_fcst_loads_exprs_and_fallbacks();
     std::cout << "ALL SSA OPT TESTS PASSED!\n";
     return 0;
 }

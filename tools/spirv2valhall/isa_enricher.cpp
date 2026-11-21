@@ -211,6 +211,10 @@ dataflow::PointerAnalysisEnv build_df_env(
     env.role = to_df_role(ebin.role);
     env.data_section_offset = ebin.meta.data_section_offset;
 
+    for (const auto& kv : sym_idx.fcst_by_fau_off) {
+        env.initial_fau[kv.first] = dataflow::TrackedValDomain::make_const_u64(kv.second.value);
+    }
+
     if (pilot_info) {
         for (const auto& kv : pilot_info->fau_map) {
             const auto& pe = kv.second;
@@ -471,6 +475,41 @@ std::string format_enriched_disassembly(
         }
     }
     return oss.str();
+}
+
+dataflow::FauSummaryMap build_fau_summary_for_ebin(
+    const Mbs2Module& mbs2,
+    const std::vector<ExtractedEbin>& ebins,
+    uint8_t arch,
+    const ExtractedEbin& primary_eb) {
+    dataflow::FauSummaryMap summary;
+    Mbs2SymbolIndex lut = build_symbol_index(mbs2, &primary_eb);
+
+    for (const auto& eb : ebins) {
+        if (eb.role != EbinRole::Pilot) continue;
+        Mbs2SymbolIndex pilot_lut = build_symbol_index(mbs2, &eb);
+        dataflow::PointerAnalysisEnv pilot_env = build_df_env(pilot_lut, eb, nullptr);
+        cfg::ControlFlowGraph pilot_cfg = cfg::build_cfg(eb.instructions);
+        ValhallTranslateOptions p_opts;
+        p_opts.stage = valhall::ShaderStage::Pilot;
+        p_opts.arch = arch;
+        p_opts.tolerant_ssa = true;
+        auto p1 = compiler::run_pass1_lowering(pilot_cfg, {}, p_opts);
+        if (p1.ok) {
+            dataflow::FauSummaryMap p_sum = dataflow::run_pilot_fau_summary(p1.ssa, pilot_env);
+            for (const auto& kv : p_sum) {
+                summary[kv.first] = kv.second;
+            }
+        }
+        break;
+    }
+
+    std::map<uint32_t, uint32_t> fcst_words;
+    for (const auto& kv : lut.fcst_by_fau_off) {
+        fcst_words[kv.first] = kv.second.value;
+    }
+    dataflow::seed_fcst_into_fau_summary(fcst_words, summary, /*overwrite=*/false);
+    return summary;
 }
 
 }  // namespace valhall::spirv2valhall

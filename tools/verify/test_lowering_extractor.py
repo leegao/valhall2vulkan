@@ -45,10 +45,10 @@ class TestLoweringExtractor(unittest.TestCase):
         rules_used = {r["rule_index"] for r in results}
         self.assertGreaterEqual(len(rules_used), 200)
 
-        # Verify FADD_LSCALE.f32 (spec 101) arity mismatch warning is surfaced
+        # Verify FADD_LSCALE.f32 (spec 101) lowers cleanly with 2 f32 inputs and no arity mismatch
         lscale = [r for r in results if r["mnemonic"] == "FADD_LSCALE"]
         self.assertEqual(len(lscale), 1)
-        self.assertTrue(any("Arity mismatch" in w for w in lscale[0]["warnings"]))
+        self.assertFalse(any("Arity mismatch" in w for w in lscale[0]["warnings"]))
 
     def test_direct_ssa_op_and_scalar_bleed_capture(self) -> None:
         ins = InstLoweringContext(
@@ -176,7 +176,8 @@ class TestLoweringExtractor(unittest.TestCase):
         _, tr = self.ext.lower_instruction(ins)
         summary = tr.format_summary()
         self.assertIn("[T_lowering] FADD_LSCALE.f32", summary)
-        self.assertIn("WARN: Arity mismatch", summary)
+        self.assertNotIn("WARN: Arity mismatch", summary)
+        self.assertIn("FAdd", summary)
         self.assertIn("Emitted SsaOps", summary)
 
 

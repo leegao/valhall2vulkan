@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ssa_defau_devirt.h"
+
 #include "mbs2_types.h"
 #include "spirv_inspect.h"
 
@@ -69,5 +71,14 @@ std::string format_enriched_disassembly(
     const PilotAnalysisResult& pilot_info,
     bool include_modifiers = false,
     bool enrich = true);
+
+/// Builds a unified `FauSummaryMap` for `primary_eb` by summarizing any companion
+/// Pilot shader (`EbinRole::Pilot`) via `run_pilot_fau_summary` and seeding all
+/// MBS2 `FCST` constant-pool words.
+dataflow::FauSummaryMap build_fau_summary_for_ebin(
+    const Mbs2Module& mbs2,
+    const std::vector<ExtractedEbin>& ebins,
+    uint8_t arch,
+    const ExtractedEbin& primary_eb);
 
 }  // namespace valhall::spirv2valhall

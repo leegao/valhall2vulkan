@@ -1780,8 +1780,7 @@
       "dest_type": "f32",
       "src_types": [
         "f32",
-        "f32",
-        "s32"
+        "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
@@ -1789,8 +1788,17 @@
         "uses_glsl_std450"
       ],
       "inline_ops": [
-        "%l : f32 = Ldexp(%0, %2);",
-        "%out : f32 = FAdd(%l, %1);"
+        "%bits : u32 = @bitcast(u32, %1);",
+        "%exp_u : u32 = BfeU(%bits, #u32(23), #u32(8));",
+        "%top_u : u32 = BfeU(%bits, #u32(22), #u32(1));",
+        "%nz : bool = ICmpNe(%exp_u, #u32(0));",
+        "%nf : bool = ICmpNe(%exp_u, #u32(255));",
+        "%is_norm : bool = LogicalAnd(%nz, %nf);",
+        "%new_exp : u32 = ISub(#u32(127), %top_u);",
+        "%red_u : u32 = Bfi(%bits, %new_exp, #u32(23), #u32(8));",
+        "%red_f : f32 = @bitcast(f32, %red_u);",
+        "%m : f32 = Select(%is_norm, %red_f, %1);",
+        "%out : f32 = FAdd(%0, %m);"
       ]
     },
     {
@@ -2050,15 +2058,21 @@
         "*"
       ],
       "op_class": "fp_sfu1",
-      "ssa_op": "Exp2",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
+        "s32",
         "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%qf : f32 = ConvertSToF(%0);",
+        "%scaled : f32 = Ldexp(%qf, #s32(-24));",
+        "%out : f32 = Exp2(%scaled);"
       ]
     },
     {
@@ -2101,7 +2115,7 @@
         "*"
       ],
       "op_class": "fp_sfu1",
-      "ssa_op": "Log2",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
         "f32"
@@ -2110,6 +2124,24 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%bits : u32 = @bitcast(u32, %0);",
+        "%exp_u : u32 = BfeU(%bits, #u32(23), #u32(8));",
+        "%top_u : u32 = BfeU(%bits, #u32(22), #u32(1));",
+        "%nz : bool = ICmpNe(%exp_u, #u32(0));",
+        "%nf : bool = ICmpNe(%exp_u, #u32(255));",
+        "%is_norm : bool = LogicalAnd(%nz, %nf);",
+        "%new_exp : u32 = ISub(#u32(127), %top_u);",
+        "%red_u : u32 = Bfi(%bits, %new_exp, #u32(23), #u32(8));",
+        "%red_f : f32 = @bitcast(f32, %red_u);",
+        "%m : f32 = Select(%is_norm, %red_f, %0);",
+        "%denom : f32 = FSub(%m, #f32(1.0));",
+        "%is_one : bool = FCmpOrdEq(%m, #f32(1.0));",
+        "%log2m : f32 = Log2(%m);",
+        "%quot : f32 = FDiv(%log2m, %denom);",
+        "%inv_ln2 : f32 = #f32_bits(0x3fb8aa3b);",
+        "%out : f32 = Select(%is_one, %inv_ln2, %quot);"
       ]
     },
     {
@@ -2222,7 +2254,7 @@
         "*"
       ],
       "op_class": "fp_frexp",
-      "ssa_op": "FrexpExp",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "s32",
       "src_types": [
         "f32"
@@ -2231,6 +2263,33 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%out : s32 = FrexpExp(%0);",
+        "if (@mod_eq(special, log)) {",
+        "  %bits : u32 = @bitcast(u32, %0);",
+        "  %exp_u : u32 = BfeU(%bits, #u32(23), #u32(8));",
+        "  %top_u : u32 = BfeU(%bits, #u32(22), #u32(1));",
+        "  %nz : bool = ICmpNe(%exp_u, #u32(0));",
+        "  %nf : bool = ICmpNe(%exp_u, #u32(255));",
+        "  %is_norm : bool = LogicalAnd(%nz, %nf);",
+        "  %exp_s : s32 = @bitcast(s32, %exp_u);",
+        "  %top_s : s32 = @bitcast(s32, %top_u);",
+        "  %unbias : s32 = ISub(%exp_s, #s32(127));",
+        "  %elog : s32 = IAdd(%unbias, %top_s);",
+        "  %out = Select(%is_norm, %elog, #s32(0));",
+        "} else if (@mod_eq(special, sqrt)) {",
+        "  %bits2 : u32 = @bitcast(u32, %0);",
+        "  %exp_u2 : u32 = BfeU(%bits2, #u32(23), #u32(8));",
+        "  %nz2 : bool = ICmpNe(%exp_u2, #u32(0));",
+        "  %nf2 : bool = ICmpNe(%exp_u2, #u32(255));",
+        "  %is_norm2 : bool = LogicalAnd(%nz2, %nf2);",
+        "  %exp_s2 : s32 = @bitcast(s32, %exp_u2);",
+        "  %sub2 : s32 = ISub(%exp_s2, #s32(125));",
+        "  %esqrt : s32 = ShrS(%sub2, #s32(1));",
+        "  %out = Select(%is_norm2, %esqrt, #s32(0));",
+        "}",
+        "if (@mod_eq(neg_result, neg)) { %out = SNeg(%out); }"
       ]
     },
     {

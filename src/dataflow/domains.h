@@ -12,3 +12,4 @@
 #include "domains/finite_set.h"
 #include "domains/union.h"
 #include "domains/lane.h"
+#include "domains/sym_expr.h"

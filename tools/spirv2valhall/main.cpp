@@ -4,6 +4,9 @@
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
 #include "valhall_ssa_json.h"
+#include "ssa_defau_devirt.h"
+#include "ssa_opt_pipeline.h"
+#include "isa_enricher.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -62,6 +65,8 @@ int main(int argc, char** argv) {
     std::string dump_ssa_json_path;
     valhall::spirv2valhall::EquivBundleOptions equiv_opts;
     bool dump_ssa = false;
+    bool run_defau = false;
+    bool dump_devirt_fallbacks = false;
     bool direct_ssa = false;
     bool include_mods = false;
     bool show_context = true;
@@ -99,6 +104,11 @@ int main(int argc, char** argv) {
             dump_equiv_json_path = argv[++i];
         } else if (arg == "--opt-ssa") {
             equiv_opts.run_ssa_opt = true;
+        } else if (arg == "--defau") {
+            run_defau = true;
+        } else if (arg == "--dump-devirt-fallbacks") {
+            run_defau = true;
+            dump_devirt_fallbacks = true;
         } else if (arg == "--opt-fp-mode" && i + 1 < argc) {
             std::string m = argv[++i];
             equiv_opts.fp_fast_math = (m == "fast" || m == "fast_math");
@@ -249,7 +259,7 @@ int main(int argc, char** argv) {
         vopts.stage = to_compiler_stage(res.stage_info.stage);
         vopts.arch = res.arch;
         vopts.tolerant_ssa = true;
-        vopts.run_ssa_opt = equiv_opts.run_ssa_opt;
+        vopts.run_ssa_opt = run_defau ? false : equiv_opts.run_ssa_opt;
         vopts.ssa_opt_fp_fast_math = equiv_opts.fp_fast_math;
         vopts.ssa_opt_fp_tile_rewrites = equiv_opts.enable_fp_tile_rewrites;
         vopts.ssa_opt_fp_cpp_rewrites = equiv_opts.enable_fp_cpp_rewrites;
@@ -268,6 +278,29 @@ int main(int argc, char** argv) {
         if (!p1.ok) {
             std::cerr << "[spirv2valhall] ERROR: valhall_pass1 failed: " << p1.error_message << "\n";
             return 1;
+        }
+        if (run_defau) {
+            auto fau_summary = valhall::spirv2valhall::build_fau_summary_for_ebin(res.mbs2, res.ebins, res.arch, *primary_eb);
+            auto df_res = valhall::dataflow::run_ssa_defau_devirt(p1.ssa, fau_summary);
+            if (dump_devirt_fallbacks) {
+                std::cerr << "[defau] consts=" << df_res.fau_consts_materialized
+                          << " loads=" << df_res.fau_loads_materialized
+                          << " exprs=" << df_res.fau_exprs_materialized
+                          << " addrs=" << df_res.fau_addrs_materialized
+                          << " fallbacks=" << df_res.fallbacks.size() << "\n";
+                for (const auto& fb : df_res.fallbacks) {
+                    std::cerr << "  [fallback] pc=0x" << std::hex << fb.valhall_pc
+                              << " %" << std::dec << fb.ssa_id << " " << fb.detail << "\n";
+                }
+            }
+            if (equiv_opts.run_ssa_opt) {
+                valhall::dataflow::SsaOptPipelineOptions popts;
+                popts.fp_mode = equiv_opts.fp_fast_math ? valhall::dataflow::FpOptMode::FastMath
+                                                        : valhall::dataflow::FpOptMode::StrictIEEE;
+                popts.enable_fp_tile_rewrites = equiv_opts.enable_fp_tile_rewrites;
+                popts.enable_fp_cpp_rewrites = equiv_opts.enable_fp_cpp_rewrites;
+                valhall::dataflow::run_ssa_opt_pipeline(p1.ssa, popts);
+            }
         }
         if (!dump_ssa_json_path.empty()) {
             std::ofstream ofs(dump_ssa_json_path, std::ios::binary);

@@ -625,6 +625,32 @@ void test_flat_float_domains_algebraic_mixins_and_auto_convert() {
     std::cout << "[PASS] test_flat_float_domains_algebraic_mixins_and_auto_convert\n";
 }
 
+void test_sym_expr_domain_and_mixins() {
+    auto buf = SymExprDomain::from_expr(SymExpr::make_buffer_addr(4, 1, "ubo:0:0", 0x10, true));
+    auto off = IntegralDomain<uint64_t>::Value::make(0xc0);
+    auto shifted = SymExprDomain::add(buf, off);
+    CHECK(shifted.is_known() && shifted.value.expr->byte_offset == 0xd0 && shifted.value.expr->offset_known);
+
+    auto masked = SymExprDomain::bit_and(shifted, IntegralDomain<uint64_t>::Value::make(0x00FFFFFFULL));
+    CHECK(SymExprDomain::equals(masked, shifted));
+
+    auto widened = SymExprDomain::add(buf, IntegralDomain<uint64_t>::top());
+    CHECK(widened.is_known() && !widened.value.expr->offset_known);
+
+    auto joined = SymExprDomain::join(buf, shifted);
+    CHECK(joined.is_top());
+    CHECK(SymExprDomain::equals(SymExprDomain::join(buf, SymExprDomain::bottom()), buf));
+
+    // Verify bounded depth cap (kMaxSymExprDepth == 4).
+    auto e = SymExpr::make_const_u32(1u);
+    for (int i = 0; i < 4; ++i) {
+        e = SymExpr::make_unary(SsaOp::FNeg, e);
+        CHECK(e != nullptr);
+    }
+    CHECK(SymExpr::make_unary(SsaOp::FNeg, e) == nullptr);
+    std::cout << "[PASS] test_sym_expr_domain_and_mixins\n";
+}
+
 }  // namespace
 
 int main() {
@@ -637,6 +663,7 @@ int main() {
     test_ssa_pack64_split64_and_fau_seed();
     test_compound_op_delegation_lane_wrapper_and_atomic_exchange();
     test_flat_float_domains_algebraic_mixins_and_auto_convert();
+    test_sym_expr_domain_and_mixins();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

@@ -545,6 +545,61 @@ int main() {
         std::cout << "[PASS] Checkpoint v27.1: BRANCH combine modes and CLPER lane_op/subgroup verified\n";
     }
 
+    // Checkpoint v27.2: Valhall SFU log2/exp2 lowering (FREXPE.log, FADD_LSCALE, FLOGD, FMUL_RSCALE, FEXP).
+    {
+        auto lower_single = [&](const DecodedValhallInst& ins) {
+            DecodedValhallInst end = make_inst(0x08, Mnemonic::NOP, Mnemonic::NOP);
+            end.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> v = { ins, end };
+            auto cfg = cfg::build_cfg(v);
+            ValhallTranslateOptions opts{};
+            opts.stage = ShaderStage::Fragment;
+            auto p1 = run_pass1_lowering(cfg, cfg::ControlFlowGraph{}, opts);
+            assert(p1.ok);
+            return p1;
+        };
+        auto has_op = [&](const Pass1Result& p1, SsaOp op) {
+            for (size_t id = 1; id < p1.ssa.nodes.size(); ++id) {
+                if (p1.ssa.nodes[id].op == op) return true;
+            }
+            return false;
+        };
+
+        auto frexpe_log = make_inst(0x00, Mnemonic::FREXPE, Mnemonic::FREXPE, Variant::F32);
+        frexpe_log.has_dest = true; frexpe_log.dest_reg = 5;
+        frexpe_log.srcs = { reg_src(1) };
+        frexpe_log.modifier_strs["special"] = "log";
+        auto p_fl = lower_single(frexpe_log);
+        assert(has_op(p_fl, SsaOp::BfeU) && has_op(p_fl, SsaOp::Select));
+
+        auto lscale = make_inst(0x00, Mnemonic::FADD_LSCALE, Mnemonic::FADD_LSCALE, Variant::F32);
+        lscale.has_dest = true; lscale.dest_reg = 5;
+        lscale.srcs = { reg_src(1), reg_src(2) };
+        auto p_ls = lower_single(lscale);
+        assert(has_op(p_ls, SsaOp::Bfi) && has_op(p_ls, SsaOp::FAdd) && !has_op(p_ls, SsaOp::Ldexp));
+
+        auto flogd = make_inst(0x00, Mnemonic::FLOGD, Mnemonic::FLOGD, Variant::F32);
+        flogd.has_dest = true; flogd.dest_reg = 5;
+        flogd.srcs = { reg_src(1) };
+        auto p_ld = lower_single(flogd);
+        assert(has_op(p_ld, SsaOp::Log2) && has_op(p_ld, SsaOp::FDiv) && has_op(p_ld, SsaOp::Select));
+
+        auto rscale = make_inst(0x00, Mnemonic::FMUL_RSCALE, Mnemonic::FMA_RSCALE, Variant::F32);
+        rscale.has_dest = true; rscale.dest_reg = 5;
+        rscale.srcs = { reg_src(1), reg_src(2), reg_src(3) };
+        rscale.fields["neg2"] = 1u;  // elided -0.0 addend bitfield must NOT negate src2 exponent!
+        auto p_rs = lower_single(rscale);
+        assert(has_op(p_rs, SsaOp::Ldexp) && !has_op(p_rs, SsaOp::SNeg));
+
+        auto fexp = make_inst(0x00, Mnemonic::FEXP, Mnemonic::FEXP, Variant::F32);
+        fexp.has_dest = true; fexp.dest_reg = 5;
+        fexp.srcs = { reg_src(1), reg_src(2) };
+        auto p_fe = lower_single(fexp);
+        assert(has_op(p_fe, SsaOp::ConvertSToF) && has_op(p_fe, SsaOp::Ldexp) && has_op(p_fe, SsaOp::Exp2));
+
+        std::cout << "[PASS] Checkpoint v27.2: Valhall SFU log2/exp2 (FREXPE.log, FADD_LSCALE, FLOGD, FMUL_RSCALE, FEXP) verified\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }

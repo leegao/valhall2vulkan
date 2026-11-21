@@ -281,6 +281,20 @@ BufferSymbolizeResult run_ssa_symbolize_buffers(ValhallSsaModule& mod,
         for (SsaId nid : blk.nodes) {
             auto& n = mod.get_mut(nid);
 
+            if (n.op == SsaOp::LoadFau) {
+                uint64_t cv = 0;
+                if (TrackedValDomain::try_as_const_u64(pa.val(nid), &cv)) {
+                    n.op = SsaOp::ConstU32;
+                    n.type = compiler::ValType::U32;
+                    n.imm_u32 = static_cast<uint32_t>(cv);
+                    n.imm_u32_2 = 0;
+                    n.args.clear();
+                    n.aux_str.clear();
+                    n.effects = {};
+                    ++result.stats.nodes_folded;
+                }
+                continue;
+            }
             if (n.op == SsaOp::ControlBarrier || n.op == SsaOp::AtomicCmpXchg ||
                 n.op == SsaOp::AtomicExchange || n.op == SsaOp::AtomicRmw) {
                 live_slots.clear();
