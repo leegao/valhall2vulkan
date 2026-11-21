@@ -412,6 +412,9 @@ class SharedShaderEnv:
             self.base_to_buf[base] = key
         return self.buf_base_map[key]
 
+    def is_shared_sym_bkey(self, bkey: str) -> bool:
+        return bkey in getattr(self, 'shared_sym_bkeys', set())
+
     def get_sym_buf_slot(self, sym_tag: str, off32: z3.BitVecRef) -> z3.BitVecRef:
         if not hasattr(self, "sym_buf_ufs"):
             self.sym_buf_ufs: Dict[str, z3.FuncDeclRef] = {}
@@ -689,10 +692,19 @@ def _merge_states(
                     ))
                 base_st.atomic_events[akey] = merged_ev
             else:
-                # Preserve events from both branches guarded by their respective branch condition
+                # Preserve shared prefix once without duplicating across CFG diamonds
+                pref = 0
+                min_len = min(len(ev_a), len(ev_b))
+                while pref < min_len:
+                    ea, eb = ev_a[pref], ev_b[pref]
+                    if ea[1] == eb[1] and ea[0].eq(eb[0]) and ea[2].eq(eb[2]) and ea[3].eq(eb[3]) and ea[4].eq(eb[4]):
+                        pref += 1
+                    else:
+                        break
                 ncond = _z3_not(cond)
-                combined = [(_z3_and(ncond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_a]
-                combined.extend((_z3_and(cond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_b)
+                combined = list(ev_a[:pref])
+                combined.extend((_z3_and(ncond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_a[pref:])
+                combined.extend((_z3_and(cond, e[0]), e[1], e[2], e[3], e[4]) for e in ev_b[pref:])
                 base_st.atomic_events[akey] = combined
         for k, pcs in st.output_pcs.items():
             base_st.output_pcs.setdefault(k, set()).update(pcs)
@@ -1169,16 +1181,19 @@ class DagSsaZ3Evaluator:
 
         if op == "PsbLoad":
             addr = _as_bv64(args[0])
+            eff_hint = aux_str
             if aux_str.startswith("sym:"):
                 bkey_hint = aux_str[4:].split("[", 1)[0]
-                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
-                if aux_str in st.sym_buf_stores:
-                    w_cond, w_val, w_off = st.sym_buf_stores[aux_str]
-                    val = _z3_if(_z3_and(w_cond, off32 == w_off), w_val, self.env.get_sym_buf_slot(aux_str, off32))
-                else:
-                    val = self.env.get_sym_buf_slot(aux_str, off32)
-                return (val, args[1] if len(args) > 1 else bv32(0))
-            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+                if self.env.is_shared_sym_bkey(bkey_hint):
+                    _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
+                    if aux_str in st.sym_buf_stores:
+                        w_cond, w_val, w_off = st.sym_buf_stores[aux_str]
+                        val = _z3_if(_z3_and(w_cond, off32 == w_off), w_val, self.env.get_sym_buf_slot(aux_str, off32))
+                    else:
+                        val = self.env.get_sym_buf_slot(aux_str, off32)
+                    return (val, args[1] if len(args) > 1 else bv32(0))
+                eff_hint = bkey_hint
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=eff_hint)
             if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
                 bkey = self.env.unique_workgroup_key
             if bkey is not None:
@@ -1197,13 +1212,16 @@ class DagSsaZ3Evaluator:
             val = _as_bv32(args[1])
             store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
             nid = int(node["id"])
+            eff_hint = aux_str
             if aux_str.startswith("sym:"):
                 bkey_hint = aux_str[4:].split("[", 1)[0]
-                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
-                prev_w, prev_v, prev_o = st.sym_buf_stores.get(aux_str, (z3.BoolVal(False), self.env.get_sym_buf_slot(aux_str, off32), off32))
-                st.sym_buf_stores[aux_str] = (_z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v), _z3_if(store_mask, off32, prev_o))
-                st.output_pcs.setdefault(aux_str, set()).add(nid)
-                return args[2] if len(args) > 2 else bv32(0)
+                if self.env.is_shared_sym_bkey(bkey_hint):
+                    _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
+                    prev_w, prev_v, prev_o = st.sym_buf_stores.get(aux_str, (z3.BoolVal(False), self.env.get_sym_buf_slot(aux_str, off32), off32))
+                    st.sym_buf_stores[aux_str] = (_z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v), _z3_if(store_mask, off32, prev_o))
+                    st.output_pcs.setdefault(aux_str, set()).add(nid)
+                    return args[2] if len(args) > 2 else bv32(0)
+                eff_hint = bkey_hint
             # Normalize OpImageWrite (emitted as PsbStore on img:* with packed xy + c*4) into image_mems
             if aux_str.startswith("img:"):
                 ikey = aux_str
@@ -1224,7 +1242,7 @@ class DagSsaZ3Evaluator:
                 st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
                 return args[2] if len(args) > 2 else bv32(0)
 
-            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=aux_str)
+            bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=eff_hint)
             if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
                 bkey = self.env.unique_workgroup_key
             if bkey is not None:
@@ -1394,6 +1412,37 @@ class DagSsaZ3Evaluator:
         if not self.blocks:
             return init_state
 
+        blk_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in self.blocks}
+        visited: Set[int] = set()
+        postorder: List[int] = []
+        dfs_stack: List[Tuple[int, int]] = [(0, 0)] if 0 in blk_by_id else []
+        while dfs_stack:
+            u, step = dfs_stack.pop()
+            if step == 0:
+                if u in visited:
+                    continue
+                visited.add(u)
+                dfs_stack.append((u, 1))
+                bu = blk_by_id[u]
+                succs: List[int] = []
+                bt_u = int(bu.get("branch_target", -1))
+                ft_u = int(bu.get("fallthrough", -1))
+                if bool(bu.get("is_cond", False)):
+                    if bt_u >= 0: succs.append(bt_u)
+                    if ft_u >= 0 and ft_u != bt_u: succs.append(ft_u)
+                elif bt_u >= 0:
+                    succs.append(bt_u)
+                elif ft_u >= 0:
+                    succs.append(ft_u)
+                for s in reversed(succs):
+                    if s in blk_by_id and s not in visited:
+                        dfs_stack.append((s, 0))
+            else:
+                postorder.append(u)
+        rpo_ids = list(reversed(postorder))
+        rpo_index: Dict[int, int] = {bid: idx for idx, bid in enumerate(rpo_ids)}
+        rpo_blocks = [blk_by_id[bid] for bid in rpo_ids]
+
         blk_reach: Dict[int, z3.BoolRef] = {}
         blk_out_state: Dict[int, BlockEffectState] = {}
         edge_conds: Dict[int, List[Tuple[int, z3.BoolRef]]] = {b["id"]: [] for b in self.blocks}
@@ -1403,6 +1452,7 @@ class DagSsaZ3Evaluator:
             backedges: List[Tuple[int, int, z3.BoolRef]] = []
             for blk in block_list:
                 bid = int(blk["id"])
+                b_rpo = rpo_index.get(bid, bid)
                 if bid == 0 and not allow_backedges:
                     reach = z3.BoolVal(True)
                     cur_st = _clone_state(init_state)
@@ -1420,7 +1470,8 @@ class DagSsaZ3Evaluator:
                 blk_reach[bid] = reach
 
                 for p in blk.get("preds", []):
-                    if int(p) >= bid:
+                    ip = int(p)
+                    if ip in rpo_index and rpo_index[ip] >= b_rpo:
                         self.has_loops = True
 
                 inc_cond_map = {p: c for (p, c) in edge_conds.get(bid, [])}
@@ -1461,28 +1512,30 @@ class DagSsaZ3Evaluator:
                 is_end = bool(blk.get("is_end", False))
                 is_discard = bool(blk.get("is_discard", False))
 
+                bt_rpo = rpo_index.get(bt, -1)
+                ft_rpo = rpo_index.get(ft, -1)
                 if is_cond and bt >= 0 and ft >= 0:
                     bcond_id = int(blk.get("branch_cond", 0))
                     bcond = _as_bool(self.values.get(bcond_id, z3.BoolVal(False)))
                     t_cond = _z3_and(cf_reach, bcond)
                     f_cond = _z3_and(cf_reach, _z3_not(bcond))
-                    if bt > bid:
+                    if bt_rpo > b_rpo:
                         edge_conds.setdefault(bt, []).append((bid, t_cond))
                     else:
                         self.has_loops = True
                         if not z3.is_false(t_cond):
                             backedges.append((bid, bt, t_cond))
-                    if ft > bid:
+                    if ft_rpo > b_rpo:
                         edge_conds.setdefault(ft, []).append((bid, f_cond))
                     else:
                         self.has_loops = True
                         if not z3.is_false(f_cond):
                             backedges.append((bid, ft, f_cond))
-                elif bt >= 0 and bt > bid:
+                elif bt >= 0 and bt_rpo > b_rpo:
                     edge_conds.setdefault(bt, []).append((bid, cf_reach))
-                elif ft >= 0 and ft > bid:
+                elif ft >= 0 and ft_rpo > b_rpo:
                     edge_conds.setdefault(ft, []).append((bid, cf_reach))
-                elif bt >= 0 and bt <= bid:
+                elif bt >= 0 and bt_rpo <= b_rpo:
                     self.has_loops = True
                     if not z3.is_false(cf_reach):
                         backedges.append((bid, bt, cf_reach))
@@ -1491,7 +1544,7 @@ class DagSsaZ3Evaluator:
                     exit_states.append((reach, cur_st))
             return backedges
 
-        backedges = _eval_block_slice(self.blocks, allow_backedges=False)
+        backedges = _eval_block_slice(rpo_blocks, allow_backedges=False)
         self.max_unroll_depth = 1 if self.has_loops else 0
 
         # Configurable bounded loop unrolling when max_unroll > 1
@@ -1499,10 +1552,10 @@ class DagSsaZ3Evaluator:
         while backedges and unroll_iter < self.max_unroll:
             unroll_iter += 1
             self.max_unroll_depth = unroll_iter
-            min_hdr = min(hdr for _, hdr, _ in backedges)
-            for src, hdr, bcond in backedges:
-                edge_conds.setdefault(hdr, []).append((src, bcond))
-            loop_slice = [b for b in self.blocks if int(b["id"]) >= min_hdr]
+            min_hdr_rpo = min(rpo_index.get(hdr, 0) for _, hdr, _ in backedges)
+            for src_b, hdr, bcond in backedges:
+                edge_conds.setdefault(hdr, []).append((src_b, bcond))
+            loop_slice = [b for b in rpo_blocks if rpo_index[int(b["id"])] >= min_hdr_rpo]
             exit_states.clear()
             backedges = _eval_block_slice(loop_slice, allow_backedges=True)
 
@@ -1627,6 +1680,14 @@ def verify_equivalence_bundle(
         return res
 
     env = SharedShaderEnv(bundle)
+    def _collect_sym_bkeys(ssa_d: Dict[str, Any]) -> Set[str]:
+        ks: Set[str] = set()
+        for n in ssa_d.get("nodes", []):
+            a = n.get("aux_str", "")
+            if a.startswith("sym:"):
+                ks.add(a[4:].split("[", 1)[0])
+        return ks
+    env.shared_sym_bkeys = _collect_sym_bkeys(bundle.get("direct_ssa", {})) & _collect_sym_bkeys(bundle.get("valhall_ssa", {}))
     d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll)
     v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll)
 
@@ -1761,13 +1822,20 @@ def verify_equivalence_bundle(
         d_evs = d_st.atomic_events.get(akey, [])
         v_evs = v_st.atomic_events.get(akey, [])
         if len(d_evs) != len(v_evs):
-            checks.append((f"atomic:{akey}.count", bv32(len(d_evs)), bv32(len(v_evs)), None, f"atomic:{akey}"))
-        for idx in range(min(len(d_evs), len(v_evs))):
-            de, ve = d_evs[idx], v_evs[idx]
-            checks.append((f"atomic:{akey}[{idx}].active", de[0], ve[0], None, f"atomic:{akey}"))
-            ev_guard = _z3_or(de[0], ve[0])
-            checks.append((f"atomic:{akey}[{idx}].addr", _as_bv64(de[2]), _as_bv64(ve[2]), ev_guard, f"atomic:{akey}"))
-            checks.append((f"atomic:{akey}[{idx}].arg", de[3], ve[3], ev_guard, f"atomic:{akey}"))
+            d_cnt = bv32(0)
+            for de in d_evs:
+                d_cnt = d_cnt + z3.If(de[0], bv32(1), bv32(0))
+            v_cnt = bv32(0)
+            for ve in v_evs:
+                v_cnt = v_cnt + z3.If(ve[0], bv32(1), bv32(0))
+            checks.append((f"atomic:{akey}.dyn_count", d_cnt, v_cnt, None, f"atomic:{akey}"))
+        else:
+            for idx in range(len(d_evs)):
+                de, ve = d_evs[idx], v_evs[idx]
+                checks.append((f"atomic:{akey}[{idx}].active", de[0], ve[0], None, f"atomic:{akey}"))
+                ev_guard = _z3_or(de[0], ve[0])
+                checks.append((f"atomic:{akey}[{idx}].addr", _as_bv64(de[2]), _as_bv64(ve[2]), ev_guard, f"atomic:{akey}"))
+                checks.append((f"atomic:{akey}[{idx}].arg", de[3], ve[3], ev_guard, f"atomic:{akey}"))
 
     # Unresolved-address fallback memory writes (never silently skip)
     if not d_st.fallback_mem.eq(env.fallback_mem) or not v_st.fallback_mem.eq(env.fallback_mem):

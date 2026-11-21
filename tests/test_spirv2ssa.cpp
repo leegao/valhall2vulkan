@@ -6,6 +6,9 @@
 
 #include <cassert>
 #include <cstring>
+#include <algorithm>
+#include <cstring>
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -355,6 +358,72 @@ void test_typed_parser_views() {
     std::cout << "[PASS] test_typed_parser_views\n";
 }
 
+
+static void test_inlined_call_cfg_and_reduction_inputs() {
+    // Load samples/comp_unique_02_d7242030.spv if present, verifying CFG integrity after
+    // multi-block OpFunctionCall inlining (bb40 terminator, bb1/bb28 preds=[bb40], non-zero reduction inputs).
+    std::ifstream ifs("samples/comp_unique_02_d7242030.spv", std::ios::binary);
+    if (!ifs) {
+        ifs.open("../samples/comp_unique_02_d7242030.spv", std::ios::binary);
+    }
+    if (!ifs) {
+        std::cout << "[SKIP] test_inlined_call_cfg_and_reduction_inputs (sample not found)\n";
+        return;
+    }
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    assert(!bytes.empty() && (bytes.size() % 4 == 0));
+    std::vector<uint32_t> words(bytes.size() / 4);
+    std::memcpy(words.data(), bytes.data(), bytes.size());
+
+    for (bool run_opt : {false, true}) {
+        valhall::spirv2ssa::Spirv2SsaOptions opts{};
+        opts.run_ssa_opt = run_opt;
+        auto res = valhall::spirv2ssa::lower_spirv_to_valhall_ssa(words, opts);
+        assert(res.ok);
+        const auto& ssa = res.ssa;
+
+        // BFS reachability from bb0: every reachable block must have a terminator and valid preds
+        std::vector<bool> reach(ssa.blocks.size(), false);
+        std::vector<uint32_t> q = {0u};
+        reach[0] = true;
+        uint32_t atomic_count = 0;
+        while (!q.empty()) {
+            uint32_t u = q.back();
+            q.pop_back();
+            const auto& blk = ssa.blocks[u];
+            bool has_term = blk.is_terminated_by_end || blk.is_terminated_by_discard ||
+                            blk.is_unconditional_branch || blk.is_conditional_branch ||
+                            blk.fallthrough_block >= 0;
+            assert(has_term);
+            for (auto nid : blk.nodes) {
+                if (ssa.get(nid).op == valhall::tables::SsaOp::AtomicRmw) atomic_count++;
+            }
+            auto push_succ = [&](int32_t s) {
+                if (s < 0) return;
+                uint32_t su = static_cast<uint32_t>(s);
+                assert(su < ssa.blocks.size());
+                const auto& spreds = ssa.blocks[su].preds;
+                assert(std::find(spreds.begin(), spreds.end(), u) != spreds.end());
+                if (!reach[su]) {
+                    reach[su] = true;
+                    q.push_back(su);
+                }
+            };
+            if (blk.is_unconditional_branch) {
+                push_succ(blk.branch_target_block);
+            } else if (blk.is_conditional_branch) {
+                push_succ(blk.branch_target_block);
+                push_succ(blk.fallthrough_block);
+            } else if (blk.fallthrough_block >= 0) {
+                push_succ(blk.fallthrough_block);
+            }
+        }
+        // Reduction body must remain reachable and retain its AtomicRmw ops both unopt and opt
+        assert(atomic_count >= 7u);
+    }
+    std::cout << "[PASS] test_inlined_call_cfg_and_reduction_inputs (unopt + opt)\n";
+}
+
 int main() {
     test_generated_parser_tables();
     test_typed_parser_views();
@@ -362,6 +431,7 @@ int main() {
     test_branching_frag_mem2reg();
     test_switch_desugaring();
     test_v24_2_spec_ops();
+    test_inlined_call_cfg_and_reduction_inputs();
     std::cout << "All spirv2ssa tests passed!\n";
     return 0;
 }

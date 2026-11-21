@@ -126,7 +126,9 @@ public:
     // Function inlining & switch desugaring (spirv2ssa.cpp)
     bool lower_function_call(uint32_t* io_blk_id, const SpirvInst& inst);
     void lower_switch(uint32_t blk_id, const SpirvInst& inst,
-                      const std::unordered_map<uint32_t, uint32_t>& lbl_map);
+                      const std::unordered_map<uint32_t, uint32_t>& lbl_map,
+                      uint32_t src_spv_label,
+                      std::map<std::pair<uint32_t, uint32_t>, uint32_t>* switch_edge_src);
     bool lower_function_body(
         const SpirvFunction& fn,
         uint32_t entry_blk,
@@ -159,6 +161,7 @@ public:
 
     // Per-block mem2reg state: block_id -> (slot_key -> SsaId)
     std::vector<std::unordered_map<uint64_t, compiler::SsaId>> blk_slot_defs_;
+    std::vector<uint32_t> blk_static_pred_count_;
     std::vector<PendingMemPhi> pending_mem_phis_;
 
     std::unordered_map<uint32_t, uint32_t> local_var_types_;

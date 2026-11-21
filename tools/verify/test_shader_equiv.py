@@ -1157,5 +1157,48 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertIn("[equiv][layer2] ob=verbose_ob backend=ortools_cpsat status=DISCHARGED", buf2.getvalue())
 
 
+    def test_v27_rpo_out_of_order_inlined_blocks(self):
+        """Out-of-ID-order CFG (bb0 -> bb2 -> bb1) evaluates in RPO without false backedge."""
+        # Direct: bb0 -> bb2 (computes 7) -> bb1 (stores 7 to ssbo:0:1+0)
+        d_nodes = [
+            {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+            {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "aux_str": "ssbo:0:1"},
+            {"id": 3, "op": "ConstU32", "type": "U32", "blk": 2, "args": [], "imm_u32": 7},
+            {"id": 4, "op": "PsbStore", "type": "Token", "blk": 1, "args": [2, 3, 1], "imm_u32": 4, "aux_str": "sym:ssbo:0:1[stride=0,off=0]"},
+        ]
+        d_ssa = {
+            "blocks": [
+                {"id": 0, "preds": [], "phis": [], "nodes": [1, 2], "branch_target": 2, "fallthrough": -1, "is_cond": False, "is_uncond": True, "is_end": False, "is_discard": False},
+                {"id": 1, "preds": [2], "phis": [], "nodes": [4], "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False, "is_end": True, "is_discard": False},
+                {"id": 2, "preds": [0], "phis": [], "nodes": [3], "branch_target": 1, "fallthrough": -1, "is_cond": False, "is_uncond": True, "is_end": False, "is_discard": False},
+            ],
+            "nodes": d_nodes,
+        }
+        # Valhall: single block bb0 storing 7 to raw ssbo:0:1+0 (asymmetric sym: vs raw!)
+        v_nodes = [
+            {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+            {"id": 2, "op": "LoadSidebandU64", "type": "U64", "blk": 0, "args": [], "aux_str": "ssbo:0:1"},
+            {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 7},
+            {"id": 4, "op": "PsbStore", "type": "Token", "blk": 0, "args": [2, 3, 1], "imm_u32": 4},
+        ]
+        v_ssa = {
+            "blocks": [
+                {"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4], "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False, "is_end": True, "is_discard": False},
+            ],
+            "nodes": v_nodes,
+        }
+        bundle = {
+            "spv_path": "synthetic_rpo_sym.spv",
+            "stage": "Compute",
+            "local_size": [1, 1, 1],
+            "direct_ssa": d_ssa,
+            "valhall_ssa": v_ssa,
+            "pilot_fau_entries": [],
+            "direct_ok": True, "valhall_ok": True, "mbs2_symbols": {},
+        }
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(res.max_unroll_depth, 0)
+
 if __name__ == "__main__":
     unittest.main()

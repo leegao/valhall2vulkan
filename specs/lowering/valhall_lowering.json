@@ -6336,13 +6336,18 @@
       "op_class": "tex_sample",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%u : f32 = @bitcast(@sr_get(0));",
-        "%v : f32 = @bitcast(@sr_get(1));",
+        "%xy : u32 = %0;",
+        "%x_u : u32 = BfeU(%xy, @u32(0), @u32(16));",
+        "%y_u : u32 = BfeU(%xy, @u32(16), @u32(16));",
+        "%u : f32 = @bitcast(%x_u);",
+        "%v : f32 = @bitcast(%y_u);",
         "%uv : v2f32 = VecConstruct2(%u, %v);",
         "%tup : tuple_val_token = @tex_sample(%uv, $is_gather, #token);",
         "%sampled : v4f32 = @tuple_val(%tup);",
@@ -6362,13 +6367,18 @@
       "op_class": "tex_sample",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%u : f32 = @bitcast(@sr_get(0));",
-        "%v : f32 = @bitcast(@sr_get(1));",
+        "%xy : u32 = %0;",
+        "%x_u : u32 = BfeU(%xy, @u32(0), @u32(16));",
+        "%y_u : u32 = BfeU(%xy, @u32(16), @u32(16));",
+        "%u : f32 = @bitcast(%x_u);",
+        "%v : f32 = @bitcast(%y_u);",
         "%uv : v2f32 = VecConstruct2(%u, %v);",
         "%tup : tuple_val_token = @tex_sample(%uv, $is_gather, #token);",
         "%sampled : v4f32 = @tuple_val(%tup);",

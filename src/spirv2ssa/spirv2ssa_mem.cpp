@@ -169,7 +169,11 @@ SsaId SpirvLowerer::read_slot(uint32_t blk_id, uint64_t slot_key, ValType vt) {
         return z;
     }
 
-    if (blk.preds.size() == 1 && blk.preds[0] < blk_id) {
+    if (blk.preds.size() == 1 &&
+        blk_id < blk_static_pred_count_.size() &&
+        blk_static_pred_count_[blk_id] <= 1u &&
+        !blk.is_loop_header &&
+        blk.preds[0] != blk_id) {
         SsaId v = read_slot(blk.preds[0], slot_key, vt);
         blk_slot_defs_[blk_id][slot_key] = v;
         return v;

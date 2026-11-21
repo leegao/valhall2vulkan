@@ -145,7 +145,7 @@ int main() {
         mod.block_in_token.resize(1, kInvalidSsa);
         mod.block_out_token.resize(1, kInvalidSsa);
 
-        SsaId a = sb.emit_const_f32_bits(0, 0x3f800000u);
+        SsaId a = sb.emit_const_f32_bits(0, 0x3fc00000u);
         SsaId b_v = sb.emit_const_f32_bits(0, 0x40000000u);
         SsaId c = sb.emit_const_f32_bits(0, 0x40400000u);
 
@@ -423,6 +423,61 @@ int main() {
         assert(has_op(lower_single(csel_v2s), SsaOp::ICmpSGe));
 
         std::cout << "[PASS] Checkpoint v7: BRANCH, JUMP, ADR, LEA, IADD_IMM(64/32), RSCALE, CSEL(v2i16/f32/i32) verified\n";
+    }
+
+
+    // Checkpoint v27: Valhall Compute preload ABI (r55=LID.xy, r56=LID.z, r57..59=WGID.xyz, r60..62=GID.xyz)
+    // and LD_TEX_IMM 16:16 packed coordinate extraction from src0.
+    {
+        auto i0 = make_inst(0x00, Mnemonic::IMUL, Mnemonic::IMUL, Variant::U32);
+        i0.has_dest = true; i0.dest_reg = 0;
+        i0.srcs = { reg_src(57), reg_src(58) }; // WorkGroupID.x * WorkGroupID.y
+        auto i1 = make_inst(0x08, Mnemonic::LD_TEX_IMM, Mnemonic::LD_TEX_IMM, Variant::NONE);
+        i1.sr_write.present = true; i1.sr_write.base_reg = 5; i1.sr_write.count = 1;
+        i1.srcs = { reg_src(0) };
+        i1.fields["index"] = 2u;
+        i1.fields["table"] = 4u;
+        auto i2 = make_inst(0x10, Mnemonic::NOP, Mnemonic::NOP);
+        i2.flow = FlowControlM::end;
+
+        std::vector<DecodedValhallInst> insts = { i0, i1, i2 };
+        auto cfg = cfg::build_cfg(insts);
+        ValhallTranslateOptions opts{};
+        opts.stage = ShaderStage::Compute;
+        auto p1 = run_pass1_lowering(cfg, cfg::ControlFlowGraph{}, opts);
+        assert(p1.ok);
+
+        bool saw_imul_wgid = false;
+        bool saw_tex_bfe = false;
+        bool saw_tex_binding = false;
+        for (size_t id = 1; id < p1.ssa.nodes.size(); ++id) {
+            const auto& n = p1.ssa.nodes[id];
+            if (n.op == SsaOp::IMul && n.args.size() == 2) {
+                const auto& a = p1.ssa.get(n.args[0]);
+                const auto& b_n = p1.ssa.get(n.args[1]);
+                if (a.op == SsaOp::VecExtract && b_n.op == SsaOp::VecExtract &&
+                    a.imm_u32 == 0u && b_n.imm_u32 == 1u &&
+                    p1.ssa.get(a.args[0]).aux_str == "gl_WorkGroupID" &&
+                    p1.ssa.get(b_n.args[0]).aux_str == "gl_WorkGroupID") {
+                    saw_imul_wgid = true;
+                }
+            }
+            if (n.op == SsaOp::TexSample) {
+                assert(n.imm_u32 == 2u);
+                if (n.aux_str == "tex:0:2") saw_tex_binding = true;
+                const auto& uv = p1.ssa.get(n.args[0]);
+                assert(uv.op == SsaOp::VecConstruct2 && uv.args.size() == 2);
+                const auto& ux = p1.ssa.get(p1.ssa.get(uv.args[0]).args[0]);
+                const auto& uy = p1.ssa.get(p1.ssa.get(uv.args[1]).args[0]);
+                if (ux.op == SsaOp::BfeU && uy.op == SsaOp::BfeU && ux.args[0] == uy.args[0]) {
+                    saw_tex_bfe = true;
+                }
+            }
+        }
+        assert(saw_imul_wgid);
+        assert(saw_tex_bfe);
+        assert(saw_tex_binding);
+        std::cout << "[PASS] Checkpoint v27: Compute ABI r55..r62 and LD_TEX_IMM 16:16 coordinate unpacking verified\n";
     }
 
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";

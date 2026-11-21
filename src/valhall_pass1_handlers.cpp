@@ -75,24 +75,35 @@ void Pass1Context::emit_stage_preamble(uint32_t blk, const std::vector<DecodedVa
         sb.set_reg(blk, 2, s0);
         sb.set_reg(blk, 3, s1);
     } else if (opts.stage == ShaderStage::Compute) {
-        bool reads_wg_regs = false;
-        for (const auto& ins : insts) {
-            for (const auto& s : ins.srcs) {
-                if (s.kind == SourceKind::Register && s.reg_num >= 55 && s.reg_num <= 57) {
-                    reads_wg_regs = true;
-                }
-            }
-        }
+        (void)insts;
+        // Valhall compute hardware preload ABI (aux_idx preload mask = r48 + bit):
+        //   r55: LocalInvocationID.xy packed as v2u16 (h0 = x, h1 = y)
+        //   r56: LocalInvocationID.z (h0 = z)
+        //   r57..r59: WorkGroupID.xyz
+        //   r60..r62: GlobalInvocationID.xyz
+        SsaId lid = emit_builtin_input(blk, spirv::BuiltIn::LocalInvocationId, ValType::V3U32, "gl_LocalInvocationID");
+        SsaNode lx_n{}; lx_n.op = SsaOp::VecExtract; lx_n.type = ValType::U32; lx_n.imm_u32 = 0; lx_n.args = { lid };
+        SsaNode ly_n{}; ly_n.op = SsaOp::VecExtract; ly_n.type = ValType::U32; ly_n.imm_u32 = 1; ly_n.args = { lid };
+        SsaNode lz_n{}; lz_n.op = SsaOp::VecExtract; lz_n.type = ValType::U32; lz_n.imm_u32 = 2; lz_n.args = { lid };
+        SsaId lx = sb.emit(blk, std::move(lx_n));
+        SsaId ly = sb.emit(blk, std::move(ly_n));
+        SsaId lz = sb.emit(blk, std::move(lz_n));
+        SsaId c16 = sb.emit_const_u32(blk, 16u);
+        SsaNode lxy{}; lxy.op = SsaOp::Bfi; lxy.type = ValType::U32;
+        lxy.imm_u32 = 16u; lxy.imm_u32_2 = 16u;
+        lxy.args = { lx, ly, c16, c16 };
+        sb.set_reg(blk, 55, sb.emit(blk, std::move(lxy)));
+        sb.set_reg(blk, 56, lz);
+
         SsaId wgid = emit_builtin_input(blk, spirv::BuiltIn::WorkgroupId, ValType::V3U32, "gl_WorkGroupID");
         for (uint32_t c = 0; c < 3; ++c) {
             SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::U32; ex.imm_u32 = c; ex.args = { wgid };
-            sb.set_reg(blk, 55 + c, sb.emit(blk, std::move(ex)));
+            sb.set_reg(blk, 57 + c, sb.emit(blk, std::move(ex)));
         }
-        auto bi = reads_wg_regs ? spirv::BuiltIn::LocalInvocationId : spirv::BuiltIn::GlobalInvocationId;
-        const char* bname = reads_wg_regs ? "gl_LocalInvocationID" : "gl_GlobalInvocationID";
-        SsaId tid = emit_builtin_input(blk, bi, ValType::V3U32, bname);
+
+        SsaId gid = emit_builtin_input(blk, spirv::BuiltIn::GlobalInvocationId, ValType::V3U32, "gl_GlobalInvocationID");
         for (uint32_t c = 0; c < 3; ++c) {
-            SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::U32; ex.imm_u32 = c; ex.args = { tid };
+            SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::U32; ex.imm_u32 = c; ex.args = { gid };
             sb.set_reg(blk, 60 + c, sb.emit(blk, std::move(ex)));
         }
     } else if (opts.stage == ShaderStage::Vertex) {
@@ -556,11 +567,32 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
         auto it_gc = ins.fields.find("gather_component");
         if (it_gc != ins.fields.end()) gcomp = it_gc->second & 3u;
     }
+    uint32_t tex_idx = 0;
+    bool has_tex_idx = false;
+    if (auto it_idx = ins.fields.find("index"); it_idx != ins.fields.end()) {
+        tex_idx = it_idx->second;
+        has_tex_idx = true;
+    } else if (auto it_tidx = ins.fields.find("texture_index"); it_tidx != ins.fields.end()) {
+        tex_idx = it_tidx->second;
+        has_tex_idx = true;
+    }
     SsaNode ts{};
     ts.op = SsaOp::TexSample;
     ts.type = ValType::TupleValToken;
-    ts.imm_u32 = 0;
+    ts.imm_u32 = tex_idx;
     ts.imm_u32_2 = gcomp;
+    if (has_tex_idx) {
+        uint32_t d_set = 0;
+        uint32_t binding = tex_idx;
+        for (const auto& s : ctx.opts.samplers) {
+            if (s.tex_index == tex_idx) {
+                d_set = s.descriptor_set;
+                binding = s.binding;
+                break;
+            }
+        }
+        ts.aux_str = "tex:" + std::to_string(d_set) + ":" + std::to_string(binding);
+    }
     ts.aux_bool = (ctx.opts.stage == ShaderStage::Fragment && !is_gather);
     ts.aux_bool2 = is_gather;
     ts.args = { uv, tok };

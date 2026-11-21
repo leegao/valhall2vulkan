@@ -302,7 +302,7 @@ std::string format_csf_execution_context(
     // 4. Implicit Hardware Preload / ABI Entry Register Map
     oss << "; [Hardware ABI Entry Registers (live at PC 0x0000 before clobber)]\n";
     if (mod.stage_chunk == "CCOM") {
-        oss << ";   Main Compute: r55..r57 = WorkGroupID.xyz, r60..r62 = GlobalInvocationID.xyz\n";
+        oss << ";   Main Compute: r55 = LocalInvocationID.xy (v2u16), r56 = LocalInvocationID.z, r57..r59 = WorkGroupID.xyz, r60..r62 = GlobalInvocationID.xyz\n";
         if (pilot_info.found_pilot) {
             oss << ";   Pilot Shader: r0:r1 = pilot_fau_dst_va (FAU_0), r2:r3 = srt_base_va (SRT_0)\n";
         }
