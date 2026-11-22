@@ -651,6 +651,33 @@ int main() {
         std::cout << "[PASS] Checkpoint v29 lowering regression tests (FNEG, FSIN_TABLE, TEX_SINGLE.a, verify_ssa_types)\n";
     }
 
+
+    // Checkpoint v29.2: SWZ.v2i16 r1, r0.h10 must swap 16-bit halves via (v >> 16) | (v << 16).
+    {
+        auto swz_h10 = make_inst(0x00, Mnemonic::SWZ, Mnemonic::SWZ, Variant::V2I16);
+        swz_h10.has_dest = true;
+        swz_h10.dest_reg = 1;
+        auto s0 = reg_src(0);
+        s0.swizzle_mod = "h10";
+        swz_h10.srcs = { s0 };
+        DecodedValhallInst end = make_inst(0x08, Mnemonic::NOP, Mnemonic::NOP);
+        end.flow = FlowControlM::end;
+        std::vector<DecodedValhallInst> v = { swz_h10, end };
+        auto cfg = cfg::build_cfg(v);
+        ValhallTranslateOptions opts{};
+        opts.stage = ShaderStage::Fragment;
+        auto p1 = run_pass1_lowering(cfg, cfg::ControlFlowGraph{}, opts);
+        assert(p1.ok);
+        bool saw_shru = false, saw_shl = false, saw_bitor = false;
+        for (size_t id = 1; id < p1.ssa.nodes.size(); ++id) {
+            if (p1.ssa.nodes[id].op == SsaOp::ShrU) saw_shru = true;
+            if (p1.ssa.nodes[id].op == SsaOp::Shl) saw_shl = true;
+            if (p1.ssa.nodes[id].op == SsaOp::BitOr) saw_bitor = true;
+        }
+        assert(saw_shru && saw_shl && saw_bitor);
+        std::cout << "[PASS] Checkpoint v29.2: SWZ.v2i16 .h10 half-word swap verified\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }
