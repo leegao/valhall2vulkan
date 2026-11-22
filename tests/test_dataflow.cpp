@@ -858,6 +858,67 @@ static void test_defau_high_fau_u53_no_alias() {
     std::cout << "[PASS] test_defau_high_fau_u53_no_alias\n";
 }
 
+
+static void test_pilot_v2_image_desc_query_trig_depth16_and_telemetry() {
+    // Verify kMaxSymExprDepth == 16 and Sin/Cos/Ldexp/ImageDescQuery materialization.
+    CHECK(kMaxSymExprDepth == 16u);
+    auto cur = SymExpr::make_buffer_load(4, 0, "ubo:0:0", 0, 4);
+    for (int i = 0; i < 10; ++i) {
+        cur = SymExpr::make_unary(SsaOp::Sin, cur);
+        CHECK(cur != nullptr);
+    }
+    CHECK(cur->depth == 10u);
+    auto ld = SymExpr::make_binary(SsaOp::Ldexp, SymExpr::make_unary(SsaOp::Cos, cur),
+                                   SymExpr::make_const_u32(2u));
+    CHECK(ld != nullptr && ld->depth == 12u);
+
+    ValhallSsaModule mod;
+    mod.nodes.push_back(SsaNode{});
+    mod.blocks.resize(1);
+    mod.blocks[0].id = 0;
+    auto add = [&](SsaOp op, ValType ty, std::vector<SsaId> args, uint32_t imm32 = 0) -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm32;
+        n.args = std::move(args);
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+    add(SsaOp::Nop, ValType::Token, {});
+    SsaId f_tex = add(SsaOp::LoadFau, ValType::U32, {}, 0u);
+    SsaId f_ldexp = add(SsaOp::LoadFau, ValType::U32, {}, 1u);
+    SsaId f_miss = add(SsaOp::LoadFau, ValType::U32, {}, 2u);
+    (void)f_tex; (void)f_ldexp; (void)f_miss;
+
+    FauSummaryMap summary;
+    summary[0u] = SymExpr::make_image_desc_query(68, 1, "tex:0:1", 0x20, 4u);
+    summary[4u] = ld;
+
+    DeFauDevirtResult res = run_ssa_defau_devirt(mod, summary);
+    CHECK(res.fau_loads_materialized == 1u);
+    CHECK(res.fau_exprs_materialized == 1u);
+    CHECK(res.fallbacks.size() == 1u);
+    CHECK(std::string(fallback_reason_name(res.fallbacks[0].reason)) == "unresolved_fau_slot");
+
+    bool found_img_query = false, found_ldexp = false;
+    for (SsaId nid : mod.blocks[0].nodes) {
+        const auto& n = mod.get(nid);
+        if (n.op == SsaOp::ImageQuerySize && n.aux_str == "tex:0:1:OpImageQuerySize") {
+            found_img_query = true;
+        }
+        if (n.op == SsaOp::Ldexp) {
+            found_ldexp = true;
+        }
+    }
+    CHECK(found_img_query);
+    CHECK(found_ldexp);
+    std::cout << "[PASS] test_pilot_v2_image_desc_query_trig_depth16_and_telemetry\n";
+}
+
 int main() {
     std::cout << "=== [Test] Valhall SSA Dataflow Combinators, Worklist, Liveness & Pointer Analysis ===\n";
     test_domain_combinators_and_memory_disjointness();
@@ -873,6 +934,7 @@ int main() {
     test_pilot_bfe_const_fold_and_deep_expr();
     test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr();
     test_defau_high_fau_u53_no_alias();
+    test_pilot_v2_image_desc_query_trig_depth16_and_telemetry();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

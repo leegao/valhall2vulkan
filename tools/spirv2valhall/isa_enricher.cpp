@@ -1,6 +1,8 @@
 #include "isa_enricher.h"
 #include "liveness.h"
 #include "pointer_analysis.h"
+#include "ssa_dce.h"
+#include "ssa_spill_mem2reg.h"
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
 #include "valhall_to_spirv.h"
@@ -520,8 +522,22 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
         p_opts.stage = valhall::ShaderStage::Pilot;
         p_opts.arch = arch;
         p_opts.tolerant_ssa = true;
+        std::map<std::pair<uint32_t, uint32_t>, std::string> canon_tex_by_rack_addr;
+        for (const auto& sym : mbs2.cmmn.simg) {
+            uint32_t d_set = (sym.rack_index >= 68u) ? (sym.rack_index - 68u)
+                           : (sym.rack_index >= 4u ? (sym.rack_index - 4u) : 0u);
+            uint32_t binding = (sym.binding != 0xFFFFu) ? sym.binding : sym.address;
+            canon_tex_by_rack_addr[{sym.rack_index, sym.address}] =
+                "tex:" + std::to_string(d_set) + ":" + std::to_string(binding);
+        }
+        pilot_env.lookup_tex_symbol = [&canon_tex_by_rack_addr](uint8_t rack, uint32_t desc) -> std::string {
+            auto it = canon_tex_by_rack_addr.find({rack, desc});
+            return (it != canon_tex_by_rack_addr.end()) ? it->second : "";
+        };
         auto p1 = compiler::run_pass1_lowering(pilot_cfg, {}, p_opts);
         if (p1.ok) {
+            dataflow::run_ssa_spill_mem2reg(p1.ssa);
+            dataflow::run_ssa_dce(p1.ssa);
             dataflow::FauSummaryMap p_sum = dataflow::run_pilot_fau_summary(p1.ssa, pilot_env);
             for (const auto& kv : p_sum) {
                 summary[kv.first] = kv.second;

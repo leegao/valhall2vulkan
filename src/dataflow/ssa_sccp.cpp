@@ -230,6 +230,39 @@ SccpVal eval_node_sccp(const ValhallSsaModule& mod,
                     return state.val(elem);
                 }
             }
+            if (vn.op == SsaOp::UnpackHalf2x16 && !vn.args.empty() && n.imm_u32 < 2u) {
+                SsaId raw_id = vn.args[0];
+                if (raw_id != kInvalidSsa) {
+                    SccpVal raw = state.val(raw_id);
+                    if (raw.is_undef()) return SccpVal::undef();
+                    if (raw.is_const()) {
+                        uint16_t h = static_cast<uint16_t>(
+                            (raw.bits >> (n.imm_u32 * 16u)) & 0xFFFFu);
+                        uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16u;
+                        uint32_t exp = (h >> 10u) & 0x1Fu;
+                        uint32_t mant = h & 0x03FFu;
+                        uint32_t f32_bits = 0;
+                        if (exp == 0u) {
+                            if (mant == 0u) {
+                                f32_bits = sign;
+                            } else {
+                                while ((mant & 0x0400u) == 0u) {
+                                    mant <<= 1u;
+                                    --exp;
+                                }
+                                ++exp;
+                                mant &= 0x03FFu;
+                                f32_bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+                            }
+                        } else if (exp == 31u) {
+                            f32_bits = sign | 0x7F800000u | (mant << 13u);
+                        } else {
+                            f32_bits = sign | ((exp + 112u) << 23u) | (mant << 13u);
+                        }
+                        return SccpVal::make_f32_bits(f32_bits);
+                    }
+                }
+            }
             return SccpVal::overdefined();
         }
 

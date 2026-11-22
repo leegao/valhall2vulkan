@@ -56,6 +56,7 @@ struct PointerAnalysisEnv {
     std::function<std::string(uint32_t location)> lookup_input_symbol;
     std::function<std::string(uint32_t location)> lookup_output_symbol;
     std::function<std::string(uint32_t addr)> lookup_image_symbol;
+    std::function<std::string(uint8_t rack, uint32_t desc_idx)> lookup_tex_symbol;
     std::function<std::string(uint32_t addr)> lookup_sampler_symbol;
 };
 

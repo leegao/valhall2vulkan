@@ -653,6 +653,82 @@ void test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel() {
     std::cout << "[PASS] test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel\n";
 }
 
+
+static void test_pilot_v2_sccp_dce_and_fp_valhall_isms() {
+    ValhallSsaModule mod;
+    mod.nodes.push_back(SsaNode{});
+    mod.blocks.resize(1);
+    mod.blocks[0].id = 0;
+
+    auto emit = [&](SsaOp op, ValType ty, std::vector<SsaId> args, uint32_t imm = 0) -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm;
+        n.args = std::move(args);
+        if (op == SsaOp::Kill || op == SsaOp::StoreFragColor) {
+            n.is_side_effect = true;
+            n.is_barrier_or_cf = true;
+        }
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+
+    SsaId tok0 = emit(SsaOp::Nop, ValType::Token, {});
+    // 1. UnpackHalf2x16(0x40003c00) -> lo=1.0f (0x3f800000), hi=2.0f (0x40000000)
+    SsaId packed_fp16 = emit(SsaOp::ConstU32, ValType::U32, {}, 0x40003c00u);
+    SsaId up2 = emit(SsaOp::UnpackHalf2x16, ValType::V2F32, {packed_fp16});
+    SsaId f_lo = emit(SsaOp::VecExtract, ValType::F32, {up2}, 0u);
+    SsaId f_hi = emit(SsaOp::VecExtract, ValType::F32, {up2}, 1u);
+
+    // 2. Dead Kill(ConstBool(false), tok0)
+    SsaId c_false = emit(SsaOp::ConstBool, ValType::Bool, {}, 0u);
+    SsaId kill_tok = emit(SsaOp::Kill, ValType::Token, {c_false, tok0});
+
+    // 3. Bitcast<F32>(Select(c, Bitcast<U32>(a), ConstU32(0))) -> Select<F32>(c, a, ConstF32(0.0))
+    SsaId var_x = emit(SsaOp::LoadFragVarying, ValType::V4F32, {}, 0u);
+    SsaId a_f32 = emit(SsaOp::VecExtract, ValType::F32, {var_x}, 0u);
+    SsaId c_cond = emit(SsaOp::FCmpOrdGt, ValType::Bool, {a_f32, f_lo});
+    SsaId a_u32 = emit(SsaOp::Bitcast, ValType::U32, {a_f32});
+    SsaId zero_u32 = emit(SsaOp::ConstU32, ValType::U32, {}, 0u);
+    SsaId sel_u32 = emit(SsaOp::Select, ValType::U32, {c_cond, a_u32, zero_u32});
+    SsaId sel_f32 = emit(SsaOp::Bitcast, ValType::F32, {sel_u32});
+
+    // 4. CLPER quad-shuffle DPdx/DPdy
+    SsaId lid = emit(SsaOp::LoadBuiltinInput, ValType::U32, {}, 0x29u);
+    SsaId c1 = emit(SsaOp::ConstU32, ValType::U32, {}, 1u);
+    SsaId c2 = emit(SsaOp::ConstU32, ValType::U32, {}, 2u);
+    SsaId lane_x = emit(SsaOp::BitXor, ValType::U32, {lid, c1});
+    SsaId lane_y = emit(SsaOp::BitXor, ValType::U32, {lid, c2});
+    SsaId shuf_x = emit(SsaOp::SubgroupShuffle, ValType::F32, {a_f32, lane_x});
+    SsaId shuf_y = emit(SsaOp::SubgroupShuffle, ValType::F32, {a_f32, lane_y});
+    SsaId dx = emit(SsaOp::FSub, ValType::F32, {shuf_x, a_f32});
+    SsaId dy = emit(SsaOp::FSub, ValType::F32, {shuf_y, a_f32});
+
+    emit(SsaOp::StoreFragColor, ValType::Token, {f_lo, f_hi, sel_f32, dx, dy, kill_tok});
+
+    run_ssa_sccp(mod);
+    CHECK(mod.get(f_lo).op == SsaOp::ConstF32 && mod.get(f_lo).imm_u32 == 0x3f800000u);
+    CHECK(mod.get(f_hi).op == SsaOp::ConstF32 && mod.get(f_hi).imm_u32 == 0x40000000u);
+
+    auto fp_res = run_ssa_fp_canonicalize(mod);
+    CHECK(fp_res.rule_hits.count("csel_bitcast_f32") > 0u);
+    CHECK(fp_res.rule_hits.count("clper_dpdx") > 0u);
+    CHECK(fp_res.rule_hits.count("clper_dpdy") > 0u);
+    CHECK(mod.get(sel_f32).op == SsaOp::Select && mod.get(sel_f32).type == ValType::F32);
+    CHECK(mod.get(dx).op == SsaOp::DPdx);
+    CHECK(mod.get(dy).op == SsaOp::DPdy);
+
+    run_ssa_dce(mod);
+    for (SsaId nid : mod.blocks[0].nodes) {
+        CHECK(mod.get(nid).op != SsaOp::Kill);
+    }
+    std::cout << "[PASS] test_pilot_v2_sccp_dce_and_fp_valhall_isms\n";
+}
+
 int main() {
     test_dce_basic_and_unreachable();
     test_cse_dominator_scoping_and_commutativity();
@@ -666,6 +742,7 @@ int main() {
     test_fp_dual_toggles_tile_vs_cpp();
     test_defau_devirt_fcst_loads_exprs_and_fallbacks();
     test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel();
+    test_pilot_v2_sccp_dce_and_fp_valhall_isms();
     std::cout << "ALL SSA OPT TESTS PASSED!\n";
     return 0;
 }

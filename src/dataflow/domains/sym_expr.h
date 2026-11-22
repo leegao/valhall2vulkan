@@ -14,7 +14,7 @@
 namespace valhall::dataflow {
 
 /// Maximum AST depth for bounded symbolic expressions (guarantees finite lattice height).
-static constexpr uint8_t kMaxSymExprDepth = 8;
+static constexpr uint8_t kMaxSymExprDepth = 16;
 
 /// Immutable, structurally-comparable symbolic expression node capturing
 /// buffer base addresses, UBO/SSBO scalar loads, constants, and bounded pure
@@ -24,6 +24,7 @@ struct SymExpr {
         ConstU32 = 0,
         BufferAddr,
         BufferScalarLoad,
+        ImageDescQuery,
         FauSlotRef,
         UnaryOp,
         BinaryOp,
@@ -79,6 +80,21 @@ struct SymExpr {
         e->desc_idx = desc_idx;
         e->symbol_name = std::move(sym);
         e->byte_offset = byte_off;
+        e->offset_known = true;
+        e->elem_bytes = bytes;
+        e->depth = 0;
+        return e;
+    }
+
+    static std::shared_ptr<const SymExpr> make_image_desc_query(
+        int32_t rack, int32_t desc_idx, std::string sym,
+        int64_t field_off, uint32_t bytes = 4) {
+        auto e = std::make_shared<SymExpr>();
+        e->kind = Kind::ImageDescQuery;
+        e->rack = rack;
+        e->desc_idx = desc_idx;
+        e->symbol_name = std::move(sym);
+        e->byte_offset = field_off;
         e->offset_known = true;
         e->elem_bytes = bytes;
         e->depth = 0;
@@ -192,6 +208,7 @@ struct SymExpr {
                        symbol_name == o.symbol_name &&
                        byte_offset == o.byte_offset && offset_known == o.offset_known;
             case Kind::BufferScalarLoad:
+            case Kind::ImageDescQuery:
                 return rack == o.rack && desc_idx == o.desc_idx &&
                        symbol_name == o.symbol_name &&
                        byte_offset == o.byte_offset && elem_bytes == o.elem_bytes;
@@ -232,6 +249,12 @@ struct SymExpr {
                 oss << "*(" << (symbol_name.empty()
                                     ? ("buf:" + std::to_string(rack) + ":" + std::to_string(desc_idx))
                                     : symbol_name)
+                    << "+0x" << std::hex << byte_offset << std::dec << ")";
+                break;
+            case Kind::ImageDescQuery:
+                oss << "tex_desc(" << (symbol_name.empty()
+                                           ? ("tex:" + std::to_string(rack) + ":" + std::to_string(desc_idx))
+                                           : symbol_name)
                     << "+0x" << std::hex << byte_offset << std::dec << ")";
                 break;
             case Kind::FauSlotRef:

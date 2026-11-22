@@ -326,8 +326,65 @@ FpOptResult run_ssa_fp_canonicalize(ValhallSsaModule& mod, const FpOptOptions& o
                 const uint32_t blk = static_cast<uint32_t>(b);
 
                 // Sign-bit bitwise idioms -> FAbs / FNeg / FNeg(FAbs) (M5-M7, T1)
+                // and CSEL Bitcast<F32>(Select(c, Bitcast<U32>(a), Bitcast<U32>(b))) -> Select<F32>(c, a, b)
                 if (n.op == SsaOp::Bitcast && is_f32_scalar(n) && n.args.size() == 1) {
                     const auto& inner = mod.get(n.args[0]);
+                    if (inner.op == SsaOp::Select && inner.args.size() == 3) {
+                        auto unwrap_f32_branch = [&](SsaId bid, bool* needs_const, uint32_t* const_bits) -> SsaId {
+                            *needs_const = false;
+                            SsaId cur = resolve_remap(remap, bid);
+                            const auto& bn = mod.get(cur);
+                            if (bn.op == SsaOp::Bitcast && bn.args.size() == 1 &&
+                                mod.get(bn.args[0]).type == ValType::F32) {
+                                return resolve_remap(remap, bn.args[0]);
+                            }
+                            if (bn.op == SsaOp::ConstU32) {
+                                *needs_const = true;
+                                *const_bits = bn.imm_u32;
+                                return cur;
+                            }
+                            return kInvalidSsa;
+                        };
+                        bool tc = false, fc = false;
+                        uint32_t tb = 0, fb = 0;
+                        SsaId ft = unwrap_f32_branch(inner.args[1], &tc, &tb);
+                        SsaId ff = unwrap_f32_branch(inner.args[2], &fc, &fb);
+                        if (ft != kInvalidSsa && ff != kInvalidSsa) {
+                            SsaId cond_id = resolve_remap(remap, inner.args[0]);
+                            if (tc) {
+                                SsaNode cn{};
+                                cn.id = static_cast<SsaId>(mod.nodes.size());
+                                cn.op = SsaOp::ConstF32;
+                                cn.type = ValType::F32;
+                                cn.imm_u32 = tb;
+                                mod.nodes.push_back(cn);
+                                ft = cn.id;
+                                auto& bnodes = mod.blocks[blk].nodes;
+                                auto pos = std::find(bnodes.begin(), bnodes.end(), nid);
+                                bnodes.insert(pos, ft);
+                                ensure_remap();
+                            }
+                            if (fc) {
+                                SsaNode cn{};
+                                cn.id = static_cast<SsaId>(mod.nodes.size());
+                                cn.op = SsaOp::ConstF32;
+                                cn.type = ValType::F32;
+                                cn.imm_u32 = fb;
+                                mod.nodes.push_back(cn);
+                                ff = cn.id;
+                                auto& bnodes = mod.blocks[blk].nodes;
+                                auto pos = std::find(bnodes.begin(), bnodes.end(), nid);
+                                bnodes.insert(pos, ff);
+                                ensure_remap();
+                            }
+                            auto& mut = mod.get_mut(nid);
+                            mut.op = SsaOp::Select;
+                            mut.type = ValType::F32;
+                            mut.args = {cond_id, ft, ff};
+                            hit("csel_bitcast_f32");
+                            continue;
+                        }
+                    }
                     if ((inner.op == SsaOp::BitAnd || inner.op == SsaOp::BitXor || inner.op == SsaOp::BitOr) &&
                         inner.args.size() == 2) {
                         uint32_t mask = 0;
@@ -422,6 +479,28 @@ FpOptResult run_ssa_fp_canonicalize(ValhallSsaModule& mod, const FpOptOptions& o
                     if (inner.op == SsaOp::ConvertUToF) {
                         replace_with(nid, n.args[0], "M8_fabs_utof");
                         continue;
+                    }
+                }
+
+                // CLPER quad-shuffle derivative idiom:
+                // FSub(SubgroupShuffle(x, BitXor(lid, 1|2)), x) -> DPdx(x) / DPdy(x)
+                if (n.op == SsaOp::FSub && is_f32_scalar(n) && n.args.size() == 2) {
+                    const auto& lhs = mod.get(n.args[0]);
+                    if (lhs.op == SsaOp::SubgroupShuffle && lhs.args.size() >= 2 &&
+                        lhs.args[0] == n.args[1]) {
+                        const auto& lane_expr = mod.get(lhs.args[1]);
+                        if (lane_expr.op == SsaOp::BitXor && lane_expr.args.size() == 2) {
+                            uint32_t xor_mask = 0;
+                            bool has_mask = try_get_const_u32(mod, lane_expr.args[1], &xor_mask) ||
+                                            try_get_const_u32(mod, lane_expr.args[0], &xor_mask);
+                            if (has_mask && (xor_mask == 1u || xor_mask == 2u)) {
+                                auto& mut = mod.get_mut(nid);
+                                mut.op = (xor_mask == 1u) ? SsaOp::DPdx : SsaOp::DPdy;
+                                mut.args = {n.args[1]};
+                                hit(xor_mask == 1u ? "clper_dpdx" : "clper_dpdy");
+                                continue;
+                            }
+                        }
                     }
                 }
 

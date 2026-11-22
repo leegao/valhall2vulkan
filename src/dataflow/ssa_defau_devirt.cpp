@@ -34,6 +34,9 @@ bool is_float_op(SsaOp op) {
         case SsaOp::InverseSqrt:
         case SsaOp::Exp2:
         case SsaOp::Log2:
+        case SsaOp::Sin:
+        case SsaOp::Cos:
+        case SsaOp::Ldexp:
         case SsaOp::FCmpOrdEq:
         case SsaOp::FCmpOrdNe:
         case SsaOp::FCmpOrdLt:
@@ -87,6 +90,8 @@ bool is_pure_unary_sym_op(SsaOp op) {
         case SsaOp::InverseSqrt:
         case SsaOp::Exp2:
         case SsaOp::Log2:
+        case SsaOp::Sin:
+        case SsaOp::Cos:
         case SsaOp::ConvertUToF:
         case SsaOp::ConvertSToF:
         case SsaOp::ConvertFToU:
@@ -123,6 +128,7 @@ bool is_pure_binary_sym_op(SsaOp op) {
         case SsaOp::FDiv:
         case SsaOp::FMin:
         case SsaOp::FMax:
+        case SsaOp::Ldexp:
         case SsaOp::IAdd:
         case SsaOp::ISub:
         case SsaOp::IMul:
@@ -232,8 +238,9 @@ class PilotFauSummaryVisitor : public SsaTransferVisitorBase {
 public:
     PilotFauSummaryVisitor(const ValhallSsaModule& mod,
                            const PointerAnalysisResult& pa,
+                           const PointerAnalysisEnv& env,
                            FauSummaryMap* summary)
-        : mod_(mod), pa_(pa), summary_(summary),
+        : mod_(mod), pa_(pa), env_(env), summary_(summary),
           exprs_(mod.nodes.size()), vec_exprs_(mod.nodes.size()) {}
 
     void on_const(SsaId dst, const SsaNode& node) override {
@@ -301,6 +308,51 @@ public:
             off_known && off >= 0) {
             exprs_[dst] = SymExpr::make_buffer_load(rack, desc, sym, off,
                                                     elem_bytes > 0 ? elem_bytes : 4u);
+            return;
+        }
+        TrackedVal addr_tv = pa_.val(addr);
+        if (const auto* pv = addr_tv.inner.get_if<PointerDomain>();
+            pv && pv->is_valid_pointer() && pv->offset_known && pv->byte_offset >= 0) {
+            int32_t tex_rack = pv->rack;
+            int32_t tex_desc = -1;
+            int64_t field_off = 0;
+            std::string tex_sym;
+            if (pv->kind == PointerVal::Kind::DescriptorAddr) {
+                tex_desc = pv->desc_idx;
+                field_off = pv->byte_offset;
+                if (env_.lookup_tex_symbol && tex_rack >= 0 && tex_desc >= 0) {
+                    tex_sym = env_.lookup_tex_symbol(static_cast<uint8_t>(tex_rack),
+                                                     static_cast<uint32_t>(tex_desc));
+                }
+                if (tex_sym.empty() && pv->symbol_name.rfind("tex:", 0) == 0) {
+                    tex_sym = pv->symbol_name;
+                }
+            } else if (pv->kind == PointerVal::Kind::SrtRackPtr && tex_rack >= 0) {
+                int32_t d64 = static_cast<int32_t>(pv->byte_offset / 64);
+                int64_t f64 = pv->byte_offset % 64;
+                if (env_.lookup_tex_symbol) {
+                    tex_sym = env_.lookup_tex_symbol(static_cast<uint8_t>(tex_rack),
+                                                     static_cast<uint32_t>(d64));
+                    if (!tex_sym.empty()) {
+                        tex_desc = d64;
+                        field_off = f64;
+                    } else {
+                        int32_t d32 = static_cast<int32_t>(pv->byte_offset / 32);
+                        int64_t f32 = pv->byte_offset % 32;
+                        tex_sym = env_.lookup_tex_symbol(static_cast<uint8_t>(tex_rack),
+                                                         static_cast<uint32_t>(d32));
+                        if (!tex_sym.empty()) {
+                            tex_desc = d32;
+                            field_off = f32;
+                        }
+                    }
+                }
+            }
+            if (!tex_sym.empty() && tex_desc >= 0) {
+                exprs_[dst] = SymExpr::make_image_desc_query(
+                    tex_rack, tex_desc, tex_sym, field_off,
+                    elem_bytes > 0 ? elem_bytes : 4u);
+            }
         }
     }
 
@@ -336,13 +388,18 @@ public:
     }
 
     void on_select(SsaId dst, SsaId cond, SsaId tv, SsaId fv, const SsaNode&) override {
-        if (try_seed_from_pa(dst)) return;
         auto ec = get_expr(cond);
         auto et = get_expr(tv);
         auto ef = get_expr(fv);
+        if (ec && ec->kind == SymExpr::Kind::ConstU32) {
+            exprs_[dst] = ec->const_u32 ? std::move(et) : std::move(ef);
+            if (exprs_[dst]) return;
+        }
         if (ec && et && ef) {
             exprs_[dst] = SymExpr::make_select(std::move(ec), std::move(et), std::move(ef));
+            return;
         }
+        try_seed_from_pa(dst);
     }
 
     void on_iadd(SsaId dst, SsaId lhs, SsaId rhs, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
@@ -436,6 +493,7 @@ public:
 private:
     const ValhallSsaModule& mod_;
     const PointerAnalysisResult& pa_;
+    const PointerAnalysisEnv& env_;
     FauSummaryMap* summary_ = nullptr;
     std::vector<std::shared_ptr<const SymExpr>> exprs_;
     std::vector<std::vector<std::shared_ptr<const SymExpr>>> vec_exprs_;
@@ -485,13 +543,23 @@ private:
 
 }  // namespace
 
+const char* fallback_reason_name(FallbackReason reason) {
+    switch (reason) {
+        case FallbackReason::UnresolvedFauSlot: return "unresolved_fau_slot";
+        case FallbackReason::DynamicFauOffset: return "dynamic_fau_offset";
+        case FallbackReason::SymExprDepthExceeded: return "sym_expr_depth_exceeded";
+        case FallbackReason::UnsupportedOpInExpr: return "unsupported_op_in_expr";
+    }
+    return "unknown";
+}
+
 FauSummaryMap run_pilot_fau_summary(const ValhallSsaModule& pilot_ssa,
                                     const PointerAnalysisEnv& pilot_env) {
     FauSummaryMap summary;
     if (pilot_ssa.blocks.empty()) return summary;
 
     PointerAnalysisResult pa = run_ssa_pointer_analysis(pilot_ssa, pilot_env);
-    PilotFauSummaryVisitor visitor(pilot_ssa, pa, &summary);
+    PilotFauSummaryVisitor visitor(pilot_ssa, pa, pilot_env, &summary);
     for (const auto& blk : pilot_ssa.blocks) {
         for (SsaId nid : blk.nodes) {
             dispatch_ssa_transfer(pilot_ssa.get(nid), visitor);
@@ -720,14 +788,20 @@ private:
                 SsaId a = materialize_raw(e->a, opts, nullptr, nullptr, nullptr);
                 SsaId b = materialize_raw(e->b, opts, nullptr, nullptr, nullptr);
                 if (a == kInvalidSsa || b == kInvalidSsa) return kInvalidSsa;
-                ValType in_ty = is_float_op(e->op) ? ValType::F32
-                              : ((e->op == SsaOp::LogicalAnd || e->op == SsaOp::LogicalOr)
-                                     ? ValType::Bool
-                                     : ValType::U32);
-                ValType out_ty = is_bool_producing_op(e->op) ? ValType::Bool : in_ty;
-                a = ensure_type(a, in_ty);
-                b = ensure_type(b, in_ty);
-                res = emit_node(e->op, out_ty, {a, b});
+                if (e->op == SsaOp::Ldexp) {
+                    a = ensure_type(a, ValType::F32);
+                    b = ensure_type(b, ValType::S32);
+                    res = emit_node(e->op, ValType::F32, {a, b});
+                } else {
+                    ValType in_ty = is_float_op(e->op) ? ValType::F32
+                                  : ((e->op == SsaOp::LogicalAnd || e->op == SsaOp::LogicalOr)
+                                         ? ValType::Bool
+                                         : ValType::U32);
+                    ValType out_ty = is_bool_producing_op(e->op) ? ValType::Bool : in_ty;
+                    a = ensure_type(a, in_ty);
+                    b = ensure_type(b, in_ty);
+                    res = emit_node(e->op, out_ty, {a, b});
+                }
                 if (out_is_expr) *out_is_expr = true;
                 break;
             }
@@ -776,6 +850,34 @@ private:
                 d = ensure_type(d, ValType::U32);
                 res = emit_node(e->op, ValType::U32, {a, b, c, d});
                 if (out_is_expr) *out_is_expr = true;
+                break;
+            }
+
+            case SymExpr::Kind::ImageDescQuery: {
+                if (!opts.materialize_pilot_loads) return kInvalidSsa;
+                std::string tkey = e->symbol_name.empty()
+                                       ? ("tex:" + std::to_string(e->rack) + ":" + std::to_string(e->desc_idx))
+                                       : e->symbol_name;
+                uint32_t comp = 0u;
+                std::string tag = "OpImageQuerySize";
+                if (e->byte_offset == 0x20) {
+                    comp = 0u;
+                } else if (e->byte_offset == 0x24) {
+                    comp = 2u;
+                } else if (e->byte_offset == 0x03) {
+                    comp = 0u;
+                    tag = "OpImageQueryLevels";
+                } else {
+                    comp = static_cast<uint32_t>(e->byte_offset);
+                    char buf[32];
+                    std::snprintf(buf, sizeof(buf), "desc+0x%llx",
+                                  static_cast<unsigned long long>(e->byte_offset));
+                    tag = buf;
+                }
+                SsaId lod0 = emit_const_u32(0u);
+                res = emit_node(SsaOp::ImageQuerySize, ValType::U32, {lod0}, comp, 0,
+                                tkey + ":" + tag);
+                if (out_is_load) *out_is_load = true;
                 break;
             }
 

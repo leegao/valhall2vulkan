@@ -23,6 +23,45 @@ SsaPassStats run_ssa_dce(ValhallSsaModule& mod, const DceOptions& opts) {
         stats.phis_simplified += simplify_trivial_phis(mod);
     }
 
+    // Eliminate dead Kill(ConstBool(false), tok) by forwarding its token operand.
+    {
+        const size_t nsz = mod.nodes.size();
+        std::vector<SsaId> kill_remap(nsz, kInvalidSsa);
+        for (size_t i = 0; i < nsz; ++i) kill_remap[i] = static_cast<SsaId>(i);
+        bool any_dead_kill = false;
+        for (const auto& blk : mod.blocks) {
+            for (SsaId nid : blk.nodes) {
+                if (nid == kInvalidSsa || nid >= nsz) continue;
+                const auto& kn = mod.get(nid);
+                if (kn.op != SsaOp::Kill || kn.args.empty()) continue;
+                SsaId cond_id = kn.args[0];
+                for (int hop = 0; hop < 8 && cond_id != kInvalidSsa && cond_id < nsz; ++hop) {
+                    const auto& cn = mod.get(cond_id);
+                    if (cn.op == SsaOp::Copy && !cn.args.empty()) cond_id = cn.args[0];
+                    else break;
+                }
+                if (cond_id != kInvalidSsa && cond_id < nsz) {
+                    const auto& cn = mod.get(cond_id);
+                    if (cn.op == SsaOp::ConstBool && cn.imm_u32 == 0u) {
+                        if (kn.args.size() >= 2 && kn.args[1] != kInvalidSsa) {
+                            kill_remap[nid] = kn.args[1];
+                        }
+                        auto& mut = mod.get_mut(nid);
+                        mut.op = SsaOp::Nop;
+                        mut.args.clear();
+                        mut.is_side_effect = false;
+                        mut.is_barrier_or_cf = false;
+                        any_dead_kill = true;
+                        ++stats.nodes_removed;
+                    }
+                }
+            }
+        }
+        if (any_dead_kill) {
+            apply_value_remap(mod, kill_remap);
+        }
+    }
+
     const size_t num_nodes = mod.nodes.size();
     std::vector<uint8_t> live(num_nodes, 0);
     std::queue<SsaId> worklist;

@@ -25,6 +25,9 @@ enum class FallbackReason : uint8_t {
     UnsupportedOpInExpr,
 };
 
+/// Returns a short diagnostic string for `FallbackReason`.
+const char* fallback_reason_name(FallbackReason reason);
+
 struct FallbackRecord {
     uint64_t valhall_pc = 0;
     compiler::SsaId ssa_id = compiler::kInvalidSsa;

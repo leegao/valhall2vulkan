@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
                           << " addrs=" << df_res.fau_addrs_materialized
                           << " fallbacks=" << df_res.fallbacks.size() << "\n";
                 for (const auto& fb : df_res.fallbacks) {
-                    std::cerr << "  [fallback] pc=0x" << std::hex << fb.valhall_pc
+                    std::cerr << "  [fallback] reason=" << valhall::dataflow::fallback_reason_name(fb.reason) << " pc=0x" << std::hex << fb.valhall_pc
                               << " %" << std::dec << fb.ssa_id << " " << fb.detail << "\n";
                 }
             }
