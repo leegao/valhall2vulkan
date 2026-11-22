@@ -15,6 +15,7 @@ Outputs:
 
 import argparse
 import json
+import re
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -55,6 +56,10 @@ def load_xml_instructions(xml_path):
             arch_mask |= (1 << a)
         if arch_mask == 0:
             continue
+        valid_fields = set()
+        for ch in elem.iter():
+            if ch.tag in ("modifier", "field") and "name" in ch.attrib:
+                valid_fields.add(ch.attrib["name"])
         insns.append({
             "index": len(insns),
             "name": elem.attrib["name"],
@@ -64,8 +69,59 @@ def load_xml_instructions(xml_path):
             "since": since,
             "until": until,
             "arch_mask": arch_mask,
+            "valid_fields": valid_fields,
         })
     return insns
+
+
+
+
+def validate_lowering_spec(insns, lowering_json, lowering_path):
+    """Fail-loud structural validation of valhall_lowering.json against the XML ISA spec."""
+    fields_by_mnem = {}
+    for ins in insns:
+        fields_by_mnem.setdefault(ins["name"], set()).update(ins.get("valid_fields", set()))
+
+    allowed_rule_keys = {
+        "mnemonic", "variants", "op_class", "ssa_op", "dest_type", "src_types",
+        "splits_block", "is_barrier_or_cf", "effects", "arch_range", "when",
+        "inline_ops", "handler", "comment", "_comment",
+    }
+    mod_ref_re = re.compile(r"\$modifiers\.([A-Za-z0-9_]+)")
+    mod_eq_re = re.compile(r"@mod_eq\(\s*([A-Za-z0-9_]+)\s*,")
+    lookup_tables = lowering_json.get("lookup_tables", {})
+    errors = []
+
+    for ridx, r in enumerate(lowering_json.get("rules", [])):
+        mnem = r.get("mnemonic", "<missing>")
+        unknown_keys = sorted(set(r.keys()) - allowed_rule_keys)
+        if unknown_keys:
+            errors.append(f"rule[{ridx}] {mnem}: unrecognized keys {unknown_keys}")
+        valid_fields = fields_by_mnem.get(mnem, set())
+        if not valid_fields:
+            errors.append(f"rule[{ridx}] {mnem}: mnemonic not found in XML ISA spec")
+            continue
+        # Validate every $modifiers.<key> and @mod_eq(<key>, ...) reference
+        scan_parts = [str(r.get("ssa_op", "")), str(r.get("when", ""))]
+        scan_parts.extend(str(x) for x in r.get("inline_ops", []))
+        blob = "\n".join(scan_parts)
+        for key in sorted(set(mod_ref_re.findall(blob)) | set(mod_eq_re.findall(blob))):
+            if key not in valid_fields:
+                errors.append(
+                    f"rule[{ridx}] {mnem}: references unknown modifier '{key}' "
+                    f"(valid: {sorted(valid_fields)})"
+                )
+        # Validate @LOOKUP(table, ...) references an existing lookup_table
+        for m in re.finditer(r"@LOOKUP\(\s*([A-Za-z0-9_]+)\s*,", blob):
+            tbl = m.group(1)
+            if tbl not in lookup_tables:
+                errors.append(f"rule[{ridx}] {mnem}: references unknown lookup table '{tbl}'")
+
+    if errors:
+        print(f"[ERROR] Structural validation failed for {lowering_path} ({len(errors)} issue(s)):", file=sys.stderr)
+        for e in errors[:30]:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def parse_arch_range(rule):
@@ -212,6 +268,7 @@ def main():
     with open(args.tiles, "r", encoding="utf-8") as f:
         tiles_json = json.load(f)
 
+    validate_lowering_spec(insns, lowering_json, args.lowering)
     rules = lowering_json["rules"]
     lookup_tables = lowering_json.get("lookup_tables", {})
     host_functions = lowering_json.get("host_functions", {})
