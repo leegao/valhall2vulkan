@@ -25,6 +25,15 @@ bool is_float_op(SsaOp op) {
         case SsaOp::FAbs:
         case SsaOp::FMin:
         case SsaOp::FMax:
+        case SsaOp::Fma:
+        case SsaOp::Floor:
+        case SsaOp::Ceil:
+        case SsaOp::Trunc:
+        case SsaOp::RoundEven:
+        case SsaOp::Sqrt:
+        case SsaOp::InverseSqrt:
+        case SsaOp::Exp2:
+        case SsaOp::Log2:
         case SsaOp::FCmpOrdEq:
         case SsaOp::FCmpOrdNe:
         case SsaOp::FCmpOrdLt:
@@ -70,6 +79,18 @@ bool is_pure_unary_sym_op(SsaOp op) {
     switch (op) {
         case SsaOp::FNeg:
         case SsaOp::FAbs:
+        case SsaOp::Floor:
+        case SsaOp::Ceil:
+        case SsaOp::Trunc:
+        case SsaOp::RoundEven:
+        case SsaOp::Sqrt:
+        case SsaOp::InverseSqrt:
+        case SsaOp::Exp2:
+        case SsaOp::Log2:
+        case SsaOp::ConvertUToF:
+        case SsaOp::ConvertSToF:
+        case SsaOp::ConvertFToU:
+        case SsaOp::ConvertFToS:
         case SsaOp::BitNot:
         case SsaOp::LogicalNot:
         case SsaOp::SNeg:
@@ -77,6 +98,21 @@ bool is_pure_unary_sym_op(SsaOp op) {
         default:
             return false;
     }
+}
+
+bool is_pure_ternary_sym_op(SsaOp op) {
+    switch (op) {
+        case SsaOp::Fma:
+        case SsaOp::BfeU:
+        case SsaOp::BfeS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_pure_quaternary_sym_op(SsaOp op) {
+    return op == SsaOp::Bfi;
 }
 
 bool is_pure_binary_sym_op(SsaOp op) {
@@ -121,11 +157,41 @@ bool is_pure_binary_sym_op(SsaOp op) {
 }
 
 std::string canonical_buf_key(int32_t rack, int32_t desc_idx, const std::string& sym) {
-    if (!sym.empty() && (sym.rfind("ubo:", 0) == 0 || sym.rfind("ssbo:", 0) == 0)) {
+    if (!sym.empty() && (sym == "push_const" || sym.rfind("ubo:", 0) == 0 || sym.rfind("ssbo:", 0) == 0)) {
         return sym;
     }
     if (!sym.empty()) return sym;
     return "buf:" + std::to_string(rack) + ":" + std::to_string(desc_idx);
+}
+
+uint32_t f16_to_f32_bits(uint16_t h) {
+    uint32_t sign = (static_cast<uint32_t>(h & 0x8000u)) << 16u;
+    uint32_t exp = (h >> 10u) & 0x1Fu;
+    uint32_t mant = h & 0x03FFu;
+    if (exp == 0u) {
+        if (mant == 0u) return sign;
+        while ((mant & 0x0400u) == 0u) {
+            mant <<= 1u;
+            --exp;
+        }
+        ++exp;
+        mant &= 0x03FFu;
+        return sign | ((exp + 112u) << 23u) | (mant << 13u);
+    }
+    if (exp == 31u) {
+        return sign | 0x7F800000u | (mant << 13u);
+    }
+    return sign | ((exp + 112u) << 23u) | (mant << 13u);
+}
+
+bool try_extract_tls_offset(const TrackedVal& tv, uint32_t* out_tls_off) {
+    if (const auto* pv = tv.inner.get_if<PointerDomain>();
+        pv && pv->is_valid_pointer() && pv->kind == PointerVal::Kind::TlsPtr &&
+        pv->offset_known && pv->byte_offset >= 0) {
+        *out_tls_off = static_cast<uint32_t>(pv->byte_offset);
+        return true;
+    }
+    return false;
 }
 
 bool try_extract_buffer_addr(const TrackedVal& tv,
@@ -194,6 +260,8 @@ public:
             if (src < vec_exprs_.size() && !vec_exprs_[src].empty()) {
                 vec_exprs_[dst] = vec_exprs_[src];
             }
+        } else if (is_pure_unary_sym_op(node.op)) {
+            handle_unary(dst, src, node.op);
         }
     }
 
@@ -209,6 +277,22 @@ public:
 
     void on_psb_load(SsaId dst, SsaId addr, uint32_t elem_bytes, const SsaNode&) override {
         if (try_seed_from_pa(dst)) return;
+        uint32_t tls_off = 0;
+        if (try_extract_tls_offset(pa_.val(addr), &tls_off)) {
+            uint32_t words = (elem_bytes >= 4u) ? (elem_bytes / 4u) : 1u;
+            if (words > 1u) {
+                vec_exprs_[dst].resize(words);
+                for (uint32_t w = 0; w < words; ++w) {
+                    auto it = tls_exprs_.find(tls_off + w * 4u);
+                    if (it != tls_exprs_.end()) vec_exprs_[dst][w] = it->second;
+                }
+                if (vec_exprs_[dst][0]) exprs_[dst] = vec_exprs_[dst][0];
+            } else {
+                auto it = tls_exprs_.find(tls_off);
+                if (it != tls_exprs_.end()) exprs_[dst] = it->second;
+            }
+            return;
+        }
         int32_t rack = -1, desc = -1;
         std::string sym;
         int64_t off = 0;
@@ -225,6 +309,16 @@ public:
         if ((node.op == SsaOp::VecConstruct2 || node.op == SsaOp::VecConstruct4) && !node.args.empty()) {
             vec_exprs_[dst].reserve(node.args.size());
             for (SsaId a : node.args) vec_exprs_[dst].push_back(get_expr(a));
+        } else if (node.op == SsaOp::UnpackHalf2x16 && !node.args.empty()) {
+            auto e = get_expr(node.args[0]);
+            if (e && e->kind == SymExpr::Kind::ConstU32) {
+                uint16_t lo16 = static_cast<uint16_t>(e->const_u32 & 0xFFFFu);
+                uint16_t hi16 = static_cast<uint16_t>((e->const_u32 >> 16u) & 0xFFFFu);
+                vec_exprs_[dst] = {
+                    SymExpr::make_const_u32(f16_to_f32_bits(lo16)),
+                    SymExpr::make_const_u32(f16_to_f32_bits(hi16)),
+                };
+            }
         } else if (node.op == SsaOp::VecExtract && !node.args.empty()) {
             SsaId base = node.args[0];
             if (base < vec_exprs_.size() && node.imm_u32 < vec_exprs_[base].size()) {
@@ -261,6 +355,19 @@ public:
     void on_shift(SsaId dst, SsaId lhs, SsaId rhs, ShiftKind, bool, const SsaNode& n) override { handle_binary(dst, lhs, rhs, n.op); }
 
     void on_psb_store(SsaId addr, SsaId val_id, uint32_t, const SsaNode&) override {
+        uint32_t tls_off = 0;
+        if (try_extract_tls_offset(pa_.val(addr), &tls_off)) {
+            if (val_id < vec_exprs_.size() && !vec_exprs_[val_id].empty()) {
+                for (size_t i = 0; i < vec_exprs_[val_id].size(); ++i) {
+                    if (vec_exprs_[val_id][i]) {
+                        tls_exprs_[tls_off + static_cast<uint32_t>(i * 4u)] = vec_exprs_[val_id][i];
+                    }
+                }
+            } else if (auto e = get_expr(val_id)) {
+                tls_exprs_[tls_off] = e;
+            }
+            return;
+        }
         uint32_t fau_off = 0;
         if (!try_extract_fau_dst_offset(pa_.val(addr), &fau_off)) return;
         if (val_id < vec_exprs_.size() && !vec_exprs_[val_id].empty()) {
@@ -298,11 +405,31 @@ public:
                 exprs_[dst] = SymExpr::make_const_u32(out);
                 return;
             }
+            if (eb && eo && ew) {
+                exprs_[dst] = SymExpr::make_ternary(node.op, std::move(eb), std::move(eo), std::move(ew));
+                return;
+            }
         }
         if (is_pure_unary_sym_op(node.op) && !node.args.empty()) {
             handle_unary(dst, node.args[0], node.op);
         } else if (is_pure_binary_sym_op(node.op) && node.args.size() >= 2) {
             handle_binary(dst, node.args[0], node.args[1], node.op);
+        } else if (is_pure_ternary_sym_op(node.op) && node.args.size() >= 3) {
+            auto a0 = get_expr(node.args[0]);
+            auto a1 = get_expr(node.args[1]);
+            auto a2 = get_expr(node.args[2]);
+            if (a0 && a1 && a2) {
+                exprs_[dst] = SymExpr::make_ternary(node.op, std::move(a0), std::move(a1), std::move(a2));
+            }
+        } else if (is_pure_quaternary_sym_op(node.op) && node.args.size() >= 4) {
+            auto a0 = get_expr(node.args[0]);
+            auto a1 = get_expr(node.args[1]);
+            auto a2 = get_expr(node.args[2]);
+            auto a3 = get_expr(node.args[3]);
+            if (a0 && a1 && a2 && a3) {
+                exprs_[dst] = SymExpr::make_quaternary(
+                    node.op, std::move(a0), std::move(a1), std::move(a2), std::move(a3));
+            }
         }
     }
 
@@ -312,6 +439,7 @@ private:
     FauSummaryMap* summary_ = nullptr;
     std::vector<std::shared_ptr<const SymExpr>> exprs_;
     std::vector<std::vector<std::shared_ptr<const SymExpr>>> vec_exprs_;
+    std::unordered_map<uint32_t, std::shared_ptr<const SymExpr>> tls_exprs_;
 
     std::shared_ptr<const SymExpr> get_expr(SsaId id) const {
         if (id == kInvalidSsa || id >= exprs_.size()) return nullptr;
@@ -406,6 +534,22 @@ namespace {
 class SymExprMaterializer {
 public:
     explicit SymExprMaterializer(ValhallSsaModule& mod) : mod_(mod) {
+        uint32_t max_sideband = 0x0Fu;
+        for (size_t i = 0; i < mod_.nodes.size(); ++i) {
+            const auto& n = mod_.nodes[i];
+            if (n.op == SsaOp::LoadSidebandU64 && n.imm_u32 > max_sideband) {
+                max_sideband = n.imm_u32;
+            }
+        }
+        next_sideband_member_ = std::max<uint32_t>(0x10u, max_sideband + 1u);
+        if (!mod_.blocks.empty()) {
+            for (SsaId nid : mod_.blocks[0].nodes) {
+                const auto& n = mod_.get(nid);
+                if (n.op == SsaOp::LoadSidebandU64 && !n.aux_str.empty()) {
+                    buf_bases_.emplace(n.aux_str, nid);
+                }
+            }
+        }
         orig_entry_tok_ = find_or_emit_entry_token();
         entry_tok_ = orig_entry_tok_;
     }
@@ -450,6 +594,7 @@ private:
     ValhallSsaModule& mod_;
     SsaId orig_entry_tok_ = kInvalidSsa;
     SsaId entry_tok_ = kInvalidSsa;
+    uint32_t next_sideband_member_ = 0x10u;
     std::vector<SsaId> emitted_;
     std::unordered_map<std::string, SsaId> memo_;
     std::unordered_map<std::string, SsaId> buf_bases_;
@@ -491,7 +636,8 @@ private:
     SsaId get_or_emit_buf_base(const std::string& key) {
         auto it = buf_bases_.find(key);
         if (it != buf_bases_.end()) return it->second;
-        SsaId id = emit_node(SsaOp::LoadSidebandU64, ValType::U64, {}, 0x10u, 0, key);
+        uint32_t slot = next_sideband_member_++;
+        SsaId id = emit_node(SsaOp::LoadSidebandU64, ValType::U64, {}, slot, 0, key);
         buf_bases_[key] = id;
         return id;
     }
@@ -548,10 +694,23 @@ private:
                 if (!opts.materialize_pilot_exprs) return kInvalidSsa;
                 SsaId a = materialize_raw(e->a, opts, nullptr, nullptr, nullptr);
                 if (a == kInvalidSsa) return kInvalidSsa;
-                ValType op_ty = is_float_op(e->op) ? ValType::F32
-                              : (e->op == SsaOp::LogicalNot ? ValType::Bool : ValType::U32);
-                a = ensure_type(a, op_ty);
-                res = emit_node(e->op, op_ty, {a});
+                ValType in_ty = ValType::U32;
+                ValType out_ty = ValType::U32;
+                if (e->op == SsaOp::ConvertUToF || e->op == SsaOp::ConvertSToF) {
+                    in_ty = ValType::U32;
+                    out_ty = ValType::F32;
+                } else if (e->op == SsaOp::ConvertFToU || e->op == SsaOp::ConvertFToS) {
+                    in_ty = ValType::F32;
+                    out_ty = ValType::U32;
+                } else if (is_float_op(e->op)) {
+                    in_ty = ValType::F32;
+                    out_ty = ValType::F32;
+                } else if (e->op == SsaOp::LogicalNot) {
+                    in_ty = ValType::Bool;
+                    out_ty = ValType::Bool;
+                }
+                a = ensure_type(a, in_ty);
+                res = emit_node(e->op, out_ty, {a});
                 if (out_is_expr) *out_is_expr = true;
                 break;
             }
@@ -583,6 +742,39 @@ private:
                 tv = ensure_type(tv, ValType::U32);
                 fv = ensure_type(fv, ValType::U32);
                 res = emit_node(SsaOp::Select, ValType::U32, {c, tv, fv});
+                if (out_is_expr) *out_is_expr = true;
+                break;
+            }
+
+            case SymExpr::Kind::TernaryOp: {
+                if (!opts.materialize_pilot_exprs) return kInvalidSsa;
+                SsaId a = materialize_raw(e->a, opts, nullptr, nullptr, nullptr);
+                SsaId b = materialize_raw(e->b, opts, nullptr, nullptr, nullptr);
+                SsaId c = materialize_raw(e->c, opts, nullptr, nullptr, nullptr);
+                if (a == kInvalidSsa || b == kInvalidSsa || c == kInvalidSsa) return kInvalidSsa;
+                ValType ty = is_float_op(e->op) ? ValType::F32 : ValType::U32;
+                a = ensure_type(a, ty);
+                b = ensure_type(b, ty);
+                c = ensure_type(c, ty);
+                res = emit_node(e->op, ty, {a, b, c});
+                if (out_is_expr) *out_is_expr = true;
+                break;
+            }
+
+            case SymExpr::Kind::QuaternaryOp: {
+                if (!opts.materialize_pilot_exprs) return kInvalidSsa;
+                SsaId a = materialize_raw(e->a, opts, nullptr, nullptr, nullptr);
+                SsaId b = materialize_raw(e->b, opts, nullptr, nullptr, nullptr);
+                SsaId c = materialize_raw(e->c, opts, nullptr, nullptr, nullptr);
+                SsaId d = materialize_raw(e->d, opts, nullptr, nullptr, nullptr);
+                if (a == kInvalidSsa || b == kInvalidSsa || c == kInvalidSsa || d == kInvalidSsa) {
+                    return kInvalidSsa;
+                }
+                a = ensure_type(a, ValType::U32);
+                b = ensure_type(b, ValType::U32);
+                c = ensure_type(c, ValType::U32);
+                d = ensure_type(d, ValType::U32);
+                res = emit_node(e->op, ValType::U32, {a, b, c, d});
                 if (out_is_expr) *out_is_expr = true;
                 break;
             }

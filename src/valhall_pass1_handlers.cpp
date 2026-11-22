@@ -585,6 +585,13 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     } else if (auto it_tidx = ins.fields.find("texture_index"); it_tidx != ins.fields.end()) {
         tex_idx = it_tidx->second;
         has_tex_idx = true;
+    } else if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::FauUniform) {
+        uint32_t fau_off = static_cast<uint32_t>(ins.srcs[0].fau_index64) * 8u;
+        auto it_fau = ctx.opts.fau_tex_handle_indices.find(fau_off);
+        if (it_fau != ctx.opts.fau_tex_handle_indices.end()) {
+            tex_idx = it_fau->second;
+            has_tex_idx = true;
+        }
     }
     SsaNode ts{};
     ts.op = SsaOp::TexSample;

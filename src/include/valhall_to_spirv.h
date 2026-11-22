@@ -78,6 +78,7 @@ struct ValhallTranslateOptions {
     std::vector<VertexAttributeBindingSpec> vertex_attributes;
     std::vector<VaryingSlotSpec> varyings;
     std::vector<CombinedSamplerBindingSpec> samplers;
+    std::map<uint32_t, uint32_t> fau_tex_handle_indices;
     uint32_t num_color_attachments = 1;
     bool emits_depth = false;
 

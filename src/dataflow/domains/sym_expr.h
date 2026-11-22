@@ -18,7 +18,7 @@ static constexpr uint8_t kMaxSymExprDepth = 8;
 
 /// Immutable, structurally-comparable symbolic expression node capturing
 /// buffer base addresses, UBO/SSBO scalar loads, constants, and bounded pure
-/// Pilot/Main ALU and comparison expressions.
+/// Pilot/Main ALU, bitfield, and comparison expressions.
 struct SymExpr {
     enum class Kind : uint8_t {
         ConstU32 = 0,
@@ -28,6 +28,8 @@ struct SymExpr {
         UnaryOp,
         BinaryOp,
         SelectOp,
+        TernaryOp,
+        QuaternaryOp,
     };
 
     Kind kind = Kind::ConstU32;
@@ -44,6 +46,7 @@ struct SymExpr {
     std::shared_ptr<const SymExpr> a;
     std::shared_ptr<const SymExpr> b;
     std::shared_ptr<const SymExpr> c;
+    std::shared_ptr<const SymExpr> d;
 
     static std::shared_ptr<const SymExpr> make_const_u32(uint32_t v) {
         auto e = std::make_shared<SymExpr>();
@@ -106,12 +109,12 @@ struct SymExpr {
         std::shared_ptr<const SymExpr> lhs,
         std::shared_ptr<const SymExpr> rhs) {
         if (!lhs || !rhs) return nullptr;
-        uint8_t d = (lhs->depth > rhs->depth) ? lhs->depth : rhs->depth;
-        if (d >= kMaxSymExprDepth) return nullptr;
+        uint8_t md = (lhs->depth > rhs->depth) ? lhs->depth : rhs->depth;
+        if (md >= kMaxSymExprDepth) return nullptr;
         auto e = std::make_shared<SymExpr>();
         e->kind = Kind::BinaryOp;
         e->op = op;
-        e->depth = static_cast<uint8_t>(d + 1u);
+        e->depth = static_cast<uint8_t>(md + 1u);
         e->a = std::move(lhs);
         e->b = std::move(rhs);
         return e;
@@ -122,17 +125,60 @@ struct SymExpr {
         std::shared_ptr<const SymExpr> tv,
         std::shared_ptr<const SymExpr> fv) {
         if (!cond || !tv || !fv) return nullptr;
-        uint8_t d = cond->depth;
-        if (tv->depth > d) d = tv->depth;
-        if (fv->depth > d) d = fv->depth;
-        if (d >= kMaxSymExprDepth) return nullptr;
+        uint8_t md = cond->depth;
+        if (tv->depth > md) md = tv->depth;
+        if (fv->depth > md) md = fv->depth;
+        if (md >= kMaxSymExprDepth) return nullptr;
         auto e = std::make_shared<SymExpr>();
         e->kind = Kind::SelectOp;
         e->op = tables::SsaOp::Select;
-        e->depth = static_cast<uint8_t>(d + 1u);
+        e->depth = static_cast<uint8_t>(md + 1u);
         e->a = std::move(cond);
         e->b = std::move(tv);
         e->c = std::move(fv);
+        return e;
+    }
+
+    static std::shared_ptr<const SymExpr> make_ternary(
+        tables::SsaOp op,
+        std::shared_ptr<const SymExpr> arg0,
+        std::shared_ptr<const SymExpr> arg1,
+        std::shared_ptr<const SymExpr> arg2) {
+        if (!arg0 || !arg1 || !arg2) return nullptr;
+        uint8_t md = arg0->depth;
+        if (arg1->depth > md) md = arg1->depth;
+        if (arg2->depth > md) md = arg2->depth;
+        if (md >= kMaxSymExprDepth) return nullptr;
+        auto e = std::make_shared<SymExpr>();
+        e->kind = Kind::TernaryOp;
+        e->op = op;
+        e->depth = static_cast<uint8_t>(md + 1u);
+        e->a = std::move(arg0);
+        e->b = std::move(arg1);
+        e->c = std::move(arg2);
+        return e;
+    }
+
+    static std::shared_ptr<const SymExpr> make_quaternary(
+        tables::SsaOp op,
+        std::shared_ptr<const SymExpr> arg0,
+        std::shared_ptr<const SymExpr> arg1,
+        std::shared_ptr<const SymExpr> arg2,
+        std::shared_ptr<const SymExpr> arg3) {
+        if (!arg0 || !arg1 || !arg2 || !arg3) return nullptr;
+        uint8_t md = arg0->depth;
+        if (arg1->depth > md) md = arg1->depth;
+        if (arg2->depth > md) md = arg2->depth;
+        if (arg3->depth > md) md = arg3->depth;
+        if (md >= kMaxSymExprDepth) return nullptr;
+        auto e = std::make_shared<SymExpr>();
+        e->kind = Kind::QuaternaryOp;
+        e->op = op;
+        e->depth = static_cast<uint8_t>(md + 1u);
+        e->a = std::move(arg0);
+        e->b = std::move(arg1);
+        e->c = std::move(arg2);
+        e->d = std::move(arg3);
         return e;
     }
 
@@ -159,6 +205,12 @@ struct SymExpr {
             case Kind::SelectOp:
                 return a && o.a && b && o.b && c && o.c &&
                        a->equals(*o.a) && b->equals(*o.b) && c->equals(*o.c);
+            case Kind::TernaryOp:
+                return op == o.op && a && o.a && b && o.b && c && o.c &&
+                       a->equals(*o.a) && b->equals(*o.b) && c->equals(*o.c);
+            case Kind::QuaternaryOp:
+                return op == o.op && a && o.a && b && o.b && c && o.c && d && o.d &&
+                       a->equals(*o.a) && b->equals(*o.b) && c->equals(*o.c) && d->equals(*o.d);
         }
         return false;
     }
@@ -197,6 +249,19 @@ struct SymExpr {
                 oss << "Select(" << (a ? a->format() : "?") << ", "
                     << (b ? b->format() : "?") << ", "
                     << (c ? c->format() : "?") << ")";
+                break;
+            case Kind::TernaryOp:
+                oss << tables::ssa_op_to_string(op) << "("
+                    << (a ? a->format() : "?") << ", "
+                    << (b ? b->format() : "?") << ", "
+                    << (c ? c->format() : "?") << ")";
+                break;
+            case Kind::QuaternaryOp:
+                oss << tables::ssa_op_to_string(op) << "("
+                    << (a ? a->format() : "?") << ", "
+                    << (b ? b->format() : "?") << ", "
+                    << (c ? c->format() : "?") << ", "
+                    << (d ? d->format() : "?") << ")";
                 break;
         }
         return oss.str();

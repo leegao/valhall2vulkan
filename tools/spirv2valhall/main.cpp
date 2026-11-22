@@ -269,6 +269,34 @@ int main(int argc, char** argv) {
             vopts.local_size_y = res.mbs2.kern.wg_y;
             vopts.local_size_z = res.mbs2.kern.wg_z;
         }
+        std::map<uint32_t, uint32_t> simg_addrs;
+        for (const auto& sym : res.mbs2.cmmn.simg) {
+            valhall::CombinedSamplerBindingSpec spec;
+            spec.tex_index = sym.address;
+            spec.descriptor_set = (sym.rack_index >= 68u) ? (sym.rack_index - 68u)
+                                : (sym.rack_index >= 4u ? (sym.rack_index - 4u) : 0u);
+            spec.binding = (sym.binding != 0xFFFFu) ? sym.binding : sym.address;
+            vopts.samplers.push_back(spec);
+            simg_addrs[sym.address] = spec.binding;
+        }
+        if (!simg_addrs.empty()) {
+            std::map<uint32_t, uint32_t> fcst_map;
+            for (const auto& f : res.mbs2.cmmn.fcsts) fcst_map[f.reg_offset] = f.value;
+            if (primary_eb->meta.has_dbug) {
+                for (const auto& f : primary_eb->meta.dbug.fcsts) fcst_map[f.reg_offset] = f.value;
+            }
+            for (const auto& kv : fcst_map) {
+                if ((kv.first & 7u) != 0u) continue;
+                auto hi_it = fcst_map.find(kv.first + 4u);
+                if (hi_it == fcst_map.end()) continue;
+                if (kv.second == 0xFFFFFFFFu) {
+                    uint32_t desc_addr = hi_it->second & 0xFFFFu;
+                    if (simg_addrs.count(desc_addr)) {
+                        vopts.fau_tex_handle_indices[kv.first] = desc_addr;
+                    }
+                }
+            }
+        }
 
         valhall::cfg::ControlFlowGraph pri_cfg = valhall::cfg::build_cfg(primary_eb->instructions);
         valhall::cfg::ControlFlowGraph sec_cfg;

@@ -740,6 +740,83 @@ void test_pilot_bfe_const_fold_and_deep_expr() {
     std::cout << "[PASS] test_pilot_bfe_const_fold_and_deep_expr\n";
 }
 
+static void test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr() {
+    ValhallSsaModule mod;
+    mod.blocks.resize(1);
+    mod.blocks[0].id = 0;
+
+    auto add = [&](SsaOp op, ValType ty, std::vector<SsaId> args,
+                   uint32_t imm32 = 0, uint64_t imm64 = 0, std::string aux = "") -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm32;
+        n.imm_u64 = imm64;
+        n.args = std::move(args);
+        n.aux_str = std::move(aux);
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+
+    add(SsaOp::Nop, ValType::Token, {});
+    // Two 64-bit buffer address pairs + two 32-bit FAU expressions (Fma + Bfi)
+    SsaId f0 = add(SsaOp::LoadFau, ValType::U32, {}, 0u);  // FAU+0x00
+    SsaId f1 = add(SsaOp::LoadFau, ValType::U32, {}, 1u);  // FAU+0x04
+    SsaId addr0 = add(SsaOp::Pack64, ValType::U64, {f0, f1});
+    SsaId f2 = add(SsaOp::LoadFau, ValType::U32, {}, 2u);  // FAU+0x08
+    SsaId f3 = add(SsaOp::LoadFau, ValType::U32, {}, 3u);  // FAU+0x0c
+    SsaId addr1 = add(SsaOp::Pack64, ValType::U64, {f2, f3});
+    SsaId f4 = add(SsaOp::LoadFau, ValType::U32, {}, 4u);  // FAU+0x10 -> Fma
+    SsaId f5 = add(SsaOp::LoadFau, ValType::U32, {}, 5u);  // FAU+0x14 -> Bfi
+    (void)addr0;
+    (void)addr1;
+    (void)f4;
+    (void)f5;
+
+    FauSummaryMap summary;
+    summary[0x00u] = SymExpr::make_buffer_addr(4, 1, "ssbo:0:1", 0, true);
+    summary[0x08u] = SymExpr::make_buffer_addr(4, 0, "ssbo:0:0", 0, true);
+    auto pc_ld = SymExpr::make_buffer_load(0, 0, "push_const", 0x04, 4);
+    auto half = SymExpr::make_const_u32(0x3f000000u);
+    summary[0x10u] = SymExpr::make_ternary(SsaOp::Fma, pc_ld, half, half);
+    summary[0x14u] = SymExpr::make_quaternary(
+        SsaOp::Bfi, pc_ld, SymExpr::make_const_u32(1u),
+        SymExpr::make_const_u32(16u), SymExpr::make_const_u32(16u));
+
+    DeFauDevirtResult res = run_ssa_defau_devirt(mod, summary);
+    CHECK(res.fau_addrs_materialized == 2u);
+    CHECK(res.fau_exprs_materialized == 2u);
+    CHECK(res.fallbacks.empty());
+
+    // Verify all 3 LoadSidebandU64 nodes have strictly distinct imm_u32 slots (>= 0x10).
+    std::map<std::string, uint32_t> slot_by_key;
+    std::set<uint32_t> seen_slots;
+    bool has_fma = false;
+    bool has_bfi = false;
+    for (SsaId nid : mod.blocks[0].nodes) {
+        const auto& n = mod.get(nid);
+        if (n.op == SsaOp::LoadSidebandU64) {
+            CHECK(n.imm_u32 >= 0x10u);
+            CHECK(seen_slots.insert(n.imm_u32).second);
+            slot_by_key[n.aux_str] = n.imm_u32;
+        } else if (n.op == SsaOp::Fma) {
+            has_fma = true;
+        } else if (n.op == SsaOp::Bfi) {
+            has_bfi = true;
+        }
+    }
+    CHECK(slot_by_key.size() == 3u);
+    CHECK(slot_by_key.count("ssbo:0:1") == 1u);
+    CHECK(slot_by_key.count("ssbo:0:0") == 1u);
+    CHECK(slot_by_key.count("push_const") == 1u);
+    CHECK(has_fma);
+    CHECK(has_bfi);
+    std::cout << "[PASS] test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr\n";
+}
+
 int main() {
     std::cout << "=== [Test] Valhall SSA Dataflow Combinators, Worklist, Liveness & Pointer Analysis ===\n";
     test_domain_combinators_and_memory_disjointness();
@@ -753,6 +830,7 @@ int main() {
     test_sym_expr_domain_and_mixins();
     test_known_bits_domain();
     test_pilot_bfe_const_fold_and_deep_expr();
+    test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }

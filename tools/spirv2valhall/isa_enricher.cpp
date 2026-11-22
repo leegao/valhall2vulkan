@@ -477,6 +477,18 @@ std::string format_enriched_disassembly(
     return oss.str();
 }
 
+static std::string canonical_mbs2_buffer_name(const Mbs2Symbol& sym, bool is_ssbo) {
+    if (!is_ssbo && sym.rack_index == 0u && sym.binding == 0xFFFFu) {
+        return "push_const";
+    }
+    if (sym.binding != 0xFFFFu) {
+        uint32_t d_set = (sym.rack_index >= 4u) ? (sym.rack_index - 4u) : 0u;
+        return std::string(is_ssbo ? "ssbo:" : "ubo:") +
+               std::to_string(d_set) + ":" + std::to_string(sym.binding);
+    }
+    return sym.name;
+}
+
 dataflow::FauSummaryMap build_fau_summary_for_ebin(
     const Mbs2Module& mbs2,
     const std::vector<ExtractedEbin>& ebins,
@@ -485,10 +497,24 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
     dataflow::FauSummaryMap summary;
     Mbs2SymbolIndex lut = build_symbol_index(mbs2, &primary_eb);
 
+    std::map<std::pair<uint32_t, uint32_t>, std::string> canon_buf_by_rack_addr;
+    for (const auto& sym : mbs2.cmmn.suni) {
+        canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = canonical_mbs2_buffer_name(sym, false);
+    }
+    for (const auto& sym : mbs2.cmmn.s3bo) {
+        canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = canonical_mbs2_buffer_name(sym, true);
+    }
+
     for (const auto& eb : ebins) {
         if (eb.role != EbinRole::Pilot) continue;
         Mbs2SymbolIndex pilot_lut = build_symbol_index(mbs2, &eb);
         dataflow::PointerAnalysisEnv pilot_env = build_df_env(pilot_lut, eb, nullptr);
+        pilot_env.lookup_srt_symbol = [&canon_buf_by_rack_addr, &pilot_lut](uint8_t rack, uint32_t desc) -> std::string {
+            auto cit = canon_buf_by_rack_addr.find({rack, desc});
+            if (cit != canon_buf_by_rack_addr.end()) return cit->second;
+            auto it = pilot_lut.by_rack_addr.find({rack, desc});
+            return (it != pilot_lut.by_rack_addr.end()) ? it->second->name : "";
+        };
         cfg::ControlFlowGraph pilot_cfg = cfg::build_cfg(eb.instructions);
         ValhallTranslateOptions p_opts;
         p_opts.stage = valhall::ShaderStage::Pilot;
@@ -506,8 +532,9 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
 
     // Seed direct MBS2 RLOC uniform/push-constant relocations (4-byte words)
     // without overwriting Pilot-computed FAU entries.
-    auto seed_rlocs = [&](const std::vector<Mbs2Symbol>& list) {
+    auto seed_rlocs = [&](const std::vector<Mbs2Symbol>& list, bool is_ssbo) {
         for (const auto& sym : list) {
+            std::string bname = canonical_mbs2_buffer_name(sym, is_ssbo);
             for (const auto& r : sym.rlocs) {
                 uint32_t words = std::max<uint32_t>(1u, (r.size + 3u) / 4u);
                 for (uint32_t w = 0; w < words; ++w) {
@@ -516,15 +543,15 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
                     summary[fau_off] = dataflow::SymExpr::make_buffer_load(
                         static_cast<int32_t>(sym.rack_index),
                         static_cast<int32_t>(sym.address),
-                        sym.name,
+                        bname,
                         static_cast<int64_t>(r.uni_offset + w * 4u),
                         4u);
                 }
             }
         }
     };
-    seed_rlocs(mbs2.cmmn.suni);
-    seed_rlocs(mbs2.cmmn.s3bo);
+    seed_rlocs(mbs2.cmmn.suni, false);
+    seed_rlocs(mbs2.cmmn.s3bo, true);
 
     std::map<uint32_t, uint32_t> fcst_words;
     for (const auto& kv : lut.fcst_by_fau_off) {
