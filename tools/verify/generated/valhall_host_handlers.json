@@ -1205,7 +1205,7 @@
               "op": "&",
               "right": {
                 "canonical_type": "unsigned int",
-                "int_value": 63,
+                "int_value": 127,
                 "kind": "literal",
                 "lit_kind": "int",
                 "loc": {
@@ -1213,7 +1213,7 @@
                   "line": 25
                 },
                 "type": "unsigned int",
-                "value": "63"
+                "value": "127"
               },
               "type": "unsigned int"
             }

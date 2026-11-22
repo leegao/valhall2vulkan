@@ -22,7 +22,7 @@ SsaId Pass1Context::emit_load_fau(uint32_t blk, uint32_t word_idx) {
     SsaNode n{};
     n.op = SsaOp::LoadFau;
     n.type = ValType::U32;
-    n.imm_u32 = word_idx & 63u;
+    n.imm_u32 = word_idx & 127u;
     n.effects.flags |= EffectSet::kFlagUsesSideband;
     res.uses_sideband = true;
     return sb.emit(blk, std::move(n));

@@ -817,6 +817,47 @@ static void test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr() {
     std::cout << "[PASS] test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr\n";
 }
 
+
+static void test_defau_high_fau_u53_no_alias() {
+    ValhallSsaModule mod;
+    mod.blocks.resize(1);
+    mod.blocks[0].id = 0;
+    auto add = [&](SsaOp op, ValType ty, std::vector<SsaId> args,
+                   uint32_t imm32 = 0) -> SsaId {
+        SsaNode n{};
+        n.id = static_cast<SsaId>(mod.nodes.size());
+        n.op = op;
+        n.type = ty;
+        n.imm_u32 = imm32;
+        n.args = std::move(args);
+        mod.nodes.push_back(std::move(n));
+        SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+        mod.blocks[0].nodes.push_back(id);
+        return id;
+    };
+    add(SsaOp::Nop, ValType::Token, {});
+    SsaId f_lo = add(SsaOp::LoadFau, ValType::U32, {}, 106u);  // u53.w0 = FAU+0x1a8
+    SsaId f_hi = add(SsaOp::LoadFau, ValType::U32, {}, 107u);  // u53.w1 = FAU+0x1ac
+    add(SsaOp::Pack64, ValType::U64, {f_lo, f_hi});
+
+    FauSummaryMap summary;
+    summary[0x0a8u] = SymExpr::make_const_u32(0x3f800000u);
+    summary[0x0acu] = SymExpr::make_const_u32(0x40000000u);
+    summary[0x1a8u] = SymExpr::make_buffer_addr(4, 5, "ssbo:0:5", 0, true);
+
+    DeFauDevirtResult res = run_ssa_defau_devirt(mod, summary);
+    CHECK(res.fau_addrs_materialized == 1u);
+    CHECK(res.fallbacks.empty());
+    bool found_ssbo5 = false;
+    for (SsaId nid : mod.blocks[0].nodes) {
+        if (mod.get(nid).op == SsaOp::LoadSidebandU64 && mod.get(nid).aux_str == "ssbo:0:5") {
+            found_ssbo5 = true;
+        }
+    }
+    CHECK(found_ssbo5);
+    std::cout << "[PASS] test_defau_high_fau_u53_no_alias\n";
+}
+
 int main() {
     std::cout << "=== [Test] Valhall SSA Dataflow Combinators, Worklist, Liveness & Pointer Analysis ===\n";
     test_domain_combinators_and_memory_disjointness();
@@ -831,6 +872,7 @@ int main() {
     test_known_bits_domain();
     test_pilot_bfe_const_fold_and_deep_expr();
     test_defau_distinct_sideband_ids_and_ternary_quaternary_symexpr();
+    test_defau_high_fau_u53_no_alias();
     std::cout << "=== ALL SSA DATAFLOW TESTS PASSED ===\n";
     return 0;
 }
