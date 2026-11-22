@@ -113,11 +113,21 @@ void Pass1Context::emit_stage_preamble(uint32_t blk, const std::vector<DecodedVa
         sb.set_reg(blk, 60, vi);
         sb.set_reg(blk, 61, ii);
     } else if (opts.stage == ShaderStage::Fragment) {
+        // Valhall Fragment ABI: r59 holds packed integer pixel coordinates (uint16(y) << 16 | uint16(x)),
+        // r60 holds initial sample coverage mask, and r61 holds active/helper flag (.h0) + sample ID ([21:16]).
         SsaId fc = emit_builtin_input(blk, spirv::BuiltIn::FragCoord, ValType::V4F32, "gl_FragCoord");
-        SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = 2; ex.args = { fc };
-        SsaId fz = sb.emit(blk, std::move(ex));
-        sb.set_reg(blk, 59, sb.emit_bitcast(blk, ValType::U32, fz));
+        SsaNode ex_x{}; ex_x.op = SsaOp::VecExtract; ex_x.type = ValType::F32; ex_x.imm_u32 = 0; ex_x.args = { fc };
+        SsaNode ex_y{}; ex_y.op = SsaOp::VecExtract; ex_y.type = ValType::F32; ex_y.imm_u32 = 1; ex_y.args = { fc };
+        SsaId fx = emit_op(blk, SsaOp::ConvertFToU, ValType::U32, { emit_op(blk, SsaOp::Floor, ValType::F32, { sb.emit(blk, std::move(ex_x)) }) });
+        SsaId fy = emit_op(blk, SsaOp::ConvertFToU, ValType::U32, { emit_op(blk, SsaOp::Floor, ValType::F32, { sb.emit(blk, std::move(ex_y)) }) });
+        SsaId packed_xy = emit_op(blk, SsaOp::Bfi, ValType::U32, { fx, fy, sb.emit_const_u32(blk, 16u), sb.emit_const_u32(blk, 16u) });
+        sb.set_reg(blk, 59, packed_xy);
         sb.set_reg(blk, 60, sb.emit_const_u32(blk, 1u));
+        SsaId helper = emit_builtin_input(blk, spirv::BuiltIn::HelperInvocation, ValType::Bool, "HelperInvocation");
+        SsaId active = emit_op(blk, SsaOp::Select, ValType::U32, { helper, sb.emit_const_u32(blk, 0u), sb.emit_const_u32(blk, 1u) });
+        SsaId sid = emit_builtin_input(blk, spirv::BuiltIn::SampleId, ValType::U32, "gl_SampleID");
+        SsaId r61_val = emit_op(blk, SsaOp::Bfi, ValType::U32, { active, sid, sb.emit_const_u32(blk, 16u), sb.emit_const_u32(blk, 16u) });
+        sb.set_reg(blk, 61, r61_val);
     }
 }
 
