@@ -553,6 +553,28 @@ FpOptResult run_ssa_fp_canonicalize(ValhallSsaModule& mod, const FpOptOptions& o
 
                 // FMul rules (M11, I11, I12, I13, F7, R1, R7, R8, T8)
                 if (n.op == SsaOp::FMul && is_f32_scalar(n) && n.args.size() == 2) {
+                    auto is_valhall_persp_var = [&](SsaId id) -> bool {
+                        if (id >= mod.nodes.size()) return false;
+                        const auto& vn = mod.get(id);
+                        if (vn.op != SsaOp::VecExtract || vn.args.empty()) return false;
+                        const auto& base = mod.get(vn.args[0]);
+                        return base.op == SsaOp::LoadFragVarying && !base.aux_bool && base.orig_inst_idx >= 0;
+                    };
+                    auto is_valhall_frag_w = [&](SsaId id) -> bool {
+                        if (id >= mod.nodes.size()) return false;
+                        const auto& wn = mod.get(id);
+                        if (wn.op != SsaOp::VecExtract || wn.imm_u32 != 3u || wn.args.empty()) return false;
+                        const auto& base = mod.get(wn.args[0]);
+                        return base.op == SsaOp::LoadBuiltinInput && base.aux_str == "gl_FragCoord" && base.orig_inst_idx >= 0;
+                    };
+                    if (is_valhall_persp_var(n.args[0]) && is_valhall_frag_w(n.args[1])) {
+                        replace_with(nid, n.args[0], "V1_split_persp_var_w");
+                        continue;
+                    }
+                    if (is_valhall_persp_var(n.args[1]) && is_valhall_frag_w(n.args[0])) {
+                        replace_with(nid, n.args[1], "V1_split_persp_var_w");
+                        continue;
+                    }
                     uint32_t rb = 0;
                     bool rc = try_get_const_f32_bits(mod, n.args[1], &rb);
                     if (rc && is_pos_one(rb)) {
