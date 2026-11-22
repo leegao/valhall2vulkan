@@ -667,10 +667,11 @@ bool has_clamp_0_inf(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& 
 SsaId emit_pack_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId lo_u32, SsaId hi_u32) {
     SsaNode _n55{};
     _n55.op = tables::SsaOp::Pack64;
-    _n55.type = ValType::U32;
+    _n55.type = ValType::U64;
     _n55.args = { lo_u32, hi_u32 };
     _n55.effects.cap_bits |= EffectSet::kCapInt64;
-    return ctx.sb.emit(blk, std::move(_n55));
+    SsaId res = ctx.sb.emit(blk, std::move(_n55));
+    return res;
 }
 
 SsaId split64_hi(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId val_u64) {

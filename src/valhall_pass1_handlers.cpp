@@ -349,7 +349,9 @@ SsaId bitcast(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const 
 
 SsaId extract(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, ValType vt, SsaId vec, uint32_t idx) {
     SsaNode ex{};
-    ex.op = SsaOp::VecExtract;
+    ValType src_ty = (vec < ctx.res.ssa.nodes.size()) ? ctx.res.ssa.get(vec).type : ValType::Void;
+    ex.op = (src_ty == ValType::TupleU32x2 || src_ty == ValType::TupleValToken)
+            ? SsaOp::TupleExtract : SsaOp::VecExtract;
     ex.type = vt;
     ex.imm_u32 = idx;
     ex.args = { vec };

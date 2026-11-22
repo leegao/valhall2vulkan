@@ -294,4 +294,28 @@ void SsaBuilder::seal_all_phis() {
     mod_.recompute_use_counts();
 }
 
+
+bool verify_ssa_types(const ValhallSsaModule& mod, std::string* out_err) {
+    auto fail = [&](const std::string& msg) {
+        if (out_err) *out_err = msg;
+        return false;
+    };
+    for (const auto& blk : mod.blocks) {
+        for (SsaId nid : blk.nodes) {
+            if (nid >= mod.nodes.size()) continue;
+            const auto& n = mod.nodes[nid];
+            if (n.op == tables::SsaOp::Pack64 && n.type != ValType::U64) {
+                return fail("Node %" + std::to_string(nid) + " Pack64 must have type U64");
+            }
+            if (n.op == tables::SsaOp::VecExtract && !n.args.empty() && n.args[0] < mod.nodes.size()) {
+                ValType at = mod.nodes[n.args[0]].type;
+                if (at == ValType::TupleU32x2 || at == ValType::TupleValToken) {
+                    return fail("Node %" + std::to_string(nid) + " VecExtract applied to Tuple type");
+                }
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace valhall::compiler

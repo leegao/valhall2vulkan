@@ -191,4 +191,9 @@ private:
     uint32_t cur_orig_pc_ = 0;
 };
 
+
+// Verify structural type invariants across all SSA nodes (e.g., Pack64 -> U64,
+// VecExtract never applied to TupleU32x2 / TupleValToken).
+bool verify_ssa_types(const ValhallSsaModule& mod, std::string* out_err = nullptr);
+
 } // namespace valhall::compiler

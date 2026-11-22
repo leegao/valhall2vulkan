@@ -810,7 +810,8 @@
         "SsaId %hi_u32"
       ],
       "inline_ops": [
-        "return Pack64(%lo_u32, %hi_u32);"
+        "%res : u64 = Pack64(%lo_u32, %hi_u32);",
+        "return %res;"
       ],
       "effects": [
         "cap:Int64"
