@@ -927,7 +927,7 @@ class DagSsaZ3Evaluator:
             a, b = args[0], args[1]
             comb = (list(a) if isinstance(a, tuple) else [a]) + (list(b) if isinstance(b, tuple) else [b])
             return (comb[imm_u32], comb[imm_u32_2])
-        if op == "Pack64":
+        if op in ("Pack64", "ImageTexelAddr"):
             lo, hi = _as_bv32(args[0]), _as_bv32(args[1])
             if isinstance(lo, z3.BitVecNumRef) and isinstance(hi, z3.BitVecNumRef):
                 return bv64((hi.as_long() << 32) | lo.as_long())

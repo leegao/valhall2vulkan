@@ -5971,19 +5971,25 @@
       "op_class": "mem_lea",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "u32",
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%off : u32 = #u32(0);",
-        "if (@has_field(attribute_index)) { %off = @field_u32_mul16(attribute_index); }",
-        "else { if (@has_field(buffer_index)) { %off = @field_u32_mul16(buffer_index); }",
-        "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
-        "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
-        "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
-      ]
+        "%xy : u32 = %0;",
+        "%z_layer : u32 = #u32(0);",
+        "if ($has_src1) { %z_layer = %1; }",
+        "%taddr : u64 = ImageTexelAddr(%xy, %z_layer);",
+        "%lo : u32 = @split64_lo(%taddr);",
+        "%hi : u32 = @split64_hi(%taddr);",
+        "@sr_set(0, %lo);",
+        "@sr_set(1, %hi);",
+        "@sr_set(2, #u32(0));"
+      ],
+      "comment": "Compute symbolic 64-bit ImageTexelAddr from texel coordinates (src0, src1) instead of hardcoded 0xEEEEEEEE stub."
     },
     {
       "mnemonic": "LEA_TEX_IMM",
@@ -5993,19 +5999,25 @@
       "op_class": "mem_lea",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "u32",
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%off : u32 = #u32(0);",
-        "if (@has_field(attribute_index)) { %off = @field_u32_mul16(attribute_index); }",
-        "else { if (@has_field(buffer_index)) { %off = @field_u32_mul16(buffer_index); }",
-        "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
-        "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
-        "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
-      ]
+        "%xy : u32 = %0;",
+        "%z_layer : u32 = #u32(0);",
+        "if ($has_src1) { %z_layer = %1; }",
+        "%taddr : u64 = ImageTexelAddr(%xy, %z_layer);",
+        "%lo : u32 = @split64_lo(%taddr);",
+        "%hi : u32 = @split64_hi(%taddr);",
+        "@sr_set(0, %lo);",
+        "@sr_set(1, %hi);",
+        "@sr_set(2, #u32(0));"
+      ],
+      "comment": "Compute symbolic 64-bit ImageTexelAddr from texel coordinates (src0, src1) instead of hardcoded 0xEEEEEEEE stub."
     },
     {
       "mnemonic": "ATOM",

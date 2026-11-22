@@ -400,7 +400,8 @@ struct EmitContext {
                 return spv_ids[id];
             }
 
-            case SsaOp::Pack64: {
+            case SsaOp::Pack64:
+            case SsaOp::ImageTexelAddr: {
                 uint32_t v2u = b.type_vector(b.type_u32(), 2);
                 uint32_t vec = b.op_CompositeConstruct(v2u, { get_spv(n.args[0]), get_spv(n.args[1]) });
                 spv_ids[id] = b.op_Bitcast(b.type_u64(), vec);

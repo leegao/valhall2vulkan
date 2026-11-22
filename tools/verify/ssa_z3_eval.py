@@ -308,7 +308,7 @@ def eval_ssa_module_z3(
             a, b = args[0], args[1]
             combined = list(a) + list(b)
             values[node.id] = (combined[node.imm_u32], combined[node.imm_u32_2])
-        elif op == "Pack64":
+        elif op in ("Pack64", "ImageTexelAddr"):
             lo, hi = _as_bv32(args[0]), _as_bv32(args[1])
             values[node.id] = z3.Concat(hi, lo)
         elif op == "Split64":
