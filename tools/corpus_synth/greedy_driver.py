@@ -14,7 +14,7 @@ import dataclasses
 import os
 import random
 import time
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from tools.corpus_synth import spv_builder as spv
 from tools.corpus_synth.op_catalog import OP_CATALOG, OpSpec
@@ -32,6 +32,7 @@ class SynthesizedShaderRecord:
     all_features: Set[str]
     new_features: Set[str]
     equiv_status: Optional[str] = None
+    divergence_report: Optional[Any] = None
 
 
 @dataclasses.dataclass
@@ -259,6 +260,7 @@ def synthesize_corpus(
                 fh.write(best_bytes)
 
         eq_status: Optional[str] = None
+        div_rep: Optional[Any] = None
         if verify_equiv and best_oracle.bundle is not None:
             from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
             from tools.symbolic_ssa.passes import canonicalize_ssa_module
@@ -269,6 +271,7 @@ def synthesize_corpus(
                 best_oracle.bundle, d_ssa, v_ssa, seed_side="direct", k_init=16, time_budget_ms=500
             )
             eq_status = ef.status
+            div_rep = ef.first_divergence
 
         records.append(
             SynthesizedShaderRecord(
@@ -279,6 +282,7 @@ def synthesize_corpus(
                 all_features=best_oracle.features,
                 new_features=new_feats,
                 equiv_status=eq_status,
+                divergence_report=div_rep,
             )
         )
 

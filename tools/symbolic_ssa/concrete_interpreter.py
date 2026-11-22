@@ -2,10 +2,10 @@
 """
 Bit-Exact Concrete SSA Interpreter (`ConcreteSsaInterpreter`).
 
-Subclasses `SsaInterpreter` with `ConcreteDomain()` to execute ValhallSsaModule
-graphs concretely against a `ConcreteShaderEnv`, achieving full opcode parity
-with `SymbolicSsaInterpreter` (including Atomics, IDot4*, ImageTexelAddr, and
-`sym:`/`img:` loads/stores).
+Subclasses `SsaInterpreter` with `ConcreteDomain()`, implementing only the
+concrete `_ConcreteState` storage backend and single-path CFG stepper. All
+opcode, memory, kill, atomic, and output semantics are inherited from
+`SsaInterpreter` and `SsaDomain`.
 """
 
 from __future__ import annotations
@@ -14,13 +14,7 @@ import dataclasses
 from typing import Any, Dict, List, Optional, Tuple
 
 from tools.symbolic_ssa.domains import ConcreteDomain
-from tools.symbolic_ssa.env import (
-    MASK32,
-    MASK64,
-    ConcreteShaderEnv,
-    _det_hash_u32,
-    _s32,
-)
+from tools.symbolic_ssa.env import ConcreteShaderEnv
 from tools.symbolic_ssa.interpreter import SsaInterpreter
 
 
@@ -55,158 +49,93 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         self.domain: ConcreteDomain = domain if domain is not None else ConcreteDomain()
         self._env: Optional[ConcreteShaderEnv] = None
 
-    def image_query_size(self, lod: Any, imm_u32: int, aux_str: str) -> int:
-        assert self._env is not None
-        qkey = (aux_str or "img").replace(":", "_")
-        return self._env.eval_hw_uf(f"hw_imgq_{qkey}_c{imm_u32}", self.domain.as_u32(lod), fallback_tag=f"imgq_{qkey}_{imm_u32}")
+    # Minimal concrete _ConcreteState backend hooks
+    def _active_mask(self, st: _ConcreteState, reach: Any) -> bool:
+        return bool(reach) and not (st.terminated or st.demoted)
 
-    def tex_sample(self, op: str, args: List[Any], imm_u32: int, aux_str: str) -> Tuple[Tuple[int, ...], Any]:
+    def _resolve_buf_addr(self, addr: int, hint_key: str) -> Tuple[Optional[str], Optional[int], int]:
         assert self._env is not None
-        uv = args[0] if args else (0, 0)
-        u0 = self.domain.as_u32(uv[0]) if isinstance(uv, tuple) else self.domain.as_u32(uv)
-        u1 = self.domain.as_u32(uv[1]) if isinstance(uv, tuple) and len(uv) > 1 else 0
-        tkey = aux_str or f"tex_{imm_u32}"
-        lanes = tuple(self._env.eval_hw_uf(f"hw_tex_{tkey}_c{c}", u0, u1, fallback_tag=f"tex_{tkey}_c{c}") for c in range(4))
-        return (lanes, args[-1] if args else 0)
+        bkey, off = self._env.resolve_addr(addr, hint_key=hint_key)
+        return (bkey, off, off)
 
-    def psb_load(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState) -> Tuple[int, Any]:
+    def _read_sym_slot(self, st: _ConcreteState, sym_tag: str, off: int) -> Optional[int]:
         assert self._env is not None
-        addr = self.domain.as_u64(args[0])
-        aux_str = node.get("aux_str", "")
-        if aux_str.startswith("sym:"):
-            bkey_hint = aux_str[4:].split("[", 1)[0]
-            _, off = self._env.resolve_addr(addr, hint_key=bkey_hint)
-            if (aux_str, off) in st.sym_buf_writes:
-                return (st.sym_buf_writes[(aux_str, off)], args[1] if len(args) > 1 else 0)
-            if f"sym_slot:{aux_str}:{off}" in self._env.overrides or f"sym_slot_default:{aux_str}" in self._env.overrides:
-                return (self._env.read_sym_buf_slot(aux_str, off), args[1] if len(args) > 1 else 0)
-            hint = bkey_hint
-        else:
-            hint = aux_str
-        bkey, off = self._env.resolve_addr(addr, hint_key=hint)
-        if bkey == "wls_shared" and self._env.unique_workgroup_key is not None:
-            bkey = self._env.unique_workgroup_key
+        if (sym_tag, off) in st.sym_buf_writes:
+            return st.sym_buf_writes[(sym_tag, off)]
+        if f"sym_slot:{sym_tag}:{off}" in self._env.overrides or f"sym_slot_default:{sym_tag}" in self._env.overrides:
+            return self._env.read_sym_buf_slot(sym_tag, off)
+        return None
+
+    def _write_sym_slot(self, st: _ConcreteState, mask: bool, sym_tag: str, off: int, val: int, nid: int) -> bool:
+        if mask:
+            st.sym_buf_writes[(sym_tag, off)] = val
+        # Also fall through to underlying buffer write so concrete buf_writes stays synchronized.
+        return False
+
+    def _read_buf(self, st: _ConcreteState, bkey: Optional[str], const_off: Optional[int], off: int, addr: int) -> int:
+        assert self._env is not None
         if bkey is not None:
-            val = st.buf_writes.get((bkey, off), self._env.read_init_buf(bkey, off))
-        else:
-            val = st.fallback_writes.get(addr, self._env.read_fallback_mem(addr))
-        return (val, args[1] if len(args) > 1 else 0)
+            return st.buf_writes.get((bkey, off), self._env.read_init_buf(bkey, off))
+        return st.fallback_writes.get(addr, self._env.read_fallback_mem(addr))
 
-    def psb_store(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Any:
-        assert self._env is not None
-        if not (st.terminated or st.demoted):
-            addr = self.domain.as_u64(args[0])
-            val = self.domain.as_u32(args[1])
-            aux_str = node.get("aux_str", "")
-            if aux_str.startswith("img:"):
-                ikey = aux_str
-                ch_idx = 0
-                xy_addr = addr
-                if (addr & 0xF) in (4, 8, 12):
-                    ch_idx = (addr & 0xF) // 4
-                    xy_addr = addr - (addr & 0xF)
-                cur = st.img_writes.get((ikey, xy_addr))
-                if cur is None:
-                    cur = list(self._env.read_init_img(ikey, xy_addr))
-                cur[ch_idx] = val
-                st.img_writes[(ikey, xy_addr)] = cur
-                return args[2] if len(args) > 2 else 0
-            if aux_str.startswith("sym:"):
-                bkey_hint = aux_str[4:].split("[", 1)[0]
-                _, off = self._env.resolve_addr(addr, hint_key=bkey_hint)
-                st.sym_buf_writes[(aux_str, off)] = val
-                hint = bkey_hint
-            else:
-                hint = aux_str
-            bkey, off = self._env.resolve_addr(addr, hint_key=hint)
-            if bkey == "wls_shared" and self._env.unique_workgroup_key is not None:
-                bkey = self._env.unique_workgroup_key
-            if bkey is not None:
-                st.buf_writes[(bkey, off)] = val
-            else:
-                st.fallback_writes[addr] = val
-        return args[2] if len(args) > 2 else 0
-
-    def kill(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> int:
-        aux_bool = bool(node.get("aux_bool", False))
-        aux_bool2 = bool(node.get("aux_bool2", False))
-        kcond = self.domain.as_bool(args[0]) if (aux_bool and len(args) >= 2) else True
-        if kcond:
-            if aux_bool2: st.demoted = True
-            else: st.terminated = True
-        return 0
-
-    def store_frag_color(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Any:
-        if not (st.terminated or st.demoted):
-            col = args[0]
-            imm32 = int(node.get("imm_u32", 0))
-            st.frag_colors[imm32] = tuple(self.domain.as_u32(col[c]) if isinstance(col, tuple) and c < len(col) else 0 for c in range(4))
-        return args[-1] if args else 0
-
-    def store_builtin_output(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Any:
-        if not (st.terminated or st.demoted):
-            st.builtin_outputs[int(node.get("imm_u32", 0))] = args[0]
-        return args[-1] if args else 0
-
-    def store_vert_varying(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Any:
-        assert self._env is not None
-        if not (st.terminated or st.demoted):
-            imm32 = int(node.get("imm_u32", 0))
-            loc = self._env.sout_addr_to_loc.get(imm32, imm32) if self.is_valhall else imm32
-            vec = args[0]
-            st.vert_varyings[loc] = tuple(self.domain.as_u32(vec[c]) if isinstance(vec, tuple) and c < len(vec) else 0 for c in range(4))
-        return args[-1] if args else 0
-
-    def store_texel(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Any:
-        if not (st.terminated or st.demoted):
-            coord = args[0]
-            texel = args[1] if len(args) > 1 else (0, 0, 0, 0)
-            cx = self.domain.as_u32(coord[0]) if isinstance(coord, tuple) and len(coord) > 0 else self.domain.as_u32(coord)
-            cy = self.domain.as_u32(coord[1]) if isinstance(coord, tuple) and len(coord) > 1 else 0
-            xy = ((cy << 32) | cx) & MASK64
-            ikey = node.get("aux_str", "") or f"img_{int(node.get('imm_u32', 0))}"
-            st.img_writes[(ikey, xy)] = [self.domain.as_u32(texel[c]) if isinstance(texel, tuple) and c < len(texel) else 0 for c in range(4)]
-        return args[-1] if args else 0
-
-    def atomic_op(self, node: Dict[str, Any], args: List[Any], st: _ConcreteState, reach: Any) -> Tuple[int, Any]:
-        assert self._env is not None
-        op = node["op"]
-        aux_str = node.get("aux_str", "")
-        addr = self.domain.as_u64(args[0])
-        arg = self.domain.as_u32(args[1]) if len(args) > 1 else 0
-        cmp_val = self.domain.as_u32(args[2]) if (op == "AtomicCmpXchg" and len(args) > 2) else 0
-        op_tag = aux_str.lower() if aux_str else op.lower()
-        bkey, off = self._env.resolve_addr(addr, hint_key="")
-        if bkey == "wls_shared" and self._env.unique_workgroup_key is not None:
-            bkey = self._env.unique_workgroup_key
+    def _write_buf(self, st: _ConcreteState, mask: bool, bkey: Optional[str], const_off: Optional[int], off: int, addr: int, val: int, nid: int) -> None:
+        if not mask:
+            return
         if bkey is not None:
-            old_val = st.buf_writes.get((bkey, off), self._env.read_init_buf(bkey, off))
+            st.buf_writes[(bkey, off)] = val
         else:
-            old_val = st.fallback_writes.get(addr, self._env.read_fallback_mem(addr))
+            st.fallback_writes[addr] = val
 
-        if op == "AtomicExchange": new_val = arg
-        elif op == "AtomicCmpXchg": new_val = arg if old_val == cmp_val else old_val
-        elif op_tag in ("aadd", "add"): new_val = (old_val + arg) & MASK32
-        elif op_tag in ("asub", "sub"): new_val = (old_val - arg) & MASK32
-        elif op_tag in ("aand", "and"): new_val = (old_val & arg) & MASK32
-        elif op_tag in ("aor", "or"): new_val = (old_val | arg) & MASK32
-        elif op_tag in ("axor", "xor"): new_val = (old_val ^ arg) & MASK32
-        elif op_tag in ("asmin", "smin"): new_val = old_val if _s32(old_val) < _s32(arg) else arg
-        elif op_tag in ("aumin", "umin"): new_val = old_val if old_val < arg else arg
-        elif op_tag in ("asmax", "smax"): new_val = old_val if _s32(old_val) > _s32(arg) else arg
-        elif op_tag in ("aumax", "umax"): new_val = old_val if old_val > arg else arg
-        else: new_val = _det_hash_u32(f"atomic_post_{op_tag}", old_val, arg)
+    def _extract_img_channel(self, addr: int) -> Tuple[int, int]:
+        if (addr & 0xF) in (4, 8, 12):
+            return ((addr & 0xF) // 4, addr - (addr & 0xF))
+        return (0, addr)
 
-        if not (st.terminated or st.demoted):
-            if bkey is not None:
-                st.buf_writes[(bkey, off)] = new_val
-                st.atomic_events.setdefault(bkey, []).append((op_tag, off, arg, cmp_val))
+    def _write_img_channel(self, st: _ConcreteState, mask: bool, ikey: str, xy_addr: int, ch_idx: int, val: int, nid: int) -> None:
+        assert self._env is not None
+        if not mask:
+            return
+        cur = st.img_writes.get((ikey, xy_addr))
+        if cur is None:
+            cur = list(self._env.read_init_img(ikey, xy_addr))
+        cur[ch_idx] = val
+        st.img_writes[(ikey, xy_addr)] = cur
+
+    def _write_img_texel(self, st: _ConcreteState, mask: bool, ikey: str, xy: int, vec4: Tuple[int, ...], nid: int) -> None:
+        if mask:
+            st.img_writes[(ikey, xy)] = list(vec4)
+
+    def _record_kill(self, st: _ConcreteState, eff: bool, is_demote: bool, nid: int) -> None:
+        if eff:
+            if is_demote:
+                st.demoted = True
             else:
-                st.fallback_writes[addr] = new_val
-                st.atomic_events.setdefault("fallback_mem", []).append((op_tag, addr, arg, cmp_val))
-        return (old_val, args[-1] if args else 0)
+                st.terminated = True
 
-    def execute_one(self, env: ConcreteShaderEnv) -> Tuple[Dict[int, Any], Dict[str, Any]]:
+    def _write_frag_color(self, st: _ConcreteState, mask: bool, rt: int, vec4: Tuple[int, ...], nid: int) -> None:
+        if mask:
+            st.frag_colors[rt] = vec4
+
+    def _write_builtin_output(self, st: _ConcreteState, mask: bool, bi: int, payload: Any, nid: int) -> None:
+        if mask:
+            st.builtin_outputs[bi] = payload
+
+    def _write_vert_varying(self, st: _ConcreteState, mask: bool, loc: int, vec4: Tuple[int, ...], nid: int) -> None:
+        if mask:
+            st.vert_varyings[loc] = vec4
+
+    def _record_atomic(self, st: _ConcreteState, mask: bool, bkey: Optional[str], off: int, addr: int, op_tag: str, arg: int, cmp_val: int, new_val: int, nid: int) -> None:
+        if not mask:
+            return
+        if bkey is not None:
+            st.buf_writes[(bkey, off)] = new_val
+            st.atomic_events.setdefault(bkey, []).append((op_tag, off, arg, cmp_val))
+        else:
+            st.fallback_writes[addr] = new_val
+            st.atomic_events.setdefault("fallback_mem", []).append((op_tag, addr, arg, cmp_val))
+
+    def evaluate(self, env: ConcreteShaderEnv) -> Tuple[Dict[int, Any], Dict[str, Any]]:
+        """Execute the CFG concretely against `env`, returning `(node_values, flat_outputs)`."""
         self._env = env
         vals: Dict[int, Any] = {0: 0}
         st = _ConcreteState()
@@ -238,9 +167,8 @@ class ConcreteSsaInterpreter(SsaInterpreter):
 
             for nid in blk.get("nodes", []):
                 node = self.nodes_by_id.get(nid)
-                if not node:
-                    continue
-                vals[nid] = self.eval_node(node, vals, st, True)
+                if node is not None:
+                    vals[nid] = self.eval_node(node, vals, st, True)
 
             if st.terminated or blk.get("is_end") or blk.get("is_discard"):
                 break
@@ -285,3 +213,5 @@ class ConcreteSsaInterpreter(SsaInterpreter):
                     continue
                 outs[f"atomic:{akey}"] = tuple(evs)
         return vals, outs
+
+    execute_one = evaluate

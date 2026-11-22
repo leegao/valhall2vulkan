@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from tools.corpus_synth.greedy_driver import synthesize_corpus
@@ -45,6 +46,19 @@ def main() -> int:
             f"  synth[{r.shader_id}] blocks={r.num_blocks} +{len(r.new_features)} new "
             f"(total={len(r.all_features)}){eq_s} {r.spv_path}"
         )
+        rep = r.divergence_report
+        if rep is not None and rep.diverged:
+            print(
+                f"    [MISMATCH] output={rep.output_name} direct={rep.direct_val} valhall={rep.valhall_val} "
+                f"kind={rep.diff_kind} ulp={rep.ulp_diff} "
+                f"overrides={rep.original_override_count}->{rep.shrunk_override_count} "
+                f"cone=({rep.cone_direct_size},{rep.cone_valhall_size})"
+            )
+            if rep.frontier_pcs:
+                pcs_str = ", ".join(f"0x{pc:x}({dis})" if dis else f"0x{pc:x}" for pc, dis in rep.frontier_pcs[:6])
+                print(f"      frontier_pcs: {pcs_str}")
+            if rep.shrunk_overrides:
+                print(f"      shrunk_overrides: {json.dumps(rep.shrunk_overrides, sort_keys=True)[:200]}")
     return 0
 
 

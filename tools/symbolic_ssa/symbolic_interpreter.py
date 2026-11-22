@@ -2,10 +2,10 @@
 """
 Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter` / `DagSsaZ3Evaluator`).
 
-Subclasses `SsaInterpreter` with `SymbolicDomain(fp_mode=...)` to perform
-reverse-postorder symbolic evaluation with bounded loop unrolling, per-iteration
-branch decision tracking, cutpoint substitution, and incremental single-block
-cone evaluation.
+Subclasses `SsaInterpreter` with `SymbolicDomain(fp_mode=...)`, implementing
+only the Z3 `BlockEffectState` storage backend and RPO bounded-unroll CFG
+evaluation. All opcode, memory, kill, atomic, and output semantics are inherited
+from `SsaInterpreter` and `SsaDomain`.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import z3
 
 from tools.symbolic_ssa.domains import SymbolicDomain
 from tools.symbolic_ssa.env import (
-    BV32,
     SharedShaderEnv,
     Z3Val,
     _z3_and,
@@ -26,7 +25,7 @@ from tools.symbolic_ssa.env import (
     _z3_or,
 )
 from tools.symbolic_ssa.interpreter import SsaInterpreter
-from tools.verify.panfrost_z3_model import _hw_uf, bv32
+from tools.verify.panfrost_z3_model import bv32
 
 
 @dataclasses.dataclass
@@ -176,231 +175,117 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         self.has_loops: bool = False
         self.max_unroll_depth: int = 0
 
-    def image_query_size(self, lod: Any, imm_u32: int, aux_str: str) -> z3.BitVecRef:
-        qkey = (aux_str or "img").replace(":", "_")
-        return _hw_uf(f"imgq_{qkey}_c{imm_u32}", BV32, BV32)(self.domain.as_u32(lod))
+    # Minimal Z3 BlockEffectState backend hooks
+    def _active_mask(self, st: BlockEffectState, reach: z3.BoolRef) -> z3.BoolRef:
+        return _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
 
-    def tex_sample(self, op: str, args: List[Any], imm_u32: int, aux_str: str) -> Tuple[Tuple[z3.BitVecRef, ...], Z3Val]:
-        uv = args[0] if args else (bv32(0), bv32(0))
-        u0 = self.domain.as_u32(uv[0]) if isinstance(uv, tuple) else self.domain.as_u32(uv)
-        u1 = self.domain.as_u32(uv[1]) if isinstance(uv, tuple) and len(uv) > 1 else bv32(0)
-        tkey = aux_str or f"tex_{imm_u32}"
-        lanes = tuple(_hw_uf(f"tex_{tkey}_c{c}", BV32, BV32, BV32)(u0, u1) for c in range(4))
-        return (lanes, args[-1] if args else bv32(0))
+    def _resolve_buf_addr(self, addr: z3.BitVecRef, hint_key: str) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
+        return self.env.resolve_addr(addr, hint_key=hint_key)
 
-    def psb_load(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState) -> Tuple[z3.BitVecRef, Z3Val]:
-        addr = self.domain.as_u64(args[0])
-        aux_str = node.get("aux_str", "")
-        eff_hint = aux_str
-        if aux_str.startswith("sym:"):
-            bkey_hint = aux_str[4:].split("[", 1)[0]
-            if self.env.is_shared_sym_bkey(bkey_hint):
-                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
-                if aux_str in st.sym_buf_stores:
-                    w_cond, w_val, w_off = st.sym_buf_stores[aux_str]
-                    val = _z3_if(_z3_and(w_cond, off32 == w_off), w_val, self.env.get_sym_buf_slot(aux_str, off32))
-                else:
-                    val = self.env.get_sym_buf_slot(aux_str, off32)
-                return (val, args[1] if len(args) > 1 else bv32(0))
-            eff_hint = bkey_hint
-        bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=eff_hint)
-        if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
-            bkey = self.env.unique_workgroup_key
-        if bkey is not None:
-            if const_off is not None and (bkey, const_off) in st.const_stores:
-                w_cond, w_val = st.const_stores[(bkey, const_off)]
-                mem_v = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off32)
-                val = _z3_if(w_cond, w_val, mem_v)
-            else:
-                val = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off32)
-        else:
-            val = z3.Select(st.fallback_mem, addr)
-        return (val, args[1] if len(args) > 1 else bv32(0))
+    def _read_sym_slot(self, st: BlockEffectState, sym_tag: str, off: z3.BitVecRef) -> Optional[z3.BitVecRef]:
+        bkey_hint = sym_tag[4:].split("[", 1)[0]
+        if not self.env.is_shared_sym_bkey(bkey_hint):
+            return None
+        if sym_tag in st.sym_buf_stores:
+            w_cond, w_val, w_off = st.sym_buf_stores[sym_tag]
+            return _z3_if(_z3_and(w_cond, off == w_off), w_val, self.env.get_sym_buf_slot(sym_tag, off))
+        return self.env.get_sym_buf_slot(sym_tag, off)
 
-    def psb_store(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
-        addr = self.domain.as_u64(args[0])
-        val = self.domain.as_u32(args[1])
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        nid = int(node["id"])
-        aux_str = node.get("aux_str", "")
-        eff_hint = aux_str
-        if aux_str.startswith("sym:"):
-            bkey_hint = aux_str[4:].split("[", 1)[0]
-            if self.env.is_shared_sym_bkey(bkey_hint):
-                _, _, off32 = self.env.resolve_addr(addr, hint_key=bkey_hint)
-                prev_w, prev_v, prev_o = st.sym_buf_stores.get(
-                    aux_str, (z3.BoolVal(False), self.env.get_sym_buf_slot(aux_str, off32), off32)
-                )
-                st.sym_buf_stores[aux_str] = (
-                    _z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v), _z3_if(store_mask, off32, prev_o)
-                )
-                st.output_pcs.setdefault(aux_str, set()).add(nid)
-                return args[2] if len(args) > 2 else bv32(0)
-            eff_hint = bkey_hint
-        if aux_str.startswith("img:"):
-            ikey = aux_str
-            ch_idx = 0
-            xy_addr = addr
-            if z3.is_app(addr) and addr.decl().kind() == z3.Z3_OP_BADD and len(addr.children()) == 2:
-                c0, c1 = addr.children()
-                if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
-                    ch_idx = c1.as_long() // 4
-                    xy_addr = c0
-            cur_im = list(st.image_mems.get(ikey, self.env.get_img_mem(ikey)))
-            cur_im[ch_idx] = (
-                z3.If(store_mask, z3.Store(cur_im[ch_idx], xy_addr, val), cur_im[ch_idx])
-                if not z3.is_true(store_mask)
-                else z3.Store(cur_im[ch_idx], xy_addr, val)
-            )
-            st.image_mems[ikey] = tuple(cur_im)
-            st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
-            return args[2] if len(args) > 2 else bv32(0)
+    def _write_sym_slot(self, st: BlockEffectState, mask: z3.BoolRef, sym_tag: str, off: z3.BitVecRef, val: z3.BitVecRef, nid: int) -> bool:
+        bkey_hint = sym_tag[4:].split("[", 1)[0]
+        if not self.env.is_shared_sym_bkey(bkey_hint):
+            return False
+        prev_w, prev_v, prev_o = st.sym_buf_stores.get(
+            sym_tag, (z3.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off), off)
+        )
+        st.sym_buf_stores[sym_tag] = (
+            _z3_or(prev_w, mask), _z3_if(mask, val, prev_v), _z3_if(mask, off, prev_o)
+        )
+        st.output_pcs.setdefault(sym_tag, set()).add(nid)
+        return True
 
-        bkey, const_off, off32 = self.env.resolve_addr(addr, hint_key=eff_hint)
-        if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
-            bkey = self.env.unique_workgroup_key
-        if bkey is not None:
-            cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            st.buf_mems[bkey] = (
-                z3.If(store_mask, z3.Store(cur_mem, off32, val), cur_mem)
-                if not z3.is_true(store_mask)
-                else z3.Store(cur_mem, off32, val)
-            )
-            if const_off is not None:
-                prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off32)))
-                st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, store_mask), _z3_if(store_mask, val, prev_v))
-                st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
-            else:
-                st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
-        else:
-            st.fallback_mem = z3.If(store_mask, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
+    def _read_buf(self, st: BlockEffectState, bkey: Optional[str], const_off: Optional[int], off: z3.BitVecRef, addr: z3.BitVecRef) -> z3.BitVecRef:
+        if bkey is None:
+            return z3.Select(st.fallback_mem, addr)
+        mem_v = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off)
+        if const_off is not None and (bkey, const_off) in st.const_stores:
+            w_cond, w_val = st.const_stores[(bkey, const_off)]
+            return _z3_if(w_cond, w_val, mem_v)
+        return mem_v
+
+    def _write_buf(self, st: BlockEffectState, mask: z3.BoolRef, bkey: Optional[str], const_off: Optional[int], off: z3.BitVecRef, addr: z3.BitVecRef, val: z3.BitVecRef, nid: int) -> None:
+        if bkey is None:
+            st.fallback_mem = z3.If(mask, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
-        return args[2] if len(args) > 2 else bv32(0)
+            return
+        cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
+        st.buf_mems[bkey] = z3.Store(cur_mem, off, val) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_mem, off, val), cur_mem)
+        if const_off is not None:
+            prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off)))
+            st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, mask), _z3_if(mask, val, prev_v))
+            st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
+        else:
+            st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
 
-    def kill(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> z3.BitVecRef:
-        aux_bool = bool(node.get("aux_bool", False))
-        cond = self.domain.as_bool(args[0]) if (aux_bool and len(args) >= 2) else z3.BoolVal(True)
-        is_demote = bool(node.get("aux_bool2", False))
-        eff = _z3_and(reach, cond)
+    def _extract_img_channel(self, addr: z3.BitVecRef) -> Tuple[int, z3.BitVecRef]:
+        if z3.is_app(addr) and addr.decl().kind() == z3.Z3_OP_BADD and len(addr.children()) == 2:
+            c0, c1 = addr.children()
+            if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
+                return (c1.as_long() // 4, c0)
+        return (0, addr)
+
+    def _write_img_channel(self, st: BlockEffectState, mask: z3.BoolRef, ikey: str, xy_addr: z3.BitVecRef, ch_idx: int, val: z3.BitVecRef, nid: int) -> None:
+        cur_im = list(st.image_mems.get(ikey, self.env.get_img_mem(ikey)))
+        cur_im[ch_idx] = (
+            z3.Store(cur_im[ch_idx], xy_addr, val)
+            if z3.is_true(mask)
+            else z3.If(mask, z3.Store(cur_im[ch_idx], xy_addr, val), cur_im[ch_idx])
+        )
+        st.image_mems[ikey] = tuple(cur_im)
+        st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
+
+    def _write_img_texel(self, st: BlockEffectState, mask: z3.BoolRef, ikey: str, xy: z3.BitVecRef, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
+        cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
+        st.image_mems[ikey] = tuple(
+            z3.Store(cur_im[c], xy, vec4[c]) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c])
+            for c in range(4)
+        )
+        st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
+
+    def _record_kill(self, st: BlockEffectState, eff: z3.BoolRef, is_demote: bool, nid: int) -> None:
         if is_demote:
             st.demoted = _z3_or(st.demoted, eff)
         else:
             st.terminated = _z3_or(st.terminated, eff)
         st.discarded = _z3_or(st.terminated, st.demoted)
-        st.output_pcs.setdefault("discarded", set()).add(int(node["id"]))
-        return bv32(0)
+        st.output_pcs.setdefault("discarded", set()).add(nid)
 
-    def store_frag_color(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
-        imm_u32 = int(node.get("imm_u32", 0))
-        col = args[0]
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        vec4 = tuple(self.domain.as_u32(col[c]) if isinstance(col, tuple) and c < len(col) else bv32(0) for c in range(4))
-        prev = st.frag_colors.get(imm_u32, (bv32(0),) * 4)
-        st.frag_colors[imm_u32] = tuple(_z3_if(store_mask, n, p) for n, p in zip(vec4, prev))
-        st.output_pcs.setdefault(f"frag_color[{imm_u32}]", set()).add(int(node["id"]))
-        return args[-1] if args else bv32(0)
+    def _write_frag_color(self, st: BlockEffectState, mask: z3.BoolRef, rt: int, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
+        prev = st.frag_colors.get(rt, (bv32(0),) * 4)
+        st.frag_colors[rt] = tuple(_z3_if(mask, n, p) for n, p in zip(vec4, prev))
+        st.output_pcs.setdefault(f"frag_color[{rt}]", set()).add(nid)
 
-    def store_builtin_output(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
-        imm_u32 = int(node.get("imm_u32", 0))
-        payload = args[0]
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        if imm_u32 in st.builtin_outputs:
-            st.builtin_outputs[imm_u32] = _z3_if(store_mask, payload, st.builtin_outputs[imm_u32])
-        else:
-            st.builtin_outputs[imm_u32] = payload
-        st.output_pcs.setdefault(f"builtin_out[{imm_u32}]", set()).add(int(node["id"]))
-        return args[-1] if args else bv32(0)
+    def _write_builtin_output(self, st: BlockEffectState, mask: z3.BoolRef, bi: int, payload: Z3Val, nid: int) -> None:
+        st.builtin_outputs[bi] = _z3_if(mask, payload, st.builtin_outputs[bi]) if bi in st.builtin_outputs else payload
+        st.output_pcs.setdefault(f"builtin_out[{bi}]", set()).add(nid)
 
-    def store_vert_varying(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
-        imm_u32 = int(node.get("imm_u32", 0))
-        loc = self.env.sout_addr_to_loc.get(imm_u32, imm_u32) if self.is_valhall else imm_u32
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        vec = args[0]
-        vec4 = tuple(self.domain.as_u32(vec[c]) if isinstance(vec, tuple) and c < len(vec) else bv32(0) for c in range(4))
+    def _write_vert_varying(self, st: BlockEffectState, mask: z3.BoolRef, loc: int, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
         prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
-        st.vert_varyings[loc] = tuple(_z3_if(store_mask, n, p) for n, p in zip(vec4, prev))
-        st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(int(node["id"]))
-        return args[-1] if args else bv32(0)
+        st.vert_varyings[loc] = tuple(_z3_if(mask, n, p) for n, p in zip(vec4, prev))
+        st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(nid)
 
-    def store_texel(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
-        imm_u32 = int(node.get("imm_u32", 0))
-        aux_str = node.get("aux_str", "")
-        coord = args[0]
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        texel = args[1] if len(args) > 1 else (bv32(0),) * 4
-        cx = self.domain.as_u32(coord[0]) if isinstance(coord, tuple) and len(coord) > 0 else self.domain.as_u32(coord)
-        cy = self.domain.as_u32(coord[1]) if isinstance(coord, tuple) and len(coord) > 1 else bv32(0)
-        xy = z3.Concat(cy, cx)
-        vec4 = tuple(self.domain.as_u32(texel[c]) if isinstance(texel, tuple) and c < len(texel) else bv32(0) for c in range(4))
-        ikey = aux_str or f"img_{imm_u32}"
-        cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
-        st.image_mems[ikey] = tuple(
-            z3.If(store_mask, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c]) if not z3.is_true(store_mask)
-            else z3.Store(cur_im[c], xy, vec4[c])
-            for c in range(4)
-        )
-        st.output_pcs.setdefault(f"img:{ikey}", set()).add(int(node["id"]))
-        return args[-1] if args else bv32(0)
-
-    def atomic_op(self, node: Dict[str, Any], args: List[Any], st: BlockEffectState, reach: z3.BoolRef) -> Tuple[z3.BitVecRef, Z3Val]:
-        op = node["op"]
-        aux_str = node.get("aux_str", "")
-        addr = self.domain.as_u64(args[0])
-        arg = self.domain.as_u32(args[1]) if len(args) > 1 else bv32(0)
-        cmp_val = self.domain.as_u32(args[2]) if (op == "AtomicCmpXchg" and len(args) > 2) else bv32(0)
-        store_mask = _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
-        op_tag = aux_str.lower() if aux_str else op.lower()
-        bkey, _, off32 = self.env.resolve_addr(addr, hint_key="")
-        if bkey == "wls_shared" and self.env.unique_workgroup_key is not None:
-            bkey = self.env.unique_workgroup_key
-        nid = int(node["id"])
+    def _record_atomic(self, st: BlockEffectState, mask: z3.BoolRef, bkey: Optional[str], off: z3.BitVecRef, addr: z3.BitVecRef, op_tag: str, arg: z3.BitVecRef, cmp_val: z3.BitVecRef, new_val: z3.BitVecRef, nid: int) -> None:
         if bkey is not None:
             cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            old_val = z3.Select(cur_mem, off32)
-        else:
-            old_val = z3.Select(st.fallback_mem, addr)
-
-        if op == "AtomicExchange":
-            new_val = arg
-        elif op == "AtomicCmpXchg":
-            new_val = z3.If(old_val == cmp_val, arg, old_val)
-        elif op_tag in ("aadd", "add"):
-            new_val = old_val + arg
-        elif op_tag in ("asub", "sub"):
-            new_val = old_val - arg
-        elif op_tag in ("aand", "and"):
-            new_val = old_val & arg
-        elif op_tag in ("aor", "or"):
-            new_val = old_val | arg
-        elif op_tag in ("axor", "xor"):
-            new_val = old_val ^ arg
-        elif op_tag in ("asmin", "smin"):
-            new_val = z3.If(old_val < arg, old_val, arg)
-        elif op_tag in ("aumin", "umin"):
-            new_val = z3.If(z3.ULT(old_val, arg), old_val, arg)
-        elif op_tag in ("asmax", "smax"):
-            new_val = z3.If(old_val > arg, old_val, arg)
-        elif op_tag in ("aumax", "umax"):
-            new_val = z3.If(z3.UGT(old_val, arg), old_val, arg)
-        else:
-            new_val = _hw_uf(f"atomic_post_{op_tag}", BV32, BV32, BV32)(old_val, arg)
-
-        if bkey is not None:
-            cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            st.buf_mems[bkey] = (
-                z3.If(store_mask, z3.Store(cur_mem, off32, new_val), cur_mem)
-                if not z3.is_true(store_mask)
-                else z3.Store(cur_mem, off32, new_val)
-            )
-            st.atomic_events.setdefault(bkey, []).append((store_mask, op_tag, off32, arg, cmp_val))
+            st.buf_mems[bkey] = z3.Store(cur_mem, off, new_val) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_mem, off, new_val), cur_mem)
+            st.atomic_events.setdefault(bkey, []).append((mask, op_tag, off, arg, cmp_val))
             st.output_pcs.setdefault(f"atomic:{bkey}", set()).add(nid)
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
         else:
-            st.fallback_mem = z3.If(store_mask, z3.Store(st.fallback_mem, addr, new_val), st.fallback_mem)
-            st.atomic_events.setdefault("fallback_mem", []).append((store_mask, op_tag, addr, arg, cmp_val))
+            st.fallback_mem = z3.If(mask, z3.Store(st.fallback_mem, addr, new_val), st.fallback_mem)
+            st.atomic_events.setdefault("fallback_mem", []).append((mask, op_tag, addr, arg, cmp_val))
             st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
-        return (old_val, args[-1] if args else bv32(0))
 
     def _eval_node(self, node: Dict[str, Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
         nid = int(node["id"])
@@ -410,33 +295,16 @@ class SymbolicSsaInterpreter(SsaInterpreter):
 
     def collect_pcs_for_nodes(self, root_nids: Set[int], max_visit: int = 2048) -> List[int]:
         pcs: Set[int] = set()
-        seen: Set[int] = set()
-        queue: List[int] = list(root_nids)
-        while queue and len(seen) < max_visit:
-            nid = queue.pop()
-            if nid in seen:
-                continue
-            seen.add(nid)
-            node = self.nodes_by_id.get(nid)
-            if not node:
-                continue
-            if "orig_pc" in node:
-                pcs.add(int(node["orig_pc"]))
-            for aid in node.get("args", []):
-                ia = int(aid)
-                if ia not in seen:
-                    queue.append(ia)
-            for _, vid in node.get("phi", []):
-                iv = int(vid)
-                if iv not in seen:
-                    queue.append(iv)
+        seen = self.run_backward_worklist(
+            self.nodes_by_id,
+            root_nids,
+            on_visit=lambda _nid, n: pcs.add(int(n["orig_pc"])) if "orig_pc" in n and len(pcs) < max_visit else None,
+        )
+        _ = seen
         return sorted(pcs)
 
     def evaluate_single_block_cone(self, target_nid: int, st: BlockEffectState) -> Z3Val:
-        """
-        Incrementally evaluate only the uncached backward cone of `target_nid`
-        on a single-block DAG, stopping at already-cached values or cutpoints.
-        """
+        """Incrementally evaluate only the uncached backward cone of `target_nid` on a 1-block DAG."""
         if target_nid in self.cutpoints:
             return self.cutpoints[target_nid]
         if target_nid in self.values:
@@ -466,8 +334,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
 
         reach = z3.BoolVal(True)
         for nid in order:
-            node = self.nodes_by_id[nid]
-            self.values[nid] = self._eval_node(node, st, reach)
+            self.values[nid] = self._eval_node(self.nodes_by_id[nid], st, reach)
         return self.values.get(target_nid, bv32(0))
 
     def invalidate_cone_from(self, root_nid: int, users_map: Dict[int, List[int]]) -> None:
@@ -507,33 +374,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             return init_state
 
         blk_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in self.blocks}
-        visited: Set[int] = set()
-        postorder: List[int] = []
-        dfs_stack: List[Tuple[int, int]] = [(0, 0)] if 0 in blk_by_id else []
-        while dfs_stack:
-            u, step = dfs_stack.pop()
-            if step == 0:
-                if u in visited:
-                    continue
-                visited.add(u)
-                dfs_stack.append((u, 1))
-                bu = blk_by_id[u]
-                succs: List[int] = []
-                bt_u = int(bu.get("branch_target", -1))
-                ft_u = int(bu.get("fallthrough", -1))
-                if bool(bu.get("is_cond", False)):
-                    if bt_u >= 0: succs.append(bt_u)
-                    if ft_u >= 0 and ft_u != bt_u: succs.append(ft_u)
-                elif bt_u >= 0:
-                    succs.append(bt_u)
-                elif ft_u >= 0:
-                    succs.append(ft_u)
-                for s in reversed(succs):
-                    if s in blk_by_id and s not in visited:
-                        dfs_stack.append((s, 0))
-            else:
-                postorder.append(u)
-        rpo_ids = list(reversed(postorder))
+        rpo_ids = self.compute_rpo(blk_by_id, 0)
         rpo_index: Dict[int, int] = {bid: idx for idx, bid in enumerate(rpo_ids)}
         rpo_blocks = [blk_by_id[bid] for bid in rpo_ids]
 
@@ -594,9 +435,8 @@ class SymbolicSsaInterpreter(SsaInterpreter):
 
                 for nid in blk.get("nodes", []):
                     node = self.nodes_by_id.get(int(nid))
-                    if not node:
-                        continue
-                    self.values[int(nid)] = self._eval_node(node, cur_st, reach)
+                    if node is not None:
+                        self.values[int(nid)] = self._eval_node(node, cur_st, reach)
 
                 blk_out_state[bid] = cur_st
                 cf_reach = _z3_and(reach, _z3_not(cur_st.terminated))

@@ -148,14 +148,8 @@ def pass_gvn_dce(
         stats.alg_simplified += len(simp.repl)
         changed = True
 
-    rpo = compute_rpo(blocks_by_id, 0)
-    idom = compute_idom(blocks_by_id, rpo)
-    dom_children: Dict[int, List[int]] = {b: [] for b in rpo}
-    for b in rpo[1:]:
-        p = idom.get(b)
-        if p is not None and p != b:
-            dom_children[p].append(b)
-
+    from tools.symbolic_ssa.interpreter import SsaInterpreter
+    rpo = SsaInterpreter.compute_rpo(blocks_by_id, 0)
     gvn_repl: Dict[int, int] = {}
 
     def resolve_gvn(x: int) -> int:
@@ -189,57 +183,45 @@ def pass_gvn_dce(
             n.get("aux_str", ""),
         )
 
-    def walk_dom(bid: int, table: Dict[Tuple[Any, ...], int]) -> None:
+    gvn_table: Dict[Tuple[Any, ...], int] = {}
+
+    def _on_dom_enter(bid: int) -> List[Tuple[Any, ...]]:
         local_keys: List[Tuple[Any, ...]] = []
-        blk = blocks_by_id[bid]
-        for nid in blk.get("nodes", []):
+        for nid in blocks_by_id[bid].get("nodes", []):
             n = nodes_by_id.get(nid)
             if not n or not can_gvn(nid, n):
                 continue
             key = gvn_key(n)
-            prev = table.get(key)
+            prev = gvn_table.get(key)
             if prev is not None and prev != nid:
                 gvn_repl[nid] = prev
             else:
-                table[key] = nid
+                gvn_table[key] = nid
                 local_keys.append(key)
-        for ch in dom_children.get(bid, []):
-            walk_dom(ch, table)
-        for k in local_keys:
-            table.pop(k, None)
+        return local_keys
 
-    if rpo:
-        walk_dom(rpo[0], {})
+    def _on_dom_exit(_bid: int, local_keys: List[Tuple[Any, ...]]) -> None:
+        for k in local_keys:
+            gvn_table.pop(k, None)
+
+    SsaInterpreter.walk_dom_tree(blocks_by_id, rpo, _on_dom_enter, _on_dom_exit)
 
     if gvn_repl:
         replace_all_uses(blocks_by_id, nodes_by_id, gvn_repl)
         stats.gvn_merged += len(gvn_repl)
         changed = True
 
-    live: Set[int] = set()
-    worklist: List[int] = []
-
-    def mark(nid: int) -> None:
-        if nid > 0 and nid not in live and nid in nodes_by_id:
-            live.add(nid)
-            worklist.append(nid)
-
+    roots: List[int] = []
     for blk in blocks_by_id.values():
         bc = int(blk.get("branch_cond", 0))
         if bc > 0:
-            mark(bc)
+            roots.append(bc)
         for nid in blk.get("nodes", []):
             n = nodes_by_id.get(nid)
             if n and n["op"] in SIDE_EFFECT_OPS:
-                mark(nid)
+                roots.append(nid)
 
-    while worklist:
-        cur = worklist.pop()
-        n = nodes_by_id[cur]
-        for a in n.get("args", []):
-            mark(int(a))
-        for _, v in n.get("phi", []):
-            mark(int(v))
+    live = SsaInterpreter.run_backward_worklist(nodes_by_id, roots)
 
     dead_nids = [nid for nid in list(nodes_by_id.keys()) if nid not in live]
     if dead_nids:
