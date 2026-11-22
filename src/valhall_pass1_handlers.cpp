@@ -567,6 +567,10 @@ SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& i
     } else if (auto it2 = ins.fields.find("index"); it2 != ins.fields.end()) {
         var_loc = it2->second;
     }
+    if (auto mit = ctx.opts.frag_varying_addr_to_loc.find(var_loc);
+        mit != ctx.opts.frag_varying_addr_to_loc.end()) {
+        var_loc = mit->second;
+    }
     SsaNode ld{};
     ld.op = SsaOp::LoadFragVarying;
     ld.type = ValType::V4F32;

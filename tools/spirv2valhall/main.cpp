@@ -269,6 +269,11 @@ int main(int argc, char** argv) {
             vopts.local_size_y = res.mbs2.kern.wg_y;
             vopts.local_size_z = res.mbs2.kern.wg_z;
         }
+        for (const auto& sym : res.mbs2.cmmn.sinp) {
+            if (sym.rack_index == 11u && sym.location != 0xFFFFu) {
+                vopts.frag_varying_addr_to_loc[sym.address] = sym.location;
+            }
+        }
         std::map<uint32_t, uint32_t> simg_addrs;
         for (const auto& sym : res.mbs2.cmmn.simg) {
             valhall::CombinedSamplerBindingSpec spec;
