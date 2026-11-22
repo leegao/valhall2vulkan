@@ -531,6 +531,10 @@ static const CanonicalTileSpec kCanonicalTiles[] = {
     { "canon_fwidth", SsaOp::Fwidth, 1u, TileEmitKind::OpFwidth, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_img_query_size", SsaOp::ImageQuerySize, 1u, TileEmitKind::OpImageQuerySize, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_img_query_lod", SsaOp::ImageQueryLod, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_tex_sample_lod", SsaOp::TexSampleLod, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_tex_sample_dref", SsaOp::TexSampleDref, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_tex_gather", SsaOp::TexGather, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_tex_fetch", SsaOp::TexFetch, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
 };
 
 static const FusionPatternNode kFusionPatternNodes[] = {
@@ -811,7 +815,7 @@ const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic) {
 }
 
 const CanonicalTileSpec* lookup_canonical_tile(SsaOp op) {
-    for (size_t i = 0; i < 150; ++i) {
+    for (size_t i = 0; i < 154; ++i) {
         if (kCanonicalTiles[i].ssa_op == op) return &kCanonicalTiles[i];
     }
     return nullptr;
@@ -1059,7 +1063,11 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::SubgroupBallot: return "SubgroupBallot";
         case SsaOp::SubgroupShuffle: return "SubgroupShuffle";
         case SsaOp::Tanh: return "Tanh";
+        case SsaOp::TexFetch: return "TexFetch";
+        case SsaOp::TexGather: return "TexGather";
         case SsaOp::TexSample: return "TexSample";
+        case SsaOp::TexSampleDref: return "TexSampleDref";
+        case SsaOp::TexSampleLod: return "TexSampleLod";
         case SsaOp::Trunc: return "Trunc";
         case SsaOp::TupleExtract: return "TupleExtract";
         case SsaOp::UConvert32To64: return "UConvert32To64";

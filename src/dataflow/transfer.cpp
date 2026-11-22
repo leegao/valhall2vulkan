@@ -99,6 +99,10 @@ SsaOpKind classify_ssa_op(tables::SsaOp op) {
         case SsaOp::LoadVertAttr:     return SsaOpKind::LoadVertAttr;
         case SsaOp::LoadFragVarying:  return SsaOpKind::LoadFragVarying;
         case SsaOp::TexSample:
+        case SsaOp::TexSampleLod:
+        case SsaOp::TexSampleDref:
+        case SsaOp::TexGather:
+        case SsaOp::TexFetch:
         case SsaOp::ImageQueryLod:    return SsaOpKind::TexSample;
 
         case SsaOp::StoreFragColor:

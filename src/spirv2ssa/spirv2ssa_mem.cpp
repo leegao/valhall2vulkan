@@ -1024,13 +1024,43 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
 
     const auto op = static_cast<SpvOp>(inst.opcode);
     SsaNode ts{};
-    ts.op = SsaOp::TexSample;
+    if (op == SpvOpImageFetch) {
+        ts.op = SsaOp::TexFetch;
+    } else if (op == SpvOpImageGather || op == SpvOpImageDrefGather) {
+        ts.op = SsaOp::TexGather;
+    } else if (op == SpvOpImageSampleDrefImplicitLod || op == SpvOpImageSampleDrefExplicitLod ||
+               op == SpvOpImageSampleProjDrefImplicitLod || op == SpvOpImageSampleProjDrefExplicitLod) {
+        ts.op = SsaOp::TexSampleDref;
+    } else if (op == SpvOpImageSampleExplicitLod || op == SpvOpImageSampleProjExplicitLod) {
+        ts.op = SsaOp::TexSampleLod;
+    } else {
+        ts.op = SsaOp::TexSample;
+    }
     ts.type = ValType::TupleValToken;
     ts.aux_str = tex_key;
     ts.aux_bool = (op == SpvOpImageSampleImplicitLod || op == SpvOpImageSampleDrefImplicitLod ||
                    op == SpvOpImageSampleProjImplicitLod);
     ts.aux_bool2 = (op == SpvOpImageGather || op == SpvOpImageDrefGather);
-    ts.args = {uv, sb_.current_token(blk_id)};
+    ts.args = {uv};
+    for (size_t ci = 2; ci < coord.lanes.size(); ++ci) {
+        ts.args.push_back(coord.lanes[ci]);
+    }
+    size_t op_start = 5u;
+    if (op == SpvOpImageSampleDrefImplicitLod || op == SpvOpImageSampleDrefExplicitLod ||
+        op == SpvOpImageSampleProjDrefImplicitLod || op == SpvOpImageSampleProjDrefExplicitLod ||
+        op == SpvOpImageGather || op == SpvOpImageDrefGather) {
+        if (inst.words.size() > 5u) {
+            ts.args.push_back(get_value(blk_id, inst.words[5]).scalar());
+        }
+        op_start = 6u;
+    }
+    if (inst.words.size() > op_start + 1u) {
+        for (size_t wi = op_start + 1u; wi < inst.words.size(); ++wi) {
+            LoweredValue extra = get_value(blk_id, inst.words[wi]);
+            for (SsaId el : extra.lanes) ts.args.push_back(el);
+        }
+    }
+    ts.args.push_back(sb_.current_token(blk_id));
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
     SsaId tup = sb_.emit(blk_id, std::move(ts));

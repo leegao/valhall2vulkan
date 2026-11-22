@@ -643,7 +643,23 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     bool is_grad = (ins.mnemonic == Mnemonic::TEX_GRADIENT ||
                     ins.mnemonic == Mnemonic::VAR_TEX_GRADIENT ||
                     ins.mnemonic == Mnemonic::VAR_TEX_BUF_GRADIENT);
-    ts.op = is_grad ? SsaOp::ImageQueryLod : SsaOp::TexSample;
+    bool is_fetch = (ins.mnemonic == Mnemonic::TEX_FETCH ||
+                     ins.mnemonic == Mnemonic::LD_TEX ||
+                     ins.mnemonic == Mnemonic::LD_TEX_IMM);
+    bool is_dref = false;
+    if (auto it = ins.modifier_strs.find("compare_enable"); it != ins.modifier_strs.end() && it->second == "compare") {
+        is_dref = true;
+    }
+    bool is_explicit_lod = false;
+    if (auto it = ins.modifier_strs.find("lod_mode"); it != ins.modifier_strs.end() && it->second == "explicit") {
+        is_explicit_lod = true;
+    }
+    if (is_grad) ts.op = SsaOp::ImageQueryLod;
+    else if (is_fetch) ts.op = SsaOp::TexFetch;
+    else if (is_gather) ts.op = SsaOp::TexGather;
+    else if (is_dref) ts.op = SsaOp::TexSampleDref;
+    else if (is_explicit_lod) ts.op = SsaOp::TexSampleLod;
+    else ts.op = SsaOp::TexSample;
     ts.type = ValType::TupleValToken;
     ts.imm_u32 = tex_idx;
     ts.imm_u32_2 = gcomp;
@@ -661,7 +677,16 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     }
     ts.aux_bool = (ctx.opts.stage == ShaderStage::Fragment && !is_gather);
     ts.aux_bool2 = is_gather;
-    ts.args = { uv, tok };
+    ts.args = { uv };
+    uint32_t sr_cnt = abi::sr_read_count(ctx, blk, ins, nullptr);
+    if (sr_cnt > 2u &&
+        ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
+        uint32_t max_sr = std::min<uint32_t>(sr_cnt, 8u);
+        for (uint32_t sr_i = 2u; sr_i < max_sr; ++sr_i) {
+            ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
+        }
+    }
+    ts.args.push_back(tok);
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
     return ctx.sb.emit(blk, std::move(ts));

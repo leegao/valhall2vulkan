@@ -2540,6 +2540,38 @@
       "cost": 3,
       "emit": "EmitTexSample",
       "effects": []
+    },
+    {
+      "name": "canon_tex_sample_lod",
+      "kind": "canonical",
+      "ssa_op": "TexSampleLod",
+      "cost": 3,
+      "emit": "EmitTexSample",
+      "effects": []
+    },
+    {
+      "name": "canon_tex_sample_dref",
+      "kind": "canonical",
+      "ssa_op": "TexSampleDref",
+      "cost": 3,
+      "emit": "EmitTexSample",
+      "effects": []
+    },
+    {
+      "name": "canon_tex_gather",
+      "kind": "canonical",
+      "ssa_op": "TexGather",
+      "cost": 3,
+      "emit": "EmitTexSample",
+      "effects": []
+    },
+    {
+      "name": "canon_tex_fetch",
+      "kind": "canonical",
+      "ssa_op": "TexFetch",
+      "cost": 3,
+      "emit": "EmitTexSample",
+      "effects": []
     }
   ]
 }

@@ -234,19 +234,23 @@ enum class SsaOp : uint16_t {
     SubgroupBallot = 134,
     SubgroupShuffle = 135,
     Tanh = 136,
-    TexSample = 137,
-    Trunc = 138,
-    TupleExtract = 139,
-    UConvert32To64 = 140,
-    UConvert64To32 = 141,
-    UDiv = 142,
-    UMod = 143,
-    UnpackHalf2x16 = 144,
-    VecConstruct2 = 145,
-    VecConstruct3 = 146,
-    VecConstruct4 = 147,
-    VecExtract = 148,
-    VecShuffle = 149,
+    TexFetch = 137,
+    TexGather = 138,
+    TexSample = 139,
+    TexSampleDref = 140,
+    TexSampleLod = 141,
+    Trunc = 142,
+    TupleExtract = 143,
+    UConvert32To64 = 144,
+    UConvert64To32 = 145,
+    UDiv = 146,
+    UMod = 147,
+    UnpackHalf2x16 = 148,
+    VecConstruct2 = 149,
+    VecConstruct3 = 150,
+    VecConstruct4 = 151,
+    VecExtract = 152,
+    VecShuffle = 153,
 };
 
 enum class LoweringKind : uint8_t {
@@ -465,7 +469,7 @@ struct FusionTileSpec {
 
 constexpr size_t kNumXmlInstructions = 627;
 constexpr size_t kNumLoweringRules = 242;
-constexpr size_t kNumCanonicalTiles = 150;
+constexpr size_t kNumCanonicalTiles = 154;
 constexpr size_t kNumFusionTiles = 52;
 
 const LoweringRuleSpec* lookup_lowering_rule(uint16_t spec_index);

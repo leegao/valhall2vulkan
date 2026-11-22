@@ -667,6 +667,10 @@ struct EmitContext {
             }
 
             case SsaOp::TexSample:
+            case SsaOp::TexSampleLod:
+            case SsaOp::TexSampleDref:
+            case SsaOp::TexGather:
+            case SsaOp::TexFetch:
             case SsaOp::ImageQueryLod: {
                 uint32_t si_t = 0;
                 uint32_t samp_var = get_or_create_sampled_image(n.imm_u32, &si_t);

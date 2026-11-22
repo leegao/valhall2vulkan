@@ -464,7 +464,7 @@ int main() {
                     saw_imul_wgid = true;
                 }
             }
-            if (n.op == SsaOp::TexSample) {
+            if (n.op == SsaOp::TexSample || n.op == SsaOp::TexFetch) {
                 assert(n.imm_u32 == 2u);
                 if (n.aux_str == "tex:0:2") saw_tex_binding = true;
                 const auto& uv = p1.ssa.get(n.args[0]);
