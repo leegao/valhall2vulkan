@@ -253,5 +253,132 @@ class TestLoweringExtractor(unittest.TestCase):
         self.assertIsNotNone(self.ext.match_rule("ST_CHECKED", "", arch=11))
         self.assertIsNone(self.ext.match_rule("ST_CHECKED", "", arch=8))
 
+
+    def test_v29_regenerated_ast_constructs(self) -> None:
+        from tools.verify.clang_ast_evaluator import (
+            CppAssign,
+            CppBinary,
+            CppCall,
+            CppExprStmt,
+            CppFunctionDef,
+            CppIdent,
+            CppIf,
+            CppInitList,
+            CppLiteral,
+            CppMember,
+            CppParam,
+            CppReturn,
+            CppScopedIdent,
+            CppTernary,
+            CppVarDecl,
+            SymbolicSsaModule,
+            SymbolicSsaNode,
+        )
+
+        # Simulate regenerated abi::extract AST accessing ctx.res.ssa.nodes.size(),
+        # ctx.res.ssa.get(vec).type, rule->op_class, and list.push_back / std::string::npos.
+        ssa = SymbolicSsaModule()
+        tup_id = ssa.emit(SymbolicSsaNode(0, "Unpack64", "TupleU32x2", args=[]))
+        ins = InstLoweringContext(
+            mnemonic="TEX_SINGLE",
+            modifiers={"write_mask": "gb"},
+            rule_op_class="TexSample",
+        )
+
+        ctx_res_ssa = CppMember(CppMember(CppIdent("ctx"), "res"), "ssa")
+        nodes_size = CppCall(
+            callee=CppMember(CppMember(ctx_res_ssa, "nodes"), "size"),
+            args=[],
+            qualified_callee="std::vector<valhall::compiler::SsaNode>::size",
+        )
+        get_type = CppMember(
+            CppCall(
+                callee=CppMember(ctx_res_ssa, "get"),
+                args=[CppIdent("vec")],
+                qualified_callee="valhall::compiler::ValhallSsaModule::get",
+            ),
+            "type",
+        )
+        fn = CppFunctionDef(
+            name="_test_v29_extract_ast",
+            namespace="abi",
+            ret_type="SsaId",
+            params=[
+                CppParam("Pass1Context&", "ctx"),
+                CppParam("uint32_t", "blk"),
+                CppParam("const DecodedValhallInst&", "ins"),
+                CppParam("const tables::LoweringRuleSpec*", "rule"),
+                CppParam("ValType", "vt"),
+                CppParam("SsaId", "vec"),
+                CppParam("uint32_t", "idx"),
+            ],
+            body=[
+                CppVarDecl("SsaNode", "ex", is_struct_zero=True),
+                CppVarDecl(
+                    "ValType",
+                    "src_ty",
+                    CppTernary(
+                        cond=CppBinary("<", CppIdent("vec"), nodes_size),
+                        then_expr=get_type,
+                        else_expr=CppScopedIdent(["ValType", "Void"]),
+                    ),
+                ),
+                CppAssign(
+                    CppMember(CppIdent("ex"), "op"),
+                    "=",
+                    CppTernary(
+                        cond=CppBinary("==", CppIdent("src_ty"), CppScopedIdent(["ValType", "TupleU32x2"])),
+                        then_expr=CppScopedIdent(["SsaOp", "TupleExtract"]),
+                        else_expr=CppScopedIdent(["SsaOp", "VecExtract"]),
+                    ),
+                ),
+                CppAssign(CppMember(CppIdent("ex"), "type"), "=", CppIdent("vt")),
+                CppAssign(CppMember(CppIdent("ex"), "imm_u32"), "=", CppIdent("idx")),
+                CppExprStmt(
+                    CppCall(
+                        callee=CppMember(CppMember(CppIdent("ex"), "args"), "push_back"),
+                        args=[CppIdent("vec")],
+                        qualified_callee="std::vector<unsigned int>::push_back",
+                    )
+                ),
+                CppVarDecl("std::string", "sout_name"),
+                CppIf(
+                    cond=CppBinary(
+                        "!=",
+                        CppCall(CppMember(CppIdent("sout_name"), "find"), [CppLiteral("string", "PointSize")]),
+                        CppScopedIdent(["std", "string", "npos"]),
+                    ),
+                    then_body=[CppReturn(CppLiteral("int", 999))],
+                ),
+                CppVarDecl(
+                    "uint32_t",
+                    "clamped",
+                    CppCall(
+                        callee=CppScopedIdent(["std", "min"]),
+                        args=[CppLiteral("int", 12), CppLiteral("int", 8)],
+                        qualified_callee="std::min<unsigned int>",
+                    ),
+                ),
+                CppAssign(CppMember(CppIdent("ex"), "imm_u32_2"), "=", CppIdent("clamped")),
+                CppReturn(
+                    CppCall(
+                        callee=CppMember(CppMember(CppIdent("ctx"), "sb"), "emit"),
+                        args=[CppIdent("blk"), CppIdent("ex")],
+                        qualified_callee="valhall::compiler::SsaBuilder::emit",
+                    )
+                ),
+            ],
+        )
+        self.ext.cpp_registry.abi_funcs[fn.name] = fn
+        try:
+            out_id = self.ext.cpp_eval.call_abi_fn(fn.name, ssa, ins, ["U32", tup_id, 1])
+            node = ssa.nodes[out_id]
+            self.assertEqual(node.op, "TupleExtract")
+            self.assertEqual(node.args, [tup_id])
+            self.assertEqual(node.imm_u32, 1)
+            self.assertEqual(node.imm_u32_2, 8)
+        finally:
+            self.ext.cpp_registry.abi_funcs.pop(fn.name, None)
+
 if __name__ == "__main__":
     unittest.main()

@@ -496,6 +496,7 @@ class SourceOperandDesc:
     word_select: bool = False
     is_64bit: bool = False
     symbolic_name: str = ""
+    fau_index64: int = 0
 
 
 @dataclasses.dataclass
@@ -526,6 +527,11 @@ class InstLoweringContext:
     stage: str = "Compute"
     arch: int = 11
     rule_effects: Tuple[str, ...] = ()
+    rule_op_class: str = ""
+    fau_pka_buf_names: Dict[int, str] = dataclasses.field(default_factory=dict)
+    frag_varying_addr_to_loc: Dict[int, int] = dataclasses.field(default_factory=dict)
+    vert_sout_attr_names: Dict[int, str] = dataclasses.field(default_factory=dict)
+    fau_tex_handle_indices: Dict[int, int] = dataclasses.field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.canonical_mnemonic is None:
@@ -741,6 +747,10 @@ class CppSymbolicEvaluator:
                 env[st.name] = [0] * int(val) if isinstance(val, int) else list(val)
             elif st.init is not None:
                 env[st.name] = self._eval_expr(st.init, env, ssa, ins)
+            elif "basic_string" in st.type_str or "string" in st.type_str:
+                env[st.name] = ""
+            elif "vector" in st.type_str:
+                env[st.name] = []
             else:
                 env[st.name] = 0
         elif isinstance(st, CppMultiVarDecl):
@@ -821,9 +831,9 @@ class CppSymbolicEvaluator:
                 else:
                     cur = getattr(obj, attr, 0)
                     setattr(obj, attr, self._apply_assign_op(cur, op, val))
-            elif isinstance(obj, tuple) and obj[0] == "blk" and target.member == "branch_cond":
+            elif isinstance(obj, tuple) and len(obj) > 1 and obj[0] == "blk" and target.member == "branch_cond":
                 obj[1].branch_cond = val
-            elif isinstance(obj, tuple) and obj[0] == "ctx":
+            elif isinstance(obj, tuple) and len(obj) > 0 and obj[0] == "ctx":
                 pass
         elif isinstance(target, CppIndex):
             obj = self._eval_expr(target.obj, env, ssa, ins)
@@ -864,6 +874,8 @@ class CppSymbolicEvaluator:
                     return ("res", ssa)
             return expr.name
         if isinstance(expr, CppScopedIdent):
+            if expr.parts and expr.parts[-1] == "npos":
+                return -1
             if len(expr.parts) >= 2 and expr.parts[-2] == "VaryingNameM":
                 _vmap = {"point": 0, "bary": 1, "frag_w": 2, "frag_z": 3}
                 if expr.parts[-1] in _vmap:
@@ -902,6 +914,8 @@ class CppSymbolicEvaluator:
             r = self._eval_expr(expr.right, env, ssa, ins)
             if isinstance(l, _DictRef) and expr.op in ("!=", "=="):
                 return (l.found) if expr.op == "!=" else (not l.found)
+            if isinstance(r, _DictRef) and expr.op in ("!=", "=="):
+                return (r.found) if expr.op == "!=" else (not r.found)
             if expr.op == "+":
                 return l + r
             if expr.op == "-":
@@ -993,10 +1007,25 @@ class CppSymbolicEvaluator:
                 return ("mod", obj[1])
             if m == "res":
                 return ("res", obj[1])
-        if isinstance(obj, tuple) and obj[0] == "opts" and m == "stage":
-            return obj[1].stage
-        if isinstance(obj, tuple) and obj[0] == "rule" and m == "effects":
-            return obj[1].rule_effects
+        if isinstance(obj, SymbolicSsaNode):
+            if m == "type":
+                return obj.val_type
+            if m == "effects":
+                return (obj, "effects")
+            return getattr(obj, m)
+        if isinstance(obj, tuple) and obj[0] == "res" and m == "ssa":
+            return ("ssa", obj[1])
+        if isinstance(obj, tuple) and obj[0] == "ssa" and m == "nodes":
+            return obj[1].nodes
+        if isinstance(obj, tuple) and obj[0] == "opts":
+            if m == "stage":
+                return obj[1].stage
+            return getattr(obj[1], m, {})
+        if isinstance(obj, tuple) and obj[0] == "rule":
+            if m == "effects":
+                return obj[1].rule_effects
+            if m == "op_class":
+                return obj[1].rule_op_class
         if isinstance(obj, tuple) and obj[0] == "mod" and m == "blocks":
             return [("blk", obj[1])]
         if isinstance(obj, tuple) and obj[0] == "blk" and m == "branch_cond":
@@ -1013,7 +1042,7 @@ class CppSymbolicEvaluator:
             obj = self._eval_expr(expr.callee.obj, env, ssa, ins)
             m = expr.callee.member
             args = [self._eval_expr(a, env, ssa, ins) for a in expr.args]
-            if isinstance(obj, (list, dict, str)) and m in ("size", "empty", "find", "count", "at", "back"):
+            if isinstance(obj, (list, dict, str)) and m in ("size", "empty", "find", "count", "at", "back", "push_back"):
                 if m == "size":
                     return len(obj)
                 if m == "empty":
@@ -1028,8 +1057,13 @@ class CppSymbolicEvaluator:
                     return obj[args[0]]
                 if m == "back":
                     return obj[-1]
+                if m == "push_back":
+                    obj.append(args[0])
+                    return None
             if isinstance(obj, dict) and m == "end":
                 return ("end", obj)
+            if isinstance(obj, tuple) and obj[0] == "ssa" and m == "get":
+                return obj[1].nodes[int(args[0])]
             qc = expr.qualified_callee
             if not qc and isinstance(obj, tuple) and obj[0] == "sb":
                 qc = self.reg.sb_attr_by_method.get(m, "")
@@ -1054,9 +1088,9 @@ class CppSymbolicEvaluator:
                 return str(args[0]) if args else ""
             if qc == "std::to_string":
                 return str(args[0])
-            if qc == "std::max":
+            if qc == "std::max" or qc.startswith("std::max<"):
                 return max(args[0], args[1])
-            if qc == "std::min":
+            if qc == "std::min" or qc.startswith("std::min<"):
                 return min(args[0], args[1])
             if qc in ("std::strcmp", "strcmp"):
                 return 0 if args[0] == args[1] else 1
@@ -1069,6 +1103,9 @@ class CppSymbolicEvaluator:
                     return self.call_operand_fn(fn_name, ssa, ins, args)
                 if fn_name in self.reg.abi_funcs:
                     return self.call_abi_fn(fn_name, ssa, ins, args)
+                if fn_name in self.reg.global_handlers:
+                    fn = self.reg.global_handlers[fn_name]
+                    return self._exec_fn(fn, self._bind_pass1_params(fn, ssa, ins, args), ssa, ins)
 
         # Fallback for DSL-constructed ASTs (from operands_spec_loader.py)
         if isinstance(expr.callee, CppScopedIdent):
@@ -1116,5 +1153,8 @@ class CppSymbolicEvaluator:
                 return self.call_operand_fn(fn_name, ssa, ins, args)
             if fn_name in self.reg.abi_funcs:
                 return self.call_abi_fn(fn_name, ssa, ins, args)
+            if fn_name in self.reg.global_handlers:
+                fn = self.reg.global_handlers[fn_name]
+                return self._exec_fn(fn, self._bind_pass1_params(fn, ssa, ins, args), ssa, ins)
 
         raise ValueError(f"Unsupported C++ call: {expr.callee} (qualified={qc!r})")
