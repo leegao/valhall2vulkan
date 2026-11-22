@@ -53,6 +53,7 @@ class TestAllPathsMiter(unittest.TestCase):
             ("ICMP", "u32", {"cmpf": "lt", "result_type": "m1"}),
             ("MOV", "i32", {}),
         ]
+        sound_cases.append(("MUX", "i32", {"muxf": "int_zero"}))
         for mnem, var, mods in sound_cases:
             mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)
             self.assertEqual(
@@ -70,7 +71,6 @@ class TestAllPathsMiter(unittest.TestCase):
             ("IADD", "s32", {"saturate": True}),
             ("MKVEC", "v2i8", {}),
             ("CUBEFACE2", "", {}),
-            ("MUX", "u32", {"muxf": "int_zero"}),
             ("IDPADD", "v4s8", {}),
             ("FMIN", "f32", {"nan_mode": "nan_suppress"}),  # Psi_pan deterministic -0.0 < +0.0 vs ssa_z3_eval fpMin
         ]
