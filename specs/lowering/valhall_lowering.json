@@ -5130,9 +5130,9 @@
       ],
       "inline_ops": [
         "%cond : bool = ICmpNe(%0, #u32(0));",
-        "%ballot : v4u32 = SubgroupBallot(#u32(3), %cond)[barrier][side_effect];",
-        "%out : u32 = @extract(%ballot, 0);"
-      ]
+        "%out : u32 = SubgroupBallot(%cond)[barrier][side_effect];"
+      ],
+      "comment": "Canonical 1-arg SubgroupBallot(pred) -> u32 matching spirv2ssa."
     },
     {
       "mnemonic": "CLPER",
@@ -5176,7 +5176,7 @@
         "  %lo : u32 = BitAnd(%sum, %mask);",
         "  %lane = BitOr(%hi, %lo);",
         "}",
-        "%out : u32 = SubgroupShuffle(#u32(3), %0, %lane)[barrier][side_effect];"
+        "%out : u32 = SubgroupShuffle(%0, %lane)[barrier][side_effect];"
       ]
     },
     {
@@ -5204,7 +5204,7 @@
         "else if (@mod_eq(subgroup, subgroup4)) { %mask = #u32(3); }",
         "else if (@mod_eq(subgroup, subgroup8)) { %mask = #u32(7); }",
         "%lane : u32 = BitAnd(%1, %mask);",
-        "%shuf : u32 = SubgroupShuffle(#u32(3), %0, %lane)[barrier][side_effect];",
+        "%shuf : u32 = SubgroupShuffle(%0, %lane)[barrier][side_effect];",
         "%out : u32 = %shuf;",
         "if ($has_src2) { %out = BitOr(%shuf, %2); }"
       ]

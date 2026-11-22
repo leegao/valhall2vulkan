@@ -579,12 +579,21 @@ struct EmitContext {
             case SsaOp::SConvert32To64: spv_ids[id] = b.op_SConvert(b.type_s64(), get_spv(n.args[0])); return spv_ids[id];
             case SsaOp::UConvert64To32: spv_ids[id] = b.op_UConvert(b.type_u32(), get_spv(n.args[0])); return spv_ids[id];
 
-            case SsaOp::SubgroupBallot:
-                spv_ids[id] = b.op_GroupNonUniformBallot(rt, get_spv(n.args[0]), get_spv(n.args[1]));
+            case SsaOp::SubgroupBallot: {
+                uint32_t scope = (n.args.size() >= 2) ? get_spv(n.args[0]) : b.const_u32(3u);
+                uint32_t pred = (n.args.size() >= 2) ? get_spv(n.args[1]) : get_spv(n.args[0]);
+                uint32_t v4u = b.type_vector(b.type_u32(), 4);
+                uint32_t bv = b.op_GroupNonUniformBallot(v4u, scope, pred);
+                spv_ids[id] = (n.type == ValType::U32) ? b.op_CompositeExtract(b.type_u32(), bv, {0u}) : bv;
                 return spv_ids[id];
-            case SsaOp::SubgroupShuffle:
-                spv_ids[id] = b.op_GroupNonUniformShuffle(rt, get_spv(n.args[0]), get_spv(n.args[1]), get_spv(n.args[2]));
+            }
+            case SsaOp::SubgroupShuffle: {
+                uint32_t scope = (n.args.size() >= 3) ? get_spv(n.args[0]) : b.const_u32(3u);
+                uint32_t val = (n.args.size() >= 3) ? get_spv(n.args[1]) : get_spv(n.args[0]);
+                uint32_t lane = (n.args.size() >= 3) ? get_spv(n.args[2]) : get_spv(n.args[1]);
+                spv_ids[id] = b.op_GroupNonUniformShuffle(rt, scope, val, lane);
                 return spv_ids[id];
+            }
 
             case SsaOp::PsbLoad: {
                 uint32_t addr = get_spv(n.args[0]);

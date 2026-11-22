@@ -304,6 +304,12 @@ bool verify_ssa_types(const ValhallSsaModule& mod, std::string* out_err) {
         for (SsaId nid : blk.nodes) {
             if (nid >= mod.nodes.size()) continue;
             const auto& n = mod.nodes[nid];
+            if (n.op == tables::SsaOp::SubgroupBallot && (n.args.size() != 1u || n.type != ValType::U32)) {
+                return fail("Node %" + std::to_string(nid) + " SubgroupBallot must be 1-arg returning U32");
+            }
+            if (n.op == tables::SsaOp::SubgroupShuffle && n.args.size() != 2u) {
+                return fail("Node %" + std::to_string(nid) + " SubgroupShuffle must take 2 args (val, lane)");
+            }
             if (n.op == tables::SsaOp::Pack64 && n.type != ValType::U64) {
                 return fail("Node %" + std::to_string(nid) + " Pack64 must have type U64");
             }
