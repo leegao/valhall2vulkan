@@ -1173,8 +1173,7 @@
         "} else if (@src_is_fau_wls(%src_idx)) {",
         "  return @load_sideband_u64(7);",
         "} else {",
-        "  %base : uint32_t = @src_reg_base(%src_idx);",
-        "  return @emit_pack_u64(@load_fau(%base), @load_fau(@add_u32(%base, 1)));",
+        "  return @load_sideband_u64(8);",
         "}"
       ]
     },

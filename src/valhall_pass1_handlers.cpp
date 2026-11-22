@@ -33,6 +33,9 @@ SsaId Pass1Context::emit_load_sideband_u64(uint32_t blk, uint32_t member_idx) {
     n.op = SsaOp::LoadSidebandU64;
     n.type = ValType::U64;
     n.imm_u32 = member_idx;
+    if (member_idx == 8u) {
+        n.aux_str = "gl_SamplePosition";
+    }
     n.effects.flags |= EffectSet::kFlagUsesSideband;
     n.effects.cap_bits |= EffectSet::kCapInt64;
     res.uses_sideband = true;
