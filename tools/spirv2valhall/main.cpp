@@ -279,6 +279,37 @@ int main(int argc, char** argv) {
             vopts.samplers.push_back(spec);
             simg_addrs[sym.address] = spec.binding;
         }
+        {
+            std::map<std::pair<uint32_t, uint32_t>, std::string> pka_buf_by_rack_addr;
+            auto add_pka = [&](const std::vector<valhall::spirv2valhall::Mbs2Symbol>& syms, bool is_ssbo) {
+                for (const auto& sym : syms) {
+                    std::string bname = sym.name;
+                    if (!is_ssbo && sym.rack_index == 0u && sym.binding == 0xFFFFu) {
+                        bname = "push_const";
+                    } else if (sym.binding != 0xFFFFu) {
+                        uint32_t d_set = (sym.rack_index >= 4u) ? (sym.rack_index - 4u) : 0u;
+                        bname = std::string(is_ssbo ? "ssbo:" : "ubo:") +
+                                std::to_string(d_set) + ":" + std::to_string(sym.binding);
+                    }
+                    pka_buf_by_rack_addr[{sym.rack_index, sym.address}] = std::move(bname);
+                }
+            };
+            add_pka(res.mbs2.cmmn.suni, false);
+            add_pka(res.mbs2.cmmn.s3bo, true);
+            std::map<uint32_t, uint32_t> fcst_all;
+            for (const auto& f : res.mbs2.cmmn.fcsts) fcst_all[f.reg_offset] = f.value;
+            if (primary_eb->meta.has_dbug) {
+                for (const auto& f : primary_eb->meta.dbug.fcsts) fcst_all[f.reg_offset] = f.value;
+            }
+            for (const auto& kv : fcst_all) {
+                uint32_t rack = (kv.second >> 24u) & 0xFFu;
+                uint32_t addr = kv.second & 0xFFFFu;
+                auto it = pka_buf_by_rack_addr.find({rack, addr});
+                if (it != pka_buf_by_rack_addr.end()) {
+                    vopts.fau_pka_buf_names[kv.first] = it->second;
+                }
+            }
+        }
         if (!simg_addrs.empty()) {
             std::map<uint32_t, uint32_t> fcst_map;
             for (const auto& f : res.mbs2.cmmn.fcsts) fcst_map[f.reg_offset] = f.value;

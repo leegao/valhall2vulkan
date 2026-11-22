@@ -186,7 +186,7 @@ static const LoweringRuleSpec kLoweringRules[] = {
     { "LD_CHECKED", 178u, OpClass::MemLoad, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, false, { 0x21u, 0x1u, 0x0u, 0x0u } },
     { "LD_CHECKED_IMM", 179u, OpClass::MemLoad, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, false, { 0x21u, 0x1u, 0x0u, 0x0u } },
     { "LD_MULTI", 180u, OpClass::MemNop, LoweringKind::DirectSsaOp, SsaOp::Nop, "Nop", false, true, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
-    { "LD_PKA", 181u, OpClass::MemLoadPka, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", true, true, 0x7e00u, false, { 0x21u, 0x1u, 0x0u, 0x0u } },
+    { "LD_PKA", 181u, OpClass::MemLoadPka, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, false, { 0x21u, 0x1u, 0x0u, 0x0u } },
     { "LD_CVT", 182u, OpClass::MemLoad, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, false, { 0x21u, 0x1u, 0x0u, 0x0u } },
     { "STORE", 183u, OpClass::MemStore, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, true, { 0x0u, 0x0u, 0x0u, 0x1u } },
     { "STORE", 184u, OpClass::MemStore, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, true, 0x7e00u, true, { 0x0u, 0x0u, 0x0u, 0x0u } },

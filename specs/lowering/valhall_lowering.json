@@ -5356,7 +5356,7 @@
       "src_types": [
         "u64"
       ],
-      "splits_block": true,
+      "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
         "cap:PhysicalStorageBufferAddresses",
@@ -5383,7 +5383,8 @@
         "  %tok = @tuple_tok(%tup);",
         "}",
         "@set_token(%tok);"
-      ]
+      ],
+      "comment": "LD_PKA loads from packed buffer descriptor src1 at 32-bit byte offset src0; abi::psb_load(is_pka=true) resolves src1 to buffer base."
     },
     {
       "mnemonic": "LD_CVT",

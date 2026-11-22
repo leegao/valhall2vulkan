@@ -414,13 +414,33 @@ SsaId tuple_tok(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, cons
     return ctx.sb.emit(blk, std::move(et));
 }
 
-SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec* rule, SsaId addr, uint32_t elem_bytes, bool is_pka, SsaId tok) {
+SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId addr, uint32_t elem_bytes, bool is_pka, SsaId tok) {
+    SsaId eff_addr = addr;
+    std::string buf_sym;
+    if (is_pka && ins.srcs.size() >= 2 && ins.srcs[1].kind == SourceKind::FauUniform) {
+        uint32_t word_off = static_cast<uint32_t>(ins.srcs[1].fau_index64) * 8u +
+                            (ins.srcs[1].word_select ? 4u : 0u);
+        auto it = ctx.opts.fau_pka_buf_names.find(word_off);
+        if (it != ctx.opts.fau_pka_buf_names.end() && !it->second.empty()) {
+            buf_sym = it->second;
+            SsaNode base_n{};
+            base_n.op = SsaOp::LoadSidebandU64;
+            base_n.type = ValType::U64;
+            base_n.imm_u32 = 0x10u;
+            base_n.aux_str = buf_sym;
+            base_n.effects.flags |= EffectSet::kFlagUsesSideband;
+            ctx.res.uses_sideband = true;
+            SsaId base_id = ctx.sb.emit(blk, std::move(base_n));
+            eff_addr = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { base_id, addr });
+        }
+    }
     SsaNode ld{};
     ld.op = SsaOp::PsbLoad;
     ld.type = ValType::TupleValToken;
     ld.imm_u32 = elem_bytes;
     ld.aux_bool = is_pka;
-    ld.args = { addr, tok };
+    ld.aux_str = std::move(buf_sym);
+    ld.args = { eff_addr, tok };
     ld.effects = rule->effects;
     ld.is_barrier_or_cf = true;
     ld.is_side_effect = true;
