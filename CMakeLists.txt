@@ -367,6 +367,21 @@ add_test(NAME test_shader_equiv
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
+add_test(NAME test_stratum1_canon
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_stratum1_canon.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_test(NAME test_cec
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_cec.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_test(NAME test_coverage_synthesizer
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/coverage/test_coverage_synthesizer.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)
 set(VALHALL_LLVM21_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/prebuilts/llvm-21")
