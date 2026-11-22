@@ -211,7 +211,7 @@ def verify_equivalence_bundle(
     dump_smt2_path: Optional[str] = None,
     fp_discharger: Optional[FpProofDischargerRegistry] = None,
     verbose: bool = False,
-    use_stratum1: bool = False,
+    canonicalize: bool = False,
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -219,7 +219,7 @@ def verify_equivalence_bundle(
     stage = bundle.get("stage", "Unknown")
     direct_ssa = bundle.get("direct_ssa", {})
     valhall_ssa = bundle.get("valhall_ssa", {})
-    if use_stratum1 and bundle.get("direct_ok", False) and bundle.get("valhall_ok", False):
+    if canonicalize and bundle.get("direct_ok", False) and bundle.get("valhall_ok", False):
         from tools.symbolic_ssa.passes import canonicalize_ssa_module
         direct_ssa, _ = canonicalize_ssa_module(direct_ssa)
         valhall_ssa, _ = canonicalize_ssa_module(valhall_ssa)
@@ -542,7 +542,7 @@ def verify_spv_file(
     max_unroll: int = 1,
     dump_smt2_path: Optional[str] = None,
     verbose: bool = False,
-    use_stratum1: bool = False,
+    canonicalize: bool = False,
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -566,7 +566,7 @@ def verify_spv_file(
             )
         with open(tmp_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose, use_stratum1=use_stratum1)
+        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose, canonicalize=canonicalize)
     finally:
         if os.path.exists(tmp_json):
             os.remove(tmp_json)
@@ -580,7 +580,7 @@ def main() -> int:
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
-    ap.add_argument("--stratum1", action="store_true", help="Apply Stratum 1 pre-SMT canonicalization before Z3")
+    ap.add_argument("--canonicalize", action="store_true", help="Apply pre-SMT structural canonicalization before Z3")
     ap.add_argument("--cec", action="store_true", help="Run concrete diff + incremental CEC cutpoint sweeping")
     ap.add_argument("-v", "--verbose", action="store_true", help="Emit detailed tier-by-tier Z3/Layer-2 diagnostics to stderr")
     args = ap.parse_args()
@@ -608,7 +608,7 @@ def main() -> int:
                     os.remove(tmp_json)
         s2r = verify_with_cec(
             bundle,
-            use_stratum1=True,
+            canonicalize=True,
             output_timeout_ms=args.timeout_ms,
         )
         print(
@@ -630,7 +630,7 @@ def main() -> int:
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,
-            use_stratum1=args.stratum1,
+            canonicalize=args.canonicalize,
         )
     else:
         r = verify_spv_file(
@@ -641,7 +641,7 @@ def main() -> int:
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,
-            use_stratum1=args.stratum1,
+            canonicalize=args.canonicalize,
         )
 
     print(f"[{r.status}] {os.path.basename(r.spv_path)} stage={r.stage} fp={r.fp_mode} "

@@ -27,7 +27,7 @@ from tools.symbolic_ssa.env import (
     _f32_ulp_diff,
     _u32_to_f32,
 )
-from tools.symbolic_ssa.interpreter import ConcreteSsaInterpreter
+from tools.symbolic_ssa import ConcreteSsaInterpreter
 
 
 @dataclass

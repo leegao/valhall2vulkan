@@ -1,5 +1,14 @@
-"""Unified Valhall SSA symbolic/concrete evaluator and Stratum 1 canonicalization."""
+"""Unified Valhall SSA domains, concrete/symbolic interpreters, and canonicalization passes."""
 
+from typing import Any, Dict, Optional
+
+from tools.symbolic_ssa.concrete_interpreter import ConcreteSsaInterpreter
+from tools.symbolic_ssa.domains import (
+    AbstractTopDomain,
+    ConcreteDomain,
+    SsaDomain,
+    SymbolicDomain,
+)
 from tools.symbolic_ssa.env import (
     BV8,
     BV32,
@@ -46,21 +55,19 @@ from tools.symbolic_ssa.env import (
     _z3_not,
     _z3_or,
 )
-from tools.symbolic_ssa.interpreter import (
-    BlockEffectState,
-    ConcreteSsaInterpreter,
-    DagSsaZ3Evaluator,
-    SsaInterpreter,
-    SymbolicSsaInterpreter,
-    _clone_state,
-    _merge_states,
-    evaluate_ssa,
-)
+from tools.symbolic_ssa.interpreter import SsaInterpreter
 from tools.symbolic_ssa.passes import (
     SIDE_EFFECT_OPS,
     Stratum1Stats,
     canonicalize_ssa_module,
     cfg_isomorphic,
+)
+from tools.symbolic_ssa.symbolic_interpreter import (
+    BlockEffectState,
+    DagSsaZ3Evaluator,
+    SymbolicSsaInterpreter,
+    _clone_state,
+    _merge_states,
 )
 from tools.verify.panfrost_z3_model import (
     _hw_uf,
@@ -72,11 +79,34 @@ from tools.verify.panfrost_z3_model import (
     fp32_to_bv32,
 )
 
+
+def evaluate_ssa(
+    bundle: Dict[str, Any],
+    ssa_json: Dict[str, Any],
+    is_valhall_side: bool = False,
+    mode: str = "symbolic",
+    fp_mode: str = "exact",
+    max_unroll: int = 1,
+    vec_idx: int = 0,
+    overrides: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """Unified entrypoint for evaluating a ValhallSsaModule symbolically or concretely."""
+    if mode == "concrete":
+        cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, overrides=overrides)
+        return ConcreteSsaInterpreter(ssa_json, is_valhall_side=is_valhall_side).execute_one(cenv)
+    env = SharedShaderEnv(bundle)
+    ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll)
+    st = ev.evaluate()
+    return ev, st, env
+
+
 __all__ = [
+    "AbstractTopDomain",
     "BV8",
     "BV32",
     "BV64",
     "BlockEffectState",
+    "ConcreteDomain",
     "ConcreteShaderEnv",
     "ConcreteSsaInterpreter",
     "DagSsaZ3Evaluator",
@@ -87,8 +117,10 @@ __all__ = [
     "SIDE_EFFECT_OPS",
     "ShaderEnvBase",
     "SharedShaderEnv",
+    "SsaDomain",
     "SsaInterpreter",
     "Stratum1Stats",
+    "SymbolicDomain",
     "SymbolicSsaInterpreter",
     "Z3Val",
     "canonicalize_ssa_module",

@@ -29,7 +29,7 @@ from tools.coverage.synthesizer import (
     synthesize_coverage_vectors,
 )
 from tools.symbolic_ssa.env import ConcreteShaderEnv
-from tools.symbolic_ssa.interpreter import ConcreteSsaInterpreter
+from tools.symbolic_ssa import ConcreteSsaInterpreter
 
 
 @dataclass

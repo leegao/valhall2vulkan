@@ -65,7 +65,7 @@ class TestCec(unittest.TestCase):
     def test_cec_cutpoint_sweeping_is_incremental_and_unsat(self) -> None:
         depth = 8
         b = _make_fp_chain_bundle(depth=depth, inject_bug=False)
-        res = verify_with_cec(b, use_stratum1=True, k_sim=16, cone_timeout_ms=500, output_timeout_ms=1000)
+        res = verify_with_cec(b, canonicalize=True, k_sim=16, cone_timeout_ms=500, output_timeout_ms=1000)
         self.assertEqual(res.status, "UNSAT")
         self.assertEqual(res.concrete_status, "EXACT_MATCH")
         self.assertGreaterEqual(res.cutpoints_proved, depth)
@@ -121,7 +121,7 @@ class TestCec(unittest.TestCase):
         self.assertEqual(cd.status, "EXACT_MATCH")
         cands = discover_cutpoint_candidates(d_ssa, v_ssa, cd.d_node_traces, cd.v_node_traces)
         self.assertTrue(any(kind == "FNEG" for _, _, kind in cands))
-        res = verify_with_cec(b, use_stratum1=True, k_sim=16)
+        res = verify_with_cec(b, canonicalize=True, k_sim=16)
         self.assertEqual(res.status, "UNSAT")
 
 

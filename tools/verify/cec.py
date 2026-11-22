@@ -34,7 +34,7 @@ from tools.symbolic_ssa.env import (
     _z3_not,
     _z3_or,
 )
-from tools.symbolic_ssa.interpreter import (
+from tools.symbolic_ssa import (
     BlockEffectState,
     ConcreteSsaInterpreter,
     SymbolicSsaInterpreter,
@@ -357,7 +357,7 @@ Stratum2Result = CecResult
 
 def verify_with_cec(
     bundle: Dict[str, Any],
-    use_stratum1: bool = True,
+    canonicalize: bool = True,
     k_sim: int = 32,
     cone_timeout_ms: int = 250,
     output_timeout_ms: int = 1000,
@@ -372,7 +372,7 @@ def verify_with_cec(
     t0 = time.perf_counter()
     direct_ssa = bundle["direct_ssa"]
     valhall_ssa = bundle["valhall_ssa"]
-    if use_stratum1:
+    if canonicalize:
         direct_ssa, _ = canonicalize_ssa_module(direct_ssa)
         valhall_ssa, _ = canonicalize_ssa_module(valhall_ssa)
 

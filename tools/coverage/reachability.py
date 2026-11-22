@@ -26,7 +26,7 @@ from tools.symbolic_ssa.env import (
     _as_bool,
     _z3_not,
 )
-from tools.symbolic_ssa.interpreter import (
+from tools.symbolic_ssa import (
     ConcreteSsaInterpreter,
     SymbolicSsaInterpreter,
 )

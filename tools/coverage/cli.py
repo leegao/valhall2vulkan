@@ -62,7 +62,7 @@ def main() -> int:
     ap.add_argument("--k-init", type=int, default=32, help="Initial concrete seed vectors")
     ap.add_argument("--max-rounds", type=int, default=12, help="Maximum synthesis rounds")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact", help="Z3 FP mode")
-    ap.add_argument("--stratum1", action="store_true", help="Canonicalize SSA via Stratum 1 before synthesis")
+    ap.add_argument("--canonicalize", action="store_true", help="Canonicalize SSA before synthesis")
     ap.add_argument(
         "--maximal-reachability",
         action="store_true",
@@ -94,7 +94,7 @@ def main() -> int:
 
     d_ssa = bundle["direct_ssa"]
     v_ssa = bundle["valhall_ssa"]
-    if args.stratum1:
+    if args.canonicalize:
         d_ssa, _ = canonicalize_ssa_module(d_ssa)
         v_ssa, _ = canonicalize_ssa_module(v_ssa)
 
