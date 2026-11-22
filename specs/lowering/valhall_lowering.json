@@ -1971,7 +1971,7 @@
       "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
-        "f32"
+        "u32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
@@ -1979,9 +1979,12 @@
         "uses_glsl_std450"
       ],
       "inline_ops": [
-        "%arg : f32 = FMul(%0, #f32(6.283185307179586));",
+        "%idx : u32 = BitAnd(%0, #u32(63));",
+        "%fidx : f32 = ConvertUToF(%idx);",
+        "%arg : f32 = FMul(%fidx, #f32(0.09817477042468103));",
         "%out : f32 = Sin(%arg);"
-      ]
+      ],
+      "comment": "Valhall FSIN_TABLE.u6 indexes sin((bits(src0) & 0x3f) * pi/32)."
     },
     {
       "mnemonic": "FCOS_TABLE",
@@ -1992,7 +1995,7 @@
       "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
-        "f32"
+        "u32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
@@ -2000,9 +2003,12 @@
         "uses_glsl_std450"
       ],
       "inline_ops": [
-        "%arg : f32 = FMul(%0, #f32(6.283185307179586));",
+        "%idx : u32 = BitAnd(%0, #u32(63));",
+        "%fidx : f32 = ConvertUToF(%idx);",
+        "%arg : f32 = FMul(%fidx, #f32(0.09817477042468103));",
         "%out : f32 = Cos(%arg);"
-      ]
+      ],
+      "comment": "Valhall FCOS_TABLE.u6 indexes cos((bits(src0) & 0x3f) * pi/32)."
     },
     {
       "mnemonic": "FSINCOS",
