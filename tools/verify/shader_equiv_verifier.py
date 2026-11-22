@@ -1653,6 +1653,7 @@ def verify_equivalence_bundle(
     dump_smt2_path: Optional[str] = None,
     fp_discharger: Optional[FpProofDischargerRegistry] = None,
     verbose: bool = False,
+    use_stratum1: bool = False,
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -1660,6 +1661,10 @@ def verify_equivalence_bundle(
     stage = bundle.get("stage", "Unknown")
     direct_ssa = bundle.get("direct_ssa", {})
     valhall_ssa = bundle.get("valhall_ssa", {})
+    if use_stratum1 and bundle.get("direct_ok", False) and bundle.get("valhall_ok", False):
+        from tools.verify.stratum1_canon import canonicalize_ssa_module
+        direct_ssa, _ = canonicalize_ssa_module(direct_ssa)
+        valhall_ssa, _ = canonicalize_ssa_module(valhall_ssa)
 
     res = ShaderEquivResult(
         spv_path=spv_path,
@@ -1979,6 +1984,7 @@ def verify_spv_file(
     max_unroll: int = 1,
     dump_smt2_path: Optional[str] = None,
     verbose: bool = False,
+    use_stratum1: bool = False,
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -2002,7 +2008,7 @@ def verify_spv_file(
             )
         with open(tmp_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose)
+        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose, use_stratum1=use_stratum1)
     finally:
         if os.path.exists(tmp_json):
             os.remove(tmp_json)
@@ -2016,8 +2022,45 @@ def main() -> int:
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
+    ap.add_argument("--stratum1", action="store_true", help="Apply Stratum 1 pre-SMT canonicalization before Z3")
+    ap.add_argument("--stratum2", action="store_true", help="Run Stratum 2 concrete diff + CEC cutpoint sweeping")
     ap.add_argument("-v", "--verbose", action="store_true", help="Emit detailed tier-by-tier Z3/Layer-2 diagnostics to stderr")
     args = ap.parse_args()
+
+    if args.stratum2:
+        from tools.verify.stratum2_cec import verify_with_stratum2_cec
+        if args.spv_or_json.endswith(".json"):
+            with open(args.spv_or_json, "r", encoding="utf-8") as fh:
+                bundle = json.load(fh)
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+                tmp_json = tf.name
+            try:
+                proc = subprocess.run(
+                    [args.bin, args.spv_or_json, "--quiet", "--dump-equiv-json", tmp_json],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if proc.returncode != 0:
+                    print(f"[ERROR] {os.path.basename(args.spv_or_json)}: {proc.stderr.strip()[:200]}")
+                    return 1
+                with open(tmp_json, "r", encoding="utf-8") as fh:
+                    bundle = json.load(fh)
+            finally:
+                if os.path.exists(tmp_json):
+                    os.remove(tmp_json)
+        s2r = verify_with_stratum2_cec(
+            bundle,
+            use_stratum1=True,
+            output_timeout_ms=args.timeout_ms,
+        )
+        print(
+            f"[{s2r.status}] {os.path.basename(bundle.get('spv_path', args.spv_or_json))} "
+            f"stage={bundle.get('stage', 'Unknown')} "
+            f"concrete={s2r.concrete_status}({s2r.concrete_ms:.1f}ms) "
+            f"cutpoints={s2r.cutpoints_proved}/{s2r.candidates_found} "
+            f"cegar={s2r.cegar_refinements} elapsed={s2r.elapsed_ms:.1f}ms"
+        )
+        return 0 if s2r.status in ("UNSAT", "BOUNDED_UNSAT") else 1
 
     if args.spv_or_json.endswith(".json"):
         with open(args.spv_or_json, "r", encoding="utf-8") as fh:
@@ -2029,6 +2072,7 @@ def main() -> int:
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,
+            use_stratum1=args.stratum1,
         )
     else:
         r = verify_spv_file(
@@ -2039,6 +2083,7 @@ def main() -> int:
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,
+            use_stratum1=args.stratum1,
         )
 
     print(f"[{r.status}] {os.path.basename(r.spv_path)} stage={r.stage} fp={r.fp_mode} "
