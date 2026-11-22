@@ -347,13 +347,37 @@ SsaId bitcast(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const 
     return ctx.sb.emit_bitcast(blk, vt, val);
 }
 
-SsaId extract(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, ValType vt, SsaId vec, uint32_t idx) {
+static uint32_t map_tex_write_mask_channel(const DecodedValhallInst& ins, uint32_t sr_idx) {
+    auto it = ins.modifier_strs.find("write_mask");
+    if (it == ins.modifier_strs.end() || it->second.empty()) return sr_idx;
+    const std::string& mask = it->second;
+    uint32_t seen = 0;
+    for (char c : mask) {
+        uint32_t ch = 0xFFu;
+        if (c == 'r' || c == 'R') ch = 0u;
+        else if (c == 'g' || c == 'G') ch = 1u;
+        else if (c == 'b' || c == 'B') ch = 2u;
+        else if (c == 'a' || c == 'A') ch = 3u;
+        if (ch != 0xFFu) {
+            if (seen == sr_idx) return ch;
+            ++seen;
+        }
+    }
+    return sr_idx;
+}
+
+SsaId extract(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, ValType vt, SsaId vec, uint32_t idx) {
     SsaNode ex{};
     ValType src_ty = (vec < ctx.res.ssa.nodes.size()) ? ctx.res.ssa.get(vec).type : ValType::Void;
     ex.op = (src_ty == ValType::TupleU32x2 || src_ty == ValType::TupleValToken)
             ? SsaOp::TupleExtract : SsaOp::VecExtract;
     ex.type = vt;
-    ex.imm_u32 = idx;
+    uint32_t eff_idx = idx;
+    if (ex.op == SsaOp::VecExtract && src_ty == ValType::V4F32 &&
+        rule && rule->op_class == tables::OpClass::TexSample) {
+        eff_idx = map_tex_write_mask_channel(ins, idx);
+    }
+    ex.imm_u32 = eff_idx;
     ex.args = { vec };
     return ctx.sb.emit(blk, std::move(ex));
 }
