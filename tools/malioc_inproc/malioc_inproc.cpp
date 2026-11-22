@@ -270,6 +270,16 @@ bool compile_spirv_in_process(
         out->ok = false;
         out->error_message = "malioc_compile in-process failed (rc=" + std::to_string(rc) +
                              ", captured_mbs2=" + std::to_string(cap.captured_count) + ")";
+        for (size_t wi = 5u; wi < spirv_words.size(); ) {
+            uint32_t wc = spirv_words[wi] >> 16u;
+            uint32_t op = spirv_words[wi] & 0xFFFFu;
+            if (wc == 0u || wi + wc > spirv_words.size()) break;
+            if (op == 17u && wc >= 2u && spirv_words[wi + 1u] == 10u) {
+                out->error_message += " [hint: SPIR-V declares OpCapability Float64, unsupported on " + opts.core + "]";
+                break;
+            }
+            wi += wc;
+        }
         if (err) *err = out->error_message;
         return false;
     }

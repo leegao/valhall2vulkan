@@ -602,6 +602,55 @@ int main() {
         std::cout << "[PASS] Checkpoint v27.2: Valhall SFU log2/exp2 (FREXPE.log, FADD_LSCALE, FLOGD, FMUL_RSCALE, FEXP) verified\n";
     }
 
+
+    // Checkpoint v29 regression tests: FNEG single negation, FSIN_TABLE.u6, TEX_SINGLE.a write_mask, verify_ssa_types
+    {
+        auto lower_single = [](DecodedValhallInst ins) -> Pass1Result {
+            auto end_i = make_inst(ins.pc + 8, Mnemonic::NOP, Mnemonic::NOP);
+            end_i.flow = FlowControlM::end;
+            std::vector<DecodedValhallInst> insts = { ins, end_i };
+            cfg::ControlFlowGraph c = cfg::build_cfg(insts);
+            ValhallTranslateOptions o;
+            o.stage = ShaderStage::Fragment;
+            return run_pass1_lowering(c, {}, o);
+        };
+        auto count_op = [](const Pass1Result& p1, SsaOp op) {
+            int cnt = 0;
+            for (const auto& n : p1.ssa.nodes) if (n.op == op) ++cnt;
+            return cnt;
+        };
+
+        auto fneg_i = make_inst(0x00, Mnemonic::FNEG, Mnemonic::FNEG, Variant::F32);
+        fneg_i.has_dest = true; fneg_i.dest_reg = 1;
+        fneg_i.srcs = { reg_src(0) };
+        fneg_i.fields["neg0"] = 1;
+        auto p1_fneg = lower_single(fneg_i);
+        assert(p1_fneg.ok && count_op(p1_fneg, SsaOp::FNeg) == 1);
+        std::string verr;
+        assert(verify_ssa_types(p1_fneg.ssa, &verr));
+
+        auto fsin_i = make_inst(0x00, Mnemonic::FSIN_TABLE, Mnemonic::FSIN_TABLE);
+        fsin_i.has_dest = true; fsin_i.dest_reg = 0; fsin_i.srcs = { reg_src(1) };
+        auto p1_fsin = lower_single(fsin_i);
+        assert(p1_fsin.ok && count_op(p1_fsin, SsaOp::BitAnd) >= 1 &&
+               count_op(p1_fsin, SsaOp::ConvertUToF) >= 1 && count_op(p1_fsin, SsaOp::Sin) == 1);
+
+        auto tex_a = make_inst(0x00, Mnemonic::TEX_SINGLE, Mnemonic::TEX_SINGLE);
+        tex_a.modifier_strs["write_mask"] = "a";
+        tex_a.sr_write.present = true; tex_a.sr_write.base_reg = 0; tex_a.sr_write.count = 1;
+        tex_a.sr_read.present = true; tex_a.sr_read.base_reg = 0; tex_a.sr_read.count = 2;
+        auto p1_tex = lower_single(tex_a);
+        assert(p1_tex.ok);
+        bool saw_ch3 = false;
+        for (const auto& n : p1_tex.ssa.nodes) {
+            if (n.op == SsaOp::VecExtract && n.imm_u32 == 3u) saw_ch3 = true;
+        }
+        assert(saw_ch3);
+        assert(verify_ssa_types(p1_tex.ssa, &verr));
+
+        std::cout << "[PASS] Checkpoint v29 lowering regression tests (FNEG, FSIN_TABLE, TEX_SINGLE.a, verify_ssa_types)\n";
+    }
+
     std::cout << "=== ALL TWO-PASS COMPILER TESTS PASSED ===\n";
     return 0;
 }
