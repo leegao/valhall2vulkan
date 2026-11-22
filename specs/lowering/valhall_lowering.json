@@ -5893,7 +5893,7 @@
         "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
         "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
         "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
+        "@sr_set(1, #u32(0));"
       ]
     },
     {
@@ -5937,7 +5937,7 @@
         "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
         "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
         "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
+        "@sr_set(1, #u32(0));"
       ]
     },
     {
@@ -5959,7 +5959,7 @@
         "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
         "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
         "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
+        "@sr_set(1, #u32(0));"
       ]
     },
     {

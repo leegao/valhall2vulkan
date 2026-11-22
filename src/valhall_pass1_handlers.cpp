@@ -740,6 +740,50 @@ SsaId store_vert_varying(Pass1Context& ctx, uint32_t blk, const DecodedValhallIn
         return store_builtin_pos(ctx, blk, ins, rule, vec, tok);
     }
     uint32_t var_loc = static_cast<uint32_t>(std::max<int64_t>(0, ins.imm_signed) / 16);
+    if (ins.mnemonic == Mnemonic::ST_CVT) {
+        uint32_t attr_idx = 0xFFFFFFFFu;
+        if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register) {
+            SsaId addr_lo = ctx.sb.current_reg(blk, ins.srcs[0].reg_num & 63u);
+            if (addr_lo < ctx.res.ssa.nodes.size() && ctx.res.ssa.get(addr_lo).op == SsaOp::ConstU32) {
+                attr_idx = ctx.res.ssa.get(addr_lo).imm_u32 / 16u;
+            }
+        }
+        bool is_f16 = false;
+        if (auto it = ins.modifier_strs.find("register_format"); it != ins.modifier_strs.end() && it->second == "f16") {
+            is_f16 = true;
+        }
+        std::string sout_name;
+        if (attr_idx != 0xFFFFFFFFu) {
+            if (auto sit = ctx.opts.vert_sout_attr_names.find(attr_idx); sit != ctx.opts.vert_sout_attr_names.end()) {
+                sout_name = sit->second;
+            }
+        }
+        if (is_f16 || sout_name.find("PointSize") != std::string::npos) {
+            SsaNode ex0{}; ex0.op = SsaOp::VecExtract; ex0.type = ValType::F32; ex0.imm_u32 = 0; ex0.args = { vec };
+            SsaId raw_u32 = ctx.sb.emit_bitcast(blk, ValType::U32, ctx.sb.emit(blk, std::move(ex0)));
+            SsaId up2 = ctx.emit_op(blk, SsaOp::UnpackHalf2x16, ValType::V2F32, { raw_u32 });
+            SsaNode ex_ps{}; ex_ps.op = SsaOp::VecExtract; ex_ps.type = ValType::F32; ex_ps.imm_u32 = 0; ex_ps.args = { up2 };
+            SsaId ps_f32 = ctx.sb.emit(blk, std::move(ex_ps));
+            SsaNode st{};
+            st.op = SsaOp::StoreBuiltinOutput;
+            st.type = ValType::Token;
+            st.imm_u32 = static_cast<uint32_t>(spirv::BuiltIn::PointSize);
+            st.aux_str = "gl_PointSize";
+            st.args = { ps_f32, tok };
+            st.is_barrier_or_cf = true;
+            st.is_side_effect = true;
+            return ctx.sb.emit(blk, std::move(st));
+        }
+        if (sout_name.find("PositionFifoAttributes") != std::string::npos) {
+            return tok;
+        }
+        if (sout_name.find("XFB_Position") != std::string::npos) {
+            return store_builtin_pos(ctx, blk, ins, rule, vec, tok);
+        }
+        if (attr_idx != 0xFFFFFFFFu) {
+            var_loc = attr_idx;
+        }
+    }
     SsaNode st{};
     st.op = SsaOp::StoreVertVarying;
     st.type = ValType::Token;

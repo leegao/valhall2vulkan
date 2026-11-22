@@ -274,6 +274,11 @@ int main(int argc, char** argv) {
                 vopts.frag_varying_addr_to_loc[sym.address] = sym.location;
             }
         }
+        for (const auto& sym : res.mbs2.cmmn.sout) {
+            if (sym.rack_index == 3u && !sym.name.empty()) {
+                vopts.vert_sout_attr_names[sym.address] = sym.name;
+            }
+        }
         std::map<uint32_t, uint32_t> simg_addrs;
         for (const auto& sym : res.mbs2.cmmn.simg) {
             valhall::CombinedSamplerBindingSpec spec;
