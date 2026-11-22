@@ -33,6 +33,8 @@ static void print_usage(const char* argv0) {
         << "  --direct-ssa                Lower input .spv directly via spirv2ssa (bypassing libMali) and output SSA\n"
         << "  --dump-equiv-json <FILE>    Write dual ValhallSSA equivalence bundle JSON\n"
         << "  --opt-ssa                   Run verification SSA optimization pipeline on ValhallSSA / spirv2ssa\n"
+        << "  --defau                     Run De-FAU devirtualization + fact prover on lowered ValhallSSA\n"
+        << "  --dump-devirt-fallbacks     Run --defau and print unresolved FAU fallback diagnostics to stderr\n"
         << "  --opt-fp-mode <strict|fast> FP algebraic canonicalization mode (default: strict)\n"
         << "  --no-fp-tile-rewrites       Disable declarative valhall_tiles.json FP rewrites in SSA opt\n"
         << "  --no-fp-cpp-rewrites        Disable procedural C++ FP rewrites in SSA opt\n"
@@ -232,7 +234,7 @@ int main(int argc, char** argv) {
         ofs << bundle_json;
     }
 
-    if (dump_ssa || !dump_ssa_json_path.empty()) {
+    if (dump_ssa || !dump_ssa_json_path.empty() || run_defau || dump_devirt_fallbacks) {
         using valhall::spirv2valhall::EbinRole;
         using valhall::spirv2valhall::ExtractedEbin;
         using valhall::spirv2valhall::ShaderStage;
