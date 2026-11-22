@@ -257,12 +257,12 @@ int main() {
         // DynamicSsaOp (@get_fp_minmax_op): FMIN / FMAX with nan_suppress vs nan_propagate
         auto fmin_sup = make_inst(0x00, Mnemonic::FMIN, Mnemonic::FMIN, Variant::F32);
         fmin_sup.has_dest = true; fmin_sup.dest_reg = 0; fmin_sup.srcs = { reg_src(1), reg_src(2) };
-        fmin_sup.modifier_strs["nan_mode"] = "nan_suppress";
+        fmin_sup.modifier_strs["sem"] = "nan_suppress";
         assert(has_op(lower_single(fmin_sup), SsaOp::NMin));
 
         auto fmax_prop = make_inst(0x00, Mnemonic::FMAX, Mnemonic::FMAX, Variant::F32);
         fmax_prop.has_dest = true; fmax_prop.dest_reg = 0; fmax_prop.srcs = { reg_src(1), reg_src(2) };
-        fmax_prop.modifier_strs["nan_mode"] = "nan_propagate";
+        fmax_prop.modifier_strs["sem"] = "nan_propagate";
         assert(has_op(lower_single(fmax_prop), SsaOp::FMax));
 
         // Handler (HANDLER(@handle_int_shadd64)): SHADD

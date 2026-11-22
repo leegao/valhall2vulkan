@@ -1702,7 +1702,7 @@
         "v2f16"
       ],
       "op_class": "fp_minmax",
-      "ssa_op": "@LOOKUP(fp_min_nan, $modifiers.nan_mode)",
+      "ssa_op": "@LOOKUP(fp_min_nan, $modifiers.sem)",
       "dest_type": "f32_or_v2f16",
       "src_types": [
         "f32_or_v2f16",
@@ -1721,7 +1721,7 @@
         "v2f16"
       ],
       "op_class": "fp_minmax",
-      "ssa_op": "@LOOKUP(fp_max_nan, $modifiers.nan_mode)",
+      "ssa_op": "@LOOKUP(fp_max_nan, $modifiers.sem)",
       "dest_type": "f32_or_v2f16",
       "src_types": [
         "f32_or_v2f16",
@@ -5236,13 +5236,6 @@
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",
-        "if (@lt_u32(#lookup_u32_raw(memory_width_bytes, $modifiers.memory_width), 4u)) {",
-        "  %tup1 : tuple_val_token = @psb_load(%addr, #lookup_u32_raw(memory_width_bytes, $modifiers.memory_width), false, %tok);",
-        "  %v1 : u32 = @tuple_val(%tup1);",
-        "  @sr_set(0, %v1);",
-        "  @set_token(@tuple_tok(%tup1));",
-        "  return;",
-        "}",
         "for (%w : 0 .. $sr_write_count) {",
         "  %w_addr : u64 = %addr;",
         "  if (!@is_zero(%w)) { %w_addr = IAdd64(%addr, #u64_mul4(%w)); }",
@@ -5680,11 +5673,6 @@
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
         "%tok : token = #token;",
-        "if (@lt_u32(#lookup_u32_raw(memory_width_bytes, $modifiers.memory_width), 4u)) {",
-        "  %t1 : token = @psb_store(%addr, @sr_get(0), #lookup_u32_raw(memory_width_bytes, $modifiers.memory_width), %tok);",
-        "  @set_token(%t1);",
-        "  return;",
-        "}",
         "for (%w : 0 .. $sr_read_count) {",
         "  %w_addr : u64 = %addr;",
         "  if (!@is_zero(%w)) { %w_addr = IAdd64(%addr, #u64_mul4(%w)); }",

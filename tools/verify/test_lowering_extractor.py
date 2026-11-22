@@ -68,7 +68,7 @@ class TestLoweringExtractor(unittest.TestCase):
             mnemonic="FMIN",
             variant="f32",
             srcs=[SourceOperandDesc(reg_num=0), SourceOperandDesc(reg_num=1)],
-            modifiers={"nan_mode": "nan_suppress"},
+            modifiers={"sem": "nan_suppress"},
             has_dest=True,
             dest_reg=0,
         )
@@ -80,7 +80,7 @@ class TestLoweringExtractor(unittest.TestCase):
             mnemonic="FMIN",
             variant="f32",
             srcs=[SourceOperandDesc(reg_num=0), SourceOperandDesc(reg_num=1)],
-            modifiers={"nan_mode": "nan_propagate"},
+            modifiers={"sem": "nan_propagate"},
             has_dest=True,
             dest_reg=0,
         )
