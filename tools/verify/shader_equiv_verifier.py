@@ -1171,7 +1171,7 @@ class DagSsaZ3Evaluator:
             qkey = (aux_str or "img").replace(":", "_")
             return _hw_uf(f"imgq_{qkey}_c{imm_u32}", BV32, BV32)(lod)
 
-        if op == "TexSample":
+        if op in ("TexSample", "ImageQueryLod"):
             uv = args[0] if args else (bv32(0), bv32(0))
             u0 = _as_bv32(uv[0]) if isinstance(uv, tuple) else _as_bv32(uv)
             u1 = _as_bv32(uv[1]) if isinstance(uv, tuple) and len(uv) > 1 else bv32(0)

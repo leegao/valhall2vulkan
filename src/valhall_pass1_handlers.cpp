@@ -640,7 +640,10 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
         }
     }
     SsaNode ts{};
-    ts.op = SsaOp::TexSample;
+    bool is_grad = (ins.mnemonic == Mnemonic::TEX_GRADIENT ||
+                    ins.mnemonic == Mnemonic::VAR_TEX_GRADIENT ||
+                    ins.mnemonic == Mnemonic::VAR_TEX_BUF_GRADIENT);
+    ts.op = is_grad ? SsaOp::ImageQueryLod : SsaOp::TexSample;
     ts.type = ValType::TupleValToken;
     ts.imm_u32 = tex_idx;
     ts.imm_u32_2 = gcomp;

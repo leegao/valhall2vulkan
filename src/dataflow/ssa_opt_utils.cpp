@@ -199,6 +199,7 @@ bool is_pure_ssa_op(const SsaNode& node, bool fau_is_readonly) {
         case SsaOp::AtomicRmw:
         case SsaOp::PsbLoad:
         case SsaOp::TexSample:
+        case SsaOp::ImageQueryLod:
         case SsaOp::SubgroupBallot:
         case SsaOp::SubgroupShuffle:
         case SsaOp::DPdx:

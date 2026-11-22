@@ -530,6 +530,7 @@ static const CanonicalTileSpec kCanonicalTiles[] = {
     { "canon_dpdy", SsaOp::DPdy, 1u, TileEmitKind::OpDPdy, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_fwidth", SsaOp::Fwidth, 1u, TileEmitKind::OpFwidth, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "canon_img_query_size", SsaOp::ImageQuerySize, 1u, TileEmitKind::OpImageQuerySize, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "canon_img_query_lod", SsaOp::ImageQueryLod, 3u, TileEmitKind::EmitTexSample, { 0x0u, 0x0u, 0x0u, 0x0u } },
 };
 
 static const FusionPatternNode kFusionPatternNodes[] = {
@@ -810,7 +811,7 @@ const LoweringRuleSpec* lookup_lowering_rule_by_name(const char* mnemonic) {
 }
 
 const CanonicalTileSpec* lookup_canonical_tile(SsaOp op) {
-    for (size_t i = 0; i < 149; ++i) {
+    for (size_t i = 0; i < 150; ++i) {
         if (kCanonicalTiles[i].ssa_op == op) return &kCanonicalTiles[i];
     }
     return nullptr;
@@ -1004,6 +1005,7 @@ const char* ssa_op_to_string(SsaOp op) {
         case SsaOp::IMul64: return "IMul64";
         case SsaOp::ISub: return "ISub";
         case SsaOp::ISub64: return "ISub64";
+        case SsaOp::ImageQueryLod: return "ImageQueryLod";
         case SsaOp::ImageQuerySize: return "ImageQuerySize";
         case SsaOp::InverseSqrt: return "InverseSqrt";
         case SsaOp::IsInf: return "IsInf";

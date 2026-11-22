@@ -1,2537 +1,2545 @@
 {
-    "schema_version": 1,
-    "max_tile_depth": 5,
-    "description": "Pass 2 Bounded DP DAG Tiler Specification for ValhallSSA -> SPIR-V 1.3",
-    "tiles": [
-        {
-            "name": "elide_split64_pack64_lo",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "TupleExtract",
-                "imm": 0,
+  "schema_version": 1,
+  "max_tile_depth": 5,
+  "description": "Pass 2 Bounded DP DAG Tiler Specification for ValhallSSA -> SPIR-V 1.3",
+  "tiles": [
+    {
+      "name": "elide_split64_pack64_lo",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "TupleExtract",
+        "imm": 0,
+        "args": [
+          {
+            "op": "Split64",
+            "args": [
+              {
+                "op": "Pack64",
                 "args": [
-                    {
-                        "op": "Split64",
-                        "args": [
-                            {
-                                "op": "Pack64",
-                                "args": [
-                                    "$lo",
-                                    "$hi"
-                                ]
-                            }
-                        ]
-                    }
+                  "$lo",
+                  "$hi"
                 ]
-            },
-            "emit": "ForwardArg0_Lo",
-            "effects": []
-        },
-        {
-            "name": "elide_split64_pack64_hi",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "TupleExtract",
-                "imm": 1,
-                "args": [
-                    {
-                        "op": "Split64",
-                        "args": [
-                            {
-                                "op": "Pack64",
-                                "args": [
-                                    "$lo",
-                                    "$hi"
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardArg0_Hi",
-            "effects": []
-        },
-        {
-            "name": "elide_bfi_full32",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "Bfi",
-                "imm_offset": 0,
-                "imm_width": 32,
-                "args": [
-                    "$old",
-                    "$val"
-                ]
-            },
-            "emit": "ForwardArg1",
-            "effects": []
-        },
-        {
-            "name": "elide_not_not",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "BitNot",
-                "args": [
-                    {
-                        "op": "BitNot",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_fneg_fneg",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "FNeg",
-                "args": [
-                    {
-                        "op": "FNeg",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "effects": [],
-            "fast_math": false,
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            }
-        },
-        {
-            "name": "elide_bitcast_roundtrip",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "Bitcast",
-                "same_type_as_inner": true,
-                "args": [
-                    {
-                        "op": "Bitcast",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_unpack_pack_half2x16",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "UnpackHalf2x16",
-                "args": [
-                    {
-                        "op": "PackHalf2x16",
-                        "args": [
-                            "$v"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_iadd_zero",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "IAdd",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstU32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_or_zero",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "BitOr",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstU32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_and_allones",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "BitAnd",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstU32",
-                        "imm": 4294967295
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "effects": []
-        },
-        {
-            "name": "elide_imul_one",
-            "kind": "fusion",
-            "cost": 0,
-            "pattern": {
-                "op": "IMul",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstU32",
-                        "imm": 1
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "effects": []
-        },
-        {
-            "name": "fuse_fma_f32",
-            "kind": "fusion",
-            "cost": 1,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    {
-                        "op": "FMul",
-                        "args": [
-                            "$a",
-                            "$b"
-                        ]
-                    },
-                    "$c"
-                ]
-            },
-            "emit": "GlslFma",
-            "effects": [
-                "uses_glsl_std450"
+              }
             ]
-        },
-        {
-            "name": "fuse_fma_f32_commuted",
-            "kind": "fusion",
-            "cost": 1,
-            "pattern": {
-                "op": "FAdd",
+          }
+        ]
+      },
+      "emit": "ForwardArg0_Lo",
+      "effects": []
+    },
+    {
+      "name": "elide_split64_pack64_hi",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "TupleExtract",
+        "imm": 1,
+        "args": [
+          {
+            "op": "Split64",
+            "args": [
+              {
+                "op": "Pack64",
                 "args": [
-                    "$c",
-                    {
-                        "op": "FMul",
-                        "args": [
-                            "$a",
-                            "$b"
-                        ]
-                    }
+                  "$lo",
+                  "$hi"
                 ]
-            },
-            "emit": "GlslFmaCommuted",
-            "effects": [
-                "uses_glsl_std450"
+              }
             ]
-        },
-        {
-            "name": "fuse_fsub_f32",
-            "kind": "fusion",
-            "cost": 1,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    "$a",
-                    {
-                        "op": "FNeg",
-                        "args": [
-                            "$b"
-                        ]
-                    }
-                ]
-            },
-            "emit": "OpFSub",
-            "effects": []
-        },
-        {
-            "name": "fuse_fclamp_f32",
-            "kind": "fusion",
-            "cost": 1,
-            "pattern": {
-                "op": "NMin",
-                "args": [
-                    {
-                        "op": "NMax",
-                        "args": [
-                            "$x",
-                            "$lo"
-                        ]
-                    },
-                    "$hi"
-                ]
-            },
-            "emit": "GlslFClamp",
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "ForwardArg0_Hi",
+      "effects": []
+    },
+    {
+      "name": "elide_bfi_full32",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "Bfi",
+        "imm_offset": 0,
+        "imm_width": 32,
+        "args": [
+          "$old",
+          "$val"
+        ]
+      },
+      "emit": "ForwardArg1",
+      "effects": []
+    },
+    {
+      "name": "elide_not_not",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "BitNot",
+        "args": [
+          {
+            "op": "BitNot",
+            "args": [
+              "$x"
             ]
-        },
-        {
-            "name": "fuse_bfe_u32",
-            "kind": "fusion",
-            "cost": 1,
-            "pattern": {
-                "op": "BitAnd",
-                "args": [
-                    {
-                        "op": "ShrU",
-                        "args": [
-                            "$x",
-                            "$off"
-                        ]
-                    },
-                    "$mask"
-                ]
-            },
-            "emit": "OpBitFieldUExtractMask",
-            "effects": []
-        },
-        {
-            "name": "elide_fabs_fabs",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FAbs",
-                "args": [
-                    {
-                        "op": "FAbs",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "GlslFAbs",
-            "ssa_rewrite": {
-                "op": "FAbs",
-                "args": [
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_fneg_fneg",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "FNeg",
+        "args": [
+          {
+            "op": "FNeg",
+            "args": [
+              "$x"
             ]
-        },
-        {
-            "name": "elide_fabs_fneg",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FAbs",
-                "args": [
-                    {
-                        "op": "FNeg",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "GlslFAbs",
-            "ssa_rewrite": {
-                "op": "FAbs",
-                "args": [
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "effects": [],
+      "fast_math": false,
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      }
+    },
+    {
+      "name": "elide_bitcast_roundtrip",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "Bitcast",
+        "same_type_as_inner": true,
+        "args": [
+          {
+            "op": "Bitcast",
+            "args": [
+              "$x"
             ]
-        },
-        {
-            "name": "elide_fadd_neg_zero_r",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 2147483648
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fadd_neg_zero_l",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 2147483648
-                    },
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fsub_pos_zero",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FSub",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmul_one_r",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmul_one_l",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    },
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmul_neg_one_r",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 3212836864
-                    }
-                ]
-            },
-            "emit": "OpFNegate",
-            "ssa_rewrite": {
-                "op": "FNeg",
-                "args": [
-                    0
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmul_neg_one_l",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 3212836864
-                    },
-                    "$x"
-                ]
-            },
-            "emit": "OpFNegate",
-            "ssa_rewrite": {
-                "op": "FNeg",
-                "args": [
-                    0
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fma_neg_zero",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    "$a",
-                    "$b",
-                    {
-                        "op": "ConstF32",
-                        "imm": 2147483648
-                    }
-                ]
-            },
-            "emit": "OpFMul",
-            "ssa_rewrite": {
-                "op": "FMul",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fma_one_r",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    },
-                    "$c"
-                ]
-            },
-            "emit": "OpFAdd",
-            "ssa_rewrite": {
-                "op": "FAdd",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fma_one_l",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    },
-                    "$x",
-                    "$c"
-                ]
-            },
-            "emit": "OpFAdd",
-            "ssa_rewrite": {
-                "op": "FAdd",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fdiv_one",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FDiv",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fdiv_neg_one",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FDiv",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 3212836864
-                    }
-                ]
-            },
-            "emit": "OpFNegate",
-            "ssa_rewrite": {
-                "op": "FNeg",
-                "args": [
-                    0
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmin_self",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FMin",
-                "args": [
-                    "$x",
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmax_self",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "FMax",
-                "args": [
-                    "$x",
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_nmin_self",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "NMin",
-                "args": [
-                    "$x",
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_nmax_self",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "NMax",
-                "args": [
-                    "$x",
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_ldexp_zero",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 0,
-            "pattern": {
-                "op": "Ldexp",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstS32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "elide_fmul_fneg_fneg",
-            "kind": "fusion",
-            "fast_math": false,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    {
-                        "op": "FNeg",
-                        "args": [
-                            "$a"
-                        ]
-                    },
-                    {
-                        "op": "FNeg",
-                        "args": [
-                            "$b"
-                        ]
-                    }
-                ]
-            },
-            "emit": "OpFMul",
-            "ssa_rewrite": {
-                "op": "FMul",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_fadd_pos_zero_r",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    "$x",
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_fadd_pos_zero_l",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "FAdd",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    },
-                    "$x"
-                ]
-            },
-            "emit": "ForwardArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_fma_pos_zero",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    "$a",
-                    "$b",
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    }
-                ]
-            },
-            "emit": "OpFMul",
-            "ssa_rewrite": {
-                "op": "FMul",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_fma_zero_r",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    "$a",
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    },
-                    "$c"
-                ]
-            },
-            "emit": "ForwardArg1",
-            "ssa_rewrite": {
-                "forward_leaf": 1
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_fma_zero_l",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "Fma",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 0
-                    },
-                    "$b",
-                    "$c"
-                ]
-            },
-            "emit": "ForwardArg1",
-            "ssa_rewrite": {
-                "forward_leaf": 1
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_fuse_fmul_rcp_r",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    "$a",
-                    {
-                        "op": "FDiv",
-                        "args": [
-                            {
-                                "op": "ConstF32",
-                                "imm": 1065353216
-                            },
-                            "$b"
-                        ]
-                    }
-                ]
-            },
-            "emit": "OpFDiv",
-            "ssa_rewrite": {
-                "op": "FDiv",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_fuse_fmul_rcp_l",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    {
-                        "op": "FDiv",
-                        "args": [
-                            {
-                                "op": "ConstF32",
-                                "imm": 1065353216
-                            },
-                            "$b"
-                        ]
-                    },
-                    "$a"
-                ]
-            },
-            "emit": "OpFDivSwapped",
-            "ssa_rewrite": {
-                "op": "FDiv",
-                "args": [
-                    1,
-                    0
-                ]
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_rcp_rcp",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "FDiv",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    },
-                    {
-                        "op": "FDiv",
-                        "args": [
-                            {
-                                "op": "ConstF32",
-                                "imm": 1065353216
-                            },
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_fuse_rcp_rsqrt",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FDiv",
-                "args": [
-                    {
-                        "op": "ConstF32",
-                        "imm": 1065353216
-                    },
-                    {
-                        "op": "InverseSqrt",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "GlslSqrt",
-            "ssa_rewrite": {
-                "op": "Sqrt",
-                "args": [
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_unpack_pack_half2x16",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "UnpackHalf2x16",
+        "args": [
+          {
+            "op": "PackHalf2x16",
+            "args": [
+              "$v"
             ]
-        },
-        {
-            "name": "fast_fuse_fmul_rsqrt_r",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    "$x",
-                    {
-                        "op": "InverseSqrt",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "GlslSqrt",
-            "ssa_rewrite": {
-                "op": "Sqrt",
-                "args": [
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_iadd_zero",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "IAdd",
+        "args": [
+          "$x",
+          {
+            "op": "ConstU32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_or_zero",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "BitOr",
+        "args": [
+          "$x",
+          {
+            "op": "ConstU32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_and_allones",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "BitAnd",
+        "args": [
+          "$x",
+          {
+            "op": "ConstU32",
+            "imm": 4294967295
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "effects": []
+    },
+    {
+      "name": "elide_imul_one",
+      "kind": "fusion",
+      "cost": 0,
+      "pattern": {
+        "op": "IMul",
+        "args": [
+          "$x",
+          {
+            "op": "ConstU32",
+            "imm": 1
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "effects": []
+    },
+    {
+      "name": "fuse_fma_f32",
+      "kind": "fusion",
+      "cost": 1,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          {
+            "op": "FMul",
+            "args": [
+              "$a",
+              "$b"
             ]
-        },
-        {
-            "name": "fast_fuse_fmul_rsqrt_l",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FMul",
-                "args": [
-                    {
-                        "op": "InverseSqrt",
-                        "args": [
-                            "$x"
-                        ]
-                    },
-                    "$x"
-                ]
-            },
-            "emit": "GlslSqrt",
-            "ssa_rewrite": {
-                "op": "Sqrt",
-                "args": [
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          },
+          "$c"
+        ]
+      },
+      "emit": "GlslFma",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fuse_fma_f32_commuted",
+      "kind": "fusion",
+      "cost": 1,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          "$c",
+          {
+            "op": "FMul",
+            "args": [
+              "$a",
+              "$b"
             ]
-        },
-        {
-            "name": "fast_elide_exp2_log2",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
-                "op": "Exp2",
-                "args": [
-                    {
-                        "op": "Log2",
-                        "args": [
-                            "$x"
-                        ]
-                    }
-                ]
-            },
-            "emit": "ForwardInnerArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_elide_log2_exp2",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 0,
-            "pattern": {
+          }
+        ]
+      },
+      "emit": "GlslFmaCommuted",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fuse_fsub_f32",
+      "kind": "fusion",
+      "cost": 1,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          "$a",
+          {
+            "op": "FNeg",
+            "args": [
+              "$b"
+            ]
+          }
+        ]
+      },
+      "emit": "OpFSub",
+      "effects": []
+    },
+    {
+      "name": "fuse_fclamp_f32",
+      "kind": "fusion",
+      "cost": 1,
+      "pattern": {
+        "op": "NMin",
+        "args": [
+          {
+            "op": "NMax",
+            "args": [
+              "$x",
+              "$lo"
+            ]
+          },
+          "$hi"
+        ]
+      },
+      "emit": "GlslFClamp",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fuse_bfe_u32",
+      "kind": "fusion",
+      "cost": 1,
+      "pattern": {
+        "op": "BitAnd",
+        "args": [
+          {
+            "op": "ShrU",
+            "args": [
+              "$x",
+              "$off"
+            ]
+          },
+          "$mask"
+        ]
+      },
+      "emit": "OpBitFieldUExtractMask",
+      "effects": []
+    },
+    {
+      "name": "elide_fabs_fabs",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FAbs",
+        "args": [
+          {
+            "op": "FAbs",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "GlslFAbs",
+      "ssa_rewrite": {
+        "op": "FAbs",
+        "args": [
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "elide_fabs_fneg",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FAbs",
+        "args": [
+          {
+            "op": "FNeg",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "GlslFAbs",
+      "ssa_rewrite": {
+        "op": "FAbs",
+        "args": [
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "elide_fadd_neg_zero_r",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 2147483648
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fadd_neg_zero_l",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 2147483648
+          },
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fsub_pos_zero",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FSub",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmul_one_r",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmul_one_l",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          },
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmul_neg_one_r",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 3212836864
+          }
+        ]
+      },
+      "emit": "OpFNegate",
+      "ssa_rewrite": {
+        "op": "FNeg",
+        "args": [
+          0
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmul_neg_one_l",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 3212836864
+          },
+          "$x"
+        ]
+      },
+      "emit": "OpFNegate",
+      "ssa_rewrite": {
+        "op": "FNeg",
+        "args": [
+          0
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fma_neg_zero",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          "$a",
+          "$b",
+          {
+            "op": "ConstF32",
+            "imm": 2147483648
+          }
+        ]
+      },
+      "emit": "OpFMul",
+      "ssa_rewrite": {
+        "op": "FMul",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fma_one_r",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          },
+          "$c"
+        ]
+      },
+      "emit": "OpFAdd",
+      "ssa_rewrite": {
+        "op": "FAdd",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fma_one_l",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          },
+          "$x",
+          "$c"
+        ]
+      },
+      "emit": "OpFAdd",
+      "ssa_rewrite": {
+        "op": "FAdd",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fdiv_one",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FDiv",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fdiv_neg_one",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FDiv",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 3212836864
+          }
+        ]
+      },
+      "emit": "OpFNegate",
+      "ssa_rewrite": {
+        "op": "FNeg",
+        "args": [
+          0
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmin_self",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FMin",
+        "args": [
+          "$x",
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmax_self",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "FMax",
+        "args": [
+          "$x",
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_nmin_self",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "NMin",
+        "args": [
+          "$x",
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_nmax_self",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "NMax",
+        "args": [
+          "$x",
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_ldexp_zero",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 0,
+      "pattern": {
+        "op": "Ldexp",
+        "args": [
+          "$x",
+          {
+            "op": "ConstS32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "elide_fmul_fneg_fneg",
+      "kind": "fusion",
+      "fast_math": false,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          {
+            "op": "FNeg",
+            "args": [
+              "$a"
+            ]
+          },
+          {
+            "op": "FNeg",
+            "args": [
+              "$b"
+            ]
+          }
+        ]
+      },
+      "emit": "OpFMul",
+      "ssa_rewrite": {
+        "op": "FMul",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_fadd_pos_zero_r",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          "$x",
+          {
+            "op": "ConstF32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_fadd_pos_zero_l",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "FAdd",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 0
+          },
+          "$x"
+        ]
+      },
+      "emit": "ForwardArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_fma_pos_zero",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          "$a",
+          "$b",
+          {
+            "op": "ConstF32",
+            "imm": 0
+          }
+        ]
+      },
+      "emit": "OpFMul",
+      "ssa_rewrite": {
+        "op": "FMul",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_fma_zero_r",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          "$a",
+          {
+            "op": "ConstF32",
+            "imm": 0
+          },
+          "$c"
+        ]
+      },
+      "emit": "ForwardArg1",
+      "ssa_rewrite": {
+        "forward_leaf": 1
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_fma_zero_l",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "Fma",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 0
+          },
+          "$b",
+          "$c"
+        ]
+      },
+      "emit": "ForwardArg1",
+      "ssa_rewrite": {
+        "forward_leaf": 1
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_fuse_fmul_rcp_r",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          "$a",
+          {
+            "op": "FDiv",
+            "args": [
+              {
+                "op": "ConstF32",
+                "imm": 1065353216
+              },
+              "$b"
+            ]
+          }
+        ]
+      },
+      "emit": "OpFDiv",
+      "ssa_rewrite": {
+        "op": "FDiv",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_fuse_fmul_rcp_l",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          {
+            "op": "FDiv",
+            "args": [
+              {
+                "op": "ConstF32",
+                "imm": 1065353216
+              },
+              "$b"
+            ]
+          },
+          "$a"
+        ]
+      },
+      "emit": "OpFDivSwapped",
+      "ssa_rewrite": {
+        "op": "FDiv",
+        "args": [
+          1,
+          0
+        ]
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_rcp_rcp",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "FDiv",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          },
+          {
+            "op": "FDiv",
+            "args": [
+              {
+                "op": "ConstF32",
+                "imm": 1065353216
+              },
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_fuse_rcp_rsqrt",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FDiv",
+        "args": [
+          {
+            "op": "ConstF32",
+            "imm": 1065353216
+          },
+          {
+            "op": "InverseSqrt",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "GlslSqrt",
+      "ssa_rewrite": {
+        "op": "Sqrt",
+        "args": [
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fast_fuse_fmul_rsqrt_r",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          "$x",
+          {
+            "op": "InverseSqrt",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "GlslSqrt",
+      "ssa_rewrite": {
+        "op": "Sqrt",
+        "args": [
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fast_fuse_fmul_rsqrt_l",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FMul",
+        "args": [
+          {
+            "op": "InverseSqrt",
+            "args": [
+              "$x"
+            ]
+          },
+          "$x"
+        ]
+      },
+      "emit": "GlslSqrt",
+      "ssa_rewrite": {
+        "op": "Sqrt",
+        "args": [
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fast_elide_exp2_log2",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "Exp2",
+        "args": [
+          {
+            "op": "Log2",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_elide_log2_exp2",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 0,
+      "pattern": {
+        "op": "Log2",
+        "args": [
+          {
+            "op": "Exp2",
+            "args": [
+              "$x"
+            ]
+          }
+        ]
+      },
+      "emit": "ForwardInnerArg0",
+      "ssa_rewrite": {
+        "forward_leaf": 0
+      },
+      "effects": []
+    },
+    {
+      "name": "fast_fuse_exp2_mul_log2_r",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "Exp2",
+        "args": [
+          {
+            "op": "FMul",
+            "args": [
+              "$b",
+              {
                 "op": "Log2",
                 "args": [
-                    {
-                        "op": "Exp2",
-                        "args": [
-                            "$x"
-                        ]
-                    }
+                  "$a"
                 ]
-            },
-            "emit": "ForwardInnerArg0",
-            "ssa_rewrite": {
-                "forward_leaf": 0
-            },
-            "effects": []
-        },
-        {
-            "name": "fast_fuse_exp2_mul_log2_r",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "Exp2",
+              }
+            ]
+          }
+        ]
+      },
+      "emit": "GlslPowSwapped",
+      "ssa_rewrite": {
+        "op": "Pow",
+        "args": [
+          1,
+          0
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fast_fuse_exp2_mul_log2_l",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "Exp2",
+        "args": [
+          {
+            "op": "FMul",
+            "args": [
+              {
+                "op": "Log2",
                 "args": [
-                    {
-                        "op": "FMul",
-                        "args": [
-                            "$b",
-                            {
-                                "op": "Log2",
-                                "args": [
-                                    "$a"
-                                ]
-                            }
-                        ]
-                    }
+                  "$a"
                 ]
-            },
-            "emit": "GlslPowSwapped",
-            "ssa_rewrite": {
-                "op": "Pow",
-                "args": [
-                    1,
-                    0
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+              },
+              "$b"
             ]
-        },
-        {
-            "name": "fast_fuse_exp2_mul_log2_l",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "Exp2",
-                "args": [
-                    {
-                        "op": "FMul",
-                        "args": [
-                            {
-                                "op": "Log2",
-                                "args": [
-                                    "$a"
-                                ]
-                            },
-                            "$b"
-                        ]
-                    }
-                ]
-            },
-            "emit": "GlslPow",
-            "ssa_rewrite": {
-                "op": "Pow",
-                "args": [
-                    0,
-                    1
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
+          }
+        ]
+      },
+      "emit": "GlslPow",
+      "ssa_rewrite": {
+        "op": "Pow",
+        "args": [
+          0,
+          1
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "fast_fuse_fminmax_fclamp",
+      "kind": "fusion",
+      "fast_math": true,
+      "cost": 1,
+      "pattern": {
+        "op": "FMin",
+        "args": [
+          {
+            "op": "FMax",
+            "args": [
+              "$x",
+              "$lo"
             ]
-        },
-        {
-            "name": "fast_fuse_fminmax_fclamp",
-            "kind": "fusion",
-            "fast_math": true,
-            "cost": 1,
-            "pattern": {
-                "op": "FMin",
-                "args": [
-                    {
-                        "op": "FMax",
-                        "args": [
-                            "$x",
-                            "$lo"
-                        ]
-                    },
-                    "$hi"
-                ]
-            },
-            "emit": "GlslFClamp",
-            "ssa_rewrite": {
-                "op": "FClamp",
-                "args": [
-                    0,
-                    1,
-                    2
-                ]
-            },
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_nop",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "Nop",
-            "emit": "Nop",
-            "effects": []
-        },
-        {
-            "name": "canon_copy",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "Copy",
-            "emit": "ForwardArg0",
-            "effects": []
-        },
-        {
-            "name": "canon_const_u32",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "ConstU32",
-            "emit": "ConstU32",
-            "effects": []
-        },
-        {
-            "name": "canon_const_s32",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "ConstS32",
-            "emit": "ConstS32",
-            "effects": []
-        },
-        {
-            "name": "canon_const_f32",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "ConstF32",
-            "emit": "ConstF32",
-            "effects": []
-        },
-        {
-            "name": "canon_const_u64",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "ConstU64",
-            "emit": "ConstU64",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_const_bool",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "ConstBool",
-            "emit": "ConstBool",
-            "effects": []
-        },
-        {
-            "name": "canon_phi",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "Phi",
-            "emit": "OpPhi",
-            "effects": []
-        },
-        {
-            "name": "canon_load_fau",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadFau",
-            "emit": "LoadFau",
-            "effects": [
-                "uses_sideband"
-            ]
-        },
-        {
-            "name": "canon_load_sideband_u64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadSidebandU64",
-            "emit": "LoadSidebandU64",
-            "effects": [
-                "uses_sideband",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_load_sideband_u32",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadSidebandU32",
-            "emit": "LoadSidebandU32",
-            "effects": [
-                "uses_sideband"
-            ]
-        },
-        {
-            "name": "canon_load_builtin_input",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadBuiltinInput",
-            "emit": "LoadBuiltinInput",
-            "effects": []
-        },
-        {
-            "name": "canon_load_vert_attr",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadVertAttr",
-            "emit": "LoadVertAttr",
-            "effects": []
-        },
-        {
-            "name": "canon_load_frag_varying",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LoadFragVarying",
-            "emit": "LoadFragVarying",
-            "effects": []
-        },
-        {
-            "name": "canon_pack64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Pack64",
-            "emit": "Pack64",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_split64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Split64",
-            "emit": "Split64",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_tuple_extract",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "TupleExtract",
-            "emit": "TupleExtract",
-            "effects": []
-        },
-        {
-            "name": "canon_bfi",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Bfi",
-            "emit": "OpBitFieldInsert",
-            "effects": []
-        },
-        {
-            "name": "canon_bfe_u",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BfeU",
-            "emit": "OpBitFieldUExtract",
-            "effects": []
-        },
-        {
-            "name": "canon_bfe_s",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BfeS",
-            "emit": "OpBitFieldSExtract",
-            "effects": []
-        },
-        {
-            "name": "canon_unpack_half2x16",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "UnpackHalf2x16",
-            "emit": "GlslUnpackHalf2x16",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_pack_half2x16",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "PackHalf2x16",
-            "emit": "GlslPackHalf2x16",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_bitcast",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "Bitcast",
-            "emit": "OpBitcast",
-            "effects": []
-        },
-        {
-            "name": "canon_vec_construct2",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "VecConstruct2",
-            "emit": "OpCompositeConstruct",
-            "effects": []
-        },
-        {
-            "name": "canon_vec_construct3",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "VecConstruct3",
-            "emit": "OpCompositeConstruct",
-            "effects": []
-        },
-        {
-            "name": "canon_vec_construct4",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "VecConstruct4",
-            "emit": "OpCompositeConstruct",
-            "effects": []
-        },
-        {
-            "name": "canon_vec_extract",
-            "kind": "canonical",
-            "cost": 0,
-            "ssa_op": "VecExtract",
-            "emit": "OpCompositeExtract",
-            "effects": []
-        },
-        {
-            "name": "canon_vec_shuffle",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "VecShuffle",
-            "emit": "OpVectorShuffle",
-            "effects": []
-        },
-        {
-            "name": "canon_fadd",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FAdd",
-            "emit": "OpFAdd",
-            "effects": []
-        },
-        {
-            "name": "canon_fsub",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FSub",
-            "emit": "OpFSub",
-            "effects": []
-        },
-        {
-            "name": "canon_fmul",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FMul",
-            "emit": "OpFMul",
-            "effects": []
-        },
-        {
-            "name": "canon_fdiv",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FDiv",
-            "emit": "OpFDiv",
-            "effects": []
-        },
-        {
-            "name": "canon_fneg",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FNeg",
-            "emit": "OpFNegate",
-            "effects": []
-        },
-        {
-            "name": "canon_fabs",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FAbs",
-            "emit": "GlslFAbs",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_fma",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Fma",
-            "emit": "GlslFma",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_fmin",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FMin",
-            "emit": "GlslFMin",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_fmax",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FMax",
-            "emit": "GlslFMax",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_nmin",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "NMin",
-            "emit": "GlslNMin",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_nmax",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "NMax",
-            "emit": "GlslNMax",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_fclamp",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FClamp",
-            "emit": "GlslFClamp",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_round_even",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "RoundEven",
-            "emit": "GlslRoundEven",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_floor",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Floor",
-            "emit": "GlslFloor",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_ceil",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Ceil",
-            "emit": "GlslCeil",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_trunc",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Trunc",
-            "emit": "GlslTrunc",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_ldexp",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Ldexp",
-            "emit": "GlslLdexp",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_frexp_exp",
-            "kind": "canonical",
-            "cost": 2,
-            "ssa_op": "FrexpExp",
-            "emit": "GlslFrexpExp",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_frexp_sig",
-            "kind": "canonical",
-            "cost": 2,
-            "ssa_op": "FrexpSignificand",
-            "emit": "GlslFrexpSig",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_exp",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Exp",
-            "emit": "GlslExp",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_exp2",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Exp2",
-            "emit": "GlslExp2",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_log",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Log",
-            "emit": "GlslLog",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_log2",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Log2",
-            "emit": "GlslLog2",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_pow",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Pow",
-            "emit": "GlslPow",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_sqrt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Sqrt",
-            "emit": "GlslSqrt",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_rsqrt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "InverseSqrt",
-            "emit": "GlslInverseSqrt",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_sin",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Sin",
-            "emit": "GlslSin",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_cos",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Cos",
-            "emit": "GlslCos",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_atan",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Atan",
-            "emit": "GlslAtan",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_isnan",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IsNan",
-            "emit": "OpIsNan",
-            "effects": []
-        },
-        {
-            "name": "canon_isinf",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IsInf",
-            "emit": "OpIsInf",
-            "effects": []
-        },
-        {
-            "name": "canon_iadd",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IAdd",
-            "emit": "OpIAdd",
-            "effects": []
-        },
-        {
-            "name": "canon_isub",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ISub",
-            "emit": "OpISub",
-            "effects": []
-        },
-        {
-            "name": "canon_imul",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IMul",
-            "emit": "OpIMul",
-            "effects": []
-        },
-        {
-            "name": "canon_iadd64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IAdd64",
-            "emit": "OpIAdd",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_isub64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ISub64",
-            "emit": "OpISub",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_imul64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "IMul64",
-            "emit": "OpIMul",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_sabs",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SAbs",
-            "emit": "GlslSAbs",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_sneg",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SNeg",
-            "emit": "OpSNegate",
-            "effects": []
-        },
-        {
-            "name": "canon_idot4s",
-            "kind": "canonical",
-            "cost": 4,
-            "ssa_op": "IDot4S",
-            "emit": "EmitIDot4S",
-            "effects": []
-        },
-        {
-            "name": "canon_idot4u",
-            "kind": "canonical",
-            "cost": 4,
-            "ssa_op": "IDot4U",
-            "emit": "EmitIDot4U",
-            "effects": []
-        },
-        {
-            "name": "canon_idot4su",
-            "kind": "canonical",
-            "cost": 4,
-            "ssa_op": "IDot4SU",
-            "emit": "EmitIDot4SU",
-            "effects": []
-        },
-        {
-            "name": "canon_bit_and",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitAnd",
-            "emit": "OpBitwiseAnd",
-            "effects": []
-        },
-        {
-            "name": "canon_bit_or",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitOr",
-            "emit": "OpBitwiseOr",
-            "effects": []
-        },
-        {
-            "name": "canon_bit_xor",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitXor",
-            "emit": "OpBitwiseXor",
-            "effects": []
-        },
-        {
-            "name": "canon_bit_not",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitNot",
-            "emit": "OpNot",
-            "effects": []
-        },
-        {
-            "name": "canon_bit_and64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitAnd64",
-            "emit": "OpBitwiseAnd",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_bit_or64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitOr64",
-            "emit": "OpBitwiseOr",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_bit_xor64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitXor64",
-            "emit": "OpBitwiseXor",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_bit_not64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitNot64",
-            "emit": "OpNot",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_shl",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Shl",
-            "emit": "OpShiftLeftLogical",
-            "effects": []
-        },
-        {
-            "name": "canon_shru",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ShrU",
-            "emit": "OpShiftRightLogical",
-            "effects": []
-        },
-        {
-            "name": "canon_shrs",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ShrS",
-            "emit": "OpShiftRightArithmetic",
-            "effects": []
-        },
-        {
-            "name": "canon_shl64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Shl64",
-            "emit": "OpShiftLeftLogical",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_shru64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ShrU64",
-            "emit": "OpShiftRightLogical",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_shrs64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ShrS64",
-            "emit": "OpShiftRightArithmetic",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_rotl",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "RotL",
-            "emit": "EmitRotL",
-            "effects": []
-        },
-        {
-            "name": "canon_rotr",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "RotR",
-            "emit": "EmitRotR",
-            "effects": []
-        },
-        {
-            "name": "canon_bitrev",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitReverse",
-            "emit": "OpBitReverse",
-            "effects": []
-        },
-        {
-            "name": "canon_bitcnt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BitCount",
-            "emit": "OpBitCount",
-            "effects": []
-        },
-        {
-            "name": "canon_clz",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "Clz",
-            "emit": "EmitClz",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_fcmp_ord_eq",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdEq",
-            "emit": "OpFOrdEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_ord_gt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdGt",
-            "emit": "OpFOrdGreaterThan",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_ord_ge",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdGe",
-            "emit": "OpFOrdGreaterThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_ord_ne",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdNe",
-            "emit": "OpFOrdNotEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_ord_lt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdLt",
-            "emit": "OpFOrdLessThan",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_ord_le",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpOrdLe",
-            "emit": "OpFOrdLessThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_unord_ne",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "FCmpUnordNe",
-            "emit": "OpFUnordNotEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_fcmp_total",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "FCmpTotal",
-            "emit": "EmitFCmpTotal",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_eq",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpEq",
-            "emit": "OpIEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_ne",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpNe",
-            "emit": "OpINotEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_sgt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpSGt",
-            "emit": "OpSGreaterThan",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_sge",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpSGe",
-            "emit": "OpSGreaterThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_slt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpSLt",
-            "emit": "OpSLessThan",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_sle",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpSLe",
-            "emit": "OpSLessThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_ugt",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpUGt",
-            "emit": "OpUGreaterThan",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_uge",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpUGe",
-            "emit": "OpUGreaterThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_ult",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpULt",
-            "emit": "OpULessThan",
-            "effects": []
-        },
-        {
-            "name": "canon_icmp_ule",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ICmpULe",
-            "emit": "OpULessThanEqual",
-            "effects": []
-        },
-        {
-            "name": "canon_land",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LogicalAnd",
-            "emit": "OpLogicalAnd",
-            "effects": []
-        },
-        {
-            "name": "canon_lor",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LogicalOr",
-            "emit": "OpLogicalOr",
-            "effects": []
-        },
-        {
-            "name": "canon_lnot",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "LogicalNot",
-            "emit": "OpLogicalNot",
-            "effects": []
-        },
-        {
-            "name": "canon_select",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Select",
-            "emit": "OpSelect",
-            "effects": []
-        },
-        {
-            "name": "canon_ftos",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ConvertFToS",
-            "emit": "OpConvertFToS",
-            "effects": []
-        },
-        {
-            "name": "canon_ftou",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ConvertFToU",
-            "emit": "OpConvertFToU",
-            "effects": []
-        },
-        {
-            "name": "canon_stof",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ConvertSToF",
-            "emit": "OpConvertSToF",
-            "effects": []
-        },
-        {
-            "name": "canon_utof",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ConvertUToF",
-            "emit": "OpConvertUToF",
-            "effects": []
-        },
-        {
-            "name": "canon_u32_to_64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "UConvert32To64",
-            "emit": "OpUConvert",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_s32_to_64",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SConvert32To64",
-            "emit": "OpSConvert",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_u64_to_32",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "UConvert64To32",
-            "emit": "OpUConvert",
-            "effects": [
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_sg_ballot",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SubgroupBallot",
-            "emit": "OpGroupNonUniformBallot",
-            "effects": [
-                "cap:GroupNonUniform",
-                "cap:GroupNonUniformBallot"
-            ]
-        },
-        {
-            "name": "canon_sg_shuffle",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SubgroupShuffle",
-            "emit": "OpGroupNonUniformShuffle",
-            "effects": [
-                "cap:GroupNonUniform",
-                "cap:GroupNonUniformShuffle"
-            ]
-        },
-        {
-            "name": "canon_psb_load",
-            "kind": "canonical",
-            "cost": 2,
-            "ssa_op": "PsbLoad",
-            "emit": "EmitPsbLoad",
-            "effects": [
-                "cap:PhysicalStorageBufferAddresses",
-                "ext:SPV_KHR_physical_storage_buffer",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_psb_store",
-            "kind": "canonical",
-            "cost": 2,
-            "ssa_op": "PsbStore",
-            "emit": "EmitPsbStore",
-            "effects": [
-                "cap:PhysicalStorageBufferAddresses",
-                "ext:SPV_KHR_physical_storage_buffer",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_atomic_rmw",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "AtomicRmw",
-            "emit": "EmitAtomicRmw",
-            "effects": [
-                "cap:PhysicalStorageBufferAddresses",
-                "ext:SPV_KHR_physical_storage_buffer",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_atomic_cmpxchg",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "AtomicCmpXchg",
-            "emit": "EmitAtomicCmpXchg",
-            "effects": [
-                "cap:PhysicalStorageBufferAddresses",
-                "ext:SPV_KHR_physical_storage_buffer",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_atomic_xchg",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "AtomicExchange",
-            "emit": "EmitAtomicExchange",
-            "effects": [
-                "cap:PhysicalStorageBufferAddresses",
-                "ext:SPV_KHR_physical_storage_buffer",
-                "cap:Int64"
-            ]
-        },
-        {
-            "name": "canon_tex_sample",
-            "kind": "canonical",
-            "cost": 3,
-            "ssa_op": "TexSample",
-            "emit": "EmitTexSample",
-            "effects": []
-        },
-        {
-            "name": "canon_store_builtin_out",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "StoreBuiltinOutput",
-            "emit": "EmitStoreBuiltinOutput",
-            "effects": []
-        },
-        {
-            "name": "canon_store_vert_var",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "StoreVertVarying",
-            "emit": "EmitStoreVertVarying",
-            "effects": []
-        },
-        {
-            "name": "canon_store_frag_col",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "StoreFragColor",
-            "emit": "EmitStoreFragColor",
-            "effects": []
-        },
-        {
-            "name": "canon_ctrl_barrier",
-            "kind": "canonical",
-            "cost": 2,
-            "ssa_op": "ControlBarrier",
-            "emit": "OpControlBarrier",
-            "effects": []
-        },
-        {
-            "name": "canon_kill",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Kill",
-            "emit": "OpKill",
-            "effects": []
-        },
-        {
-            "name": "canon_branch",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Branch",
-            "emit": "OpBranch",
-            "effects": []
-        },
-        {
-            "name": "canon_branch_cond",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "BranchCond",
-            "emit": "OpBranchConditional",
-            "effects": []
-        },
-        {
-            "name": "canon_return",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Return",
-            "emit": "OpReturn",
-            "effects": []
-        },
-        {
-            "name": "canon_udiv",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "UDiv",
-            "emit": "OpUDiv",
-            "effects": []
-        },
-        {
-            "name": "canon_sdiv",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SDiv",
-            "emit": "OpSDiv",
-            "effects": []
-        },
-        {
-            "name": "canon_umod",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "UMod",
-            "emit": "OpUMod",
-            "effects": []
-        },
-        {
-            "name": "canon_srem",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SRem",
-            "emit": "OpSRem",
-            "effects": []
-        },
-        {
-            "name": "canon_smod",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "SMod",
-            "emit": "OpSMod",
-            "effects": []
-        },
-        {
-            "name": "canon_atan2",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Atan2",
-            "emit": "GlslAtan2",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_asin",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Asin",
-            "emit": "GlslAsin",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_acos",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Acos",
-            "emit": "GlslAcos",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_sinh",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Sinh",
-            "emit": "GlslSinh",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_cosh",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Cosh",
-            "emit": "GlslCosh",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_tanh",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Tanh",
-            "emit": "GlslTanh",
-            "effects": [
-                "uses_glsl_std450"
-            ]
-        },
-        {
-            "name": "canon_dpdx",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "DPdx",
-            "emit": "OpDPdx",
-            "effects": []
-        },
-        {
-            "name": "canon_dpdy",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "DPdy",
-            "emit": "OpDPdy",
-            "effects": []
-        },
-        {
-            "name": "canon_fwidth",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "Fwidth",
-            "emit": "OpFwidth",
-            "effects": []
-        },
-        {
-            "name": "canon_img_query_size",
-            "kind": "canonical",
-            "cost": 1,
-            "ssa_op": "ImageQuerySize",
-            "emit": "OpImageQuerySize",
-            "effects": []
-        }
-    ]
+          },
+          "$hi"
+        ]
+      },
+      "emit": "GlslFClamp",
+      "ssa_rewrite": {
+        "op": "FClamp",
+        "args": [
+          0,
+          1,
+          2
+        ]
+      },
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_nop",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "Nop",
+      "emit": "Nop",
+      "effects": []
+    },
+    {
+      "name": "canon_copy",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "Copy",
+      "emit": "ForwardArg0",
+      "effects": []
+    },
+    {
+      "name": "canon_const_u32",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "ConstU32",
+      "emit": "ConstU32",
+      "effects": []
+    },
+    {
+      "name": "canon_const_s32",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "ConstS32",
+      "emit": "ConstS32",
+      "effects": []
+    },
+    {
+      "name": "canon_const_f32",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "ConstF32",
+      "emit": "ConstF32",
+      "effects": []
+    },
+    {
+      "name": "canon_const_u64",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "ConstU64",
+      "emit": "ConstU64",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_const_bool",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "ConstBool",
+      "emit": "ConstBool",
+      "effects": []
+    },
+    {
+      "name": "canon_phi",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "Phi",
+      "emit": "OpPhi",
+      "effects": []
+    },
+    {
+      "name": "canon_load_fau",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadFau",
+      "emit": "LoadFau",
+      "effects": [
+        "uses_sideband"
+      ]
+    },
+    {
+      "name": "canon_load_sideband_u64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadSidebandU64",
+      "emit": "LoadSidebandU64",
+      "effects": [
+        "uses_sideband",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_load_sideband_u32",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadSidebandU32",
+      "emit": "LoadSidebandU32",
+      "effects": [
+        "uses_sideband"
+      ]
+    },
+    {
+      "name": "canon_load_builtin_input",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadBuiltinInput",
+      "emit": "LoadBuiltinInput",
+      "effects": []
+    },
+    {
+      "name": "canon_load_vert_attr",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadVertAttr",
+      "emit": "LoadVertAttr",
+      "effects": []
+    },
+    {
+      "name": "canon_load_frag_varying",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LoadFragVarying",
+      "emit": "LoadFragVarying",
+      "effects": []
+    },
+    {
+      "name": "canon_pack64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Pack64",
+      "emit": "Pack64",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_split64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Split64",
+      "emit": "Split64",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_tuple_extract",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "TupleExtract",
+      "emit": "TupleExtract",
+      "effects": []
+    },
+    {
+      "name": "canon_bfi",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Bfi",
+      "emit": "OpBitFieldInsert",
+      "effects": []
+    },
+    {
+      "name": "canon_bfe_u",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BfeU",
+      "emit": "OpBitFieldUExtract",
+      "effects": []
+    },
+    {
+      "name": "canon_bfe_s",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BfeS",
+      "emit": "OpBitFieldSExtract",
+      "effects": []
+    },
+    {
+      "name": "canon_unpack_half2x16",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "UnpackHalf2x16",
+      "emit": "GlslUnpackHalf2x16",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_pack_half2x16",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "PackHalf2x16",
+      "emit": "GlslPackHalf2x16",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_bitcast",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "Bitcast",
+      "emit": "OpBitcast",
+      "effects": []
+    },
+    {
+      "name": "canon_vec_construct2",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "VecConstruct2",
+      "emit": "OpCompositeConstruct",
+      "effects": []
+    },
+    {
+      "name": "canon_vec_construct3",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "VecConstruct3",
+      "emit": "OpCompositeConstruct",
+      "effects": []
+    },
+    {
+      "name": "canon_vec_construct4",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "VecConstruct4",
+      "emit": "OpCompositeConstruct",
+      "effects": []
+    },
+    {
+      "name": "canon_vec_extract",
+      "kind": "canonical",
+      "cost": 0,
+      "ssa_op": "VecExtract",
+      "emit": "OpCompositeExtract",
+      "effects": []
+    },
+    {
+      "name": "canon_vec_shuffle",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "VecShuffle",
+      "emit": "OpVectorShuffle",
+      "effects": []
+    },
+    {
+      "name": "canon_fadd",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FAdd",
+      "emit": "OpFAdd",
+      "effects": []
+    },
+    {
+      "name": "canon_fsub",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FSub",
+      "emit": "OpFSub",
+      "effects": []
+    },
+    {
+      "name": "canon_fmul",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FMul",
+      "emit": "OpFMul",
+      "effects": []
+    },
+    {
+      "name": "canon_fdiv",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FDiv",
+      "emit": "OpFDiv",
+      "effects": []
+    },
+    {
+      "name": "canon_fneg",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FNeg",
+      "emit": "OpFNegate",
+      "effects": []
+    },
+    {
+      "name": "canon_fabs",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FAbs",
+      "emit": "GlslFAbs",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_fma",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Fma",
+      "emit": "GlslFma",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_fmin",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FMin",
+      "emit": "GlslFMin",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_fmax",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FMax",
+      "emit": "GlslFMax",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_nmin",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "NMin",
+      "emit": "GlslNMin",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_nmax",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "NMax",
+      "emit": "GlslNMax",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_fclamp",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FClamp",
+      "emit": "GlslFClamp",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_round_even",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "RoundEven",
+      "emit": "GlslRoundEven",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_floor",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Floor",
+      "emit": "GlslFloor",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_ceil",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Ceil",
+      "emit": "GlslCeil",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_trunc",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Trunc",
+      "emit": "GlslTrunc",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_ldexp",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Ldexp",
+      "emit": "GlslLdexp",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_frexp_exp",
+      "kind": "canonical",
+      "cost": 2,
+      "ssa_op": "FrexpExp",
+      "emit": "GlslFrexpExp",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_frexp_sig",
+      "kind": "canonical",
+      "cost": 2,
+      "ssa_op": "FrexpSignificand",
+      "emit": "GlslFrexpSig",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_exp",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Exp",
+      "emit": "GlslExp",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_exp2",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Exp2",
+      "emit": "GlslExp2",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_log",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Log",
+      "emit": "GlslLog",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_log2",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Log2",
+      "emit": "GlslLog2",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_pow",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Pow",
+      "emit": "GlslPow",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_sqrt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Sqrt",
+      "emit": "GlslSqrt",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_rsqrt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "InverseSqrt",
+      "emit": "GlslInverseSqrt",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_sin",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Sin",
+      "emit": "GlslSin",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_cos",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Cos",
+      "emit": "GlslCos",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_atan",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Atan",
+      "emit": "GlslAtan",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_isnan",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IsNan",
+      "emit": "OpIsNan",
+      "effects": []
+    },
+    {
+      "name": "canon_isinf",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IsInf",
+      "emit": "OpIsInf",
+      "effects": []
+    },
+    {
+      "name": "canon_iadd",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IAdd",
+      "emit": "OpIAdd",
+      "effects": []
+    },
+    {
+      "name": "canon_isub",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ISub",
+      "emit": "OpISub",
+      "effects": []
+    },
+    {
+      "name": "canon_imul",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IMul",
+      "emit": "OpIMul",
+      "effects": []
+    },
+    {
+      "name": "canon_iadd64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IAdd64",
+      "emit": "OpIAdd",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_isub64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ISub64",
+      "emit": "OpISub",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_imul64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "IMul64",
+      "emit": "OpIMul",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_sabs",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SAbs",
+      "emit": "GlslSAbs",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_sneg",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SNeg",
+      "emit": "OpSNegate",
+      "effects": []
+    },
+    {
+      "name": "canon_idot4s",
+      "kind": "canonical",
+      "cost": 4,
+      "ssa_op": "IDot4S",
+      "emit": "EmitIDot4S",
+      "effects": []
+    },
+    {
+      "name": "canon_idot4u",
+      "kind": "canonical",
+      "cost": 4,
+      "ssa_op": "IDot4U",
+      "emit": "EmitIDot4U",
+      "effects": []
+    },
+    {
+      "name": "canon_idot4su",
+      "kind": "canonical",
+      "cost": 4,
+      "ssa_op": "IDot4SU",
+      "emit": "EmitIDot4SU",
+      "effects": []
+    },
+    {
+      "name": "canon_bit_and",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitAnd",
+      "emit": "OpBitwiseAnd",
+      "effects": []
+    },
+    {
+      "name": "canon_bit_or",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitOr",
+      "emit": "OpBitwiseOr",
+      "effects": []
+    },
+    {
+      "name": "canon_bit_xor",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitXor",
+      "emit": "OpBitwiseXor",
+      "effects": []
+    },
+    {
+      "name": "canon_bit_not",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitNot",
+      "emit": "OpNot",
+      "effects": []
+    },
+    {
+      "name": "canon_bit_and64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitAnd64",
+      "emit": "OpBitwiseAnd",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_bit_or64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitOr64",
+      "emit": "OpBitwiseOr",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_bit_xor64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitXor64",
+      "emit": "OpBitwiseXor",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_bit_not64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitNot64",
+      "emit": "OpNot",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_shl",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Shl",
+      "emit": "OpShiftLeftLogical",
+      "effects": []
+    },
+    {
+      "name": "canon_shru",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ShrU",
+      "emit": "OpShiftRightLogical",
+      "effects": []
+    },
+    {
+      "name": "canon_shrs",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ShrS",
+      "emit": "OpShiftRightArithmetic",
+      "effects": []
+    },
+    {
+      "name": "canon_shl64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Shl64",
+      "emit": "OpShiftLeftLogical",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_shru64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ShrU64",
+      "emit": "OpShiftRightLogical",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_shrs64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ShrS64",
+      "emit": "OpShiftRightArithmetic",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_rotl",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "RotL",
+      "emit": "EmitRotL",
+      "effects": []
+    },
+    {
+      "name": "canon_rotr",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "RotR",
+      "emit": "EmitRotR",
+      "effects": []
+    },
+    {
+      "name": "canon_bitrev",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitReverse",
+      "emit": "OpBitReverse",
+      "effects": []
+    },
+    {
+      "name": "canon_bitcnt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BitCount",
+      "emit": "OpBitCount",
+      "effects": []
+    },
+    {
+      "name": "canon_clz",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "Clz",
+      "emit": "EmitClz",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_fcmp_ord_eq",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdEq",
+      "emit": "OpFOrdEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_ord_gt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdGt",
+      "emit": "OpFOrdGreaterThan",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_ord_ge",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdGe",
+      "emit": "OpFOrdGreaterThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_ord_ne",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdNe",
+      "emit": "OpFOrdNotEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_ord_lt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdLt",
+      "emit": "OpFOrdLessThan",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_ord_le",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpOrdLe",
+      "emit": "OpFOrdLessThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_unord_ne",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "FCmpUnordNe",
+      "emit": "OpFUnordNotEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_fcmp_total",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "FCmpTotal",
+      "emit": "EmitFCmpTotal",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_eq",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpEq",
+      "emit": "OpIEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_ne",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpNe",
+      "emit": "OpINotEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_sgt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpSGt",
+      "emit": "OpSGreaterThan",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_sge",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpSGe",
+      "emit": "OpSGreaterThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_slt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpSLt",
+      "emit": "OpSLessThan",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_sle",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpSLe",
+      "emit": "OpSLessThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_ugt",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpUGt",
+      "emit": "OpUGreaterThan",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_uge",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpUGe",
+      "emit": "OpUGreaterThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_ult",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpULt",
+      "emit": "OpULessThan",
+      "effects": []
+    },
+    {
+      "name": "canon_icmp_ule",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ICmpULe",
+      "emit": "OpULessThanEqual",
+      "effects": []
+    },
+    {
+      "name": "canon_land",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LogicalAnd",
+      "emit": "OpLogicalAnd",
+      "effects": []
+    },
+    {
+      "name": "canon_lor",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LogicalOr",
+      "emit": "OpLogicalOr",
+      "effects": []
+    },
+    {
+      "name": "canon_lnot",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "LogicalNot",
+      "emit": "OpLogicalNot",
+      "effects": []
+    },
+    {
+      "name": "canon_select",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Select",
+      "emit": "OpSelect",
+      "effects": []
+    },
+    {
+      "name": "canon_ftos",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ConvertFToS",
+      "emit": "OpConvertFToS",
+      "effects": []
+    },
+    {
+      "name": "canon_ftou",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ConvertFToU",
+      "emit": "OpConvertFToU",
+      "effects": []
+    },
+    {
+      "name": "canon_stof",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ConvertSToF",
+      "emit": "OpConvertSToF",
+      "effects": []
+    },
+    {
+      "name": "canon_utof",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ConvertUToF",
+      "emit": "OpConvertUToF",
+      "effects": []
+    },
+    {
+      "name": "canon_u32_to_64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "UConvert32To64",
+      "emit": "OpUConvert",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_s32_to_64",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SConvert32To64",
+      "emit": "OpSConvert",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_u64_to_32",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "UConvert64To32",
+      "emit": "OpUConvert",
+      "effects": [
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_sg_ballot",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SubgroupBallot",
+      "emit": "OpGroupNonUniformBallot",
+      "effects": [
+        "cap:GroupNonUniform",
+        "cap:GroupNonUniformBallot"
+      ]
+    },
+    {
+      "name": "canon_sg_shuffle",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SubgroupShuffle",
+      "emit": "OpGroupNonUniformShuffle",
+      "effects": [
+        "cap:GroupNonUniform",
+        "cap:GroupNonUniformShuffle"
+      ]
+    },
+    {
+      "name": "canon_psb_load",
+      "kind": "canonical",
+      "cost": 2,
+      "ssa_op": "PsbLoad",
+      "emit": "EmitPsbLoad",
+      "effects": [
+        "cap:PhysicalStorageBufferAddresses",
+        "ext:SPV_KHR_physical_storage_buffer",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_psb_store",
+      "kind": "canonical",
+      "cost": 2,
+      "ssa_op": "PsbStore",
+      "emit": "EmitPsbStore",
+      "effects": [
+        "cap:PhysicalStorageBufferAddresses",
+        "ext:SPV_KHR_physical_storage_buffer",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_atomic_rmw",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "AtomicRmw",
+      "emit": "EmitAtomicRmw",
+      "effects": [
+        "cap:PhysicalStorageBufferAddresses",
+        "ext:SPV_KHR_physical_storage_buffer",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_atomic_cmpxchg",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "AtomicCmpXchg",
+      "emit": "EmitAtomicCmpXchg",
+      "effects": [
+        "cap:PhysicalStorageBufferAddresses",
+        "ext:SPV_KHR_physical_storage_buffer",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_atomic_xchg",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "AtomicExchange",
+      "emit": "EmitAtomicExchange",
+      "effects": [
+        "cap:PhysicalStorageBufferAddresses",
+        "ext:SPV_KHR_physical_storage_buffer",
+        "cap:Int64"
+      ]
+    },
+    {
+      "name": "canon_tex_sample",
+      "kind": "canonical",
+      "cost": 3,
+      "ssa_op": "TexSample",
+      "emit": "EmitTexSample",
+      "effects": []
+    },
+    {
+      "name": "canon_store_builtin_out",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "StoreBuiltinOutput",
+      "emit": "EmitStoreBuiltinOutput",
+      "effects": []
+    },
+    {
+      "name": "canon_store_vert_var",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "StoreVertVarying",
+      "emit": "EmitStoreVertVarying",
+      "effects": []
+    },
+    {
+      "name": "canon_store_frag_col",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "StoreFragColor",
+      "emit": "EmitStoreFragColor",
+      "effects": []
+    },
+    {
+      "name": "canon_ctrl_barrier",
+      "kind": "canonical",
+      "cost": 2,
+      "ssa_op": "ControlBarrier",
+      "emit": "OpControlBarrier",
+      "effects": []
+    },
+    {
+      "name": "canon_kill",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Kill",
+      "emit": "OpKill",
+      "effects": []
+    },
+    {
+      "name": "canon_branch",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Branch",
+      "emit": "OpBranch",
+      "effects": []
+    },
+    {
+      "name": "canon_branch_cond",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "BranchCond",
+      "emit": "OpBranchConditional",
+      "effects": []
+    },
+    {
+      "name": "canon_return",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Return",
+      "emit": "OpReturn",
+      "effects": []
+    },
+    {
+      "name": "canon_udiv",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "UDiv",
+      "emit": "OpUDiv",
+      "effects": []
+    },
+    {
+      "name": "canon_sdiv",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SDiv",
+      "emit": "OpSDiv",
+      "effects": []
+    },
+    {
+      "name": "canon_umod",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "UMod",
+      "emit": "OpUMod",
+      "effects": []
+    },
+    {
+      "name": "canon_srem",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SRem",
+      "emit": "OpSRem",
+      "effects": []
+    },
+    {
+      "name": "canon_smod",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "SMod",
+      "emit": "OpSMod",
+      "effects": []
+    },
+    {
+      "name": "canon_atan2",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Atan2",
+      "emit": "GlslAtan2",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_asin",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Asin",
+      "emit": "GlslAsin",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_acos",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Acos",
+      "emit": "GlslAcos",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_sinh",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Sinh",
+      "emit": "GlslSinh",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_cosh",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Cosh",
+      "emit": "GlslCosh",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_tanh",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Tanh",
+      "emit": "GlslTanh",
+      "effects": [
+        "uses_glsl_std450"
+      ]
+    },
+    {
+      "name": "canon_dpdx",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "DPdx",
+      "emit": "OpDPdx",
+      "effects": []
+    },
+    {
+      "name": "canon_dpdy",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "DPdy",
+      "emit": "OpDPdy",
+      "effects": []
+    },
+    {
+      "name": "canon_fwidth",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "Fwidth",
+      "emit": "OpFwidth",
+      "effects": []
+    },
+    {
+      "name": "canon_img_query_size",
+      "kind": "canonical",
+      "cost": 1,
+      "ssa_op": "ImageQuerySize",
+      "emit": "OpImageQuerySize",
+      "effects": []
+    },
+    {
+      "name": "canon_img_query_lod",
+      "kind": "canonical",
+      "ssa_op": "ImageQueryLod",
+      "cost": 3,
+      "emit": "EmitTexSample",
+      "effects": []
+    }
+  ]
 }

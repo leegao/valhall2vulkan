@@ -666,7 +666,8 @@ struct EmitContext {
                 return spv_ids[id];
             }
 
-            case SsaOp::TexSample: {
+            case SsaOp::TexSample:
+            case SsaOp::ImageQueryLod: {
                 uint32_t si_t = 0;
                 uint32_t samp_var = get_or_create_sampled_image(n.imm_u32, &si_t);
                 uint32_t si_val = b.emit_load(si_t, samp_var);

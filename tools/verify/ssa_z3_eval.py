@@ -537,7 +537,7 @@ def eval_ssa_module_z3(
         elif op in ("LoadVertAttr", "LoadFragVarying"):
             uf = _hw_uf(f"ssa_{op}_{node.imm_u32}", BV32, BV32)
             values[node.id] = tuple(uf(bv32(c)) for c in range(4))
-        elif op == "TexSample":
+        elif op in ("TexSample", "ImageQueryLod"):
             uf = _hw_uf("ssa_TexSample", BV32, BV32, BV32)
             uv = args[0] if args else (bv32(0), bv32(0))
             u0 = _as_bv32(uv[0]) if isinstance(uv, tuple) else _as_bv32(uv)

@@ -1215,6 +1215,40 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         case SpvOpFwidthCoarse: emit_unary(SsaOp::Fwidth); break;
 
         // Image metadata queries
+        case SpvOpImageQueryLod: {
+            uint32_t img_id = inst.words[3];
+            uint32_t coord_id = inst.words[4];
+            std::string ikey = "tex:0:0";
+            if (auto it = sampled_images_.find(img_id); it != sampled_images_.end() && !it->second.canonical_key.empty()) {
+                ikey = it->second.canonical_key;
+            }
+            LoweredValue coord = get_value(blk_id, coord_id);
+            SsaId u = coord.lanes.empty() ? sb_.emit_const_f32_bits(blk_id, 0u) : sb_.emit_bitcast(blk_id, ValType::F32, coord.lanes[0]);
+            SsaId v = (coord.lanes.size() >= 2) ? sb_.emit_bitcast(blk_id, ValType::F32, coord.lanes[1]) : sb_.emit_const_f32_bits(blk_id, 0u);
+            SsaId uv = emit_op(blk_id, SsaOp::VecConstruct2, ValType::V2F32, {u, v});
+            SsaNode q{};
+            q.op = SsaOp::ImageQueryLod;
+            q.type = ValType::TupleValToken;
+            q.aux_str = ikey;
+            q.args = {uv, sb_.current_token(blk_id)};
+            q.is_barrier_or_cf = true;
+            q.is_side_effect = true;
+            SsaId tup = sb_.emit(blk_id, std::move(q));
+            SsaNode ev{}; ev.op = SsaOp::TupleExtract; ev.type = ValType::V4F32; ev.imm_u32 = 0; ev.args = {tup};
+            SsaId vec4 = sb_.emit(blk_id, std::move(ev));
+            SsaNode et{}; et.op = SsaOp::TupleExtract; et.type = ValType::Token; et.imm_u32 = 1; et.args = {tup};
+            sb_.set_token(blk_id, sb_.emit(blk_id, std::move(et)));
+            for (uint32_t c = 0; c < nlanes; ++c) {
+                SsaNode ex{};
+                ex.op = SsaOp::VecExtract;
+                ex.type = ValType::F32;
+                ex.imm_u32 = std::min<uint32_t>(3u, c);
+                ex.args = {vec4};
+                out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, sb_.emit(blk_id, std::move(ex))));
+            }
+            break;
+        }
+
         case SpvOpImageQuerySize:
         case SpvOpImageQuerySizeLod:
         case SpvOpImageQueryLevels:
