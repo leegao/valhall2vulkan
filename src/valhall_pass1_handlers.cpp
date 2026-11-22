@@ -757,6 +757,7 @@ std::string get_dest_mod(Pass1Context&, uint32_t, const DecodedValhallInst& ins,
 
 bool get_src_abs(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE) && src_idx == 2u) return false;
+    if ((ins.mnemonic == Mnemonic::FABS || ins.canonical_mnemonic == Mnemonic::FABS) && src_idx == 0u) return false;
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].abs) return true;
     auto it = ins.fields.find("abs" + std::to_string(src_idx));
     return (it != ins.fields.end() && it->second != 0);
@@ -764,6 +765,7 @@ bool get_src_abs(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const t
 
 bool get_src_neg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
     if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE) && src_idx == 2u) return false;
+    if ((ins.mnemonic == Mnemonic::FNEG || ins.canonical_mnemonic == Mnemonic::FNEG) && src_idx == 0u) return false;
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].neg) return true;
     auto it = ins.fields.find("neg" + std::to_string(src_idx));
     return (it != ins.fields.end() && it->second != 0);

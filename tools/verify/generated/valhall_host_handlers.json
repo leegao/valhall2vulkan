@@ -52968,61 +52968,101 @@
               "canonical_type": "bool",
               "kind": "binary",
               "left": {
-                "canonical_type": "unsigned int",
-                "kind": "ident",
-                "loc": {
-                  "col": 9,
-                  "line": 760
-                },
-                "name": "src_idx",
-                "type": "uint32_t"
-              },
-              "loc": {
-                "col": 9,
-                "line": 760
-              },
-              "op": "<",
-              "right": {
-                "args": [],
-                "callee": {
+                "canonical_type": "bool",
+                "kind": "binary",
+                "left": {
+                  "canonical_type": "const valhall::Mnemonic",
                   "is_arrow": false,
                   "kind": "member",
                   "loc": {
-                    "col": 19,
+                    "col": 10,
                     "line": 760
                   },
-                  "member": "size",
+                  "member": "mnemonic",
                   "obj": {
-                    "canonical_type": "const std::vector<valhall::DecodedSource>",
-                    "is_arrow": false,
-                    "kind": "member",
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
                     "loc": {
-                      "col": 19,
+                      "col": 10,
                       "line": 760
                     },
-                    "member": "srcs",
-                    "obj": {
-                      "canonical_type": "const valhall::DecodedValhallInst",
-                      "kind": "ident",
-                      "loc": {
-                        "col": 19,
-                        "line": 760
-                      },
-                      "name": "ins",
-                      "type": "const DecodedValhallInst"
-                    },
-                    "type": "const std::vector<DecodedSource>"
-                  }
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const Mnemonic"
                 },
-                "canonical_type": "unsigned long",
-                "kind": "call",
                 "loc": {
-                  "col": 19,
+                  "col": 10,
                   "line": 760
                 },
-                "qualified_callee": "std::vector<valhall::DecodedSource>::size",
-                "template_args": [],
-                "type": "size_type"
+                "op": "==",
+                "right": {
+                  "canonical_type": "valhall::Mnemonic",
+                  "kind": "scoped_ident",
+                  "loc": {
+                    "col": 26,
+                    "line": 760
+                  },
+                  "parts": [
+                    "valhall",
+                    "Mnemonic",
+                    "FABS"
+                  ],
+                  "qualified_name": "valhall::Mnemonic::FABS",
+                  "type": "valhall::Mnemonic"
+                },
+                "type": "bool"
+              },
+              "loc": {
+                "col": 10,
+                "line": 760
+              },
+              "op": "||",
+              "right": {
+                "canonical_type": "bool",
+                "kind": "binary",
+                "left": {
+                  "canonical_type": "const valhall::Mnemonic",
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 44,
+                    "line": 760
+                  },
+                  "member": "canonical_mnemonic",
+                  "obj": {
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 44,
+                      "line": 760
+                    },
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const Mnemonic"
+                },
+                "loc": {
+                  "col": 44,
+                  "line": 760
+                },
+                "op": "==",
+                "right": {
+                  "canonical_type": "valhall::Mnemonic",
+                  "kind": "scoped_ident",
+                  "loc": {
+                    "col": 70,
+                    "line": 760
+                  },
+                  "parts": [
+                    "valhall",
+                    "Mnemonic",
+                    "FABS"
+                  ],
+                  "qualified_name": "valhall::Mnemonic::FABS",
+                  "type": "valhall::Mnemonic"
+                },
+                "type": "bool"
               },
               "type": "bool"
             },
@@ -53032,55 +53072,36 @@
             },
             "op": "&&",
             "right": {
-              "canonical_type": "const bool",
-              "is_arrow": false,
-              "kind": "member",
-              "loc": {
-                "col": 38,
-                "line": 760
-              },
-              "member": "abs",
-              "obj": {
-                "canonical_type": "const valhall::DecodedSource",
-                "index": {
-                  "canonical_type": "unsigned int",
-                  "kind": "ident",
-                  "loc": {
-                    "col": 47,
-                    "line": 760
-                  },
-                  "name": "src_idx",
-                  "type": "uint32_t"
-                },
-                "kind": "index",
+              "canonical_type": "bool",
+              "kind": "binary",
+              "left": {
+                "canonical_type": "unsigned int",
+                "kind": "ident",
                 "loc": {
-                  "col": 38,
+                  "col": 89,
                   "line": 760
                 },
-                "obj": {
-                  "canonical_type": "const std::vector<valhall::DecodedSource>",
-                  "is_arrow": false,
-                  "kind": "member",
-                  "loc": {
-                    "col": 38,
-                    "line": 760
-                  },
-                  "member": "srcs",
-                  "obj": {
-                    "canonical_type": "const valhall::DecodedValhallInst",
-                    "kind": "ident",
-                    "loc": {
-                      "col": 38,
-                      "line": 760
-                    },
-                    "name": "ins",
-                    "type": "const DecodedValhallInst"
-                  },
-                  "type": "const std::vector<DecodedSource>"
-                },
-                "type": "const value_type"
+                "name": "src_idx",
+                "type": "uint32_t"
               },
-              "type": "const bool"
+              "loc": {
+                "col": 89,
+                "line": 760
+              },
+              "op": "==",
+              "right": {
+                "canonical_type": "unsigned int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 100,
+                  "line": 760
+                },
+                "type": "unsigned int",
+                "value": "0"
+              },
+              "type": "bool"
             },
             "type": "bool"
           },
@@ -53098,8 +53119,160 @@
                 "kind": "literal",
                 "lit_kind": "bool",
                 "loc": {
-                  "col": 68,
+                  "col": 111,
                   "line": 760
+                },
+                "type": "bool",
+                "value": false
+              },
+              "kind": "return",
+              "loc": {
+                "col": 104,
+                "line": 760
+              }
+            }
+          ]
+        },
+        {
+          "cond": {
+            "canonical_type": "bool",
+            "kind": "binary",
+            "left": {
+              "canonical_type": "bool",
+              "kind": "binary",
+              "left": {
+                "canonical_type": "unsigned int",
+                "kind": "ident",
+                "loc": {
+                  "col": 9,
+                  "line": 761
+                },
+                "name": "src_idx",
+                "type": "uint32_t"
+              },
+              "loc": {
+                "col": 9,
+                "line": 761
+              },
+              "op": "<",
+              "right": {
+                "args": [],
+                "callee": {
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 19,
+                    "line": 761
+                  },
+                  "member": "size",
+                  "obj": {
+                    "canonical_type": "const std::vector<valhall::DecodedSource>",
+                    "is_arrow": false,
+                    "kind": "member",
+                    "loc": {
+                      "col": 19,
+                      "line": 761
+                    },
+                    "member": "srcs",
+                    "obj": {
+                      "canonical_type": "const valhall::DecodedValhallInst",
+                      "kind": "ident",
+                      "loc": {
+                        "col": 19,
+                        "line": 761
+                      },
+                      "name": "ins",
+                      "type": "const DecodedValhallInst"
+                    },
+                    "type": "const std::vector<DecodedSource>"
+                  }
+                },
+                "canonical_type": "unsigned long",
+                "kind": "call",
+                "loc": {
+                  "col": 19,
+                  "line": 761
+                },
+                "qualified_callee": "std::vector<valhall::DecodedSource>::size",
+                "template_args": [],
+                "type": "size_type"
+              },
+              "type": "bool"
+            },
+            "loc": {
+              "col": 9,
+              "line": 761
+            },
+            "op": "&&",
+            "right": {
+              "canonical_type": "const bool",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 38,
+                "line": 761
+              },
+              "member": "abs",
+              "obj": {
+                "canonical_type": "const valhall::DecodedSource",
+                "index": {
+                  "canonical_type": "unsigned int",
+                  "kind": "ident",
+                  "loc": {
+                    "col": 47,
+                    "line": 761
+                  },
+                  "name": "src_idx",
+                  "type": "uint32_t"
+                },
+                "kind": "index",
+                "loc": {
+                  "col": 38,
+                  "line": 761
+                },
+                "obj": {
+                  "canonical_type": "const std::vector<valhall::DecodedSource>",
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 38,
+                    "line": 761
+                  },
+                  "member": "srcs",
+                  "obj": {
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 38,
+                      "line": 761
+                    },
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const std::vector<DecodedSource>"
+                },
+                "type": "const value_type"
+              },
+              "type": "const bool"
+            },
+            "type": "bool"
+          },
+          "else_body": null,
+          "init": null,
+          "kind": "if",
+          "loc": {
+            "col": 5,
+            "line": 761
+          },
+          "then_body": [
+            {
+              "expr": {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 68,
+                  "line": 761
                 },
                 "type": "bool",
                 "value": true
@@ -53107,7 +53280,7 @@
               "kind": "return",
               "loc": {
                 "col": 61,
-                "line": 760
+                "line": 761
               }
             }
           ]
@@ -53125,14 +53298,14 @@
                   "lit_kind": "string",
                   "loc": {
                     "col": 31,
-                    "line": 761
+                    "line": 762
                   },
                   "type": "const char[4]",
                   "value": "abs"
                 },
                 "loc": {
                   "col": 31,
-                  "line": 761
+                  "line": 762
                 },
                 "op": "+",
                 "right": {
@@ -53142,7 +53315,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 54,
-                        "line": 761
+                        "line": 762
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -53153,7 +53326,7 @@
                     "kind": "scoped_ident",
                     "loc": {
                       "col": 39,
-                      "line": 761
+                      "line": 762
                     },
                     "parts": [
                       "std",
@@ -53166,7 +53339,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 39,
-                    "line": 761
+                    "line": 762
                   },
                   "qualified_callee": "std::to_string",
                   "template_args": [],
@@ -53180,7 +53353,7 @@
               "kind": "member",
               "loc": {
                 "col": 15,
-                "line": 761
+                "line": 762
               },
               "member": "find",
               "obj": {
@@ -53189,7 +53362,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 15,
-                  "line": 761
+                  "line": 762
                 },
                 "member": "fields",
                 "obj": {
@@ -53197,7 +53370,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 15,
-                    "line": 761
+                    "line": 762
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -53209,7 +53382,7 @@
             "kind": "call",
             "loc": {
               "col": 15,
-              "line": 761
+              "line": 762
             },
             "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::find",
             "template_args": [],
@@ -53219,7 +53392,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 10,
-            "line": 761
+            "line": 762
           },
           "name": "it",
           "type": "const_iterator"
@@ -53236,14 +53409,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 13,
-                  "line": 762
+                  "line": 763
                 },
                 "name": "it",
                 "type": "const_iterator"
               },
               "loc": {
                 "col": 13,
-                "line": 762
+                "line": 763
               },
               "op": "!=",
               "right": {
@@ -53253,7 +53426,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 19,
-                    "line": 762
+                    "line": 763
                   },
                   "member": "end",
                   "obj": {
@@ -53262,7 +53435,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 19,
-                      "line": 762
+                      "line": 763
                     },
                     "member": "fields",
                     "obj": {
@@ -53270,7 +53443,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 19,
-                        "line": 762
+                        "line": 763
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -53282,7 +53455,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 19,
-                  "line": 762
+                  "line": 763
                 },
                 "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::end",
                 "template_args": [],
@@ -53292,7 +53465,7 @@
             },
             "loc": {
               "col": 13,
-              "line": 762
+              "line": 763
             },
             "op": "&&",
             "right": {
@@ -53304,7 +53477,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 39,
-                  "line": 762
+                  "line": 763
                 },
                 "member": "second",
                 "obj": {
@@ -53312,7 +53485,7 @@
                   "kind": "unary",
                   "loc": {
                     "col": 39,
-                    "line": 762
+                    "line": 763
                   },
                   "op": "->",
                   "operand": {
@@ -53320,7 +53493,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 39,
-                      "line": 762
+                      "line": 763
                     },
                     "name": "it",
                     "type": "const_iterator"
@@ -53332,7 +53505,7 @@
               },
               "loc": {
                 "col": 39,
-                "line": 762
+                "line": 763
               },
               "op": "!=",
               "right": {
@@ -53342,7 +53515,7 @@
                 "lit_kind": "int",
                 "loc": {
                   "col": 53,
-                  "line": 762
+                  "line": 763
                 },
                 "type": "int",
                 "value": "0"
@@ -53354,12 +53527,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 762
+            "line": 763
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 763,
+      "end_line": 764,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -53416,7 +53589,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 10,
-                    "line": 766
+                    "line": 767
                   },
                   "member": "mnemonic",
                   "obj": {
@@ -53424,7 +53597,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 10,
-                      "line": 766
+                      "line": 767
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -53433,7 +53606,7 @@
                 },
                 "loc": {
                   "col": 10,
-                  "line": 766
+                  "line": 767
                 },
                 "op": "==",
                 "right": {
@@ -53441,7 +53614,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 26,
-                    "line": 766
+                    "line": 767
                   },
                   "parts": [
                     "valhall",
@@ -53455,7 +53628,7 @@
               },
               "loc": {
                 "col": 10,
-                "line": 766
+                "line": 767
               },
               "op": "||",
               "right": {
@@ -53467,7 +53640,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 51,
-                    "line": 766
+                    "line": 767
                   },
                   "member": "canonical_mnemonic",
                   "obj": {
@@ -53475,7 +53648,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 51,
-                      "line": 766
+                      "line": 767
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -53484,7 +53657,7 @@
                 },
                 "loc": {
                   "col": 51,
-                  "line": 766
+                  "line": 767
                 },
                 "op": "==",
                 "right": {
@@ -53492,7 +53665,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 77,
-                    "line": 766
+                    "line": 767
                   },
                   "parts": [
                     "valhall",
@@ -53508,7 +53681,7 @@
             },
             "loc": {
               "col": 9,
-              "line": 766
+              "line": 767
             },
             "op": "&&",
             "right": {
@@ -53519,14 +53692,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 103,
-                  "line": 766
+                  "line": 767
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 103,
-                "line": 766
+                "line": 767
               },
               "op": "==",
               "right": {
@@ -53536,164 +53709,12 @@
                 "lit_kind": "int",
                 "loc": {
                   "col": 114,
-                  "line": 766
+                  "line": 767
                 },
                 "type": "unsigned int",
                 "value": "2"
               },
               "type": "bool"
-            },
-            "type": "bool"
-          },
-          "else_body": null,
-          "init": null,
-          "kind": "if",
-          "loc": {
-            "col": 5,
-            "line": 766
-          },
-          "then_body": [
-            {
-              "expr": {
-                "canonical_type": "bool",
-                "kind": "literal",
-                "lit_kind": "bool",
-                "loc": {
-                  "col": 125,
-                  "line": 766
-                },
-                "type": "bool",
-                "value": false
-              },
-              "kind": "return",
-              "loc": {
-                "col": 118,
-                "line": 766
-              }
-            }
-          ]
-        },
-        {
-          "cond": {
-            "canonical_type": "bool",
-            "kind": "binary",
-            "left": {
-              "canonical_type": "bool",
-              "kind": "binary",
-              "left": {
-                "canonical_type": "unsigned int",
-                "kind": "ident",
-                "loc": {
-                  "col": 9,
-                  "line": 767
-                },
-                "name": "src_idx",
-                "type": "uint32_t"
-              },
-              "loc": {
-                "col": 9,
-                "line": 767
-              },
-              "op": "<",
-              "right": {
-                "args": [],
-                "callee": {
-                  "is_arrow": false,
-                  "kind": "member",
-                  "loc": {
-                    "col": 19,
-                    "line": 767
-                  },
-                  "member": "size",
-                  "obj": {
-                    "canonical_type": "const std::vector<valhall::DecodedSource>",
-                    "is_arrow": false,
-                    "kind": "member",
-                    "loc": {
-                      "col": 19,
-                      "line": 767
-                    },
-                    "member": "srcs",
-                    "obj": {
-                      "canonical_type": "const valhall::DecodedValhallInst",
-                      "kind": "ident",
-                      "loc": {
-                        "col": 19,
-                        "line": 767
-                      },
-                      "name": "ins",
-                      "type": "const DecodedValhallInst"
-                    },
-                    "type": "const std::vector<DecodedSource>"
-                  }
-                },
-                "canonical_type": "unsigned long",
-                "kind": "call",
-                "loc": {
-                  "col": 19,
-                  "line": 767
-                },
-                "qualified_callee": "std::vector<valhall::DecodedSource>::size",
-                "template_args": [],
-                "type": "size_type"
-              },
-              "type": "bool"
-            },
-            "loc": {
-              "col": 9,
-              "line": 767
-            },
-            "op": "&&",
-            "right": {
-              "canonical_type": "const bool",
-              "is_arrow": false,
-              "kind": "member",
-              "loc": {
-                "col": 38,
-                "line": 767
-              },
-              "member": "neg",
-              "obj": {
-                "canonical_type": "const valhall::DecodedSource",
-                "index": {
-                  "canonical_type": "unsigned int",
-                  "kind": "ident",
-                  "loc": {
-                    "col": 47,
-                    "line": 767
-                  },
-                  "name": "src_idx",
-                  "type": "uint32_t"
-                },
-                "kind": "index",
-                "loc": {
-                  "col": 38,
-                  "line": 767
-                },
-                "obj": {
-                  "canonical_type": "const std::vector<valhall::DecodedSource>",
-                  "is_arrow": false,
-                  "kind": "member",
-                  "loc": {
-                    "col": 38,
-                    "line": 767
-                  },
-                  "member": "srcs",
-                  "obj": {
-                    "canonical_type": "const valhall::DecodedValhallInst",
-                    "kind": "ident",
-                    "loc": {
-                      "col": 38,
-                      "line": 767
-                    },
-                    "name": "ins",
-                    "type": "const DecodedValhallInst"
-                  },
-                  "type": "const std::vector<DecodedSource>"
-                },
-                "type": "const value_type"
-              },
-              "type": "const bool"
             },
             "type": "bool"
           },
@@ -53711,8 +53732,333 @@
                 "kind": "literal",
                 "lit_kind": "bool",
                 "loc": {
-                  "col": 68,
+                  "col": 125,
                   "line": 767
+                },
+                "type": "bool",
+                "value": false
+              },
+              "kind": "return",
+              "loc": {
+                "col": 118,
+                "line": 767
+              }
+            }
+          ]
+        },
+        {
+          "cond": {
+            "canonical_type": "bool",
+            "kind": "binary",
+            "left": {
+              "canonical_type": "bool",
+              "kind": "binary",
+              "left": {
+                "canonical_type": "bool",
+                "kind": "binary",
+                "left": {
+                  "canonical_type": "const valhall::Mnemonic",
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 10,
+                    "line": 768
+                  },
+                  "member": "mnemonic",
+                  "obj": {
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 10,
+                      "line": 768
+                    },
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const Mnemonic"
+                },
+                "loc": {
+                  "col": 10,
+                  "line": 768
+                },
+                "op": "==",
+                "right": {
+                  "canonical_type": "valhall::Mnemonic",
+                  "kind": "scoped_ident",
+                  "loc": {
+                    "col": 26,
+                    "line": 768
+                  },
+                  "parts": [
+                    "valhall",
+                    "Mnemonic",
+                    "FNEG"
+                  ],
+                  "qualified_name": "valhall::Mnemonic::FNEG",
+                  "type": "valhall::Mnemonic"
+                },
+                "type": "bool"
+              },
+              "loc": {
+                "col": 10,
+                "line": 768
+              },
+              "op": "||",
+              "right": {
+                "canonical_type": "bool",
+                "kind": "binary",
+                "left": {
+                  "canonical_type": "const valhall::Mnemonic",
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 44,
+                    "line": 768
+                  },
+                  "member": "canonical_mnemonic",
+                  "obj": {
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 44,
+                      "line": 768
+                    },
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const Mnemonic"
+                },
+                "loc": {
+                  "col": 44,
+                  "line": 768
+                },
+                "op": "==",
+                "right": {
+                  "canonical_type": "valhall::Mnemonic",
+                  "kind": "scoped_ident",
+                  "loc": {
+                    "col": 70,
+                    "line": 768
+                  },
+                  "parts": [
+                    "valhall",
+                    "Mnemonic",
+                    "FNEG"
+                  ],
+                  "qualified_name": "valhall::Mnemonic::FNEG",
+                  "type": "valhall::Mnemonic"
+                },
+                "type": "bool"
+              },
+              "type": "bool"
+            },
+            "loc": {
+              "col": 9,
+              "line": 768
+            },
+            "op": "&&",
+            "right": {
+              "canonical_type": "bool",
+              "kind": "binary",
+              "left": {
+                "canonical_type": "unsigned int",
+                "kind": "ident",
+                "loc": {
+                  "col": 89,
+                  "line": 768
+                },
+                "name": "src_idx",
+                "type": "uint32_t"
+              },
+              "loc": {
+                "col": 89,
+                "line": 768
+              },
+              "op": "==",
+              "right": {
+                "canonical_type": "unsigned int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 100,
+                  "line": 768
+                },
+                "type": "unsigned int",
+                "value": "0"
+              },
+              "type": "bool"
+            },
+            "type": "bool"
+          },
+          "else_body": null,
+          "init": null,
+          "kind": "if",
+          "loc": {
+            "col": 5,
+            "line": 768
+          },
+          "then_body": [
+            {
+              "expr": {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 111,
+                  "line": 768
+                },
+                "type": "bool",
+                "value": false
+              },
+              "kind": "return",
+              "loc": {
+                "col": 104,
+                "line": 768
+              }
+            }
+          ]
+        },
+        {
+          "cond": {
+            "canonical_type": "bool",
+            "kind": "binary",
+            "left": {
+              "canonical_type": "bool",
+              "kind": "binary",
+              "left": {
+                "canonical_type": "unsigned int",
+                "kind": "ident",
+                "loc": {
+                  "col": 9,
+                  "line": 769
+                },
+                "name": "src_idx",
+                "type": "uint32_t"
+              },
+              "loc": {
+                "col": 9,
+                "line": 769
+              },
+              "op": "<",
+              "right": {
+                "args": [],
+                "callee": {
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 19,
+                    "line": 769
+                  },
+                  "member": "size",
+                  "obj": {
+                    "canonical_type": "const std::vector<valhall::DecodedSource>",
+                    "is_arrow": false,
+                    "kind": "member",
+                    "loc": {
+                      "col": 19,
+                      "line": 769
+                    },
+                    "member": "srcs",
+                    "obj": {
+                      "canonical_type": "const valhall::DecodedValhallInst",
+                      "kind": "ident",
+                      "loc": {
+                        "col": 19,
+                        "line": 769
+                      },
+                      "name": "ins",
+                      "type": "const DecodedValhallInst"
+                    },
+                    "type": "const std::vector<DecodedSource>"
+                  }
+                },
+                "canonical_type": "unsigned long",
+                "kind": "call",
+                "loc": {
+                  "col": 19,
+                  "line": 769
+                },
+                "qualified_callee": "std::vector<valhall::DecodedSource>::size",
+                "template_args": [],
+                "type": "size_type"
+              },
+              "type": "bool"
+            },
+            "loc": {
+              "col": 9,
+              "line": 769
+            },
+            "op": "&&",
+            "right": {
+              "canonical_type": "const bool",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 38,
+                "line": 769
+              },
+              "member": "neg",
+              "obj": {
+                "canonical_type": "const valhall::DecodedSource",
+                "index": {
+                  "canonical_type": "unsigned int",
+                  "kind": "ident",
+                  "loc": {
+                    "col": 47,
+                    "line": 769
+                  },
+                  "name": "src_idx",
+                  "type": "uint32_t"
+                },
+                "kind": "index",
+                "loc": {
+                  "col": 38,
+                  "line": 769
+                },
+                "obj": {
+                  "canonical_type": "const std::vector<valhall::DecodedSource>",
+                  "is_arrow": false,
+                  "kind": "member",
+                  "loc": {
+                    "col": 38,
+                    "line": 769
+                  },
+                  "member": "srcs",
+                  "obj": {
+                    "canonical_type": "const valhall::DecodedValhallInst",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 38,
+                      "line": 769
+                    },
+                    "name": "ins",
+                    "type": "const DecodedValhallInst"
+                  },
+                  "type": "const std::vector<DecodedSource>"
+                },
+                "type": "const value_type"
+              },
+              "type": "const bool"
+            },
+            "type": "bool"
+          },
+          "else_body": null,
+          "init": null,
+          "kind": "if",
+          "loc": {
+            "col": 5,
+            "line": 769
+          },
+          "then_body": [
+            {
+              "expr": {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 68,
+                  "line": 769
                 },
                 "type": "bool",
                 "value": true
@@ -53720,7 +54066,7 @@
               "kind": "return",
               "loc": {
                 "col": 61,
-                "line": 767
+                "line": 769
               }
             }
           ]
@@ -53738,14 +54084,14 @@
                   "lit_kind": "string",
                   "loc": {
                     "col": 31,
-                    "line": 768
+                    "line": 770
                   },
                   "type": "const char[4]",
                   "value": "neg"
                 },
                 "loc": {
                   "col": 31,
-                  "line": 768
+                  "line": 770
                 },
                 "op": "+",
                 "right": {
@@ -53755,7 +54101,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 54,
-                        "line": 768
+                        "line": 770
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -53766,7 +54112,7 @@
                     "kind": "scoped_ident",
                     "loc": {
                       "col": 39,
-                      "line": 768
+                      "line": 770
                     },
                     "parts": [
                       "std",
@@ -53779,7 +54125,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 39,
-                    "line": 768
+                    "line": 770
                   },
                   "qualified_callee": "std::to_string",
                   "template_args": [],
@@ -53793,7 +54139,7 @@
               "kind": "member",
               "loc": {
                 "col": 15,
-                "line": 768
+                "line": 770
               },
               "member": "find",
               "obj": {
@@ -53802,7 +54148,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 15,
-                  "line": 768
+                  "line": 770
                 },
                 "member": "fields",
                 "obj": {
@@ -53810,7 +54156,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 15,
-                    "line": 768
+                    "line": 770
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -53822,7 +54168,7 @@
             "kind": "call",
             "loc": {
               "col": 15,
-              "line": 768
+              "line": 770
             },
             "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::find",
             "template_args": [],
@@ -53832,7 +54178,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 10,
-            "line": 768
+            "line": 770
           },
           "name": "it",
           "type": "const_iterator"
@@ -53849,14 +54195,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 13,
-                  "line": 769
+                  "line": 771
                 },
                 "name": "it",
                 "type": "const_iterator"
               },
               "loc": {
                 "col": 13,
-                "line": 769
+                "line": 771
               },
               "op": "!=",
               "right": {
@@ -53866,7 +54212,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 19,
-                    "line": 769
+                    "line": 771
                   },
                   "member": "end",
                   "obj": {
@@ -53875,7 +54221,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 19,
-                      "line": 769
+                      "line": 771
                     },
                     "member": "fields",
                     "obj": {
@@ -53883,7 +54229,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 19,
-                        "line": 769
+                        "line": 771
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -53895,7 +54241,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 19,
-                  "line": 769
+                  "line": 771
                 },
                 "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::end",
                 "template_args": [],
@@ -53905,7 +54251,7 @@
             },
             "loc": {
               "col": 13,
-              "line": 769
+              "line": 771
             },
             "op": "&&",
             "right": {
@@ -53917,7 +54263,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 39,
-                  "line": 769
+                  "line": 771
                 },
                 "member": "second",
                 "obj": {
@@ -53925,7 +54271,7 @@
                   "kind": "unary",
                   "loc": {
                     "col": 39,
-                    "line": 769
+                    "line": 771
                   },
                   "op": "->",
                   "operand": {
@@ -53933,7 +54279,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 39,
-                      "line": 769
+                      "line": 771
                     },
                     "name": "it",
                     "type": "const_iterator"
@@ -53945,7 +54291,7 @@
               },
               "loc": {
                 "col": 39,
-                "line": 769
+                "line": 771
               },
               "op": "!=",
               "right": {
@@ -53955,7 +54301,7 @@
                 "lit_kind": "int",
                 "loc": {
                   "col": 53,
-                  "line": 769
+                  "line": 771
                 },
                 "type": "int",
                 "value": "0"
@@ -53967,12 +54313,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 769
+            "line": 771
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 770,
+      "end_line": 772,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -54009,7 +54355,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 765
+      "start_line": 766
     },
     {
       "body": [
@@ -54025,14 +54371,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 9,
-                  "line": 773
+                  "line": 775
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 9,
-                "line": 773
+                "line": 775
               },
               "op": "<",
               "right": {
@@ -54042,7 +54388,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 19,
-                    "line": 773
+                    "line": 775
                   },
                   "member": "size",
                   "obj": {
@@ -54051,7 +54397,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 19,
-                      "line": 773
+                      "line": 775
                     },
                     "member": "srcs",
                     "obj": {
@@ -54059,7 +54405,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 19,
-                        "line": 773
+                        "line": 775
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -54071,7 +54417,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 19,
-                  "line": 773
+                  "line": 775
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -54081,7 +54427,7 @@
             },
             "loc": {
               "col": 9,
-              "line": 773
+              "line": 775
             },
             "op": "&&",
             "right": {
@@ -54090,7 +54436,7 @@
               "kind": "member",
               "loc": {
                 "col": 38,
-                "line": 773
+                "line": 775
               },
               "member": "not_mod",
               "obj": {
@@ -54100,7 +54446,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 47,
-                    "line": 773
+                    "line": 775
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -54108,7 +54454,7 @@
                 "kind": "index",
                 "loc": {
                   "col": 38,
-                  "line": 773
+                  "line": 775
                 },
                 "obj": {
                   "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -54116,7 +54462,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 38,
-                    "line": 773
+                    "line": 775
                   },
                   "member": "srcs",
                   "obj": {
@@ -54124,7 +54470,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 38,
-                      "line": 773
+                      "line": 775
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -54142,7 +54488,7 @@
           "kind": "if",
           "loc": {
             "col": 5,
-            "line": 773
+            "line": 775
           },
           "then_body": [
             {
@@ -54152,7 +54498,7 @@
                 "lit_kind": "bool",
                 "loc": {
                   "col": 72,
-                  "line": 773
+                  "line": 775
                 },
                 "type": "bool",
                 "value": true
@@ -54160,7 +54506,7 @@
               "kind": "return",
               "loc": {
                 "col": 65,
-                "line": 773
+                "line": 775
               }
             }
           ]
@@ -54178,14 +54524,14 @@
                   "lit_kind": "string",
                   "loc": {
                     "col": 31,
-                    "line": 774
+                    "line": 776
                   },
                   "type": "const char[4]",
                   "value": "not"
                 },
                 "loc": {
                   "col": 31,
-                  "line": 774
+                  "line": 776
                 },
                 "op": "+",
                 "right": {
@@ -54195,7 +54541,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 54,
-                        "line": 774
+                        "line": 776
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -54206,7 +54552,7 @@
                     "kind": "scoped_ident",
                     "loc": {
                       "col": 39,
-                      "line": 774
+                      "line": 776
                     },
                     "parts": [
                       "std",
@@ -54219,7 +54565,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 39,
-                    "line": 774
+                    "line": 776
                   },
                   "qualified_callee": "std::to_string",
                   "template_args": [],
@@ -54233,7 +54579,7 @@
               "kind": "member",
               "loc": {
                 "col": 15,
-                "line": 774
+                "line": 776
               },
               "member": "find",
               "obj": {
@@ -54242,7 +54588,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 15,
-                  "line": 774
+                  "line": 776
                 },
                 "member": "fields",
                 "obj": {
@@ -54250,7 +54596,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 15,
-                    "line": 774
+                    "line": 776
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -54262,7 +54608,7 @@
             "kind": "call",
             "loc": {
               "col": 15,
-              "line": 774
+              "line": 776
             },
             "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::find",
             "template_args": [],
@@ -54272,7 +54618,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 10,
-            "line": 774
+            "line": 776
           },
           "name": "it",
           "type": "const_iterator"
@@ -54289,14 +54635,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 13,
-                  "line": 775
+                  "line": 777
                 },
                 "name": "it",
                 "type": "const_iterator"
               },
               "loc": {
                 "col": 13,
-                "line": 775
+                "line": 777
               },
               "op": "!=",
               "right": {
@@ -54306,7 +54652,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 19,
-                    "line": 775
+                    "line": 777
                   },
                   "member": "end",
                   "obj": {
@@ -54315,7 +54661,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 19,
-                      "line": 775
+                      "line": 777
                     },
                     "member": "fields",
                     "obj": {
@@ -54323,7 +54669,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 19,
-                        "line": 775
+                        "line": 777
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -54335,7 +54681,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 19,
-                  "line": 775
+                  "line": 777
                 },
                 "qualified_callee": "std::map<std::basic_string<char>, unsigned int>::end",
                 "template_args": [],
@@ -54345,7 +54691,7 @@
             },
             "loc": {
               "col": 13,
-              "line": 775
+              "line": 777
             },
             "op": "&&",
             "right": {
@@ -54357,7 +54703,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 39,
-                  "line": 775
+                  "line": 777
                 },
                 "member": "second",
                 "obj": {
@@ -54365,7 +54711,7 @@
                   "kind": "unary",
                   "loc": {
                     "col": 39,
-                    "line": 775
+                    "line": 777
                   },
                   "op": "->",
                   "operand": {
@@ -54373,7 +54719,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 39,
-                      "line": 775
+                      "line": 777
                     },
                     "name": "it",
                     "type": "const_iterator"
@@ -54385,7 +54731,7 @@
               },
               "loc": {
                 "col": 39,
-                "line": 775
+                "line": 777
               },
               "op": "!=",
               "right": {
@@ -54395,7 +54741,7 @@
                 "lit_kind": "int",
                 "loc": {
                   "col": 53,
-                  "line": 775
+                  "line": 777
                 },
                 "type": "int",
                 "value": "0"
@@ -54407,12 +54753,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 775
+            "line": 777
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 776,
+      "end_line": 778,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -54449,7 +54795,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 772
+      "start_line": 774
     },
     {
       "body": [
@@ -54464,7 +54810,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 29,
-                    "line": 779
+                    "line": 781
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -54474,7 +54820,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 34,
-                    "line": 779
+                    "line": 781
                   },
                   "name": "blk",
                   "type": "uint32_t"
@@ -54484,7 +54830,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 39,
-                    "line": 779
+                    "line": 781
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -54494,7 +54840,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 44,
-                    "line": 779
+                    "line": 781
                   },
                   "name": "rule",
                   "type": "const tables::LoweringRuleSpec *"
@@ -54504,7 +54850,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 50,
-                    "line": 779
+                    "line": 781
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -54515,7 +54861,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 12,
-                  "line": 779
+                  "line": 781
                 },
                 "parts": [
                   "valhall",
@@ -54530,7 +54876,7 @@
               "kind": "call",
               "loc": {
                 "col": 12,
-                "line": 779
+                "line": 781
               },
               "qualified_callee": "valhall::compiler::abi::get_src_swz",
               "template_args": [],
@@ -54538,7 +54884,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 779
+              "line": 781
             },
             "op": "==",
             "right": {
@@ -54546,7 +54892,7 @@
               "kind": "ident",
               "loc": {
                 "col": 62,
-                "line": 779
+                "line": 781
               },
               "name": "str",
               "type": "const char *"
@@ -54556,12 +54902,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 779
+            "line": 781
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 780,
+      "end_line": 782,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -54603,7 +54949,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 778
+      "start_line": 780
     },
     {
       "body": [
@@ -54618,7 +54964,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 30,
-                    "line": 783
+                    "line": 785
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -54628,7 +54974,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 35,
-                    "line": 783
+                    "line": 785
                   },
                   "name": "blk",
                   "type": "uint32_t"
@@ -54638,7 +54984,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 40,
-                    "line": 783
+                    "line": 785
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -54648,7 +54994,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 45,
-                    "line": 783
+                    "line": 785
                   },
                   "name": "rule",
                   "type": "const tables::LoweringRuleSpec *"
@@ -54659,7 +55005,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 12,
-                  "line": 783
+                  "line": 785
                 },
                 "parts": [
                   "valhall",
@@ -54674,7 +55020,7 @@
               "kind": "call",
               "loc": {
                 "col": 12,
-                "line": 783
+                "line": 785
               },
               "qualified_callee": "valhall::compiler::abi::get_dest_mod",
               "template_args": [],
@@ -54682,7 +55028,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 783
+              "line": 785
             },
             "op": "==",
             "right": {
@@ -54690,7 +55036,7 @@
               "kind": "ident",
               "loc": {
                 "col": 54,
-                "line": 783
+                "line": 785
               },
               "name": "str",
               "type": "const char *"
@@ -54700,12 +55046,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 783
+            "line": 785
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 784,
+      "end_line": 786,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -54742,7 +55088,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 782
+      "start_line": 784
     },
     {
       "body": [
@@ -54755,14 +55101,14 @@
               "kind": "ident",
               "loc": {
                 "col": 12,
-                "line": 787
+                "line": 789
               },
               "name": "src_idx",
               "type": "uint32_t"
             },
             "loc": {
               "col": 12,
-              "line": 787
+              "line": 789
             },
             "op": ">=",
             "right": {
@@ -54772,7 +55118,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 23,
-                  "line": 787
+                  "line": 789
                 },
                 "member": "size",
                 "obj": {
@@ -54781,7 +55127,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 23,
-                    "line": 787
+                    "line": 789
                   },
                   "member": "srcs",
                   "obj": {
@@ -54789,7 +55135,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 23,
-                      "line": 787
+                      "line": 789
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -54801,7 +55147,7 @@
               "kind": "call",
               "loc": {
                 "col": 23,
-                "line": 787
+                "line": 789
               },
               "qualified_callee": "std::vector<valhall::DecodedSource>::size",
               "template_args": [],
@@ -54812,12 +55158,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 787
+            "line": 789
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 788,
+      "end_line": 790,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -54854,7 +55200,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 786
+      "start_line": 788
     },
     {
       "body": [
@@ -54870,14 +55216,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 791
+                  "line": 793
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 12,
-                "line": 791
+                "line": 793
               },
               "op": "<",
               "right": {
@@ -54887,7 +55233,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 22,
-                    "line": 791
+                    "line": 793
                   },
                   "member": "size",
                   "obj": {
@@ -54896,7 +55242,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 791
+                      "line": 793
                     },
                     "member": "srcs",
                     "obj": {
@@ -54904,7 +55250,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 22,
-                        "line": 791
+                        "line": 793
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -54916,7 +55262,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 22,
-                  "line": 791
+                  "line": 793
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -54926,7 +55272,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 791
+              "line": 793
             },
             "op": "&&",
             "right": {
@@ -54938,7 +55284,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 41,
-                  "line": 791
+                  "line": 793
                 },
                 "member": "kind",
                 "obj": {
@@ -54948,7 +55294,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 50,
-                      "line": 791
+                      "line": 793
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -54956,7 +55302,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 41,
-                    "line": 791
+                    "line": 793
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -54964,7 +55310,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 41,
-                      "line": 791
+                      "line": 793
                     },
                     "member": "srcs",
                     "obj": {
@@ -54972,7 +55318,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 41,
-                        "line": 791
+                        "line": 793
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -54985,7 +55331,7 @@
               },
               "loc": {
                 "col": 41,
-                "line": 791
+                "line": 793
               },
               "op": "==",
               "right": {
@@ -54993,7 +55339,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 67,
-                  "line": 791
+                  "line": 793
                 },
                 "parts": [
                   "valhall",
@@ -55010,12 +55356,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 791
+            "line": 793
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 792,
+      "end_line": 794,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -55052,7 +55398,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 790
+      "start_line": 792
     },
     {
       "body": [
@@ -55068,14 +55414,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 795
+                  "line": 797
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 12,
-                "line": 795
+                "line": 797
               },
               "op": "<",
               "right": {
@@ -55085,7 +55431,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 22,
-                    "line": 795
+                    "line": 797
                   },
                   "member": "size",
                   "obj": {
@@ -55094,7 +55440,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 795
+                      "line": 797
                     },
                     "member": "srcs",
                     "obj": {
@@ -55102,7 +55448,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 22,
-                        "line": 795
+                        "line": 797
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55114,7 +55460,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 22,
-                  "line": 795
+                  "line": 797
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -55124,7 +55470,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 795
+              "line": 797
             },
             "op": "&&",
             "right": {
@@ -55136,7 +55482,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 41,
-                  "line": 795
+                  "line": 797
                 },
                 "member": "kind",
                 "obj": {
@@ -55146,7 +55492,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 50,
-                      "line": 795
+                      "line": 797
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -55154,7 +55500,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 41,
-                    "line": 795
+                    "line": 797
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55162,7 +55508,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 41,
-                      "line": 795
+                      "line": 797
                     },
                     "member": "srcs",
                     "obj": {
@@ -55170,7 +55516,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 41,
-                        "line": 795
+                        "line": 797
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55183,7 +55529,7 @@
               },
               "loc": {
                 "col": 41,
-                "line": 795
+                "line": 797
               },
               "op": "==",
               "right": {
@@ -55191,7 +55537,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 67,
-                  "line": 795
+                  "line": 797
                 },
                 "parts": [
                   "valhall",
@@ -55208,12 +55554,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 795
+            "line": 797
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 796,
+      "end_line": 798,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -55250,7 +55596,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 794
+      "start_line": 796
     },
     {
       "body": [
@@ -55266,14 +55612,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 799
+                  "line": 801
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 12,
-                "line": 799
+                "line": 801
               },
               "op": "<",
               "right": {
@@ -55283,7 +55629,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 22,
-                    "line": 799
+                    "line": 801
                   },
                   "member": "size",
                   "obj": {
@@ -55292,7 +55638,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 799
+                      "line": 801
                     },
                     "member": "srcs",
                     "obj": {
@@ -55300,7 +55646,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 22,
-                        "line": 799
+                        "line": 801
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55312,7 +55658,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 22,
-                  "line": 799
+                  "line": 801
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -55322,7 +55668,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 799
+              "line": 801
             },
             "op": "&&",
             "right": {
@@ -55334,7 +55680,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 41,
-                  "line": 799
+                  "line": 801
                 },
                 "member": "kind",
                 "obj": {
@@ -55344,7 +55690,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 50,
-                      "line": 799
+                      "line": 801
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -55352,7 +55698,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 41,
-                    "line": 799
+                    "line": 801
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55360,7 +55706,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 41,
-                      "line": 799
+                      "line": 801
                     },
                     "member": "srcs",
                     "obj": {
@@ -55368,7 +55714,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 41,
-                        "line": 799
+                        "line": 801
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55381,7 +55727,7 @@
               },
               "loc": {
                 "col": 41,
-                "line": 799
+                "line": 801
               },
               "op": "==",
               "right": {
@@ -55389,7 +55735,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 67,
-                  "line": 799
+                  "line": 801
                 },
                 "parts": [
                   "valhall",
@@ -55406,12 +55752,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 799
+            "line": 801
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 800,
+      "end_line": 802,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -55448,7 +55794,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 798
+      "start_line": 800
     },
     {
       "body": [
@@ -55467,14 +55813,14 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 803
+                    "line": 805
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
                 },
                 "loc": {
                   "col": 12,
-                  "line": 803
+                  "line": 805
                 },
                 "op": "<",
                 "right": {
@@ -55484,7 +55830,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 803
+                      "line": 805
                     },
                     "member": "size",
                     "obj": {
@@ -55493,7 +55839,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 22,
-                        "line": 803
+                        "line": 805
                       },
                       "member": "srcs",
                       "obj": {
@@ -55501,7 +55847,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 22,
-                          "line": 803
+                          "line": 805
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -55513,7 +55859,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 22,
-                    "line": 803
+                    "line": 805
                   },
                   "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                   "template_args": [],
@@ -55523,7 +55869,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 803
+                "line": 805
               },
               "op": "&&",
               "right": {
@@ -55535,7 +55881,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 804
+                    "line": 806
                   },
                   "member": "kind",
                   "obj": {
@@ -55545,7 +55891,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 21,
-                        "line": 804
+                        "line": 806
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -55553,7 +55899,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 12,
-                      "line": 804
+                      "line": 806
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55561,7 +55907,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 12,
-                        "line": 804
+                        "line": 806
                       },
                       "member": "srcs",
                       "obj": {
@@ -55569,7 +55915,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 12,
-                          "line": 804
+                          "line": 806
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -55582,7 +55928,7 @@
                 },
                 "loc": {
                   "col": 12,
-                  "line": 804
+                  "line": 806
                 },
                 "op": "==",
                 "right": {
@@ -55590,7 +55936,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 38,
-                    "line": 804
+                    "line": 806
                   },
                   "parts": [
                     "valhall",
@@ -55606,7 +55952,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 803
+              "line": 805
             },
             "op": "&&",
             "right": {
@@ -55618,7 +55964,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 805
+                  "line": 807
                 },
                 "member": "symbolic_name",
                 "obj": {
@@ -55628,7 +55974,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 21,
-                      "line": 805
+                      "line": 807
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -55636,7 +55982,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 12,
-                    "line": 805
+                    "line": 807
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55644,7 +55990,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 12,
-                      "line": 805
+                      "line": 807
                     },
                     "member": "srcs",
                     "obj": {
@@ -55652,7 +55998,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 12,
-                        "line": 805
+                        "line": 807
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55665,7 +56011,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 805
+                "line": 807
               },
               "op": "==",
               "right": {
@@ -55674,7 +56020,7 @@
                 "lit_kind": "string",
                 "loc": {
                   "col": 47,
-                  "line": 805
+                  "line": 807
                 },
                 "type": "const char[3]",
                 "value": "pc"
@@ -55686,12 +56032,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 803
+            "line": 805
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 806,
+      "end_line": 808,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -55728,7 +56074,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 802
+      "start_line": 804
     },
     {
       "body": [
@@ -55747,14 +56093,14 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 809
+                    "line": 811
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
                 },
                 "loc": {
                   "col": 12,
-                  "line": 809
+                  "line": 811
                 },
                 "op": "<",
                 "right": {
@@ -55764,7 +56110,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 809
+                      "line": 811
                     },
                     "member": "size",
                     "obj": {
@@ -55773,7 +56119,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 22,
-                        "line": 809
+                        "line": 811
                       },
                       "member": "srcs",
                       "obj": {
@@ -55781,7 +56127,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 22,
-                          "line": 809
+                          "line": 811
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -55793,7 +56139,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 22,
-                    "line": 809
+                    "line": 811
                   },
                   "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                   "template_args": [],
@@ -55803,7 +56149,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 809
+                "line": 811
               },
               "op": "&&",
               "right": {
@@ -55815,7 +56161,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 810
+                    "line": 812
                   },
                   "member": "kind",
                   "obj": {
@@ -55825,7 +56171,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 21,
-                        "line": 810
+                        "line": 812
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -55833,7 +56179,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 12,
-                      "line": 810
+                      "line": 812
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55841,7 +56187,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 12,
-                        "line": 810
+                        "line": 812
                       },
                       "member": "srcs",
                       "obj": {
@@ -55849,7 +56195,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 12,
-                          "line": 810
+                          "line": 812
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -55862,7 +56208,7 @@
                 },
                 "loc": {
                   "col": 12,
-                  "line": 810
+                  "line": 812
                 },
                 "op": "==",
                 "right": {
@@ -55870,7 +56216,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 38,
-                    "line": 810
+                    "line": 812
                   },
                   "parts": [
                     "valhall",
@@ -55886,7 +56232,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 809
+              "line": 811
             },
             "op": "&&",
             "right": {
@@ -55898,7 +56244,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 811
+                  "line": 813
                 },
                 "member": "symbolic_name",
                 "obj": {
@@ -55908,7 +56254,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 21,
-                      "line": 811
+                      "line": 813
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -55916,7 +56262,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 12,
-                    "line": 811
+                    "line": 813
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -55924,7 +56270,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 12,
-                      "line": 811
+                      "line": 813
                     },
                     "member": "srcs",
                     "obj": {
@@ -55932,7 +56278,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 12,
-                        "line": 811
+                        "line": 813
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -55945,7 +56291,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 811
+                "line": 813
               },
               "op": "==",
               "right": {
@@ -55954,7 +56300,7 @@
                 "lit_kind": "string",
                 "loc": {
                   "col": 47,
-                  "line": 811
+                  "line": 813
                 },
                 "type": "const char[21]",
                 "value": "thread_local_pointer"
@@ -55966,12 +56312,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 809
+            "line": 811
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 812,
+      "end_line": 814,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -56008,7 +56354,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 808
+      "start_line": 810
     },
     {
       "body": [
@@ -56027,14 +56373,14 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 815
+                    "line": 817
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
                 },
                 "loc": {
                   "col": 12,
-                  "line": 815
+                  "line": 817
                 },
                 "op": "<",
                 "right": {
@@ -56044,7 +56390,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 815
+                      "line": 817
                     },
                     "member": "size",
                     "obj": {
@@ -56053,7 +56399,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 22,
-                        "line": 815
+                        "line": 817
                       },
                       "member": "srcs",
                       "obj": {
@@ -56061,7 +56407,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 22,
-                          "line": 815
+                          "line": 817
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56073,7 +56419,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 22,
-                    "line": 815
+                    "line": 817
                   },
                   "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                   "template_args": [],
@@ -56083,7 +56429,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 815
+                "line": 817
               },
               "op": "&&",
               "right": {
@@ -56095,7 +56441,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 816
+                    "line": 818
                   },
                   "member": "kind",
                   "obj": {
@@ -56105,7 +56451,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 21,
-                        "line": 816
+                        "line": 818
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -56113,7 +56459,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 12,
-                      "line": 816
+                      "line": 818
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56121,7 +56467,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 12,
-                        "line": 816
+                        "line": 818
                       },
                       "member": "srcs",
                       "obj": {
@@ -56129,7 +56475,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 12,
-                          "line": 816
+                          "line": 818
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56142,7 +56488,7 @@
                 },
                 "loc": {
                   "col": 12,
-                  "line": 816
+                  "line": 818
                 },
                 "op": "==",
                 "right": {
@@ -56150,7 +56496,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 38,
-                    "line": 816
+                    "line": 818
                   },
                   "parts": [
                     "valhall",
@@ -56166,7 +56512,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 815
+              "line": 817
             },
             "op": "&&",
             "right": {
@@ -56178,7 +56524,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 817
+                  "line": 819
                 },
                 "member": "symbolic_name",
                 "obj": {
@@ -56188,7 +56534,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 21,
-                      "line": 817
+                      "line": 819
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -56196,7 +56542,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 12,
-                    "line": 817
+                    "line": 819
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56204,7 +56550,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 12,
-                      "line": 817
+                      "line": 819
                     },
                     "member": "srcs",
                     "obj": {
@@ -56212,7 +56558,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 12,
-                        "line": 817
+                        "line": 819
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -56225,7 +56571,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 817
+                "line": 819
               },
               "op": "==",
               "right": {
@@ -56234,7 +56580,7 @@
                 "lit_kind": "string",
                 "loc": {
                   "col": 47,
-                  "line": 817
+                  "line": 819
                 },
                 "type": "const char[24]",
                 "value": "workgroup_local_pointer"
@@ -56246,12 +56592,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 815
+            "line": 817
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 818,
+      "end_line": 820,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -56288,7 +56634,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 814
+      "start_line": 816
     },
     {
       "body": [
@@ -56307,14 +56653,14 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 821
+                    "line": 823
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
                 },
                 "loc": {
                   "col": 12,
-                  "line": 821
+                  "line": 823
                 },
                 "op": "<",
                 "right": {
@@ -56324,7 +56670,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 821
+                      "line": 823
                     },
                     "member": "size",
                     "obj": {
@@ -56333,7 +56679,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 22,
-                        "line": 821
+                        "line": 823
                       },
                       "member": "srcs",
                       "obj": {
@@ -56341,7 +56687,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 22,
-                          "line": 821
+                          "line": 823
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56353,7 +56699,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 22,
-                    "line": 821
+                    "line": 823
                   },
                   "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                   "template_args": [],
@@ -56363,7 +56709,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 821
+                "line": 823
               },
               "op": "&&",
               "right": {
@@ -56375,7 +56721,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 822
+                    "line": 824
                   },
                   "member": "kind",
                   "obj": {
@@ -56385,7 +56731,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 21,
-                        "line": 822
+                        "line": 824
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -56393,7 +56739,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 12,
-                      "line": 822
+                      "line": 824
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56401,7 +56747,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 12,
-                        "line": 822
+                        "line": 824
                       },
                       "member": "srcs",
                       "obj": {
@@ -56409,7 +56755,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 12,
-                          "line": 822
+                          "line": 824
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56422,7 +56768,7 @@
                 },
                 "loc": {
                   "col": 12,
-                  "line": 822
+                  "line": 824
                 },
                 "op": "==",
                 "right": {
@@ -56430,7 +56776,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 38,
-                    "line": 822
+                    "line": 824
                   },
                   "parts": [
                     "valhall",
@@ -56446,7 +56792,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 821
+              "line": 823
             },
             "op": "&&",
             "right": {
@@ -56458,7 +56804,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 823
+                  "line": 825
                 },
                 "member": "symbolic_name",
                 "obj": {
@@ -56468,7 +56814,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 21,
-                      "line": 823
+                      "line": 825
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -56476,7 +56822,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 12,
-                    "line": 823
+                    "line": 825
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56484,7 +56830,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 12,
-                      "line": 823
+                      "line": 825
                     },
                     "member": "srcs",
                     "obj": {
@@ -56492,7 +56838,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 12,
-                        "line": 823
+                        "line": 825
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -56505,7 +56851,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 823
+                "line": 825
               },
               "op": "==",
               "right": {
@@ -56514,7 +56860,7 @@
                 "lit_kind": "string",
                 "loc": {
                   "col": 47,
-                  "line": 823
+                  "line": 825
                 },
                 "type": "const char[8]",
                 "value": "lane_id"
@@ -56526,12 +56872,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 821
+            "line": 823
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 824,
+      "end_line": 826,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -56568,7 +56914,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 820
+      "start_line": 822
     },
     {
       "body": [
@@ -56587,14 +56933,14 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 827
+                    "line": 829
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
                 },
                 "loc": {
                   "col": 12,
-                  "line": 827
+                  "line": 829
                 },
                 "op": "<",
                 "right": {
@@ -56604,7 +56950,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 827
+                      "line": 829
                     },
                     "member": "size",
                     "obj": {
@@ -56613,7 +56959,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 22,
-                        "line": 827
+                        "line": 829
                       },
                       "member": "srcs",
                       "obj": {
@@ -56621,7 +56967,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 22,
-                          "line": 827
+                          "line": 829
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56633,7 +56979,7 @@
                   "kind": "call",
                   "loc": {
                     "col": 22,
-                    "line": 827
+                    "line": 829
                   },
                   "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                   "template_args": [],
@@ -56643,7 +56989,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 827
+                "line": 829
               },
               "op": "&&",
               "right": {
@@ -56655,7 +57001,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 828
+                    "line": 830
                   },
                   "member": "kind",
                   "obj": {
@@ -56665,7 +57011,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 21,
-                        "line": 828
+                        "line": 830
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -56673,7 +57019,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 12,
-                      "line": 828
+                      "line": 830
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56681,7 +57027,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 12,
-                        "line": 828
+                        "line": 830
                       },
                       "member": "srcs",
                       "obj": {
@@ -56689,7 +57035,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 12,
-                          "line": 828
+                          "line": 830
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -56702,7 +57048,7 @@
                 },
                 "loc": {
                   "col": 12,
-                  "line": 828
+                  "line": 830
                 },
                 "op": "==",
                 "right": {
@@ -56710,7 +57056,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 38,
-                    "line": 828
+                    "line": 830
                   },
                   "parts": [
                     "valhall",
@@ -56726,7 +57072,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 827
+              "line": 829
             },
             "op": "&&",
             "right": {
@@ -56738,7 +57084,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 829
+                  "line": 831
                 },
                 "member": "symbolic_name",
                 "obj": {
@@ -56748,7 +57094,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 21,
-                      "line": 829
+                      "line": 831
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -56756,7 +57102,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 12,
-                    "line": 829
+                    "line": 831
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56764,7 +57110,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 12,
-                      "line": 829
+                      "line": 831
                     },
                     "member": "srcs",
                     "obj": {
@@ -56772,7 +57118,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 12,
-                        "line": 829
+                        "line": 831
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -56785,7 +57131,7 @@
               },
               "loc": {
                 "col": 12,
-                "line": 829
+                "line": 831
               },
               "op": "==",
               "right": {
@@ -56794,7 +57140,7 @@
                 "lit_kind": "string",
                 "loc": {
                   "col": 47,
-                  "line": 829
+                  "line": 831
                 },
                 "type": "const char[11]",
                 "value": "lane_width"
@@ -56806,12 +57152,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 827
+            "line": 829
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 830,
+      "end_line": 832,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -56848,7 +57194,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 826
+      "start_line": 828
     },
     {
       "body": [
@@ -56864,14 +57210,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 833
+                  "line": 835
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 12,
-                "line": 833
+                "line": 835
               },
               "op": "<",
               "right": {
@@ -56881,7 +57227,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 22,
-                    "line": 833
+                    "line": 835
                   },
                   "member": "size",
                   "obj": {
@@ -56890,7 +57236,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 833
+                      "line": 835
                     },
                     "member": "srcs",
                     "obj": {
@@ -56898,7 +57244,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 22,
-                        "line": 833
+                        "line": 835
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -56910,7 +57256,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 22,
-                  "line": 833
+                  "line": 835
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -56920,7 +57266,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 833
+              "line": 835
             },
             "op": "&&",
             "right": {
@@ -56929,7 +57275,7 @@
               "kind": "member",
               "loc": {
                 "col": 41,
-                "line": 833
+                "line": 835
               },
               "member": "word_select",
               "obj": {
@@ -56939,7 +57285,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 50,
-                    "line": 833
+                    "line": 835
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -56947,7 +57293,7 @@
                 "kind": "index",
                 "loc": {
                   "col": 41,
-                  "line": 833
+                  "line": 835
                 },
                 "obj": {
                   "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -56955,7 +57301,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 41,
-                    "line": 833
+                    "line": 835
                   },
                   "member": "srcs",
                   "obj": {
@@ -56963,7 +57309,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 41,
-                      "line": 833
+                      "line": 835
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -56979,12 +57325,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 833
+            "line": 835
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 834,
+      "end_line": 836,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57021,7 +57367,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 832
+      "start_line": 834
     },
     {
       "body": [
@@ -57037,14 +57383,14 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 837
+                  "line": 839
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
               },
               "loc": {
                 "col": 12,
-                "line": 837
+                "line": 839
               },
               "op": "<",
               "right": {
@@ -57054,7 +57400,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 22,
-                    "line": 837
+                    "line": 839
                   },
                   "member": "size",
                   "obj": {
@@ -57063,7 +57409,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 22,
-                      "line": 837
+                      "line": 839
                     },
                     "member": "srcs",
                     "obj": {
@@ -57071,7 +57417,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 22,
-                        "line": 837
+                        "line": 839
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -57083,7 +57429,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 22,
-                  "line": 837
+                  "line": 839
                 },
                 "qualified_callee": "std::vector<valhall::DecodedSource>::size",
                 "template_args": [],
@@ -57093,7 +57439,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 837
+              "line": 839
             },
             "op": "&&",
             "right": {
@@ -57102,7 +57448,7 @@
               "kind": "member",
               "loc": {
                 "col": 41,
-                "line": 837
+                "line": 839
               },
               "member": "is_64bit",
               "obj": {
@@ -57112,7 +57458,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 50,
-                    "line": 837
+                    "line": 839
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -57120,7 +57466,7 @@
                 "kind": "index",
                 "loc": {
                   "col": 41,
-                  "line": 837
+                  "line": 839
                 },
                 "obj": {
                   "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -57128,7 +57474,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 41,
-                    "line": 837
+                    "line": 839
                   },
                   "member": "srcs",
                   "obj": {
@@ -57136,7 +57482,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 41,
-                      "line": 837
+                      "line": 839
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -57152,12 +57498,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 837
+            "line": 839
           }
         }
       ],
       "canonical_ret_type": "bool",
-      "end_line": 838,
+      "end_line": 840,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57194,7 +57540,7 @@
       "ret_type": "bool",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 836
+      "start_line": 838
     },
     {
       "body": [
@@ -57205,7 +57551,7 @@
             "kind": "member",
             "loc": {
               "col": 12,
-              "line": 841
+              "line": 843
             },
             "member": "reg_num",
             "obj": {
@@ -57215,7 +57561,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 21,
-                  "line": 841
+                  "line": 843
                 },
                 "name": "src_idx",
                 "type": "uint32_t"
@@ -57223,7 +57569,7 @@
               "kind": "index",
               "loc": {
                 "col": 12,
-                "line": 841
+                "line": 843
               },
               "obj": {
                 "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -57231,7 +57577,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 841
+                  "line": 843
                 },
                 "member": "srcs",
                 "obj": {
@@ -57239,7 +57585,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 841
+                    "line": 843
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -57253,12 +57599,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 841
+            "line": 843
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 842,
+      "end_line": 844,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57295,7 +57641,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 840
+      "start_line": 842
     },
     {
       "body": [
@@ -57309,7 +57655,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 845
+                "line": 847
               },
               "member": "reg_num",
               "obj": {
@@ -57319,7 +57665,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 21,
-                    "line": 845
+                    "line": 847
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -57327,7 +57673,7 @@
                 "kind": "index",
                 "loc": {
                   "col": 12,
-                  "line": 845
+                  "line": 847
                 },
                 "obj": {
                   "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -57335,7 +57681,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 12,
-                    "line": 845
+                    "line": 847
                   },
                   "member": "srcs",
                   "obj": {
@@ -57343,7 +57689,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 12,
-                      "line": 845
+                      "line": 847
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -57356,7 +57702,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 845
+              "line": 847
             },
             "op": "&",
             "right": {
@@ -57366,7 +57712,7 @@
               "lit_kind": "int",
               "loc": {
                 "col": 40,
-                "line": 845
+                "line": 847
               },
               "type": "unsigned int",
               "value": "62"
@@ -57376,12 +57722,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 845
+            "line": 847
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 846,
+      "end_line": 848,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57418,7 +57764,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 844
+      "start_line": 846
     },
     {
       "body": [
@@ -57432,7 +57778,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 849
+                "line": 851
               },
               "member": "dest_reg",
               "obj": {
@@ -57440,7 +57786,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 849
+                  "line": 851
                 },
                 "name": "ins",
                 "type": "const DecodedValhallInst"
@@ -57449,7 +57795,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 849
+              "line": 851
             },
             "op": "&",
             "right": {
@@ -57459,7 +57805,7 @@
               "lit_kind": "int",
               "loc": {
                 "col": 27,
-                "line": 849
+                "line": 851
               },
               "type": "unsigned int",
               "value": "63"
@@ -57469,12 +57815,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 849
+            "line": 851
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 850,
+      "end_line": 852,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57506,7 +57852,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 848
+      "start_line": 850
     },
     {
       "body": [
@@ -57520,7 +57866,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 853
+                "line": 855
               },
               "member": "dest_reg",
               "obj": {
@@ -57528,7 +57874,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 12,
-                  "line": 853
+                  "line": 855
                 },
                 "name": "ins",
                 "type": "const DecodedValhallInst"
@@ -57537,7 +57883,7 @@
             },
             "loc": {
               "col": 12,
-              "line": 853
+              "line": 855
             },
             "op": "&",
             "right": {
@@ -57547,7 +57893,7 @@
               "lit_kind": "int",
               "loc": {
                 "col": 27,
-                "line": 853
+                "line": 855
               },
               "type": "unsigned int",
               "value": "62"
@@ -57557,12 +57903,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 853
+            "line": 855
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 854,
+      "end_line": 856,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57594,7 +57940,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 852
+      "start_line": 854
     },
     {
       "body": [
@@ -57606,7 +57952,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 31,
-                  "line": 857
+                  "line": 859
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -57617,7 +57963,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 36,
-                  "line": 857
+                  "line": 859
                 },
                 "member": "reg_num",
                 "obj": {
@@ -57627,7 +57973,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 45,
-                      "line": 857
+                      "line": 859
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -57635,7 +57981,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 36,
-                    "line": 857
+                    "line": 859
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -57643,7 +57989,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 36,
-                      "line": 857
+                      "line": 859
                     },
                     "member": "srcs",
                     "obj": {
@@ -57651,7 +57997,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 36,
-                        "line": 857
+                        "line": 859
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -57668,7 +58014,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 857
+                "line": 859
               },
               "member": "current_reg",
               "obj": {
@@ -57677,7 +58023,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 857
+                  "line": 859
                 },
                 "member": "sb",
                 "obj": {
@@ -57685,7 +58031,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 857
+                    "line": 859
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -57697,7 +58043,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 857
+              "line": 859
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::current_reg",
             "template_args": [],
@@ -57706,12 +58052,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 857
+            "line": 859
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 858,
+      "end_line": 860,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57748,7 +58094,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 856
+      "start_line": 858
     },
     {
       "body": [
@@ -57763,7 +58109,7 @@
               "kind": "member",
               "loc": {
                 "col": 20,
-                "line": 861
+                "line": 863
               },
               "member": "reg_num",
               "obj": {
@@ -57773,7 +58119,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 29,
-                    "line": 861
+                    "line": 863
                   },
                   "name": "src_idx",
                   "type": "uint32_t"
@@ -57781,7 +58127,7 @@
                 "kind": "index",
                 "loc": {
                   "col": 20,
-                  "line": 861
+                  "line": 863
                 },
                 "obj": {
                   "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -57789,7 +58135,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 20,
-                    "line": 861
+                    "line": 863
                   },
                   "member": "srcs",
                   "obj": {
@@ -57797,7 +58143,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 20,
-                      "line": 861
+                      "line": 863
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -57810,7 +58156,7 @@
             },
             "loc": {
               "col": 20,
-              "line": 861
+              "line": 863
             },
             "op": "&",
             "right": {
@@ -57820,7 +58166,7 @@
               "lit_kind": "int",
               "loc": {
                 "col": 48,
-                "line": 861
+                "line": 863
               },
               "type": "unsigned int",
               "value": "62"
@@ -57831,7 +58177,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 13,
-            "line": 861
+            "line": 863
           },
           "name": "base",
           "type": "uint8_t"
@@ -57844,7 +58190,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 31,
-                  "line": 862
+                  "line": 864
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -57860,14 +58206,14 @@
                     "kind": "ident",
                     "loc": {
                       "col": 57,
-                      "line": 862
+                      "line": 864
                     },
                     "name": "base",
                     "type": "uint8_t"
                   },
                   "loc": {
                     "col": 57,
-                    "line": 862
+                    "line": 864
                   },
                   "op": "+",
                   "right": {
@@ -57875,7 +58221,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 64,
-                      "line": 862
+                      "line": 864
                     },
                     "name": "off",
                     "type": "uint32_t"
@@ -57885,7 +58231,7 @@
                 "kind": "cast",
                 "loc": {
                   "col": 36,
-                  "line": 862
+                  "line": 864
                 },
                 "target_type": "uint8_t",
                 "type": "uint8_t"
@@ -57896,7 +58242,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 862
+                "line": 864
               },
               "member": "current_reg",
               "obj": {
@@ -57905,7 +58251,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 862
+                  "line": 864
                 },
                 "member": "sb",
                 "obj": {
@@ -57913,7 +58259,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 862
+                    "line": 864
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -57925,7 +58271,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 862
+              "line": 864
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::current_reg",
             "template_args": [],
@@ -57934,12 +58280,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 862
+            "line": 864
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 863,
+      "end_line": 865,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -57981,7 +58327,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 860
+      "start_line": 862
     },
     {
       "body": [
@@ -57993,7 +58339,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 34,
-                  "line": 866
+                  "line": 868
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -58004,7 +58350,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 39,
-                  "line": 866
+                  "line": 868
                 },
                 "member": "imm_bits",
                 "obj": {
@@ -58014,7 +58360,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 48,
-                      "line": 866
+                      "line": 868
                     },
                     "name": "src_idx",
                     "type": "uint32_t"
@@ -58022,7 +58368,7 @@
                   "kind": "index",
                   "loc": {
                     "col": 39,
-                    "line": 866
+                    "line": 868
                   },
                   "obj": {
                     "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -58030,7 +58376,7 @@
                     "kind": "member",
                     "loc": {
                       "col": 39,
-                      "line": 866
+                      "line": 868
                     },
                     "member": "srcs",
                     "obj": {
@@ -58038,7 +58384,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 39,
-                        "line": 866
+                        "line": 868
                       },
                       "name": "ins",
                       "type": "const DecodedValhallInst"
@@ -58055,7 +58401,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 866
+                "line": 868
               },
               "member": "emit_const_u32",
               "obj": {
@@ -58064,7 +58410,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 866
+                  "line": 868
                 },
                 "member": "sb",
                 "obj": {
@@ -58072,7 +58418,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 866
+                    "line": 868
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -58084,7 +58430,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 866
+              "line": 868
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::emit_const_u32",
             "template_args": [],
@@ -58093,12 +58439,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 866
+            "line": 868
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 867,
+      "end_line": 869,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -58135,7 +58481,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 865
+      "start_line": 867
     },
     {
       "body": [
@@ -58147,7 +58493,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 34,
-                  "line": 870
+                  "line": 872
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -58161,7 +58507,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 48,
-                    "line": 870
+                    "line": 872
                   },
                   "member": "imm_bits",
                   "obj": {
@@ -58171,7 +58517,7 @@
                       "kind": "ident",
                       "loc": {
                         "col": 57,
-                        "line": 870
+                        "line": 872
                       },
                       "name": "src_idx",
                       "type": "uint32_t"
@@ -58179,7 +58525,7 @@
                     "kind": "index",
                     "loc": {
                       "col": 48,
-                      "line": 870
+                      "line": 872
                     },
                     "obj": {
                       "canonical_type": "const std::vector<valhall::DecodedSource>",
@@ -58187,7 +58533,7 @@
                       "kind": "member",
                       "loc": {
                         "col": 48,
-                        "line": 870
+                        "line": 872
                       },
                       "member": "srcs",
                       "obj": {
@@ -58195,7 +58541,7 @@
                         "kind": "ident",
                         "loc": {
                           "col": 48,
-                          "line": 870
+                          "line": 872
                         },
                         "name": "ins",
                         "type": "const DecodedValhallInst"
@@ -58209,7 +58555,7 @@
                 "kind": "cast",
                 "loc": {
                   "col": 39,
-                  "line": 870
+                  "line": 872
                 },
                 "target_type": "uint64_t",
                 "type": "uint64_t"
@@ -58220,7 +58566,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 870
+                "line": 872
               },
               "member": "emit_const_u64",
               "obj": {
@@ -58229,7 +58575,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 870
+                  "line": 872
                 },
                 "member": "sb",
                 "obj": {
@@ -58237,7 +58583,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 870
+                    "line": 872
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -58249,7 +58595,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 870
+              "line": 872
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::emit_const_u64",
             "template_args": [],
@@ -58258,12 +58604,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 870
+            "line": 872
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 871,
+      "end_line": 873,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -58300,7 +58646,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 869
+      "start_line": 871
     },
     {
       "body": [
@@ -58312,7 +58658,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 34,
-                  "line": 874
+                  "line": 876
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -58323,7 +58669,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 39,
-                  "line": 874
+                  "line": 876
                 },
                 "member": "pc",
                 "obj": {
@@ -58331,7 +58677,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 39,
-                    "line": 874
+                    "line": 876
                   },
                   "name": "ins",
                   "type": "const DecodedValhallInst"
@@ -58344,7 +58690,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 874
+                "line": 876
               },
               "member": "emit_const_u64",
               "obj": {
@@ -58353,7 +58699,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 874
+                  "line": 876
                 },
                 "member": "sb",
                 "obj": {
@@ -58361,7 +58707,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 874
+                    "line": 876
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -58373,7 +58719,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 874
+              "line": 876
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::emit_const_u64",
             "template_args": [],
@@ -58382,12 +58728,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 874
+            "line": 876
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 875,
+      "end_line": 877,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -58419,7 +58765,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 873
+      "start_line": 875
     },
     {
       "body": [
@@ -58431,7 +58777,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 31,
-                  "line": 878
+                  "line": 880
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -58445,7 +58791,7 @@
                   "kind": "member",
                   "loc": {
                     "col": 36,
-                    "line": 878
+                    "line": 880
                   },
                   "member": "dest_reg",
                   "obj": {
@@ -58453,7 +58799,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 36,
-                      "line": 878
+                      "line": 880
                     },
                     "name": "ins",
                     "type": "const DecodedValhallInst"
@@ -58462,7 +58808,7 @@
                 },
                 "loc": {
                   "col": 36,
-                  "line": 878
+                  "line": 880
                 },
                 "op": "&",
                 "right": {
@@ -58472,7 +58818,7 @@
                   "lit_kind": "int",
                   "loc": {
                     "col": 51,
-                    "line": 878
+                    "line": 880
                   },
                   "type": "unsigned int",
                   "value": "63"
@@ -58485,7 +58831,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 878
+                "line": 880
               },
               "member": "current_reg",
               "obj": {
@@ -58494,7 +58840,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 878
+                  "line": 880
                 },
                 "member": "sb",
                 "obj": {
@@ -58502,7 +58848,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 878
+                    "line": 880
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -58514,7 +58860,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 878
+              "line": 880
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::current_reg",
             "template_args": [],
@@ -58523,12 +58869,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 878
+            "line": 880
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 879,
+      "end_line": 881,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -58560,7 +58906,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 877
+      "start_line": 879
     },
     {
       "body": [
@@ -58572,7 +58918,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 20,
-                  "line": 882
+                  "line": 884
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -58585,7 +58931,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 46,
-                    "line": 882
+                    "line": 884
                   },
                   "name": "d",
                   "type": "uint32_t"
@@ -58593,7 +58939,7 @@
                 "kind": "cast",
                 "loc": {
                   "col": 25,
-                  "line": 882
+                  "line": 884
                 },
                 "target_type": "uint8_t",
                 "type": "uint8_t"
@@ -58603,7 +58949,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 50,
-                  "line": 882
+                  "line": 884
                 },
                 "name": "val",
                 "type": "SsaId"
@@ -58614,7 +58960,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 882
+                "line": 884
               },
               "member": "set_reg",
               "obj": {
@@ -58623,7 +58969,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 5,
-                  "line": 882
+                  "line": 884
                 },
                 "member": "sb",
                 "obj": {
@@ -58631,7 +58977,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 5,
-                    "line": 882
+                    "line": 884
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -58643,7 +58989,7 @@
             "kind": "call",
             "loc": {
               "col": 5,
-              "line": 882
+              "line": 884
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::set_reg",
             "template_args": [],
@@ -58652,12 +58998,12 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 882
+            "line": 884
           }
         }
       ],
       "canonical_ret_type": "void",
-      "end_line": 883,
+      "end_line": 885,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -58699,7 +59045,7 @@
       "ret_type": "void",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 881
+      "start_line": 883
     },
     {
       "body": [
@@ -58790,7 +59136,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 16,
-                  "line": 886
+                  "line": 888
                 },
                 "type": "std::vector<SsaId>"
               },
@@ -58800,7 +59146,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 16,
-                  "line": 886
+                  "line": 888
                 },
                 "type": "std::vector<PhiIncoming>"
               },
@@ -58880,7 +59226,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 16,
-                  "line": 886
+                  "line": 888
                 },
                 "type": "std::string"
               },
@@ -58982,7 +59328,7 @@
             "kind": "init_list",
             "loc": {
               "col": 15,
-              "line": 886
+              "line": 888
             },
             "type": "SsaNode"
           },
@@ -58990,7 +59336,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 13,
-            "line": 886
+            "line": 888
           },
           "name": "bi",
           "type": "SsaNode"
@@ -59001,7 +59347,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 887
+              "line": 889
             },
             "op": "=",
             "target": {
@@ -59010,7 +59356,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 887
+                "line": 889
               },
               "member": "op",
               "obj": {
@@ -59018,7 +59364,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 887
+                  "line": 889
                 },
                 "name": "bi",
                 "type": "SsaNode"
@@ -59031,7 +59377,7 @@
               "kind": "scoped_ident",
               "loc": {
                 "col": 13,
-                "line": 887
+                "line": 889
               },
               "parts": [
                 "valhall",
@@ -59046,7 +59392,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 887
+            "line": 889
           }
         },
         {
@@ -59055,7 +59401,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 888
+              "line": 890
             },
             "op": "=",
             "target": {
@@ -59064,7 +59410,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 888
+                "line": 890
               },
               "member": "type",
               "obj": {
@@ -59072,7 +59418,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 888
+                  "line": 890
                 },
                 "name": "bi",
                 "type": "SsaNode"
@@ -59085,7 +59431,7 @@
               "kind": "scoped_ident",
               "loc": {
                 "col": 15,
-                "line": 888
+                "line": 890
               },
               "parts": [
                 "valhall",
@@ -59100,7 +59446,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 888
+            "line": 890
           }
         },
         {
@@ -59109,7 +59455,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 889
+              "line": 891
             },
             "op": "=",
             "target": {
@@ -59118,7 +59464,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 889
+                "line": 891
               },
               "member": "imm_u32",
               "obj": {
@@ -59126,7 +59472,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 889
+                  "line": 891
                 },
                 "name": "bi",
                 "type": "SsaNode"
@@ -59142,7 +59488,7 @@
                 "kind": "scoped_ident",
                 "loc": {
                   "col": 40,
-                  "line": 889
+                  "line": 891
                 },
                 "parts": [
                   "valhall",
@@ -59156,7 +59502,7 @@
               "kind": "cast",
               "loc": {
                 "col": 18,
-                "line": 889
+                "line": 891
               },
               "target_type": "uint32_t",
               "type": "uint32_t"
@@ -59165,7 +59511,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 889
+            "line": 891
           }
         },
         {
@@ -59174,7 +59520,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 890
+              "line": 892
             },
             "op": "=",
             "target": {
@@ -59183,7 +59529,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 890
+                "line": 892
               },
               "member": "aux_bool",
               "obj": {
@@ -59191,7 +59537,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 890
+                  "line": 892
                 },
                 "name": "bi",
                 "type": "SsaNode"
@@ -59205,7 +59551,7 @@
               "lit_kind": "bool",
               "loc": {
                 "col": 19,
-                "line": 890
+                "line": 892
               },
               "type": "bool",
               "value": true
@@ -59214,7 +59560,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 890
+            "line": 892
           }
         },
         {
@@ -59223,7 +59569,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 891
+              "line": 893
             },
             "op": "=",
             "target": {
@@ -59232,7 +59578,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 891
+                "line": 893
               },
               "member": "aux_str",
               "obj": {
@@ -59240,7 +59586,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 891
+                  "line": 893
                 },
                 "name": "bi",
                 "type": "SsaNode"
@@ -59254,7 +59600,7 @@
               "lit_kind": "string",
               "loc": {
                 "col": 18,
-                "line": 891
+                "line": 893
               },
               "type": "const char[24]",
               "value": "gl_SubgroupInvocationID"
@@ -59263,7 +59609,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 891
+            "line": 893
           }
         },
         {
@@ -59274,7 +59620,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 24,
-                  "line": 892
+                  "line": 894
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -59286,7 +59632,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 39,
-                      "line": 892
+                      "line": 894
                     },
                     "name": "bi",
                     "type": "SsaNode"
@@ -59297,7 +59643,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 29,
-                    "line": 892
+                    "line": 894
                   },
                   "parts": [
                     "std",
@@ -59310,7 +59656,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 29,
-                  "line": 892
+                  "line": 894
                 },
                 "qualified_callee": "std::move",
                 "template_args": [
@@ -59324,7 +59670,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 892
+                "line": 894
               },
               "member": "emit",
               "obj": {
@@ -59333,7 +59679,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 892
+                  "line": 894
                 },
                 "member": "sb",
                 "obj": {
@@ -59341,7 +59687,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 892
+                    "line": 894
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -59353,7 +59699,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 892
+              "line": 894
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::emit",
             "template_args": [],
@@ -59362,12 +59708,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 892
+            "line": 894
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 893,
+      "end_line": 895,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -59399,7 +59745,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 885
+      "start_line": 887
     },
     {
       "body": [
@@ -59490,7 +59836,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 18,
-                  "line": 896
+                  "line": 898
                 },
                 "type": "std::vector<SsaId>"
               },
@@ -59500,7 +59846,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 18,
-                  "line": 896
+                  "line": 898
                 },
                 "type": "std::vector<PhiIncoming>"
               },
@@ -59580,7 +59926,7 @@
                 "kind": "init_list",
                 "loc": {
                   "col": 18,
-                  "line": 896
+                  "line": 898
                 },
                 "type": "std::string"
               },
@@ -59682,7 +60028,7 @@
             "kind": "init_list",
             "loc": {
               "col": 17,
-              "line": 896
+              "line": 898
             },
             "type": "SsaNode"
           },
@@ -59690,7 +60036,7 @@
           "kind": "var_decl",
           "loc": {
             "col": 13,
-            "line": 896
+            "line": 898
           },
           "name": "sb32",
           "type": "SsaNode"
@@ -59701,7 +60047,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 897
+              "line": 899
             },
             "op": "=",
             "target": {
@@ -59710,7 +60056,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 897
+                "line": 899
               },
               "member": "op",
               "obj": {
@@ -59718,7 +60064,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 897
+                  "line": 899
                 },
                 "name": "sb32",
                 "type": "SsaNode"
@@ -59731,7 +60077,7 @@
               "kind": "scoped_ident",
               "loc": {
                 "col": 15,
-                "line": 897
+                "line": 899
               },
               "parts": [
                 "valhall",
@@ -59746,7 +60092,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 897
+            "line": 899
           }
         },
         {
@@ -59755,7 +60101,7 @@
             "kind": "assign",
             "loc": {
               "col": 5,
-              "line": 898
+              "line": 900
             },
             "op": "=",
             "target": {
@@ -59764,7 +60110,7 @@
               "kind": "member",
               "loc": {
                 "col": 5,
-                "line": 898
+                "line": 900
               },
               "member": "type",
               "obj": {
@@ -59772,7 +60118,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 5,
-                  "line": 898
+                  "line": 900
                 },
                 "name": "sb32",
                 "type": "SsaNode"
@@ -59785,7 +60131,7 @@
               "kind": "scoped_ident",
               "loc": {
                 "col": 17,
-                "line": 898
+                "line": 900
               },
               "parts": [
                 "valhall",
@@ -59795,106 +60141,6 @@
               ],
               "qualified_name": "valhall::compiler::ValType::U32",
               "type": "valhall::compiler::ValType"
-            }
-          },
-          "kind": "expr_stmt",
-          "loc": {
-            "col": 5,
-            "line": 898
-          }
-        },
-        {
-          "expr": {
-            "canonical_type": "unsigned int",
-            "kind": "assign",
-            "loc": {
-              "col": 5,
-              "line": 899
-            },
-            "op": "=",
-            "target": {
-              "canonical_type": "unsigned int",
-              "is_arrow": false,
-              "kind": "member",
-              "loc": {
-                "col": 5,
-                "line": 899
-              },
-              "member": "imm_u32",
-              "obj": {
-                "canonical_type": "valhall::compiler::SsaNode",
-                "kind": "ident",
-                "loc": {
-                  "col": 5,
-                  "line": 899
-                },
-                "name": "sb32",
-                "type": "SsaNode"
-              },
-              "type": "uint32_t"
-            },
-            "type": "uint32_t",
-            "value": {
-              "canonical_type": "int",
-              "int_value": 5,
-              "kind": "literal",
-              "lit_kind": "int",
-              "loc": {
-                "col": 20,
-                "line": 899
-              },
-              "type": "int",
-              "value": "5"
-            }
-          },
-          "kind": "expr_stmt",
-          "loc": {
-            "col": 5,
-            "line": 899
-          }
-        },
-        {
-          "expr": {
-            "canonical_type": "unsigned int",
-            "kind": "assign",
-            "loc": {
-              "col": 5,
-              "line": 900
-            },
-            "op": "=",
-            "target": {
-              "canonical_type": "unsigned int",
-              "is_arrow": false,
-              "kind": "member",
-              "loc": {
-                "col": 5,
-                "line": 900
-              },
-              "member": "imm_u32_2",
-              "obj": {
-                "canonical_type": "valhall::compiler::SsaNode",
-                "kind": "ident",
-                "loc": {
-                  "col": 5,
-                  "line": 900
-                },
-                "name": "sb32",
-                "type": "SsaNode"
-              },
-              "type": "uint32_t"
-            },
-            "type": "uint32_t",
-            "value": {
-              "canonical_type": "int",
-              "int_value": 3,
-              "kind": "literal",
-              "lit_kind": "int",
-              "loc": {
-                "col": 22,
-                "line": 900
-              },
-              "type": "int",
-              "value": "3"
             }
           },
           "kind": "expr_stmt",
@@ -59911,7 +60157,7 @@
               "col": 5,
               "line": 901
             },
-            "op": "|=",
+            "op": "=",
             "target": {
               "canonical_type": "unsigned int",
               "is_arrow": false,
@@ -59920,6 +60166,106 @@
                 "col": 5,
                 "line": 901
               },
+              "member": "imm_u32",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 901
+                },
+                "name": "sb32",
+                "type": "SsaNode"
+              },
+              "type": "uint32_t"
+            },
+            "type": "uint32_t",
+            "value": {
+              "canonical_type": "int",
+              "int_value": 5,
+              "kind": "literal",
+              "lit_kind": "int",
+              "loc": {
+                "col": 20,
+                "line": 901
+              },
+              "type": "int",
+              "value": "5"
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 901
+          }
+        },
+        {
+          "expr": {
+            "canonical_type": "unsigned int",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 902
+            },
+            "op": "=",
+            "target": {
+              "canonical_type": "unsigned int",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 902
+              },
+              "member": "imm_u32_2",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 902
+                },
+                "name": "sb32",
+                "type": "SsaNode"
+              },
+              "type": "uint32_t"
+            },
+            "type": "uint32_t",
+            "value": {
+              "canonical_type": "int",
+              "int_value": 3,
+              "kind": "literal",
+              "lit_kind": "int",
+              "loc": {
+                "col": 22,
+                "line": 902
+              },
+              "type": "int",
+              "value": "3"
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 902
+          }
+        },
+        {
+          "expr": {
+            "canonical_type": "unsigned int",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 903
+            },
+            "op": "|=",
+            "target": {
+              "canonical_type": "unsigned int",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 903
+              },
               "member": "flags",
               "obj": {
                 "canonical_type": "valhall::tables::EffectMask",
@@ -59927,7 +60273,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 5,
-                  "line": 901
+                  "line": 903
                 },
                 "member": "effects",
                 "obj": {
@@ -59935,7 +60281,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 5,
-                    "line": 901
+                    "line": 903
                   },
                   "name": "sb32",
                   "type": "SsaNode"
@@ -59950,7 +60296,7 @@
               "kind": "scoped_ident",
               "loc": {
                 "col": 27,
-                "line": 901
+                "line": 903
               },
               "parts": [
                 "valhall",
@@ -59965,7 +60311,7 @@
           "kind": "expr_stmt",
           "loc": {
             "col": 5,
-            "line": 901
+            "line": 903
           }
         },
         {
@@ -59976,7 +60322,7 @@
                 "kind": "ident",
                 "loc": {
                   "col": 24,
-                  "line": 902
+                  "line": 904
                 },
                 "name": "blk",
                 "type": "uint32_t"
@@ -59988,7 +60334,7 @@
                     "kind": "ident",
                     "loc": {
                       "col": 39,
-                      "line": 902
+                      "line": 904
                     },
                     "name": "sb32",
                     "type": "SsaNode"
@@ -59999,7 +60345,7 @@
                   "kind": "scoped_ident",
                   "loc": {
                     "col": 29,
-                    "line": 902
+                    "line": 904
                   },
                   "parts": [
                     "std",
@@ -60012,7 +60358,7 @@
                 "kind": "call",
                 "loc": {
                   "col": 29,
-                  "line": 902
+                  "line": 904
                 },
                 "qualified_callee": "std::move",
                 "template_args": [
@@ -60026,7 +60372,7 @@
               "kind": "member",
               "loc": {
                 "col": 12,
-                "line": 902
+                "line": 904
               },
               "member": "emit",
               "obj": {
@@ -60035,7 +60381,7 @@
                 "kind": "member",
                 "loc": {
                   "col": 12,
-                  "line": 902
+                  "line": 904
                 },
                 "member": "sb",
                 "obj": {
@@ -60043,7 +60389,7 @@
                   "kind": "ident",
                   "loc": {
                     "col": 12,
-                    "line": 902
+                    "line": 904
                   },
                   "name": "ctx",
                   "type": "Pass1Context"
@@ -60055,7 +60401,7 @@
             "kind": "call",
             "loc": {
               "col": 12,
-              "line": 902
+              "line": 904
             },
             "qualified_callee": "valhall::compiler::SsaBuilder::emit",
             "template_args": [],
@@ -60064,12 +60410,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 902
+            "line": 904
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 903,
+      "end_line": 905,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -60101,7 +60447,7 @@
       "ret_type": "SsaId",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 895
+      "start_line": 897
     },
     {
       "body": [
@@ -60114,14 +60460,14 @@
               "kind": "ident",
               "loc": {
                 "col": 12,
-                "line": 906
+                "line": 908
               },
               "name": "a",
               "type": "uint32_t"
             },
             "loc": {
               "col": 12,
-              "line": 906
+              "line": 908
             },
             "op": "+",
             "right": {
@@ -60129,7 +60475,7 @@
               "kind": "ident",
               "loc": {
                 "col": 16,
-                "line": 906
+                "line": 908
               },
               "name": "b",
               "type": "uint32_t"
@@ -60139,12 +60485,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 906
+            "line": 908
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 907,
+      "end_line": 909,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -60186,7 +60532,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 905
+      "start_line": 907
     },
     {
       "body": [
@@ -60199,14 +60545,14 @@
               "kind": "ident",
               "loc": {
                 "col": 12,
-                "line": 910
+                "line": 912
               },
               "name": "a",
               "type": "uint32_t"
             },
             "loc": {
               "col": 12,
-              "line": 910
+              "line": 912
             },
             "op": "*",
             "right": {
@@ -60216,7 +60562,7 @@
               "lit_kind": "int",
               "loc": {
                 "col": 16,
-                "line": 910
+                "line": 912
               },
               "type": "unsigned int",
               "value": "8"
@@ -60226,12 +60572,12 @@
           "kind": "return",
           "loc": {
             "col": 5,
-            "line": 910
+            "line": 912
           }
         }
       ],
       "canonical_ret_type": "unsigned int",
-      "end_line": 911,
+      "end_line": 913,
       "is_inline": false,
       "is_method": false,
       "is_static": false,
@@ -60268,7 +60614,7 @@
       "ret_type": "uint32_t",
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
-      "start_line": 909
+      "start_line": 911
     }
   ],
   "generator": "clang_ast_dumper (LLVM 21)",

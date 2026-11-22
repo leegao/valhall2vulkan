@@ -1567,7 +1567,8 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
-      ]
+      ],
+      "comment": "FABS aliases FADD with abs0 already set in hardware encoding; get_src_abs suppresses abs0 on src0 so FAbs is emitted once."
     },
     {
       "mnemonic": "FNEG",
@@ -1583,7 +1584,8 @@
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
-      "effects": []
+      "effects": [],
+      "comment": "FNEG aliases FADD with neg0 already set in hardware encoding; get_src_neg suppresses neg0 on src0 so FNeg is emitted once."
     },
     {
       "mnemonic": "FADD",
