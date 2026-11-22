@@ -357,7 +357,9 @@ int main() {
 
         auto cf1 = make_inst(0x00, Mnemonic::CUBEFACE1, Mnemonic::CUBEFACE1);
         cf1.has_dest = true; cf1.dest_reg = 0; cf1.srcs = { reg_src(1), reg_src(2), reg_src(3) };
-        assert(has_op(lower_single(cf1), SsaOp::FCmpOrdGe));
+        assert(has_op(lower_single(cf1), SsaOp::FMax));
+        auto cf2 = make_inst(0x00, Mnemonic::CUBEFACE2, Mnemonic::CUBEFACE2); cf2.has_dest = true; cf2.dest_reg = 0; cf2.srcs = { reg_src(1), reg_src(2), reg_src(3) };
+        assert(has_op(lower_single(cf2), SsaOp::FCmpOrdGe) && has_op(lower_single(cf2), SsaOp::Shl));
 
         std::cout << "[PASS] Milestones 1.5 & 2: @LOOKUP tables and INLINE_OPS DSL rules verified\n";
     }

@@ -2483,6 +2483,37 @@
       ],
       "op_class": "fp_cube",
       "ssa_op": "@INLINE_OPS",
+      "dest_type": "f32",
+      "src_types": [
+        "f32",
+        "f32",
+        "f32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [
+        "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%y : f32 = #f32(0);",
+        "if ($has_src1) { %y = %1; }",
+        "%z : f32 = #f32(0);",
+        "if ($has_src2) { %z = %2; }",
+        "%ax : f32 = FAbs(%0);",
+        "%ay : f32 = FAbs(%y);",
+        "%az : f32 = FAbs(%z);",
+        "%myz : f32 = FMax(%ay, %az);",
+        "%out : f32 = FMax(%ax, %myz);"
+      ],
+      "comment": "Valhall CUBEFACE1(x,y,z) returns f32 major-axis magnitude max(|x|,|y|,|z|)."
+    },
+    {
+      "mnemonic": "CUBEFACE2",
+      "variants": [
+        "*"
+      ],
+      "op_class": "fp_cube",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "u32",
       "src_types": [
         "f32",
@@ -2514,38 +2545,10 @@
         "%fy : u32 = Select(%ny, #u32(3), #u32(2));",
         "%fz : u32 = Select(%nz, #u32(5), #u32(4));",
         "%fyz : u32 = Select(%is_y, %fy, %fz);",
-        "%out : u32 = Select(%is_x, %fx, %fyz);"
-      ]
-    },
-    {
-      "mnemonic": "CUBEFACE2",
-      "variants": [
-        "*"
+        "%face : u32 = Select(%is_x, %fx, %fyz);",
+        "%out : u32 = Shl(%face, #u32(29));"
       ],
-      "op_class": "fp_cube",
-      "ssa_op": "@INLINE_OPS",
-      "dest_type": "f32",
-      "src_types": [
-        "f32",
-        "f32",
-        "f32"
-      ],
-      "splits_block": false,
-      "is_barrier_or_cf": false,
-      "effects": [
-        "uses_glsl_std450"
-      ],
-      "inline_ops": [
-        "%y : f32 = #f32(0);",
-        "if ($has_src1) { %y = %1; }",
-        "%z : f32 = #f32(0);",
-        "if ($has_src2) { %z = %2; }",
-        "%ax : f32 = FAbs(%0);",
-        "%ay : f32 = FAbs(%y);",
-        "%az : f32 = FAbs(%z);",
-        "%myz : f32 = FMax(%ay, %az);",
-        "%out : f32 = FMax(%ax, %myz);"
-      ]
+      "comment": "Valhall CUBEFACE2(x,y,z) returns u32 face index (0..5) packed in bits [31:29] (face << 29)."
     },
     {
       "mnemonic": "CUBE_SSEL",
@@ -2556,14 +2559,30 @@
       "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
-        "f32"
+        "f32",
+        "f32",
+        "u32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": [],
       "inline_ops": [
-        "return %0;"
-      ]
+        "%z : f32 = %0;",
+        "%x : f32 = #f32(0);",
+        "if ($has_src1) { %x = %1; }",
+        "%fw : u32 = #u32(0);",
+        "if ($has_src2) { %fw = %2; }",
+        "%face : u32 = ShrU(%fw, #u32(29));",
+        "%nz : f32 = FNeg(%z);",
+        "%nx : f32 = FNeg(%x);",
+        "%is0 : bool = ICmpEq(%face, #u32(0));",
+        "%is1 : bool = ICmpEq(%face, #u32(1));",
+        "%is5 : bool = ICmpEq(%face, #u32(5));",
+        "%s_45 : f32 = Select(%is5, %nx, %x);",
+        "%s_1p : f32 = Select(%is1, %z, %s_45);",
+        "%out : f32 = Select(%is0, %nz, %s_1p);"
+      ],
+      "comment": "Valhall CUBE_SSEL(Z, X, face_word): face 0 (+X) -> -Z, face 1 (-X) -> +Z, faces 2/3/4 -> +X, face 5 (-Z) -> -X."
     },
     {
       "mnemonic": "CUBE_TSEL",
@@ -2575,16 +2594,27 @@
       "dest_type": "f32",
       "src_types": [
         "f32",
-        "f32"
+        "f32",
+        "u32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": [],
       "inline_ops": [
-        "%y : f32 = #f32(0);",
-        "if ($has_src1) { %y = %1; }",
-        "return %y;"
-      ]
+        "%y : f32 = %0;",
+        "%z : f32 = #f32(0);",
+        "if ($has_src1) { %z = %1; }",
+        "%fw : u32 = #u32(0);",
+        "if ($has_src2) { %fw = %2; }",
+        "%face : u32 = ShrU(%fw, #u32(29));",
+        "%ny : f32 = FNeg(%y);",
+        "%nz : f32 = FNeg(%z);",
+        "%is2 : bool = ICmpEq(%face, #u32(2));",
+        "%is3 : bool = ICmpEq(%face, #u32(3));",
+        "%t_3p : f32 = Select(%is3, %nz, %ny);",
+        "%out : f32 = Select(%is2, %z, %t_3p);"
+      ],
+      "comment": "Valhall CUBE_TSEL(Y, Z, face_word): face 2 (+Y) -> +Z, face 3 (-Y) -> -Z, faces 0/1/4/5 -> -Y."
     },
     {
       "mnemonic": "IADD",
