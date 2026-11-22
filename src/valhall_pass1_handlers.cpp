@@ -731,6 +731,11 @@ std::string get_src_swz(Pass1Context&, uint32_t, const DecodedValhallInst& ins, 
     if (is_shift_bitwise_alias_src1) {
         return "";
     }
+    // BRANCH handles its combine modifier (and/h0/h1/lowbits) explicitly in its lowering rule;
+    // suppress src0 swizzle here so .h1 is not shifted right by 16 twice.
+    if (src_idx == 0 && (ins.mnemonic == Mnemonic::BRANCH || ins.canonical_mnemonic == Mnemonic::BRANCH)) {
+        return "";
+    }
     if (src_idx < ins.srcs.size() && !ins.srcs[src_idx].swizzle_mod.empty()) {
         return ins.srcs[src_idx].swizzle_mod;
     }
