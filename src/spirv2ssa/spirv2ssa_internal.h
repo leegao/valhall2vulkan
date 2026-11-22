@@ -31,6 +31,7 @@ enum class PtrKind : uint8_t {
     InputVar,   // Stage input (BuiltIn, Vertex attribute, Fragment varying)
     OutputVar,  // Stage output (BuiltIn, Fragment color, Vertex varying)
     ImageVar,   // UniformConstant image/sampler/sampled-image
+    ImageTexel, // Result of OpImageTexelPointer (storage image texel address)
 };
 
 /// Symbolic pointer tracked across OpVariable and OpAccessChain.

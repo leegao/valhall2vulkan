@@ -947,11 +947,14 @@ LoweredValue SpirvLowerer::lower_atomic(uint32_t blk_id, const SpirvInst& inst) 
     out.spv_type_id = res_type;
 
     auto pit = pointers_.find(ptr_id);
-    if (pit == pointers_.end() || pit->second.kind != PtrKind::Buffer) {
+    if (pit == pointers_.end() ||
+        (pit->second.kind != PtrKind::Buffer && pit->second.kind != PtrKind::ImageTexel)) {
         return make_zero_value(blk_id, res_type);
     }
     const PointerRef& ptr = pit->second;
-    SsaId addr = emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {ptr.base_ptr, ptr.byte_offset});
+    SsaId addr = (ptr.kind == PtrKind::ImageTexel)
+                     ? ptr.base_ptr
+                     : emit_op(blk_id, SsaOp::IAdd64, ValType::U64, {ptr.base_ptr, ptr.byte_offset});
     SsaId tok = sb_.current_token(blk_id);
 
     SsaNode at{};

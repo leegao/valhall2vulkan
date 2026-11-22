@@ -608,6 +608,33 @@ bool SpirvLowerer::lower_function_body(
                     lower_image_write(cur_b, inst);
                     break;
 
+                case SpvOpImageTexelPointer: {
+                    if (inst.words.size() >= 6) {
+                        uint32_t res_ty = inst.words[1];
+                        uint32_t res_id = inst.words[2];
+                        uint32_t img_ptr_id = inst.words[3];
+                        uint32_t coord_id = inst.words[4];
+                        std::string ikey = "tex:0:0";
+                        if (auto pit = pointers_.find(img_ptr_id); pit != pointers_.end() && !pit->second.canonical_key.empty()) {
+                            ikey = pit->second.canonical_key;
+                        }
+                        LoweredValue coord = get_value(cur_b, coord_id);
+                        SsaId cx = coord.lanes.empty() ? sb_.emit_const_u32(cur_b, 0u) : sb_.emit_bitcast(cur_b, ValType::U32, coord.lanes[0]);
+                        SsaId cy = (coord.lanes.size() >= 2) ? sb_.emit_bitcast(cur_b, ValType::U32, coord.lanes[1]) : sb_.emit_const_u32(cur_b, 0u);
+                        SsaId xy = emit_op(cur_b, SsaOp::Bfi, ValType::U32, {cx, cy, sb_.emit_const_u32(cur_b, 16u), sb_.emit_const_u32(cur_b, 16u)});
+                        SsaId cz = (coord.lanes.size() >= 3) ? sb_.emit_bitcast(cur_b, ValType::U32, coord.lanes[2]) : sb_.emit_const_u32(cur_b, 0u);
+                        SsaId taddr = emit_op(cur_b, SsaOp::ImageTexelAddr, ValType::U64, {xy, cz});
+                        PointerRef pref{};
+                        pref.kind = PtrKind::ImageTexel;
+                        pref.pointee_type_id = res_ty;
+                        pref.base_ptr = taddr;
+                        pref.byte_offset = sb_.emit_const_u64(cur_b, 0u);
+                        pref.canonical_key = ikey;
+                        pointers_[res_id] = std::move(pref);
+                    }
+                    break;
+                }
+
                 case SpvOpControlBarrier: {
                     SsaNode cb{};
                     cb.op = SsaOp::ControlBarrier;
