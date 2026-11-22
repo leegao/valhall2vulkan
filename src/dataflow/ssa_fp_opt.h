@@ -36,6 +36,15 @@ struct FpOptOptions {
     /// power-of-two `Ldexp` scaling, `FSub` desugaring, etc.).
     bool enable_cpp_rewrites = true;
 
+    /// Lift Valhall expanded transcendental sequences (FREXPE/FLOGD/Q8.24 Exp2,
+    /// Cody-Waite + FSIN_TABLE/FCOS_TABLE Taylor polynomials) to Log2/Exp2/Sin/Cos.
+    /// Automatically enabled when `mode == FpOptMode::FastMath`.
+    bool enable_transcendental_lifting = false;
+
+    /// Canonicalize Mali Vertex `gl_mali_ViewportTransform` epilogue stores back
+    /// to clip-space `StoreBuiltinOutput("gl_Position")`.
+    bool canonicalize_vertex_viewport = true;
+
     /// Maximum fixpoint rewrite iterations.
     uint32_t max_iterations = 8;
 };

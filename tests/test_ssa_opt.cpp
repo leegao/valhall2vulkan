@@ -729,6 +729,125 @@ static void test_pilot_v2_sccp_dce_and_fp_valhall_isms() {
     std::cout << "[PASS] test_pilot_v2_sccp_dce_and_fp_valhall_isms\n";
 }
 
+
+static void test_phase3_transcendental_and_vertex_viewport_lifting() {
+    // 1. Valhall Log2 (FREXPE.log + FLOGD + Fma) + Q8.24 Exp2 + Cody-Waite Sin/Cos lifting
+    {
+        ValhallSsaModule mod;
+        mod.nodes.push_back(SsaNode{});
+        mod.blocks.resize(1);
+        mod.blocks[0].id = 0;
+        auto emit = [&](SsaOp op, ValType ty, std::vector<SsaId> args, uint32_t imm = 0) -> SsaId {
+            SsaNode n{};
+            n.id = static_cast<SsaId>(mod.nodes.size());
+            n.op = op;
+            n.type = ty;
+            n.imm_u32 = imm;
+            n.args = std::move(args);
+            if (op == SsaOp::StoreFragColor) { n.is_side_effect = true; n.is_barrier_or_cf = true; }
+            mod.nodes.push_back(std::move(n));
+            SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+            mod.blocks[0].nodes.push_back(id);
+            return id;
+        };
+        SsaId tok = emit(SsaOp::Nop, ValType::Token, {});
+        SsaId v_in = emit(SsaOp::LoadFragVarying, ValType::V4F32, {}, 0u);
+        SsaId x = emit(SsaOp::VecExtract, ValType::F32, {v_in}, 0u);
+        SsaId y = emit(SsaOp::VecExtract, ValType::F32, {v_in}, 1u);
+
+        // Log2(x) via FREXPE.log + FLOGD + Fma
+        SsaId x_u = emit(SsaOp::Bitcast, ValType::U32, {x});
+        SsaId c23 = emit(SsaOp::ConstU32, ValType::U32, {}, 23u);
+        SsaId c8 = emit(SsaOp::ConstU32, ValType::U32, {}, 8u);
+        SsaId exp_u = emit(SsaOp::BfeU, ValType::U32, {x_u, c23, c8});
+        SsaId c127s = emit(SsaOp::ConstS32, ValType::S32, {}, 127u);
+        SsaId exp_s = emit(SsaOp::ISub, ValType::S32, {emit(SsaOp::Bitcast, ValType::S32, {exp_u}), c127s});
+        SsaId e_f = emit(SsaOp::ConvertSToF, ValType::F32, {exp_s});
+        SsaId c127u = emit(SsaOp::ConstU32, ValType::U32, {}, 127u);
+        SsaId m_u = emit(SsaOp::Bfi, ValType::U32, {x_u, c127u, c23, c8});
+        SsaId m = emit(SsaOp::Bitcast, ValType::F32, {m_u});
+        SsaId m_minus1 = emit(SsaOp::FAdd, ValType::F32, {m, emit(SsaOp::ConstF32, ValType::F32, {}, 0xbf800000u)});
+        SsaId eq1 = emit(SsaOp::FCmpOrdEq, ValType::Bool, {m, emit(SsaOp::ConstF32, ValType::F32, {}, 0x3f800000u)});
+        SsaId fdiv = emit(SsaOp::FDiv, ValType::F32, {emit(SsaOp::Log2, ValType::F32, {m}), m_minus1});
+        SsaId flogd = emit(SsaOp::Select, ValType::F32, {eq1, emit(SsaOp::ConstF32, ValType::F32, {}, 0x3fb8aa3bu), fdiv});
+        SsaId log2_fma = emit(SsaOp::Fma, ValType::F32, {m_minus1, flogd, e_f});
+
+        // Q8.24 Exp2(log2_fma * y)
+        SsaId prod = emit(SsaOp::FMul, ValType::F32, {log2_fma, y});
+        SsaId ld_p = emit(SsaOp::Ldexp, ValType::F32, {prod, emit(SsaOp::ConstS32, ValType::S32, {}, 24u)});
+        SsaId q_s = emit(SsaOp::ConvertFToS, ValType::S32, {ld_p});
+        SsaId q_f = emit(SsaOp::ConvertSToF, ValType::F32, {q_s});
+        SsaId ld_n = emit(SsaOp::Ldexp, ValType::F32, {q_f, emit(SsaOp::ConstS32, ValType::S32, {}, static_cast<uint32_t>(-24))});
+        SsaId exp2_n = emit(SsaOp::Exp2, ValType::F32, {ld_n});
+
+        // Cody-Waite + FSIN_TABLE.u6 Taylor -> Sin(x)
+        SsaId cw_q = emit(SsaOp::Fma, ValType::F32, {
+            x, emit(SsaOp::ConstF32, ValType::F32, {}, 0x3f22f983u),
+            emit(SsaOp::ConstF32, ValType::F32, {}, 0x49400000u)});
+        SsaId cw_n = emit(SsaOp::FAdd, ValType::F32, {cw_q, emit(SsaOp::ConstF32, ValType::F32, {}, 0xc9400000u)});
+        SsaId cw_r = emit(SsaOp::Fma, ValType::F32, {cw_n, emit(SsaOp::ConstF32, ValType::F32, {}, 0xbfc90fdbu), x});
+        SsaId cw_idx = emit(SsaOp::BitAnd, ValType::U32, {
+            emit(SsaOp::Bitcast, ValType::U32, {cw_q}), emit(SsaOp::ConstU32, ValType::U32, {}, 0x3fu)});
+        SsaId theta = emit(SsaOp::FMul, ValType::F32, {
+            emit(SsaOp::ConvertUToF, ValType::F32, {cw_idx}),
+            emit(SsaOp::ConstF32, ValType::F32, {}, 0x3dc90fdbu)});
+        SsaId s_tbl = emit(SsaOp::Sin, ValType::F32, {theta});
+        SsaId c_tbl = emit(SsaOp::Cos, ValType::F32, {theta});
+        SsaId corr = emit(SsaOp::Fma, ValType::F32, {cw_r, c_tbl, emit(SsaOp::ConstF32, ValType::F32, {}, 0u)});
+        SsaId sin_out = emit(SsaOp::FAdd, ValType::F32, {s_tbl, corr});
+
+        emit(SsaOp::StoreFragColor, ValType::Token, {log2_fma, exp2_n, sin_out, y, tok});
+
+        FpOptOptions fopts;
+        fopts.mode = FpOptMode::FastMath;
+        auto res = run_ssa_fp_canonicalize(mod, fopts);
+        CHECK(res.rule_hits.count("valhall_log2_lift") == 1u);
+        CHECK(res.rule_hits.count("valhall_exp2_q824_lift") == 1u);
+        CHECK(res.rule_hits.count("valhall_sin_table_lift") == 1u);
+        CHECK(mod.get(log2_fma).op == SsaOp::Log2 && mod.get(log2_fma).args[0] == x);
+        CHECK(mod.get(exp2_n).op == SsaOp::Pow && mod.get(exp2_n).args[0] == x && mod.get(exp2_n).args[1] == y);
+        CHECK(mod.get(sin_out).op == SsaOp::Sin && mod.get(sin_out).args[0] == x);
+    }
+
+    // 2. Vertex viewport epilogue Case 1: drop redundant screen-space gl_Position store
+    {
+        ValhallSsaModule mod;
+        mod.nodes.push_back(SsaNode{});
+        mod.blocks.resize(1);
+        mod.blocks[0].id = 0;
+        auto emit = [&](SsaOp op, ValType ty, std::vector<SsaId> args, uint32_t imm = 0, std::string aux = "") -> SsaId {
+            SsaNode n{};
+            n.id = static_cast<SsaId>(mod.nodes.size());
+            n.op = op; n.type = ty; n.imm_u32 = imm; n.args = std::move(args); n.aux_str = std::move(aux);
+            if (op == SsaOp::StoreBuiltinOutput) { n.is_side_effect = true; n.is_barrier_or_cf = true; }
+            mod.nodes.push_back(std::move(n));
+            SsaId id = static_cast<SsaId>(mod.nodes.size() - 1);
+            mod.blocks[0].nodes.push_back(id);
+            return id;
+        };
+        SsaId tok0 = emit(SsaOp::Nop, ValType::Token, {});
+        SsaId c1 = emit(SsaOp::ConstF32, ValType::F32, {}, 0x3f800000u);
+        SsaId clip = emit(SsaOp::VecConstruct4, ValType::V4F32, {c1, c1, c1, c1});
+        SsaId st1 = emit(SsaOp::StoreBuiltinOutput, ValType::Token, {clip, tok0}, 0u, "gl_Position");
+        SsaId va = emit(SsaOp::LoadVertAttr, ValType::V4F32, {});
+        SsaId w_dyn = emit(SsaOp::VecExtract, ValType::F32, {va}, 3u);
+        SsaId inv_w = emit(SsaOp::FDiv, ValType::F32, {c1, w_dyn});
+        SsaId screen = emit(SsaOp::VecConstruct4, ValType::V4F32, {c1, c1, c1, inv_w});
+        SsaId st2 = emit(SsaOp::StoreBuiltinOutput, ValType::Token, {screen, st1}, 0u, "gl_Position");
+        (void)st2;
+
+        auto res = run_ssa_fp_canonicalize(mod);
+        CHECK(res.rule_hits.count("vert_viewport_drop_redundant") == 1u);
+        run_ssa_dce(mod);
+        uint32_t pos_stores = 0;
+        for (SsaId nid : mod.blocks[0].nodes) {
+            if (mod.get(nid).op == SsaOp::StoreBuiltinOutput && mod.get(nid).aux_str == "gl_Position") ++pos_stores;
+        }
+        CHECK(pos_stores == 1u);
+    }
+    std::cout << "[PASS] test_phase3_transcendental_and_vertex_viewport_lifting\n";
+}
+
 int main() {
     test_dce_basic_and_unreachable();
     test_cse_dominator_scoping_and_commutativity();
@@ -743,6 +862,7 @@ int main() {
     test_defau_devirt_fcst_loads_exprs_and_fallbacks();
     test_fact_prover_bitcasts_isnan_masks_bfi_and_path_csel();
     test_pilot_v2_sccp_dce_and_fp_valhall_isms();
+    test_phase3_transcendental_and_vertex_viewport_lifting();
     std::cout << "ALL SSA OPT TESTS PASSED!\n";
     return 0;
 }
