@@ -11,16 +11,15 @@ hash-consing GVN and mark-and-sweep DCE.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+from tools.symbolic_ssa.interpreter import SsaInterpreter
 from tools.symbolic_ssa.passes.ir_utils import (
     COMMUTATIVE_OPS,
     NEVER_GVN_OPS,
     SIDE_EFFECT_OPS,
     AbstractSsaPass,
     Stratum1Stats,
-    compute_idom,
-    compute_rpo,
     replace_all_uses,
 )
 
@@ -57,7 +56,6 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
             if res != nid:
                 self.repl[nid] = res
             return res
-        # Preserve tuples for VecConstruct / Split64 / Pack64 propagation
         if isinstance(res, tuple):
             return res
         return nid
@@ -148,7 +146,6 @@ def pass_gvn_dce(
         stats.alg_simplified += len(simp.repl)
         changed = True
 
-    from tools.symbolic_ssa.interpreter import SsaInterpreter
     rpo = SsaInterpreter.compute_rpo(blocks_by_id, 0)
     gvn_repl: Dict[int, int] = {}
 

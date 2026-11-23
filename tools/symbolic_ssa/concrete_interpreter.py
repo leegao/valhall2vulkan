@@ -2,7 +2,7 @@
 """
 Bit-Exact Concrete SSA Interpreter (`ConcreteSsaInterpreter`).
 
-Subclasses `SsaInterpreter` with `ConcreteDomain()`, implementing only the
+Subclasses `SsaInterpreter` with `ConcreteBitvecDomain()`, implementing only the
 concrete `_ConcreteState` storage backend and single-path CFG stepper. All
 opcode, memory, kill, atomic, and output semantics are inherited from
 `SsaInterpreter` and `SsaDomain`.
@@ -13,7 +13,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, List, Optional, Tuple
 
-from tools.symbolic_ssa.domains import ConcreteDomain
+from tools.symbolic_ssa.domains import ConcreteBitvecDomain
 from tools.symbolic_ssa.env import ConcreteShaderEnv
 from tools.symbolic_ssa.interpreter import SsaInterpreter
 
@@ -33,20 +33,20 @@ class _ConcreteState:
 
 
 class ConcreteSsaInterpreter(SsaInterpreter):
-    """Fast concrete bit-exact interpreter subclassing SsaInterpreter with ConcreteDomain."""
+    """Fast concrete bit-exact interpreter subclassing SsaInterpreter with ConcreteBitvecDomain."""
 
     def __init__(
         self,
         ssa_json: Dict[str, Any],
         is_valhall_side: bool,
         max_block_steps: int = 256,
-        domain: Optional[ConcreteDomain] = None,
+        domain: Optional[ConcreteBitvecDomain] = None,
     ):
         self.blocks_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in ssa_json.get("blocks", [])}
         self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
         self.is_valhall = is_valhall_side
         self.max_block_steps = max_block_steps
-        self.domain: ConcreteDomain = domain if domain is not None else ConcreteDomain()
+        self.domain: ConcreteBitvecDomain = domain if domain is not None else ConcreteBitvecDomain()
         self._env: Optional[ConcreteShaderEnv] = None
 
     # Minimal concrete _ConcreteState backend hooks

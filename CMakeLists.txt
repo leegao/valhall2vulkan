@@ -387,6 +387,11 @@ add_test(NAME test_corpus_synth
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME test_v31_domains_and_cfg
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/symbolic_ssa/test_v31_domains_and_cfg.py
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

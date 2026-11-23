@@ -13,17 +13,18 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, Literal, Optional
 
-from tools.symbolic_ssa.domains import ConcreteDomain, SsaDomain
-from tools.symbolic_ssa.env import MASK32
+from tools.symbolic_ssa.cfg_rewriter import CfgRewriter
+from tools.symbolic_ssa.domains import ConcreteBitvecDomain, SsaDomain
+from tools.symbolic_ssa.env import MASK32, MASK64
 from tools.symbolic_ssa.interpreter import SsaInterpreter
-from tools.symbolic_ssa.passes.ir_utils import (
-    Stratum1Stats,
-    collapse_trivial_phis,
-    compute_rpo,
-    rebuild_preds,
-)
+from tools.symbolic_ssa.passes.ir_utils import Stratum1Stats
 
 ConstKind = Literal["int", "float", "bool", "uniform_ptr"]
+
+# Minimum guaranteed base alignment (16 bytes) for UBO / push_const pointers
+# and 48-bit Mali VA address mask.
+_UNIFORM_BASE_ALIGN_MASK = (~0xF) & MASK64
+_VA48_MASK = 0x0000FFFFFFFFFFFF
 
 
 @dataclasses.dataclass(frozen=True)
@@ -41,17 +42,34 @@ def join_const(a: Optional[ConstVal], b: Optional[ConstVal]) -> Optional[ConstVa
     return a if a == b else None
 
 
+def _mask_uniform_ptr(bkey: str, off: int, mask: int) -> Optional[ConstVal]:
+    """
+    Propagate `uniform_ptr(bkey, off) & mask` when `mask` preserves the base
+    address (either 48-bit VA tag-bit clearing or low-bit alignment masking
+    within the guaranteed 16-byte UBO/push_const base alignment).
+    """
+    m = mask & MASK64
+    if (m & _VA48_MASK) == _VA48_MASK:
+        return ConstVal("uniform_ptr", (bkey, off))
+    if (m & _UNIFORM_BASE_ALIGN_MASK) == _UNIFORM_BASE_ALIGN_MASK:
+        return ConstVal("uniform_ptr", (bkey, off & m))
+    if (m & (_VA48_MASK & _UNIFORM_BASE_ALIGN_MASK)) == (_VA48_MASK & _UNIFORM_BASE_ALIGN_MASK):
+        return ConstVal("uniform_ptr", (bkey, off & (m | _UNIFORM_BASE_ALIGN_MASK)))
+    return None
+
+
 class ConstantPropDomain(SsaDomain):
     """
     Real SsaDomain over tagged-union constants (`int`, `float`, `bool`, `uniform_ptr`).
 
-    Delegates bit-exact scalar operations to `ConcreteDomain` whenever all
-    operands are known constants, and propagates `(buf_key, byte_offset)` for
-    architecturally read-only `ubo:*` / `push_const` uniform pointers.
+    Delegates bit-exact scalar operations to `ConcreteBitvecDomain` whenever all
+    operands are known constants, and propagates `(buf_key, byte_offset)` across
+    addition, subtraction, and address/alignment masking for architecturally
+    read-only `ubo:*` / `push_const` uniform pointers.
     """
 
     def __init__(self) -> None:
-        self._concrete = ConcreteDomain()
+        self._concrete = ConcreteBitvecDomain()
 
     def default_value(self) -> Optional[ConstVal]:
         return None
@@ -60,7 +78,7 @@ class ConstantPropDomain(SsaDomain):
         return ConstVal("int", imm & MASK32)
 
     def const_u64(self, imm: int) -> ConstVal:
-        return ConstVal("int", imm)
+        return ConstVal("int", imm & MASK64)
 
     def const_bool(self, val: bool) -> ConstVal:
         return ConstVal("bool", bool(val))
@@ -118,6 +136,21 @@ class ConstantPropDomain(SsaDomain):
             if isinstance(b, ConstVal) and b.kind == "uniform_ptr" and isinstance(a, ConstVal) and a.kind == "int":
                 bkey, off = b.value
                 return ConstVal("uniform_ptr", (bkey, off + int(a.value)))
+        elif op == "ISub64":
+            if isinstance(a, ConstVal) and a.kind == "uniform_ptr" and isinstance(b, ConstVal) and b.kind == "int":
+                bkey, off = a.value
+                return ConstVal("uniform_ptr", (bkey, off - int(b.value)))
+            if (
+                isinstance(a, ConstVal) and a.kind == "uniform_ptr"
+                and isinstance(b, ConstVal) and b.kind == "uniform_ptr"
+                and a.value[0] == b.value[0]
+            ):
+                return ConstVal("int", (a.value[1] - b.value[1]) & MASK64)
+        elif op == "BitAnd64":
+            if isinstance(a, ConstVal) and a.kind == "uniform_ptr" and isinstance(b, ConstVal) and b.kind == "int":
+                return _mask_uniform_ptr(a.value[0], a.value[1], int(b.value))
+            if isinstance(b, ConstVal) and b.kind == "uniform_ptr" and isinstance(a, ConstVal) and a.kind == "int":
+                return _mask_uniform_ptr(b.value[0], b.value[1], int(a.value))
         if isinstance(a, ConstVal) and isinstance(b, ConstVal) and a.kind == "int" and b.kind == "int":
             return ConstVal("int", self._concrete.int64_binary(op, a.value, b.value))
         return None
@@ -197,9 +230,10 @@ def pass_prune_const_branches(
 ) -> bool:
     """Fold constant/degenerate conditional branches, prune unreachable blocks, and collapse trivial Phis."""
     changed = False
+    rewriter = CfgRewriter(blocks_by_id, nodes_by_id, stats)
     const_env = ConstantFoldInterpreter(blocks_by_id, nodes_by_id).run()
 
-    for blk in blocks_by_id.values():
+    for bid, blk in blocks_by_id.items():
         if not blk.get("is_cond"):
             continue
         bt = int(blk.get("branch_target", -1))
@@ -217,23 +251,15 @@ def pass_prune_const_branches(
                 taken = bt if (cval.value != 0) else ft
 
         if taken is not None and taken >= 0:
-            blk["is_cond"] = False
-            blk["is_uncond"] = True
-            blk["branch_target"] = taken
-            blk["fallthrough"] = -1
-            blk["branch_cond"] = 0
+            rewriter.set_unconditional_branch(bid, taken)
             stats.const_branches_folded += 1
             changed = True
 
-    reach_set = set(compute_rpo(blocks_by_id, 0))
-    for bid in [b for b in list(blocks_by_id.keys()) if b not in reach_set]:
-        blk = blocks_by_id.pop(bid)
-        for nid in blk.get("phis", []) + blk.get("nodes", []):
-            nodes_by_id.pop(nid, None)
-        stats.unreachable_blocks_removed += 1
+    removed = rewriter.remove_unreachable_blocks(0)
+    if removed > 0:
+        stats.unreachable_blocks_removed += removed
         changed = True
 
-    rebuild_preds(blocks_by_id, nodes_by_id)
-    if collapse_trivial_phis(blocks_by_id, nodes_by_id) > 0:
+    if rewriter.sync_cfg() > 0:
         changed = True
     return changed

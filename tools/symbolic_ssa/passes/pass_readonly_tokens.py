@@ -4,10 +4,10 @@ Pass 1.5: Read-Only Token Detachment.
 
 Uses BufferProvenanceInterpreter (an SsaInterpreter abstract interpretation over
 the flat buffer-key provenance lattice) to propagate base buffer provenance
-through arbitrary additive 64-bit address arithmetic, copies, bitcasts, selects,
-and Phis without a fixed depth bound. Provably read-only PsbLoad and TexSample
-operations are detached from the linear Token chain and rebound to root_tok so
-subsequent GVN can unify identical loads.
+through arbitrary additive/subtractive/masking 64-bit address arithmetic, copies,
+bitcasts, selects, and Phis without a fixed depth bound. Provably read-only
+PsbLoad and TexSample operations are detached from the linear Token chain and
+rebound to root_tok so subsequent GVN can unify identical loads.
 """
 
 from __future__ import annotations
@@ -32,12 +32,16 @@ class BufferProvenanceInterpreter(AbstractSsaPass):
         return val if isinstance(val, str) else None
 
     def int64_binary(self, op: str, a: Any, b: Any) -> Any:
-        if op in ("IAdd64", "ISub64"):
+        if op in ("IAdd64", "BitAnd64"):
             if isinstance(a, str) and b is None:
                 return a
             if isinstance(b, str) and a is None:
                 return b
             if isinstance(a, str) and a == b:
+                return a
+        elif op == "ISub64":
+            # ptr - offset preserves provenance; ptr - ptr yields a scalar distance.
+            if isinstance(a, str) and b is None:
                 return a
         return None
 

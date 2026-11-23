@@ -2,11 +2,6 @@
 Formal Verification & Panfrost Reference Semantics Package for valhall2spirv.
 """
 
-from .all_paths_miter import (
-    MiterResult,
-    check_instruction_miter,
-    run_all_627_miter,
-)
 from .clang_ast_evaluator import (
     CppHandlerRegistry,
     CppSymbolicEvaluator,
@@ -37,15 +32,31 @@ from .panfrost_z3_model import (
     write_dst_32,
     write_dst_64,
 )
-from .ssa_z3_eval import (
-    SsaZ3EvalResult,
-    eval_ssa_module_z3,
-)
+
+_LAZY_EXPORTS = {
+    "MiterResult": (".all_paths_miter", "MiterResult"),
+    "check_instruction_miter": (".all_paths_miter", "check_instruction_miter"),
+    "run_all_627_miter": (".all_paths_miter", "run_all_627_miter"),
+    "InstructionSsaZ3Interpreter": (".ssa_z3_eval", "InstructionSsaZ3Interpreter"),
+    "SsaZ3EvalResult": (".ssa_z3_eval", "SsaZ3EvalResult"),
+    "eval_ssa_module_z3": (".ssa_z3_eval", "eval_ssa_module_z3"),
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_EXPORTS:
+        import importlib
+        mod_name, attr = _LAZY_EXPORTS[name]
+        mod = importlib.import_module(mod_name, __name__)
+        return getattr(mod, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "CppHandlerRegistry",
     "CppSymbolicEvaluator",
     "InstLoweringContext",
+    "InstructionSsaZ3Interpreter",
     "LoweringLogger",
     "LoweringSemanticsExtractor",
     "LoweringTrace",

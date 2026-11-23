@@ -2,7 +2,7 @@
 """
 Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter` / `DagSsaZ3Evaluator`).
 
-Subclasses `SsaInterpreter` with `SymbolicDomain(fp_mode=...)`, implementing
+Subclasses `SsaInterpreter` with `SymbolicZ3BitvecDomain(fp_mode=...)`, implementing
 only the Z3 `BlockEffectState` storage backend and RPO bounded-unroll CFG
 evaluation. All opcode, memory, kill, atomic, and output semantics are inherited
 from `SsaInterpreter` and `SsaDomain`.
@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
-from tools.symbolic_ssa.domains import SymbolicDomain
+from tools.symbolic_ssa.domains import SymbolicZ3BitvecDomain
 from tools.symbolic_ssa.env import (
     SharedShaderEnv,
     Z3Val,
@@ -157,14 +157,14 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         fp_mode: str = "exact",
         max_unroll: int = 1,
         cutpoints: Optional[Dict[int, Any]] = None,
-        domain: Optional[SymbolicDomain] = None,
+        domain: Optional[SymbolicZ3BitvecDomain] = None,
     ):
         self.ssa = ssa_json
         self.env = env
         self._env = env
         self.is_valhall = is_valhall_side
         self.fp_mode = fp_mode
-        self.domain: SymbolicDomain = domain if domain is not None else SymbolicDomain(fp_mode=fp_mode)
+        self.domain: SymbolicZ3BitvecDomain = domain if domain is not None else SymbolicZ3BitvecDomain(fp_mode=fp_mode)
         self.max_unroll = max(1, int(max_unroll))
         self.cutpoints: Dict[int, Any] = cutpoints if cutpoints is not None else {}
         self.blocks: List[Dict[str, Any]] = ssa_json.get("blocks", [])
