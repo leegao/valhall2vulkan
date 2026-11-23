@@ -194,8 +194,13 @@ class PassPipeline:
             roots.append(query.guard)
         stats.initial_ast_nodes = count_ast_nodes(roots, limit=eff_ctx.max_dag_nodes)
 
-        cur = query
-        exact_q = query
+        if query.is_trivially_unsat():
+            stats.final_ast_nodes = stats.initial_ast_nodes
+            stats.total_ms = (time.perf_counter() - t0) * 1000.0
+            return SimplifyResult(query=query, exact_query=query, stats=stats)
+
+        cur = query.realize_z3()
+        exact_q = cur
         for p in self.passes:
             if cur.is_trivially_unsat():
                 break

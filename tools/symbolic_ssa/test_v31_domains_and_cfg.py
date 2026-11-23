@@ -20,6 +20,7 @@ import time
 import unittest
 
 import z3
+from tools.symbolic_ssa.z3simplifier import dsl
 
 from tools.symbolic_ssa.cfg_rewriter import (
     CfgRewriter,
@@ -309,7 +310,7 @@ class TestUDomain(unittest.TestCase):
 
         t0 = time.monotonic()
         s = z3.Solver()
-        s.add(sum1.data[0] != fma1.data[0])
+        s.add(dsl.lower(sum1.data[0] != fma1.data[0]))
         res = s.check()
         dt = time.monotonic() - t0
         self.assertEqual(res, z3.unsat)
@@ -437,9 +438,9 @@ class TestUDomainIntegration(unittest.TestCase):
             dom = make_z3_symbolic_domain(mode, fp_mode="exact")
             self.assertIsInstance(dom, Z3SymbolicDomain)
             v = dom.lift_z3_bv32(z3.BitVecVal(7, 32))
-            self.assertEqual(z3.simplify(dom.lower_z3_bv32(v)).as_long(), 7)
+            self.assertEqual(dsl.simplify(dom.lower_z3_bv32(v)).as_long(), 7)
             m = dom.merge_z3(z3.BoolVal(True), dom.const_u32(11), dom.const_u32(22))
-            self.assertEqual(z3.simplify(dom.lower_z3_bv32(m)).as_long(), 11)
+            self.assertEqual(dsl.simplify(dom.lower_z3_bv32(m)).as_long(), 11)
 
         ssa = {
             "blocks": [

@@ -15,7 +15,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, Union
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.symbolic_ssa.domains import SsaDomain, SymbolicZ3BitvecDomain
+from tools.symbolic_ssa.env import _dsl_bv32, _dsl_bv64, _dsl_hw_uf
 from tools.symbolic_ssa.symbolic_interpreter import SymbolicSsaInterpreter
 from tools.verify.clang_ast_evaluator import SymbolicSsaModule, SymbolicSsaNode
 from tools.verify.panfrost_z3_model import (
@@ -63,23 +66,23 @@ class _InstStateEnvAdapter:
         return self._st.lane_id
 
     def load_fau_word(self, word_idx: int) -> z3.BitVecRef:
-        return z3.Select(self._st.fau, z3.BitVecVal(word_idx & 63, 8))
+        return dsl.Select(self._st.fau, dsl.BitVecVal(word_idx & 63, 8))
 
     def get_builtin(self, builtin_id: int, val_type: str, aux_str: str = "") -> Z3Val:
         vlen = _vec_len(val_type)
         tag = aux_str or builtin_id
-        lane_u32 = z3.ZeroExt(27, self._st.lane_id)
+        lane_u32 = dsl.ZeroExt(27, self._st.lane_id)
         if vlen > 1:
-            return tuple(_hw_uf(f"builtin_{tag}_{i}", BV32, BV32)(lane_u32) for i in range(vlen))
-        return _hw_uf(f"builtin_{tag}", BV32, BV32)(lane_u32)
+            return tuple(_dsl_hw_uf(f"builtin_{tag}_{i}", BV32, BV32)(lane_u32) for i in range(vlen))
+        return _dsl_hw_uf(f"builtin_{tag}", BV32, BV32)(lane_u32)
 
     def get_input_vec4(self, kind: str, loc: int) -> Tuple[z3.BitVecRef, ...]:
         prefix = "ssa_LoadVertAttr" if kind == "vert_attr" else "ssa_LoadFragVarying"
-        uf = _hw_uf(f"{prefix}_{loc}", BV32, BV32)
-        return tuple(uf(bv32(c)) for c in range(4))
+        uf = _dsl_hw_uf(f"{prefix}_{loc}", BV32, BV32)
+        return tuple(uf(_dsl_bv32(c)) for c in range(4))
 
     def eval_tex_sample(self, op: str, u0: z3.BitVecRef, u1: z3.BitVecRef, imm_u32: int, aux_str: str) -> Tuple[z3.BitVecRef, ...]:
-        uf = _hw_uf("ssa_TexSample", BV32, BV32, BV32)
+        uf = _dsl_hw_uf("ssa_TexSample", BV32, BV32, BV32)
         return tuple(uf(u0, u1) for _ in range(4))
 
 
@@ -110,24 +113,24 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
             domain=dom,
         )
         self.st = st
-        self.raw_srcs = raw_srcs
-        self.dst_old = dst_old
+        self.raw_srcs = [dsl.lift(x, depth=1) if isinstance(x, z3.ExprRef) else x for x in raw_srcs] if raw_srcs is not None else None
+        self.dst_old = dsl.lift(dst_old, depth=1) if isinstance(dst_old, z3.ExprRef) else dst_old
         self.dest_reg = dest_reg
         self.notes: List[str] = []
 
     def cast_value(self, op: str, val: Any, val_type: str) -> Any:
-        if val_type == "U64" and isinstance(val, z3.BitVecRef) and val.size() == 32:
-            return z3.ZeroExt(32, val)
+        if val_type == "U64" and dsl.is_bv(val) and val.size() == 32:
+            return dsl.ZeroExt(32, val)
         if val_type in ("U32", "S32", "F32") and isinstance(val, z3.BitVecRef) and val.size() == 64:
-            return z3.Extract(31, 0, val)
+            return dsl.Extract(31, 0, val)
         return val
 
     def load_sideband_u64(self, imm_u32: int, aux_str: str) -> z3.BitVecRef:
         return self.domain.unknown_sideband_u64(self._env, imm_u32)
 
     def kill(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> z3.BitVecRef:
-        cond = self.domain.lower_z3_bool(self.domain.as_bool(args[0])) if args else z3.BoolVal(True)
-        self.st.discarded = z3.Or(self.st.discarded, cond)
+        cond = self.domain.lower_z3_bool(self.domain.as_bool(args[0])) if args else dsl.BoolVal(True)
+        self.st.discarded = dsl.Or(self.st.discarded, cond)
         self.notes.append("Kill")
         return bv32(0)
 
@@ -135,18 +138,18 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
         addr = self.domain.lower_z3_bv64(self.domain.as_u64(args[0]))
         eb = int(node.get("imm_u32", 0)) or 4
         if eb == 1:
-            val = z3.ZeroExt(24, z3.Select(self.st.mem_global, addr))
+            val = dsl.ZeroExt(24, dsl.Select(self.st.mem_global, addr))
         elif eb == 2:
-            val = z3.ZeroExt(
+            val = dsl.ZeroExt(
                 16,
-                z3.Concat(z3.Select(self.st.mem_global, addr + bv64(1)), z3.Select(self.st.mem_global, addr)),
+                dsl.Concat(dsl.Select(self.st.mem_global, addr + bv64(1)), dsl.Select(self.st.mem_global, addr)),
             )
         else:
-            val = z3.Concat(
-                z3.Select(self.st.mem_global, addr + bv64(3)),
-                z3.Select(self.st.mem_global, addr + bv64(2)),
-                z3.Select(self.st.mem_global, addr + bv64(1)),
-                z3.Select(self.st.mem_global, addr),
+            val = dsl.Concat(
+                dsl.Select(self.st.mem_global, addr + bv64(3)),
+                dsl.Select(self.st.mem_global, addr + bv64(2)),
+                dsl.Select(self.st.mem_global, addr + bv64(1)),
+                dsl.Select(self.st.mem_global, addr),
             )
         return (val, args[1] if len(args) > 1 else bv32(0))
 
@@ -155,13 +158,13 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
         val = self.domain.lower_z3_bv32(self.domain.as_u32(args[1]))
         eb = int(node.get("imm_u32", 0)) or 4
         for j in range(min(eb, 4)):
-            self.st.mem_global = z3.Store(self.st.mem_global, addr + bv64(j), z3.Extract(8 * j + 7, 8 * j, val))
+            self.st.mem_global = dsl.Store(self.st.mem_global, addr + bv64(j), dsl.Extract(8 * j + 7, 8 * j, val))
         return args[2] if len(args) > 2 else bv32(0)
 
     def atomic_op(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Tuple[z3.BitVecRef, Z3Val]:
         addr = self.domain.lower_z3_bv64(self.domain.as_u64(args[0]))
         arg = self.domain.lower_z3_bv32(self.domain.as_u32(args[1]))
-        uf = _hw_uf(f"ssa_{node['op']}_{node.get('aux_str', '')}", BV64, BV32, BV32)
+        uf = dsl.Function(f"ssa_{node['op']}_{node.get('aux_str', '')}", BV64, BV32, BV32)
         return (uf(addr, arg), args[-1] if args else bv32(0))
 
     def store_frag_color(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Z3Val:
@@ -181,7 +184,7 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
                 return self.raw_srcs[r]
             if self.dst_old is not None and r == (self.dest_reg & 63):
                 return self.dst_old
-            return z3.Select(self.st.regs, z3.BitVecVal(r, 6))
+            return dsl.Select(self.st.regs, dsl.BitVecVal(r, 6))
         if op == "Phi":
             return values[node.args[0]] if node.args else bv32(0)
         if op == "LoadBuiltinInput":
@@ -208,7 +211,7 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
             "aux_bool": node.aux_bool,
             "aux_str": node.aux_str,
         }
-        return self.eval_node(node_dict, values, self.st, z3.BoolVal(True))
+        return self.eval_node(node_dict, values, self.st, dsl.BoolVal(True))
 
 
 def eval_ssa_module_z3(
@@ -240,7 +243,7 @@ def eval_ssa_module_z3(
 
     bcond = interp.domain.lower_z3_bool(interp.domain.as_bool(values[ssa.branch_cond])) if ssa.branch_cond is not None else None
     if bcond is not None:
-        st.pc = z3.If(bcond, st.pc + bv64(8) + bv64(branch_offset), st.pc + bv64(8))
+        st.pc = dsl.If(bcond, st.pc + bv64(8) + bv64(branch_offset), st.pc + bv64(8))
     return SsaZ3EvalResult(
         values=values,
         reg_writes=reg_writes,

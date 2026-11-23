@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.symbolic_ssa.env import (
     MASK32,
     ConcreteShaderEnv,
@@ -339,9 +341,9 @@ def _extract_cutpoint_vars(expr: z3.ExprRef) -> Set[str]:
 
 def _empty_effect_state(env: SharedShaderEnv) -> BlockEffectState:
     return BlockEffectState(
-        discarded=z3.BoolVal(False),
-        terminated=z3.BoolVal(False),
-        demoted=z3.BoolVal(False),
+        discarded=dsl.BoolVal(False),
+        terminated=dsl.BoolVal(False),
+        demoted=dsl.BoolVal(False),
         frag_colors={},
         builtin_outputs={},
         vert_varyings={},
@@ -483,27 +485,27 @@ def verify_with_cec(
             if rc == "UNSAT":
                 cname = f"cut_{proved}"
                 if vt == "Bool":
-                    cvar: z3.ExprRef = z3.Bool(cname)
+                    cvar: z3.ExprRef = dsl.Bool(cname)
                     v_cvar = _z3_not(cvar) if kind == "NEGATED_BOOL" else cvar
                     d_cut_map[d_nid] = de.domain.lift_z3_bool(cvar)
                     v_cut_map[v_nid] = ve.domain.lift_z3_bool(v_cvar)
                 elif vt in ("U64", "S64"):
-                    cvar = z3.BitVec(cname, 64)
+                    cvar = dsl.BitVec(cname, 64)
                     d_cut_map[d_nid] = de.domain.lift_z3_bv64(cvar)
                     v_cut_map[v_nid] = ve.domain.lift_z3_bv64(cvar)
                 elif vt == "F32" and kind == "FNEG" and (domain == "udomain" or fp_mode == "real"):
-                    rvar = z3.Real(cname)
+                    rvar = dsl.Real(cname)
                     # Lift via fresh F32 Real if domain supports it, else bv32
                     if hasattr(de.domain, "fresh_f32") and hasattr(ve.domain, "fp_unary"):
                         du = de.domain.fresh_f32(cname)
                         d_cut_map[d_nid] = du
                         v_cut_map[v_nid] = ve.domain.fp_unary("FNeg", du)
                     else:
-                        cvar = z3.BitVec(cname, 32)
+                        cvar = dsl.BitVec(cname, 32)
                         d_cut_map[d_nid] = de.domain.lift_z3_bv32(cvar)
                         v_cut_map[v_nid] = ve.domain.lift_z3_bv32(cvar ^ bv32(0x80000000))
                 else:
-                    cvar = z3.BitVec(cname, 32)
+                    cvar = dsl.BitVec(cname, 32)
                     v_cvar = (cvar ^ bv32(0x80000000)) if kind == "FNEG" else cvar
                     d_cut_map[d_nid] = de.domain.lift_z3_bv32(cvar)
                     v_cut_map[v_nid] = ve.domain.lift_z3_bv32(v_cvar)
@@ -524,7 +526,7 @@ def verify_with_cec(
         d_st_out = de.evaluate()
         v_st_out = ve.evaluate()
         checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef]]] = []
-        if stage == "Fragment" or not z3.is_false(d_st_out.discarded) or not z3.is_false(v_st_out.discarded):
+        if stage == "Fragment" or not dsl.is_false(d_st_out.discarded) or not dsl.is_false(v_st_out.discarded):
             checks.append(("discarded", d_st_out.discarded, v_st_out.discarded, None))
         not_disc = _z3_not(d_st_out.discarded)
         for rt in sorted(set(d_st_out.frag_colors) | set(v_st_out.frag_colors)):
@@ -536,19 +538,19 @@ def verify_with_cec(
             do = d_st_out.builtin_outputs.get(bi)
             vo = v_st_out.builtin_outputs.get(bi)
             if do is None or vo is None:
-                checks.append((f"builtin_out[{bi}].present", z3.BoolVal(do is not None), z3.BoolVal(vo is not None), not_disc))
+                checks.append((f"builtin_out[{bi}].present", dsl.BoolVal(do is not None), dsl.BoolVal(vo is not None), not_disc))
                 continue
             bi_guard = not_disc
             if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
                 if fp_mode == "real" or domain == "udomain":
-                    vp_conds = [de.domain.to_z3_real_f32(do[3]) == z3.RealVal(1)]
+                    vp_conds = [de.domain.to_z3_real_f32(do[3]) == dsl.RealVal(1)]
                 else:
                     vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
                     for c in range(3):
                         dbv = _as_bv32(do[c])
-                        vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
+                        vp_conds.append(dsl.Not(dsl.fpIsNaN(bv32_to_fp32(dsl.lower(dbv)))))
                         vp_conds.append(dbv != bv32(0x80000000))
-                bi_guard = _z3_and(bi_guard, z3.And(*vp_conds))
+                bi_guard = _z3_and(bi_guard, dsl.And(*vp_conds))
             if isinstance(do, tuple) and isinstance(vo, tuple):
                 for c in range(min(len(do), len(vo))):
                     checks.append((f"builtin_out[{bi}][{c}]", _as_bv32(do[c]), _as_bv32(vo[c]), bi_guard))
@@ -562,8 +564,8 @@ def verify_with_cec(
         for bkey, off in sorted(set(d_st_out.const_stores) | set(v_st_out.const_stores)):
             if bkey in ("tls_private", "wls_shared") or bkey.startswith("workgroup:"):
                 continue
-            dw, dv = d_st_out.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
-            vw, vv = v_st_out.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
+            dw, dv = d_st_out.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
+            vw, vv = v_st_out.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
             tag = f"{bkey}+0x{off:x}"
             checks.append((f"{tag}.written", dw, vw, None))
             checks.append((f"{tag}.value", dv, vv, _z3_or(dw, vw)))

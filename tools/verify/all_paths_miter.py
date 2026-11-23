@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.verify.clang_ast_evaluator import InstLoweringContext, SourceOperandDesc
 from tools.verify.lowering_semantics_extractor import LoweringSemanticsExtractor
 _BRANCH_MNEMS = {"BRANCH", "JUMP", "JUMP_EX"}
@@ -92,7 +94,7 @@ def check_instruction_miter(
     # src0 -> r0/r1, src1 -> r2/r3, src2 -> r4/r5, src3 -> r8/r9, dst -> r6/r7
     src_regs = [0, 2, 4, 8]
     dest_reg = 6
-    raw_regs: List[z3.BitVecRef] = [z3.BitVec(f"r{i}", 32) for i in range(10)]
+    raw_regs: List[Any] = [dsl.BitVec(f"r{i}", 32) for i in range(10)]
 
     # Determine 64-bit sources/dest
     is_64_dest = rule.dest_type == "u64" or variant.lower() in ("i64", "u64", "s64")
@@ -106,18 +108,18 @@ def check_instruction_miter(
         is_64_src = st in ("u64", "s64", "i64_by_var") or variant.lower() in ("i64", "u64", "s64")
         is_jump_addr = mnemonic in ("JUMP", "JUMP_EX") and ((num_srcs == 1 and i == 0) or (num_srcs >= 2 and i == 1))
         if (variant.lower() in ("i64", "u64", "s64") or (mnemonic in _STORE_MNEMS and i == 0) or is_jump_addr) and (PANFROST_SEMANTICS[mnemonic].__name__ != "_sem_memory" or (mnemonic in _STORE_MNEMS and i == 0)):
-            s_expr = z3.Concat(raw_regs[rbase + 1], raw_regs[rbase])
+            s_expr = dsl.Concat(raw_regs[rbase + 1], raw_regs[rbase])
         else:
             s_expr = raw_regs[rbase]
-        pan_srcs.append(s_expr)
+        pan_srcs.append(dsl.lower(s_expr))
         inputs[f"src{i}"] = s_expr
         ctx_srcs.append(SourceOperandDesc(reg_num=rbase, is_64bit=is_64_src))
 
-    dst_old = z3.Concat(raw_regs[dest_reg + 1], raw_regs[dest_reg]) if is_64_dest else raw_regs[dest_reg]
+    dst_old = dsl.Concat(raw_regs[dest_reg + 1], raw_regs[dest_reg]) if is_64_dest else raw_regs[dest_reg]
     inputs["dst_old"] = dst_old
 
     if mnemonic in _STORE_MNEMS and len(pan_srcs) < 2:
-        pan_srcs.append(raw_regs[2])
+        pan_srcs.append(dsl.lower(raw_regs[2]))
         inputs["sr0"] = raw_regs[2]
 
     # 1. Evaluate Psi_pan (Task 1)
@@ -128,7 +130,7 @@ def check_instruction_miter(
     pan_mods.update(flds)
     st_pan = ValhallZ3State.symbolic("miter")
     pan_res, st_pan_out, _ = eval_panfrost_instruction(
-        mnemonic, variant, pan_srcs, modifiers=pan_mods, dst_old=dst_old, state=st_pan
+        mnemonic, variant, pan_srcs, modifiers=pan_mods, dst_old=dsl.lower(dst_old), state=st_pan
     )
 
     # 2. Extract & evaluate T_lowering -> SSA-IR -> Z3 (Tasks 2 & 3)
@@ -151,11 +153,11 @@ def check_instruction_miter(
     )
     ssa_mod, tr = ext.lower_instruction(ins_ctx, xml_index=xml_index if xml_index >= 0 else None)
     ssa_eval = eval_ssa_module_z3(
-        ssa_mod, raw_srcs=raw_regs, dst_old=dst_old, dest_reg=dest_reg, state=st_pan, branch_offset=branch_off, domain=domain
+        ssa_mod, raw_srcs=raw_regs, dst_old=dsl.lower(dst_old), dest_reg=dest_reg, state=st_pan, branch_offset=branch_off, domain=domain
     )
 
     if is_64_dest and dest_reg in ssa_eval.reg_writes and (dest_reg + 1) in ssa_eval.reg_writes:
-        cand_res: Optional[z3.ExprRef] = z3.Concat(
+        cand_res: Optional[Any] = dsl.Concat(
             ssa_eval.reg_writes[dest_reg + 1], ssa_eval.reg_writes[dest_reg]
         )
     elif dest_reg in ssa_eval.reg_writes:
@@ -192,7 +194,12 @@ def check_instruction_miter(
         final_st = "UNSAT"
         for field_name, pan_st_e, cand_st_e in state_checks:
             st_res, st_cex = verify_instruction_equivalence(
-                f"{mnemonic}.{field_name}", variant, pan_st_e, cand_st_e, inputs, timeout_ms=timeout_ms
+                f"{mnemonic}.{field_name}",
+                variant,
+                dsl.lower(pan_st_e),
+                dsl.lower(cand_st_e),
+                {k: dsl.lower(v) for k, v in inputs.items()},
+                timeout_ms=timeout_ms,
             )
             if st_res == "SAT":
                 return MiterResult(
@@ -245,7 +252,12 @@ def check_instruction_miter(
         )
 
     status, cex = verify_instruction_equivalence(
-        mnemonic, variant, pan_res, cand_res, inputs, timeout_ms=timeout_ms
+        mnemonic,
+        variant,
+        dsl.lower(pan_res),
+        dsl.lower(cand_res),
+        {k: dsl.lower(v) for k, v in inputs.items()},
+        timeout_ms=timeout_ms,
     )
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     return MiterResult(

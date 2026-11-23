@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.verify.panfrost_z3_model import (
     BV8,
     BV32,
@@ -29,15 +31,31 @@ from tools.verify.panfrost_z3_model import (
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF
 
-Z3Val = Union[z3.ExprRef, Tuple[Any, ...]]
+Z3Val = Union[dsl.Z3Expr, z3.ExprRef, Tuple[Any, ...]]
+
+_DSL_HW_UF_CACHE: Dict[Tuple[str, Tuple[Any, ...]], dsl.Z3FuncDecl] = {}
+
+def _dsl_hw_uf(name: str, *sorts: z3.SortRef) -> dsl.Z3FuncDecl:
+    key = (name, sorts)
+    fn = _DSL_HW_UF_CACHE.get(key)
+    if fn is None:
+        fn = dsl.Function(f"hw_{name}", *sorts)
+        _DSL_HW_UF_CACHE[key] = fn
+    return fn
+
+def _dsl_bv32(v: int) -> dsl.Z3BvConst:
+    return dsl.BitVecVal(v & MASK32, 32)
+
+def _dsl_bv64(v: int) -> dsl.Z3BvConst:
+    return dsl.BitVecVal(v & MASK64, 64)
 
 REAL_SORT = z3.RealSort()
-_REAL_ZERO = z3.RealVal(0)
-_REAL_ONE = z3.RealVal(1)
-_REAL_TWO = z3.RealVal(2)
-_REAL_HALF = z3.Q(1, 2)
-_REAL_NEG_HALF = z3.Q(-1, 2)
-_REAL_NEG_ONE = z3.RealVal(-1)
+_REAL_ZERO = dsl.RealVal(0)
+_REAL_ONE = dsl.RealVal(1)
+_REAL_TWO = dsl.RealVal(2)
+_REAL_HALF = dsl.Q(1, 2)
+_REAL_NEG_HALF = dsl.Q(-1, 2)
+_REAL_NEG_ONE = dsl.RealVal(-1)
 
 
 def _f32_bits_to_real_const(u32: int) -> Optional[z3.ArithRef]:
@@ -47,174 +65,194 @@ def _f32_bits_to_real_const(u32: int) -> Optional[z3.ArithRef]:
     if f == 0.0:
         return _REAL_ZERO
     frac = fractions.Fraction(f)
-    return z3.Q(frac.numerator, frac.denominator)
+    return dsl.Q(frac.numerator, frac.denominator)
 
 
 _LOG2_E_REAL = _f32_bits_to_real_const(0x3FB8AA3B)
 _LN_2_REAL = _f32_bits_to_real_const(0x3F317218)
 
 
-def _is_real2bv(x: z3.ExprRef) -> bool:
-    return z3.is_app(x) and x.decl() == _hw_uf("real2bv", REAL_SORT, BV32) and len(x.children()) == 1
+def _is_real2bv(x: Any) -> bool:
+    if isinstance(x, dsl.Z3OpUFApp) and x.func.fn_name == "hw_real2bv" and len(x.args) == 1:
+        return True
+    return isinstance(x, z3.ExprRef) and z3.is_app(x) and x.decl() == _hw_uf("real2bv", REAL_SORT, BV32) and len(x.children()) == 1
 
 
-def _bv32_to_real(x: z3.BitVecRef) -> z3.ArithRef:
+def _bv32_to_real(x: Any) -> Any:
     """Decode BV32 to exact Z3 Real, cancelling real2bv wrappers and pushing through ITEs."""
     if _is_real2bv(x):
         return x.children()[0]
-    if z3.is_app(x) and x.decl().kind() == z3.Z3_OP_ITE and len(x.children()) == 3:
+    if isinstance(x, dsl.Z3OpIte):
+        return dsl.If(x.cond, _bv32_to_real(x.then_expr), _bv32_to_real(x.else_expr))
+    if isinstance(x, z3.ExprRef) and z3.is_app(x) and x.decl().kind() == z3.Z3_OP_ITE and len(x.children()) == 3:
         c, t, e = x.children()
-        return z3.If(c, _bv32_to_real(t), _bv32_to_real(e))
-    if isinstance(x, z3.BitVecNumRef):
-        rc = _f32_bits_to_real_const(x.as_long())
+        return dsl.If(c, _bv32_to_real(t), _bv32_to_real(e))
+    if dsl.is_bv_value(x):
+        rc = _f32_bits_to_real_const(dsl.as_long(x))
         if rc is not None:
             return rc
-    return _hw_uf("bv2real", BV32, REAL_SORT)(x)
+    return _dsl_hw_uf("bv2real", BV32, REAL_SORT)(x)
 
 
-def _real_to_bv32(r: z3.ArithRef) -> z3.BitVecRef:
+def _real_to_bv32(r: Any) -> Any:
     """Wrap a Z3 Real expression back into BV32 via the canonical real2bv bridge."""
-    return _hw_uf("real2bv", REAL_SORT, BV32)(r)
+    return _dsl_hw_uf("real2bv", REAL_SORT, BV32)(r)
 
 
 def _real_sqrt(rx: z3.ArithRef) -> z3.ArithRef:
-    if isinstance(rx, z3.RatNumRef):
+    if dsl.is_rational_value(rx):
         num, den = rx.numerator_as_long(), rx.denominator_as_long()
         if num == 0:
             return _REAL_ZERO
         if num == den:
             return _REAL_ONE
-    return _hw_uf("real_sqrt", REAL_SORT, REAL_SORT)(rx)
+    return _dsl_hw_uf("real_sqrt", REAL_SORT, REAL_SORT)(rx)
 
 
 def _real_exp2(rx: z3.ArithRef) -> z3.ArithRef:
-    if isinstance(rx, z3.RatNumRef):
+    if dsl.is_rational_value(rx):
         num, den = rx.numerator_as_long(), rx.denominator_as_long()
         if num == 0:
             return _REAL_ONE
         if num == den:
             return _REAL_TWO
-    return _hw_uf("real_exp2", REAL_SORT, REAL_SORT)(rx)
+    return _dsl_hw_uf("real_exp2", REAL_SORT, REAL_SORT)(rx)
 
 
 def _real_log2(rx: z3.ArithRef) -> z3.ArithRef:
-    if isinstance(rx, z3.RatNumRef):
+    if dsl.is_rational_value(rx):
         num, den = rx.numerator_as_long(), rx.denominator_as_long()
         if num == den:
             return _REAL_ZERO
         if num == 2 * den:
             return _REAL_ONE
-    return _hw_uf("real_log2", REAL_SORT, REAL_SORT)(rx)
+    return _dsl_hw_uf("real_log2", REAL_SORT, REAL_SORT)(rx)
 
 
 def _real_sin(rx: z3.ArithRef) -> z3.ArithRef:
-    if isinstance(rx, z3.RatNumRef) and rx.numerator_as_long() == 0:
+    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
         return _REAL_ZERO
-    return _hw_uf("real_sin", REAL_SORT, REAL_SORT)(rx)
+    return _dsl_hw_uf("real_sin", REAL_SORT, REAL_SORT)(rx)
 
 
 def _real_cos(rx: z3.ArithRef) -> z3.ArithRef:
-    if isinstance(rx, z3.RatNumRef) and rx.numerator_as_long() == 0:
+    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
         return _REAL_ONE
-    return _hw_uf("real_cos", REAL_SORT, REAL_SORT)(rx)
+    return _dsl_hw_uf("real_cos", REAL_SORT, REAL_SORT)(rx)
 
 
-def _as_bv32(v: Z3Val) -> z3.BitVecRef:
-
+def _as_bv32(v: Z3Val) -> Any:
     if isinstance(v, tuple):
-        return _as_bv32(v[0]) if v else bv32(0)
-    if isinstance(v, z3.BoolRef):
-        return z3.If(v, bv32(1), bv32(0))
-    if isinstance(v, z3.FPRef):
-        return fp32_to_bv32(v)
-    assert isinstance(v, z3.BitVecRef), f"Expected BitVecRef, got {type(v)}"
+        return _as_bv32(v[0]) if v else _dsl_bv32(0)
+    if isinstance(v, z3.ExprRef):
+        v = dsl.lift(v, depth=1)
+    if dsl.is_bool(v):
+        return dsl.If(v, _dsl_bv32(1), _dsl_bv32(0))
+    if dsl.is_fp(v):
+        return dsl.lift(fp32_to_bv32(dsl.lower(v)), depth=1)
+    assert dsl.is_bv(v), f"Expected BitVec, got {type(v)}"
     if v.size() == 32:
         return v
     if v.size() < 32:
-        return z3.ZeroExt(32 - v.size(), v)
-    return z3.Extract(31, 0, v)
+        return dsl.ZeroExt(32 - v.size(), v)
+    return dsl.Extract(31, 0, v)
 
 
-def _as_bv64(v: Z3Val) -> z3.BitVecRef:
-
+def _as_bv64(v: Z3Val) -> Any:
     if isinstance(v, tuple):
-        return _as_bv64(v[0]) if v else bv64(0)
-    if isinstance(v, z3.BitVecRef):
+        return _as_bv64(v[0]) if v else _dsl_bv64(0)
+    if isinstance(v, z3.ExprRef):
+        v = dsl.lift(v, depth=1)
+    if dsl.is_bv(v):
         if v.size() == 64:
             return v
         if v.size() < 64:
-            return z3.ZeroExt(64 - v.size(), v)
-        return z3.Extract(63, 0, v)
-    return z3.ZeroExt(32, _as_bv32(v))
+            return dsl.ZeroExt(64 - v.size(), v)
+        return dsl.Extract(63, 0, v)
+    return dsl.ZeroExt(32, _as_bv32(v))
 
 
-def _as_bool(v: Z3Val) -> z3.BoolRef:
-
+def _as_bool(v: Z3Val) -> Any:
     if isinstance(v, tuple):
-        return _as_bool(v[0]) if v else z3.BoolVal(False)
-    if isinstance(v, z3.BoolRef):
+        return _as_bool(v[0]) if v else dsl.BoolVal(False)
+    if isinstance(v, z3.ExprRef):
+        v = dsl.lift(v, depth=1)
+    if dsl.is_bool(v):
         return v
-    if isinstance(v, z3.BitVecRef):
-        if isinstance(v, z3.BitVecNumRef):
-            return z3.BoolVal(v.as_long() != 0)
-        return v != z3.BitVecVal(0, v.size())
-    return z3.BoolVal(False)
+    if dsl.is_bv(v):
+        if dsl.is_bv_value(v):
+            return dsl.BoolVal(dsl.as_long(v) != 0)
+        return v != dsl.BitVecVal(0, v.size())
+    return dsl.BoolVal(False)
 
 
-def _z3_and(a: z3.BoolRef, b: z3.BoolRef) -> z3.BoolRef:
-    if z3.is_false(a) or z3.is_false(b):
-        return z3.BoolVal(False)
-    if z3.is_true(a):
+def _z3_and(a: Any, b: Any) -> Any:
+    if dsl.is_false(a) or dsl.is_false(b):
+        return dsl.BoolVal(False)
+    if dsl.is_true(a):
         return b
-    if z3.is_true(b):
+    if dsl.is_true(b):
         return a
     if a.eq(b):
         return a
-    return z3.And(a, b)
+    return dsl.And(a, b)
 
 
-def _z3_or(a: z3.BoolRef, b: z3.BoolRef) -> z3.BoolRef:
-    if z3.is_true(a) or z3.is_true(b):
-        return z3.BoolVal(True)
-    if z3.is_false(a):
+def _z3_or(a: Any, b: Any) -> Any:
+    if dsl.is_true(a) or dsl.is_true(b):
+        return dsl.BoolVal(True)
+    if dsl.is_false(a):
         return b
-    if z3.is_false(b):
+    if dsl.is_false(b):
         return a
     if a.eq(b):
         return a
-    return z3.Or(a, b)
+    return dsl.Or(a, b)
 
 
-def _z3_not(a: z3.BoolRef) -> z3.BoolRef:
-    if z3.is_true(a):
-        return z3.BoolVal(False)
-    if z3.is_false(a):
-        return z3.BoolVal(True)
-    return z3.Not(a)
+def _z3_not(a: Any) -> Any:
+    if dsl.is_true(a):
+        return dsl.BoolVal(False)
+    if dsl.is_false(a):
+        return dsl.BoolVal(True)
+    return dsl.Not(a)
 
 
-def _z3_if(cond: z3.BoolRef, t_val: Z3Val, f_val: Z3Val) -> Z3Val:
-    if z3.is_true(cond):
+def _z3_if(cond: Any, t_val: Z3Val, f_val: Z3Val) -> Z3Val:
+    if dsl.is_true(cond):
         return t_val
-    if z3.is_false(cond):
+    if dsl.is_false(cond):
         return f_val
     if isinstance(t_val, tuple) and isinstance(f_val, tuple) and len(t_val) == len(f_val):
         return tuple(_z3_if(cond, a, b) for a, b in zip(t_val, f_val))
-    if isinstance(t_val, z3.ExprRef) and isinstance(f_val, z3.ExprRef):
+    if dsl.is_expr(t_val) and dsl.is_expr(f_val):
+        if isinstance(t_val, z3.ExprRef):
+            t_val = dsl.lift(t_val, depth=1)
+        if isinstance(f_val, z3.ExprRef):
+            f_val = dsl.lift(f_val, depth=1)
         if t_val.eq(f_val):
             return t_val
-        if isinstance(t_val, z3.BoolRef) and isinstance(f_val, z3.BoolRef):
-            return z3.If(cond, t_val, f_val)
-        if isinstance(t_val, z3.BitVecRef) and isinstance(f_val, z3.BitVecRef) and t_val.size() == f_val.size():
-            return z3.If(cond, t_val, f_val)
-        return z3.If(cond, _as_bv32(t_val), _as_bv32(f_val))
+        if dsl.is_bool(t_val) and dsl.is_bool(f_val):
+            return dsl.If(cond, t_val, f_val)
+        if dsl.is_bv(t_val) and dsl.is_bv(f_val) and t_val.size() == f_val.size():
+            return dsl.If(cond, t_val, f_val)
+        return dsl.If(cond, _as_bv32(t_val), _as_bv32(f_val))
     return t_val
 
 
-def _try_const_u64(e: z3.ExprRef) -> Optional[int]:
-    if isinstance(e, z3.BitVecNumRef):
-        return e.as_long()
-    s = z3.simplify(e)
+def _try_const_u64(e: Any) -> Optional[int]:
+    if dsl.is_bv_value(e):
+        return dsl.as_long(e)
+    if isinstance(e, dsl.Z3OpExtract) and dsl.is_bv_value(e.src):
+        w = e.hi - e.lo + 1
+        return (dsl.as_long(e.src) >> e.lo) & ((1 << w) - 1)
+    if isinstance(e, dsl.Z3OpExtract) and isinstance(e.src, dsl.Z3OpBvAdd):
+        # Quick check for (const_base + off) where off is small/const
+        a, b = e.src.lhs, e.src.rhs
+        if dsl.is_bv_value(a) and dsl.is_bv_value(b):
+            w = e.hi - e.lo + 1
+            return (((dsl.as_long(a) + dsl.as_long(b)) & ((1 << e.src.width) - 1)) >> e.lo) & ((1 << w) - 1)
+    s = z3.simplify(dsl.lower(e))
     if isinstance(s, z3.BitVecNumRef):
         return s.as_long()
     return None
@@ -459,9 +497,9 @@ class SharedShaderEnv(ShaderEnvBase):
         self.inputs: Dict[str, z3.ExprRef] = {}
         self.init_buf_mem: Dict[str, z3.ArrayRef] = {}
         self.init_img_mem: Dict[str, Tuple[z3.ArrayRef, ...]] = {}
-        self.fallback_mem: z3.ArrayRef = z3.Array("mem_fallback", BV64, BV32)
-        self.fau_sym = z3.Array("fau_sym", BV32, BV32)
-        self.lane_id = z3.BitVec("lane_id", 5)
+        self.fallback_mem: Any = dsl.Array("mem_fallback", BV64, BV32)
+        self.fau_sym = dsl.Array("fau_sym", BV32, BV32)
+        self.lane_id = dsl.BitVec("lane_id", 5)
         self.inputs["lane_id"] = self.lane_id
 
     def read_untyped_slot(self, domain: Any, raw_bv32: z3.BitVecRef) -> Any:
@@ -478,7 +516,7 @@ class SharedShaderEnv(ShaderEnvBase):
             self.sym_buf_ufs: Dict[str, z3.FuncDeclRef] = {}
         if sym_tag not in self.sym_buf_ufs:
             safe = "".join(c if c.isalnum() or c == "_" else "_" for c in sym_tag)
-            self.sym_buf_ufs[sym_tag] = z3.Function(f"sym_slot_{safe}", BV32, BV32)
+            self.sym_buf_ufs[sym_tag] = dsl.Function(f"sym_slot_{safe}", BV32, BV32)
         return self.sym_buf_ufs[sym_tag](off32)
 
     def get_buf_mem(self, key: str) -> z3.ArrayRef:
@@ -486,7 +524,7 @@ class SharedShaderEnv(ShaderEnvBase):
             key = self.unique_workgroup_key
         if key not in self.init_buf_mem:
             safe = key.replace(":", "_")
-            self.init_buf_mem[key] = z3.Array(f"mem_{safe}", BV32, BV32)
+            self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, BV32)
         return self.init_buf_mem[key]
 
     def build_preconditions(self) -> List[z3.BoolRef]:
@@ -497,27 +535,27 @@ class SharedShaderEnv(ShaderEnvBase):
             for c, lim in enumerate((lx, ly, lz)):
                 lid_k = f"bi_27_{c}"
                 if lid_k in self.inputs:
-                    conds.append(z3.ULT(self.inputs[lid_k], bv32(lim)))
+                    conds.append(dsl.ULT(self.inputs[lid_k], _dsl_bv32(lim)))
                 gid_k = f"bi_28_{c}"
                 wg_k = f"bi_26_{c}"
                 if gid_k in self.inputs and lid_k in self.inputs and wg_k in self.inputs:
-                    conds.append(self.inputs[gid_k] == self.inputs[wg_k] * bv32(lim) + self.inputs[lid_k])
+                    conds.append(self.inputs[gid_k] == self.inputs[wg_k] * _dsl_bv32(lim) + self.inputs[lid_k])
             if "bi_29" in self.inputs:
                 if all(f"bi_27_{c}" in self.inputs for c in range(3)):
                     lidx_expr = (
-                        self.inputs["bi_27_2"] * bv32(lx * ly)
-                        + self.inputs["bi_27_1"] * bv32(lx)
+                        self.inputs["bi_27_2"] * _dsl_bv32(lx * ly)
+                        + self.inputs["bi_27_1"] * _dsl_bv32(lx)
                         + self.inputs["bi_27_0"]
                     )
                     conds.append(self.inputs["bi_29"] == lidx_expr)
                 else:
-                    conds.append(z3.ULT(self.inputs["bi_29"], bv32(lx * ly * lz)))
+                    conds.append(dsl.ULT(self.inputs["bi_29"], _dsl_bv32(lx * ly * lz)))
         return conds
 
     def get_img_mem(self, key: str) -> Tuple[z3.ArrayRef, ...]:
         if key not in self.init_img_mem:
             safe = key.replace(":", "_")
-            self.init_img_mem[key] = tuple(z3.Array(f"img_{safe}_c{c}", BV64, BV32) for c in range(4))
+            self.init_img_mem[key] = tuple(dsl.Array(f"img_{safe}_c{c}", BV64, BV32) for c in range(4))
         return self.init_img_mem[key]
 
     def _find_base_region_in_add(self, expr: z3.ExprRef) -> Optional[str]:
@@ -527,13 +565,13 @@ class SharedShaderEnv(ShaderEnvBase):
         while stack and visited < 64:
             cur = stack.pop()
             visited += 1
-            if isinstance(cur, z3.BitVecNumRef) and cur.size() == 64:
-                region = (cur.as_long() >> 32) << 32
+            if dsl.is_bv_value(cur) and cur.size() == 64:
+                region = (dsl.as_long(cur) >> 32) << 32
                 if region in self.base_to_buf:
                     found.add(self.base_to_buf[region])
                     if len(found) > 1:
                         return None
-            elif z3.is_app(cur) and cur.decl().kind() == z3.Z3_OP_BADD:
+            elif isinstance(cur, dsl.Z3OpBvAdd) or (isinstance(cur, z3.ExprRef) and z3.is_app(cur) and cur.decl().kind() == z3.Z3_OP_BADD):
                 for ch in cur.children():
                     stack.append(ch)
         return next(iter(found)) if len(found) == 1 else None
@@ -549,87 +587,87 @@ class SharedShaderEnv(ShaderEnvBase):
             region = (c >> 32) << 32
             off = c & MASK32
             if region in self.base_to_buf:
-                return self.base_to_buf[region], off, bv32(off)
+                return self.base_to_buf[region], off, _dsl_bv32(off)
             if hint_key:
-                return hint_key, off, bv32(off)
-            return None, c, bv32(off)
+                return hint_key, off, _dsl_bv32(off)
+            return None, c, _dsl_bv32(off)
 
-        hi = _try_const_u64(z3.Extract(63, 32, addr_expr))
+        hi = _try_const_u64(dsl.Extract(63, 32, addr_expr))
         if hi is not None:
             region = hi << 32
             if region in self.base_to_buf:
-                lo = z3.simplify(z3.Extract(31, 0, addr_expr))
+                lo = dsl.lift(z3.simplify(dsl.lower(dsl.Extract(31, 0, addr_expr))), depth=1)
                 lo_c = _try_const_u64(lo)
                 return self.base_to_buf[region], lo_c, lo
 
         bkey = self._find_base_region_in_add(addr_expr)
         if bkey is not None:
-            lo = z3.simplify(z3.Extract(31, 0, addr_expr))
+            lo = dsl.lift(z3.simplify(dsl.lower(dsl.Extract(31, 0, addr_expr))), depth=1)
             lo_c = _try_const_u64(lo)
             return bkey, lo_c, lo
 
         if hint_key:
-            lo = z3.simplify(z3.Extract(31, 0, addr_expr))
+            lo = dsl.lift(z3.simplify(dsl.lower(dsl.Extract(31, 0, addr_expr))), depth=1)
             lo_c = _try_const_u64(lo)
             return hint_key, lo_c, lo
 
-        return None, None, z3.Extract(31, 0, addr_expr)
+        return None, None, dsl.Extract(31, 0, addr_expr)
 
     def get_builtin(self, builtin_id: int, val_type: str) -> Z3Val:
         name = f"bi_{builtin_id}"
         if val_type == "V4F32":
-            lanes = tuple(z3.BitVec(f"{name}_{c}", 32) for c in range(4))
+            lanes = tuple(dsl.BitVec(f"{name}_{c}", 32) for c in range(4))
             for c, lv in enumerate(lanes):
                 self.inputs[f"{name}_{c}"] = lv
             return lanes
         if val_type == "V3U32":
-            lanes = tuple(z3.BitVec(f"{name}_{c}", 32) for c in range(3))
+            lanes = tuple(dsl.BitVec(f"{name}_{c}", 32) for c in range(3))
             for c, lv in enumerate(lanes):
                 self.inputs[f"{name}_{c}"] = lv
             return lanes
         if val_type == "Bool":
-            v = z3.Bool(name)
+            v = dsl.Bool(name)
             self.inputs[name] = v
             return v
-        v = z3.BitVec(name, 32)
+        v = dsl.BitVec(name, 32)
         self.inputs[name] = v
         return v
 
     def get_input_vec4(self, kind: str, location: int) -> Tuple[z3.BitVecRef, ...]:
-        lanes = tuple(z3.BitVec(f"{kind}_loc{location}_{c}", 32) for c in range(4))
+        lanes = tuple(dsl.BitVec(f"{kind}_loc{location}_{c}", 32) for c in range(4))
         for c, lv in enumerate(lanes):
             self.inputs[f"{kind}_loc{location}_{c}"] = lv
         return lanes
 
     def load_fau_word(self, word_idx: int) -> z3.BitVecRef:
         if word_idx in self.fcst_by_word:
-            return bv32(self.fcst_by_word[word_idx])
+            return _dsl_bv32(self.fcst_by_word[word_idx])
         if word_idx in self.viewport_fau_words:
-            return bv32(self.viewport_fau_words[word_idx])
+            return _dsl_bv32(self.viewport_fau_words[word_idx])
         if word_idx in self.pilot_by_word:
             pf, is_hi = self.pilot_by_word[word_idx]
             vkind = pf.get("value_kind", "")
             if vkind == "const_int" and pf.get("has_const_value", False):
                 cv = int(pf["const_value"])
-                return bv32((cv >> 32) & MASK32) if is_hi else bv32(cv & MASK32)
+                return _dsl_bv32((cv >> 32) & MASK32) if is_hi else _dsl_bv32(cv & MASK32)
             if vkind in ("buffer_size", "descriptor_addr", "abi_preload", "unknown"):
-                return z3.Select(self.fau_sym, bv32(word_idx))
+                return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
                 if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
-                    return z3.Select(self.get_buf_mem(pf["key"]), bv32(int(pf["byte_offset"])))
-                return z3.Select(self.fau_sym, bv32(word_idx))
+                    return dsl.Select(self.get_buf_mem(pf["key"]), _dsl_bv32(int(pf["byte_offset"])))
+                return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if pf.get("is_derived", False):
-                return z3.Select(self.fau_sym, bv32(word_idx))
+                return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             base = self.get_buf_base(pf["key"])
             if pf.get("has_pointer_offset", False):
                 base = (base + int(pf.get("pointer_offset", 0))) & MASK64
             if not is_hi:
-                return bv32(base & MASK32)
-            return bv32((base >> 32) & MASK32)
+                return _dsl_bv32(base & MASK32)
+            return _dsl_bv32((base >> 32) & MASK32)
         if word_idx in self.rloc_by_word:
             bkey, uoff = self.rloc_by_word[word_idx]
-            return z3.Select(self.get_buf_mem(bkey), bv32(uoff))
-        return z3.Select(self.fau_sym, bv32(word_idx))
+            return dsl.Select(self.get_buf_mem(bkey), _dsl_bv32(uoff))
+        return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
 
 
 class ConcreteShaderEnv(ShaderEnvBase):

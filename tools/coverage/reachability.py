@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.coverage.synthesizer import extract_concrete_overrides_from_model
 from tools.coverage.uf_pruning import lift_uf_proxies_into_overrides, prune_unique_hw_ufs
 from tools.symbolic_ssa.env import (
@@ -162,7 +164,7 @@ def solve_maximal_reachability(
 
     solver = z3.Solver()
     for p in preconditions:
-        solver.add(p)
+        solver.add(dsl.lower(p))
 
     paths: List[DisjointPathRecord] = []
     reached_blocks: Set[int] = set()
@@ -183,14 +185,14 @@ def solve_maximal_reachability(
         ]
         unvisited_exprs = [
             blk_reach[bid] for bid in unvisited
-            if not z3.is_true(blk_reach[bid]) and not z3.is_false(blk_reach[bid])
+            if not dsl.is_true(blk_reach[bid]) and not dsl.is_false(blk_reach[bid])
         ]
 
         model: Optional[z3.ModelRef] = None
         if unvisited_exprs:
             solver.push()
             solver.set("timeout", step_timeout)
-            solver.add(z3.Or(*unvisited_exprs))
+            solver.add(z3.Or(*[dsl.lower(e) for e in unvisited_exprs]))
             rc = solver.check()
             if rc == z3.sat:
                 model = solver.model()
@@ -226,23 +228,23 @@ def solve_maximal_reachability(
         pc_lits: List[z3.BoolRef] = []
         sym_decs: List[Tuple[int, int, bool]] = []
         for _iter_idx, bid, cid, r_expr, c_expr in iter_decs:
-            if z3.is_true(model.eval(r_expr, model_completion=True)):
+            if z3.is_true(model.eval(dsl.lower(r_expr), model_completion=True)):
                 bexpr = _as_bool(c_expr)
-                took = z3.is_true(model.eval(bexpr, model_completion=True))
+                took = z3.is_true(model.eval(dsl.lower(bexpr), model_completion=True))
                 pc_lits.append(bexpr if took else _z3_not(bexpr))
                 sym_decs.append((bid, cid, took))
 
         vis = [
             bid for bid in all_bids
-            if bid in blk_reach and z3.is_true(model.eval(blk_reach[bid], model_completion=True))
+            if bid in blk_reach and z3.is_true(model.eval(dsl.lower(blk_reach[bid]), model_completion=True))
         ]
 
         if pc_lits:
-            pc_expr = pc_lits[0] if len(pc_lits) == 1 else z3.And(*pc_lits)
+            pc_expr = pc_lits[0] if len(pc_lits) == 1 else dsl.And(*pc_lits)
         else:
-            pc_expr = z3.BoolVal(True)
+            pc_expr = dsl.BoolVal(True)
 
-        solver.add(_z3_not(pc_expr))
+        solver.add(dsl.lower(_z3_not(pc_expr)))
         reached_blocks.update(vis)
 
         paths.append(

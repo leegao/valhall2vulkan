@@ -22,10 +22,12 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.symbolic_ssa.env import MASK32
 
 
-def ast_node_count(expr: z3.ExprRef, limit: int = 10000) -> int:
+def ast_node_count(expr: Any, limit: int = 10000) -> int:
     """Count unique AST nodes in a Z3 expression DAG (capped at `limit`)."""
     visited: Set[int] = set()
     stack: List[z3.ExprRef] = [expr]
@@ -47,7 +49,7 @@ def _collect_hw_uf_apps(
     """Map each `hw_*` FuncDecl name to `{expr_id: expr}` of distinct applications."""
     apps_by_name: Dict[str, Dict[int, z3.ExprRef]] = {}
     visited: Set[int] = set()
-    stack: List[z3.ExprRef] = list(exprs)
+    stack: List[z3.ExprRef] = [dsl.lower(e) for e in exprs]
     while stack:
         cur = stack.pop()
         cid = cur.get_id()
@@ -105,7 +107,7 @@ def prune_unique_hw_ufs(
     if not subst_pairs:
         return list(exprs), {}
 
-    rewritten = [z3.substitute(e, *subst_pairs) for e in exprs]
+    rewritten = [z3.substitute(dsl.lower(e), *subst_pairs) for e in exprs]
     return rewritten, uf_proxies
 
 

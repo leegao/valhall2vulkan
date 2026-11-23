@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.env import (
     SharedShaderEnv,
@@ -25,7 +27,7 @@ from tools.symbolic_ssa.env import (
     _z3_or,
 )
 from tools.symbolic_ssa.interpreter import SsaInterpreter
-from tools.verify.panfrost_z3_model import bv32
+from tools.symbolic_ssa.env import _dsl_bv32 as bv32
 
 
 @dataclasses.dataclass
@@ -96,9 +98,9 @@ def _merge_states(
 
         for key in set(base_st.const_stores) | set(st.const_stores):
             bkey, off = key
-            def_v = z3.Select(env.get_buf_mem(bkey), bv32(off))
-            aw, av = st.const_stores.get(key, (z3.BoolVal(False), def_v))
-            bw, bv_ = base_st.const_stores.get(key, (z3.BoolVal(False), def_v))
+            def_v = dsl.Select(env.get_buf_mem(bkey), bv32(off))
+            aw, av = st.const_stores.get(key, (dsl.BoolVal(False), def_v))
+            bw, bv_ = base_st.const_stores.get(key, (dsl.BoolVal(False), def_v))
             base_st.const_stores[key] = (_z3_if(cond, aw, bw), _z3_if(cond, av, bv_))
 
         for skey in set(base_st.sym_buf_stores) | set(st.sym_buf_stores):
@@ -119,18 +121,18 @@ def _merge_states(
             a_m = st.buf_mems.get(bkey, env.get_buf_mem(bkey))
             b_m = base_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
             if not a_m.eq(b_m):
-                base_st.buf_mems[bkey] = z3.If(cond, a_m, b_m)
+                base_st.buf_mems[bkey] = dsl.If(cond, a_m, b_m)
 
         for ikey in set(base_st.image_mems) | set(st.image_mems):
             a_im = st.image_mems.get(ikey, env.get_img_mem(ikey))
             b_im = base_st.image_mems.get(ikey, env.get_img_mem(ikey))
             base_st.image_mems[ikey] = tuple(
-                z3.If(cond, ac, bc) if not ac.eq(bc) else ac
+                dsl.If(cond, ac, bc) if not ac.eq(bc) else ac
                 for ac, bc in zip(a_im, b_im)
             )
 
         if not st.fallback_mem.eq(base_st.fallback_mem):
-            base_st.fallback_mem = z3.If(cond, st.fallback_mem, base_st.fallback_mem)
+            base_st.fallback_mem = dsl.If(cond, st.fallback_mem, base_st.fallback_mem)
 
         for akey in set(base_st.atomic_events) | set(st.atomic_events):
             b_evs = base_st.atomic_events.get(akey, [])
@@ -206,7 +208,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         if not self.env.is_shared_sym_bkey(bkey_hint):
             return False
         prev_w, prev_v, prev_o = st.sym_buf_stores.get(
-            sym_tag, (z3.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off_bv), off_bv)
+            sym_tag, (dsl.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off_bv), off_bv)
         )
         st.sym_buf_stores[sym_tag] = (
             _z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v), _z3_if(m_b, off_bv, prev_o)
@@ -218,9 +220,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
         if bkey is None:
-            raw = z3.Select(st.fallback_mem, addr_bv)
+            raw = dsl.Select(st.fallback_mem, addr_bv)
         else:
-            mem_v = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off_bv)
+            mem_v = dsl.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off_bv)
             if const_off is not None and (bkey, const_off) in st.const_stores:
                 w_cond, w_val = st.const_stores[(bkey, const_off)]
                 raw = _z3_if(w_cond, w_val, mem_v)
@@ -234,13 +236,13 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         addr_bv = self.domain.lower_z3_bv64(addr)
         val_bv = self.domain.lower_z3_bv32(val)
         if bkey is None:
-            st.fallback_mem = z3.If(m_b, z3.Store(st.fallback_mem, addr_bv, val_bv), st.fallback_mem)
+            st.fallback_mem = dsl.If(m_b, dsl.Store(st.fallback_mem, addr_bv, val_bv), st.fallback_mem)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
             return
         cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-        st.buf_mems[bkey] = z3.Store(cur_mem, off_bv, val_bv) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_mem, off_bv, val_bv), cur_mem)
+        st.buf_mems[bkey] = dsl.Store(cur_mem, off_bv, val_bv) if dsl.is_true(m_b) else dsl.If(m_b, dsl.Store(cur_mem, off_bv, val_bv), cur_mem)
         if const_off is not None:
-            prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off_bv)))
+            prev_w, prev_v = st.const_stores.get((bkey, const_off), (dsl.BoolVal(False), dsl.Select(cur_mem, off_bv)))
             st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v))
             st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
         else:
@@ -248,7 +250,11 @@ class SymbolicSsaInterpreter(SsaInterpreter):
 
     def _extract_img_channel(self, addr: Any) -> Tuple[int, z3.BitVecRef]:
         addr_bv = self.domain.lower_z3_bv64(addr)
-        if z3.is_app(addr_bv) and addr_bv.decl().kind() == z3.Z3_OP_BADD and len(addr_bv.children()) == 2:
+        if isinstance(addr_bv, dsl.Z3OpBvAdd):
+            c0, c1 = addr_bv.lhs, addr_bv.rhs
+            if dsl.is_bv_value(c1) and dsl.as_long(c1) in (4, 8, 12):
+                return (dsl.as_long(c1) // 4, c0)
+        elif isinstance(addr_bv, z3.ExprRef) and z3.is_app(addr_bv) and addr_bv.decl().kind() == z3.Z3_OP_BADD and len(addr_bv.children()) == 2:
             c0, c1 = addr_bv.children()
             if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
                 return (c1.as_long() // 4, c0)
@@ -260,9 +266,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         val_bv = self.domain.lower_z3_bv32(val)
         cur_im = list(st.image_mems.get(ikey, self.env.get_img_mem(ikey)))
         cur_im[ch_idx] = (
-            z3.Store(cur_im[ch_idx], xy_bv, val_bv)
-            if z3.is_true(m_b)
-            else z3.If(m_b, z3.Store(cur_im[ch_idx], xy_bv, val_bv), cur_im[ch_idx])
+            dsl.Store(cur_im[ch_idx], xy_bv, val_bv)
+            if dsl.is_true(m_b)
+            else dsl.If(m_b, dsl.Store(cur_im[ch_idx], xy_bv, val_bv), cur_im[ch_idx])
         )
         st.image_mems[ikey] = tuple(cur_im)
         st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
@@ -273,7 +279,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
         cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
         st.image_mems[ikey] = tuple(
-            z3.Store(cur_im[c], xy_bv, v4[c]) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_im[c], xy_bv, v4[c]), cur_im[c])
+            dsl.Store(cur_im[c], xy_bv, v4[c]) if dsl.is_true(m_b) else dsl.If(m_b, dsl.Store(cur_im[c], xy_bv, v4[c]), cur_im[c])
             for c in range(4)
         )
         st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
@@ -316,12 +322,12 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         new_bv = self.domain.lower_z3_bv32(new_val)
         if bkey is not None:
             cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            st.buf_mems[bkey] = z3.Store(cur_mem, off_bv, new_bv) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_mem, off_bv, new_bv), cur_mem)
+            st.buf_mems[bkey] = dsl.Store(cur_mem, off_bv, new_bv) if dsl.is_true(m_b) else dsl.If(m_b, dsl.Store(cur_mem, off_bv, new_bv), cur_mem)
             st.atomic_events.setdefault(bkey, []).append((m_b, op_tag, off_bv, arg_bv, cmp_bv))
             st.output_pcs.setdefault(f"atomic:{bkey}", set()).add(nid)
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
         else:
-            st.fallback_mem = z3.If(m_b, z3.Store(st.fallback_mem, addr_bv, new_bv), st.fallback_mem)
+            st.fallback_mem = dsl.If(m_b, dsl.Store(st.fallback_mem, addr_bv, new_bv), st.fallback_mem)
             st.atomic_events.setdefault("fallback_mem", []).append((m_b, op_tag, addr_bv, arg_bv, cmp_bv))
             st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
@@ -371,7 +377,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             else:
                 order.append(nid)
 
-        reach = z3.BoolVal(True)
+        reach = dsl.BoolVal(True)
         for nid in order:
             self.values[nid] = self._eval_node(self.nodes_by_id[nid], st, reach)
         return self.values.get(target_nid, bv32(0))
@@ -394,9 +400,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
     def evaluate(self) -> BlockEffectState:
         """Evaluate all blocks in RPO topological order with bounded loop unrolling."""
         init_state = BlockEffectState(
-            discarded=z3.BoolVal(False),
-            terminated=z3.BoolVal(False),
-            demoted=z3.BoolVal(False),
+            discarded=dsl.BoolVal(False),
+            terminated=dsl.BoolVal(False),
+            demoted=dsl.BoolVal(False),
             frag_colors={},
             builtin_outputs={},
             vert_varyings={},
@@ -432,15 +438,15 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                 bid = int(blk["id"])
                 b_rpo = rpo_index.get(bid, bid)
                 if bid == 0 and not allow_backedges:
-                    reach = z3.BoolVal(True)
+                    reach = dsl.BoolVal(True)
                     cur_st = _clone_state(init_state)
                 else:
                     inc_edges = [(p, c) for (p, c) in edge_conds.get(bid, []) if p in blk_out_state]
                     if not inc_edges:
-                        blk_reach[bid] = z3.BoolVal(False)
+                        blk_reach[bid] = dsl.BoolVal(False)
                         blk_out_state[bid] = _clone_state(init_state)
                         continue
-                    reach = z3.BoolVal(False)
+                    reach = dsl.BoolVal(False)
                     for _, c in inc_edges:
                         reach = _z3_or(reach, c)
                     cur_st = _merge_states([(c, blk_out_state[p]) for (p, c) in inc_edges], self.env)
@@ -468,7 +474,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                     else:
                         acc = self.values[fwd[0][1]]
                         for pred_b, val_id in fwd[1:]:
-                            ec = inc_cond_map.get(pred_b, z3.BoolVal(False))
+                            ec = inc_cond_map.get(pred_b, dsl.BoolVal(False))
                             acc = self.domain.merge_z3(ec, self.values[val_id], acc)
                         self.values[int(pid)] = acc
 
@@ -498,13 +504,13 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                         edge_conds.setdefault(bt, []).append((bid, t_cond))
                     else:
                         self.has_loops = True
-                        if not z3.is_false(t_cond):
+                        if not dsl.is_false(t_cond):
                             backedges.append((bid, bt, t_cond))
                     if ft_rpo > b_rpo:
                         edge_conds.setdefault(ft, []).append((bid, f_cond))
                     else:
                         self.has_loops = True
-                        if not z3.is_false(f_cond):
+                        if not dsl.is_false(f_cond):
                             backedges.append((bid, ft, f_cond))
                 elif bt >= 0 and bt_rpo > b_rpo:
                     edge_conds.setdefault(bt, []).append((bid, cf_reach))
@@ -512,7 +518,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                     edge_conds.setdefault(ft, []).append((bid, cf_reach))
                 elif bt >= 0 and bt_rpo <= b_rpo:
                     self.has_loops = True
-                    if not z3.is_false(cf_reach):
+                    if not dsl.is_false(cf_reach):
                         backedges.append((bid, bt, cf_reach))
 
                 if is_end or is_discard or (bt < 0 and ft < 0):

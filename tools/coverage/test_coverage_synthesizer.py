@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unittest
+from tools.symbolic_ssa.z3simplifier import dsl
 
 from tools.coverage import collect_predicate_nodes, synthesize_coverage_vectors
 from tools.verify.cec import run_concrete_diff
@@ -110,8 +111,8 @@ class TestCoverageSynthesizer(unittest.TestCase):
         uf_val = env.get_sym_buf_slot("ssbo:0:0", bv32(16))
         img_arrs = env.get_img_mem("img:0:0")
         s = z3.Solver()
-        s.add(uf_val == bv32(0xDEAD1234))
-        s.add(z3.Select(img_arrs[0], z3.BitVecVal(7, 64)) == bv32(0xBEEF5678))
+        s.add(dsl.lower(uf_val == bv32(0xDEAD1234)))
+        s.add(dsl.lower(dsl.Select(img_arrs[0], dsl.BitVecVal(7, 64)) == bv32(0xBEEF5678)))
         self.assertEqual(s.check(), z3.sat)
         ov = extract_concrete_overrides_from_model(s.model(), env)
 
@@ -394,10 +395,10 @@ class TestV30CleanupAndEquivFuzz(unittest.TestCase):
         sev = SymbolicSsaInterpreter(ssa, senv, is_valhall_side=False, fp_mode="exact")
         sev.evaluate()
         s = z3.Solver()
-        s.add(sev.domain.lower_z3_bv32(sev.values[4]) != z3.BitVecVal(19, 32))
+        s.add(dsl.lower(sev.domain.lower_z3_bv32(sev.values[4]) != dsl.BitVecVal(19, 32)))
         self.assertEqual(s.check(), z3.unsat)
         s2 = z3.Solver()
-        s2.add(sev.domain.lower_z3_bv32(sev.values[5]) != z3.BitVecVal(275, 32))
+        s2.add(dsl.lower(sev.domain.lower_z3_bv32(sev.values[5]) != dsl.BitVecVal(275, 32)))
         self.assertEqual(s2.check(), z3.unsat)
 
     def test_concolic_equiv_fuzz_detects_bug_and_passes_clean(self) -> None:

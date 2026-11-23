@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.coverage.uf_pruning import (
     ast_node_count,
     lift_uf_proxies_into_overrides,
@@ -137,7 +139,7 @@ def _extract_array_entries(
                 default_val = int(v.as_long()) & MASK32
         elif kind == z3.Z3_OP_AS_ARRAY:
             fdecl = z3.get_as_array_func(e)
-            interp = model.get_interp(fdecl)
+            interp = model.get_interp(fdecl.to_z3 if hasattr(fdecl, "to_z3") else fdecl)
             if isinstance(interp, z3.FuncInterp):
                 ev = interp.else_value()
                 if ev is not None and z3.is_bv_value(ev):
@@ -146,7 +148,7 @@ def _extract_array_entries(
                     if len(entry) == 2 and z3.is_bv_value(entry[0]) and z3.is_bv_value(entry[1]):
                         entries[int(entry[0].as_long()) & idx_mask] = int(entry[1].as_long()) & MASK32
 
-    ev = model.eval(arr_expr, model_completion=True)
+    ev = model.eval(dsl.lower(arr_expr), model_completion=True)
     walk(ev)
     return entries, default_val
 
@@ -211,7 +213,7 @@ def extract_concrete_overrides_from_model(
             overrides[f"mem_default:{bkey}"] = mem_def
 
     for sym_tag, fdecl in getattr(env, "sym_buf_ufs", {}).items():
-        interp = model.get_interp(fdecl)
+        interp = model.get_interp(fdecl.to_z3 if hasattr(fdecl, "to_z3") else fdecl)
         if isinstance(interp, z3.FuncInterp):
             ev = interp.else_value()
             if ev is not None and z3.is_bv_value(ev):
@@ -297,8 +299,8 @@ def _build_target_formulas(
             continue
         bval = evaluator.lower_bool_value(pid)
         reach = block_reach.get(bid)
-        t_expr = z3.And(reach, bval) if reach is not None and not z3.is_true(reach) else bval
-        f_expr = z3.And(reach, _z3_not(bval)) if reach is not None and not z3.is_true(reach) else _z3_not(bval)
+        t_expr = dsl.And(reach, bval) if reach is not None and not dsl.is_true(reach) else bval
+        f_expr = dsl.And(reach, _z3_not(bval)) if reach is not None and not dsl.is_true(reach) else _z3_not(bval)
         raw_keys.append((pid, True))
         raw_exprs.append(t_expr)
         raw_keys.append((pid, False))
@@ -377,7 +379,7 @@ def synthesize_coverage_vectors(
 
     solver = z3.Solver()
     for p in preconditions:
-        solver.add(p)
+        solver.add(dsl.lower(p))
 
     synthesized: List[Dict[str, Any]] = []
     dead_targets: Set[Tuple[int, bool]] = set()
@@ -427,7 +429,7 @@ def synthesize_coverage_vectors(
                 target_sizes = {t: ast_node_count(expr) for t, expr in formulas.items()}
                 solver = z3.Solver()
                 for p in preconditions:
-                    solver.add(p)
+                    solver.add(dsl.lower(p))
                 uncovered = [t for t in (all_targets - covered) if t in formulas]
                 if not uncovered:
                     break
@@ -449,7 +451,7 @@ def synthesize_coverage_vectors(
             fallback_probes += 1
             solver.push()
             solver.set("timeout", min(probe_timeout_ms, rem_ms))
-            solver.add(formulas[tgt])
+            solver.add(dsl.lower(formulas[tgt]))
             rc = solver.check()
             if rc == z3.sat:
                 seed_model = solver.model()
@@ -482,7 +484,7 @@ def synthesize_coverage_vectors(
                 break
             solver.push()
             solver.set("timeout", min(pack_timeout, rem_ms))
-            solver.add(formulas[cand])
+            solver.add(dsl.lower(formulas[cand]))
             prc = solver.check()
             if prc == z3.sat:
                 seed_model = solver.model()

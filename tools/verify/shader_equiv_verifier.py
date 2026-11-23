@@ -27,6 +27,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 from tools.verify.panfrost_z3_model import (
     BV8,
     BV32,
@@ -95,13 +97,13 @@ def _format_model_cex(
     rhs: z3.ExprRef,
     env: SharedShaderEnv,
 ) -> Tuple[str, str, str]:
-    lv = m.eval(lhs, model_completion=True)
-    rv = m.eval(rhs, model_completion=True)
+    lv = m.eval(dsl.lower(lhs), model_completion=True)
+    rv = m.eval(dsl.lower(rhs), model_completion=True)
     lhex = f"0x{lv.as_long():08x}" if isinstance(lv, z3.BitVecNumRef) else str(lv)
     rhex = f"0x{rv.as_long():08x}" if isinstance(rv, z3.BitVecNumRef) else str(rv)
     in_parts = []
     for k, v in list(env.inputs.items())[:8]:
-        ev = m.eval(v, model_completion=True)
+        ev = m.eval(dsl.lower(v), model_completion=True)
         if isinstance(ev, z3.BitVecNumRef):
             in_parts.append(f"{k}=0x{ev.as_long():x}")
         else:
@@ -124,8 +126,8 @@ def _solve_miter_eq(
 ) -> Tuple[str, Optional[Tuple[str, str, str]]]:
     """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
     if _is_real2bv(lhs) or _is_real2bv(rhs):
-        lhs = _bv32_to_real(lhs) if isinstance(lhs, z3.BitVecRef) else lhs
-        rhs = _bv32_to_real(rhs) if isinstance(rhs, z3.BitVecRef) else rhs
+        lhs = _bv32_to_real(lhs) if dsl.is_bv(lhs) else lhs
+        rhs = _bv32_to_real(rhs) if dsl.is_bv(rhs) else rhs
 
     q = SimplifyQuery(
         lhs=lhs,
@@ -311,7 +313,7 @@ def verify_equivalence_bundle(
 
     checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef], str]] = []
 
-    if stage == "Fragment" or not z3.is_false(d_st.discarded) or not z3.is_false(v_st.discarded):
+    if stage == "Fragment" or not dsl.is_false(d_st.discarded) or not dsl.is_false(v_st.discarded):
         checks.append(("discarded", d_st.discarded, v_st.discarded, None, "discarded"))
 
     not_disc = _z3_not(d_st.discarded)
@@ -332,21 +334,21 @@ def verify_equivalence_bundle(
             msg = f"Asymmetric builtin_out[{bi}]: emitted only by {side}"
             res.asymmetric_outputs.append(f"builtin_out[{bi}]")
             res.notes.append(msg)
-            checks.append((f"builtin_out[{bi}].present", z3.BoolVal(do is not None), z3.BoolVal(vo is not None), not_disc, f"builtin_out[{bi}]"))
+            checks.append((f"builtin_out[{bi}].present", dsl.BoolVal(do is not None), dsl.BoolVal(vo is not None), not_disc, f"builtin_out[{bi}]"))
             continue
         bi_guard = not_disc
         # Under Valhall's folded gl_mali_ViewportTransform + perspective divide,
         # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
         if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
             if fp_mode == "real" or domain == "udomain":
-                vp_conds = [d_eval.domain.to_z3_real_f32(do[3]) == z3.RealVal(1)]
+                vp_conds = [d_eval.domain.to_z3_real_f32(do[3]) == dsl.RealVal(1)]
             else:
                 vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
                 for c in range(3):
                     dbv = _as_bv32(do[c])
-                    vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
+                    vp_conds.append(dsl.Not(dsl.fpIsNaN(bv32_to_fp32(dsl.lower(dbv)))))
                     vp_conds.append(dbv != bv32(0x80000000))
-            bi_guard = _z3_and(bi_guard, z3.And(*vp_conds))
+            bi_guard = _z3_and(bi_guard, dsl.And(*vp_conds))
         if isinstance(do, tuple) and isinstance(vo, tuple):
             for c in range(min(len(do), len(vo))):
                 checks.append((f"builtin_out[{bi}][{c}]", _as_bv32(do[c]), _as_bv32(vo[c]), bi_guard, f"builtin_out[{bi}]"))
@@ -369,8 +371,8 @@ def verify_equivalence_bundle(
 
     all_sym = sorted(set(d_st.sym_buf_stores.keys()) | set(v_st.sym_buf_stores.keys()))
     for stag in all_sym:
-        dw, dv, doff = d_st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
-        vw, vv, voff = v_st.sym_buf_stores.get(stag, (z3.BoolVal(False), bv32(0), bv32(0)))
+        dw, dv, doff = d_st.sym_buf_stores.get(stag, (dsl.BoolVal(False), bv32(0), bv32(0)))
+        vw, vv, voff = v_st.sym_buf_stores.get(stag, (dsl.BoolVal(False), bv32(0), bv32(0)))
         checks.append((f"{stag}.written", dw, vw, None, stag))
         checks.append((f"{stag}.off", doff, voff, _z3_or(dw, vw), stag))
         checks.append((f"{stag}.value", dv, vv, _z3_or(dw, vw), stag))
@@ -379,8 +381,8 @@ def verify_equivalence_bundle(
     for bkey, off in all_cs:
         if _is_scratch_region(bkey):
             continue
-        dw, dv = d_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
-        vw, vv = v_st.const_stores.get((bkey, off), (z3.BoolVal(False), z3.Select(env.get_buf_mem(bkey), bv32(off))))
+        dw, dv = d_st.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
+        vw, vv = v_st.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
         tag = f"{bkey}+0x{off:x}"
         checks.append((f"{tag}.written", dw, vw, None, tag))
         checks.append((f"{tag}.value", dv, vv, _z3_or(dw, vw), tag))
@@ -396,18 +398,18 @@ def verify_equivalence_bundle(
         d_mem = d_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
         v_mem = v_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
         probe_name = f"probe_{bkey.replace(':', '_')}_off"
-        probe_off = z3.BitVec(probe_name, 32)
+        probe_off = dsl.BitVec(probe_name, 32)
         env.inputs[probe_name] = probe_off
-        checks.append((f"{bkey}[probe_off]", z3.Select(d_mem, probe_off), z3.Select(v_mem, probe_off), None, f"{bkey}:dyn"))
+        checks.append((f"{bkey}[probe_off]", dsl.Select(d_mem, probe_off), dsl.Select(v_mem, probe_off), None, f"{bkey}:dyn"))
 
     all_im_keys = sorted(set(d_st.image_mems.keys()) | set(v_st.image_mems.keys()))
     for ikey in all_im_keys:
         d_im = d_st.image_mems.get(ikey, env.get_img_mem(ikey))
         v_im = v_st.image_mems.get(ikey, env.get_img_mem(ikey))
-        probe_xy = z3.BitVec(f"probe_{ikey.replace(':', '_')}_xy", 64)
+        probe_xy = dsl.BitVec(f"probe_{ikey.replace(':', '_')}_xy", 64)
         env.inputs[f"probe_{ikey.replace(':', '_')}_xy"] = probe_xy
         for c, cname in enumerate(("r", "g", "b", "a")):
-            checks.append((f"img:{ikey}[xy].{cname}", z3.Select(d_im[c], probe_xy), z3.Select(v_im[c], probe_xy), None, f"img:{ikey}"))
+            checks.append((f"img:{ikey}[xy].{cname}", dsl.Select(d_im[c], probe_xy), dsl.Select(v_im[c], probe_xy), None, f"img:{ikey}"))
 
     all_ae_keys = sorted(set(d_st.atomic_events.keys()) | set(v_st.atomic_events.keys()))
     for akey in all_ae_keys:
@@ -418,10 +420,10 @@ def verify_equivalence_bundle(
         if len(d_evs) != len(v_evs):
             d_cnt = bv32(0)
             for de in d_evs:
-                d_cnt = d_cnt + z3.If(de[0], bv32(1), bv32(0))
+                d_cnt = d_cnt + dsl.If(de[0], bv32(1), bv32(0))
             v_cnt = bv32(0)
             for ve in v_evs:
-                v_cnt = v_cnt + z3.If(ve[0], bv32(1), bv32(0))
+                v_cnt = v_cnt + dsl.If(ve[0], bv32(1), bv32(0))
             checks.append((f"atomic:{akey}.dyn_count", d_cnt, v_cnt, None, f"atomic:{akey}"))
         else:
             for idx in range(len(d_evs)):
@@ -432,9 +434,9 @@ def verify_equivalence_bundle(
                 checks.append((f"atomic:{akey}[{idx}].arg", de[3], ve[3], ev_guard, f"atomic:{akey}"))
 
     if not d_st.fallback_mem.eq(env.fallback_mem) or not v_st.fallback_mem.eq(env.fallback_mem):
-        probe_addr = z3.BitVec("probe_fallback_addr", 64)
+        probe_addr = dsl.BitVec("probe_fallback_addr", 64)
         env.inputs["probe_fallback_addr"] = probe_addr
-        checks.append(("fallback_mem[probe_addr]", z3.Select(d_st.fallback_mem, probe_addr), z3.Select(v_st.fallback_mem, probe_addr), None, "fallback_mem"))
+        checks.append(("fallback_mem[probe_addr]", dsl.Select(d_st.fallback_mem, probe_addr), dsl.Select(v_st.fallback_mem, probe_addr), None, "fallback_mem"))
 
     if not checks:
         res.status = "SKIP"

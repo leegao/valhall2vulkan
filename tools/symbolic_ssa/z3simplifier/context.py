@@ -22,6 +22,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 
 @dataclass(frozen=True)
 class SideObligation:
@@ -89,28 +91,47 @@ class SimplifyQuery:
             **kwargs,
         )
 
+    def realize_z3(self) -> "SimplifyQuery":
+        """Realize all DSL `Z3Expr` terms in this query into concrete `z3.ExprRef`s (memoized)."""
+        lhs = dsl.lower(self.lhs)
+        rhs = dsl.lower(self.rhs)
+        guard = dsl.lower(self.guard) if self.guard is not None else None
+        pres = tuple(dsl.lower(p) for p in self.preconditions)
+        pred = dsl.lower(self.predicate) if self.predicate is not None else None
+        if (
+            lhs is self.lhs
+            and rhs is self.rhs
+            and guard is self.guard
+            and pred is self.predicate
+            and all(a is b for a, b in zip(pres, self.preconditions))
+        ):
+            return self
+        return replace(self, lhs=lhs, rhs=rhs, guard=guard, preconditions=pres, predicate=pred)
+
     def is_trivially_unsat(self) -> bool:
-        """Return True if the query is already syntactically proved UNSAT."""
-        if self.predicate is not None and z3.is_false(self.predicate):
+        """Return True if the query is already syntactically proved UNSAT (works lazily on DSL)."""
+        if self.predicate is not None and dsl.is_false(self.predicate):
             return True
-        if self.guard is not None and z3.is_false(self.guard):
+        if self.guard is not None and dsl.is_false(self.guard):
             return True
         if self.lhs.eq(self.rhs):
             return True
         return False
 
     def to_refutation_predicate(self) -> z3.BoolRef:
-        """Materialize the boolean refutation formula `guard & (lhs != rhs)`."""
+        """Materialize the boolean refutation formula `guard & (lhs != rhs)` as a concrete `z3.BoolRef`."""
         if self.predicate is not None:
-            return self.predicate
+            return dsl.lower(self.predicate)
         if self.lhs.eq(self.rhs):
             return z3.BoolVal(False)
-        diff = self.lhs != self.rhs
-        if self.guard is None or z3.is_true(self.guard):
+        lhs_z = dsl.lower(self.lhs)
+        rhs_z = dsl.lower(self.rhs)
+        diff = lhs_z != rhs_z
+        if self.guard is None or dsl.is_true(self.guard):
             return diff
-        if z3.is_false(self.guard):
+        if dsl.is_false(self.guard):
             return z3.BoolVal(False)
-        return z3.And(self.guard, diff)
+        return z3.And(dsl.lower(self.guard), diff)
 
 
 @dataclass

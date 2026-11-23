@@ -18,6 +18,7 @@ import copy
 import os
 import tempfile
 import unittest
+from tools.symbolic_ssa.z3simplifier import dsl
 
 from tools.verify.shader_equiv_verifier import (
     verify_equivalence_bundle,
@@ -504,7 +505,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
             env = SharedShaderEnv({"mbs2_context": {}})
             st = DagSsaZ3Evaluator(ssa, env, is_valhall_side=False, fp_mode="exact").evaluate()
             _, val_expr = st.const_stores[("ssbo:0:0", 0)]
-            got = z3.simplify(val_expr)
+            got = dsl.simplify(val_expr)
             self.assertEqual(got.as_long(), expected & 0xFFFFFFFF, f"SMod({a_val}, {b_val}) expected {expected}")
 
         # Exercise every 32-bit, 64-bit, comparison, conversion, and FP op in a single self-equivalence check.

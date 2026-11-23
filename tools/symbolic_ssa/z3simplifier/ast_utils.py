@@ -15,6 +15,8 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tupl
 
 import z3
 
+from tools.symbolic_ssa.z3simplifier import dsl
+
 
 @dataclass(frozen=True)
 class AstCensus:
@@ -55,7 +57,7 @@ def count_ast_nodes(roots: Sequence[z3.ExprRef], limit: int = 100000) -> int:
         if cid in visited:
             continue
         visited.add(cid)
-        if z3.is_app(cur):
+        if dsl.is_app(cur):
             for i in range(cur.num_args()):
                 stack.append(cur.arg(i))
     return len(visited)
@@ -66,7 +68,7 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
     visited: Set[int] = set()
     depths: Dict[int, int] = {}
     post_order: List[z3.ExprRef] = []
-    stack: List[Tuple[z3.ExprRef, bool]] = [(r, False) for r in roots if r is not None]
+    stack: List[Tuple[z3.ExprRef, bool]] = [(dsl.lower(r), False) for r in roots if r is not None]
 
     while stack and len(visited) < limit:
         cur, expanded = stack.pop()
@@ -294,7 +296,7 @@ def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
 
 
 def format_z3_ast(
-    expr: z3.ExprRef,
+    expr: Any,
     *,
     max_depth: int = 12,
     max_lines: int = 120,
