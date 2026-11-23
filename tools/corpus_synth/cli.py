@@ -20,6 +20,7 @@ def main() -> int:
     ap.add_argument("--out-dir", default=None, help="Directory to write synthesized .spv files")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--seed", type=int, default=0xC0DE, help="PRNG seed")
+    ap.add_argument("--domain", choices=["bitvec", "udomain"], default="bitvec", help="Symbolic value domain")
     ap.add_argument("--verify-equiv", action="store_true", help="Run concolic equiv-fuzz on each synthesized shader")
     args = ap.parse_args()
 
@@ -33,6 +34,7 @@ def main() -> int:
         seed=args.seed,
         candidates_per_shader=args.candidates,
         verify_equiv=args.verify_equiv,
+        domain=args.domain,
     )
     print(
         f"[CORPUS-SYNTH] target={res.target} shaders={len(res.shaders)} "

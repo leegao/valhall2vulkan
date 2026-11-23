@@ -348,5 +348,88 @@ class TestUDomain(unittest.TestCase):
         self.assertEqual(r1.kind, UValKind.BVEC64)
 
 
+
+
+class TestUDomainIntegration(unittest.TestCase):
+    def _make_fp_equiv_bundle(self):
+        # Direct SSA: (a * b) + c -> StoreFragColor
+        direct_ssa = {
+            "blocks": [{"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9], "is_end": True}],
+            "nodes": [
+                {"id": 1, "op": "LoadFragVarying", "type": "Vec4", "imm_u32": 0, "args": []},
+                {"id": 2, "op": "VecExtract", "type": "F32", "imm_u32": 0, "args": [1]},
+                {"id": 3, "op": "VecExtract", "type": "F32", "imm_u32": 1, "args": [1]},
+                {"id": 4, "op": "VecExtract", "type": "F32", "imm_u32": 2, "args": [1]},
+                {"id": 5, "op": "FMul", "type": "F32", "args": [2, 3]},
+                {"id": 6, "op": "FAdd", "type": "F32", "args": [5, 4]},
+                {"id": 7, "op": "VecConstruct4", "type": "Vec4", "args": [6, 6, 6, 6]},
+                {"id": 8, "op": "Nop", "type": "U32", "args": []},
+                {"id": 9, "op": "StoreFragColor", "type": "Void", "imm_u32": 0, "args": [7, 8]},
+            ],
+        }
+        # Valhall SSA: Fma(a, b, c) wrapped in Bitcast(F32->U32) / Bitcast(U32->F32) pairs
+        valhall_ssa = {
+            "blocks": [{"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "is_end": True}],
+            "nodes": [
+                {"id": 1, "op": "LoadFragVarying", "type": "Vec4", "imm_u32": 0, "args": []},
+                {"id": 2, "op": "VecExtract", "type": "U32", "imm_u32": 0, "args": [1]},
+                {"id": 3, "op": "VecExtract", "type": "U32", "imm_u32": 1, "args": [1]},
+                {"id": 4, "op": "VecExtract", "type": "U32", "imm_u32": 2, "args": [1]},
+                {"id": 5, "op": "Bitcast", "type": "F32", "args": [2]},
+                {"id": 6, "op": "Bitcast", "type": "F32", "args": [3]},
+                {"id": 7, "op": "Bitcast", "type": "F32", "args": [4]},
+                {"id": 8, "op": "Fma", "type": "F32", "args": [5, 6, 7]},
+                {"id": 9, "op": "Bitcast", "type": "U32", "args": [8]},
+                {"id": 10, "op": "VecConstruct4", "type": "Vec4", "args": [9, 9, 9, 9]},
+                {"id": 11, "op": "StoreFragColor", "type": "Void", "imm_u32": 0, "args": [10, 9]},
+            ],
+        }
+        return {
+            "spv_path": "<synthetic_fp_fma>",
+            "stage": "Fragment",
+            "direct_ok": True,
+            "valhall_ok": True,
+            "direct_ssa": direct_ssa,
+            "valhall_ssa": valhall_ssa,
+            "mbs2_context": {},
+        }
+
+    def test_verify_equivalence_bundle_udomain_fma_with_bitcasts(self):
+        from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
+        bundle = self._make_fp_equiv_bundle()
+        res = verify_equivalence_bundle(bundle, fp_mode="real", domain="udomain")
+        self.assertEqual(res.status, "UNSAT")
+
+    def test_maximal_reachability_udomain_fp_branch(self):
+        from tools.coverage.reachability import solve_maximal_reachability
+        ssa = {
+            "blocks": [
+                {"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6], "is_cond": True, "branch_cond": 6, "branch_target": 1, "fallthrough": 2},
+                {"id": 1, "preds": [0], "phis": [], "nodes": [], "is_end": True},
+                {"id": 2, "preds": [0], "phis": [], "nodes": [], "is_end": True},
+            ],
+            "nodes": [
+                {"id": 1, "op": "LoadFragVarying", "type": "Vec4", "imm_u32": 0, "args": []},
+                {"id": 2, "op": "VecExtract", "type": "F32", "imm_u32": 0, "args": [1]},
+                {"id": 3, "op": "ConstF32", "type": "F32", "imm_u32": 0x3F800000, "args": []},
+                {"id": 4, "op": "FAdd", "type": "F32", "args": [2, 3]},
+                {"id": 5, "op": "Bitcast", "type": "U32", "args": [4]},
+                {"id": 6, "op": "FCmpOrdGt", "type": "Bool", "args": [5, 3]},
+            ],
+        }
+        bundle = {"stage": "Fragment", "direct_ssa": ssa, "valhall_ssa": ssa, "mbs2_context": {}}
+        r = solve_maximal_reachability(bundle, ssa, fp_mode="real", domain="udomain")
+        self.assertTrue(r.complete)
+        self.assertEqual(r.reached_blocks, {0, 1, 2})
+        self.assertEqual(len(r.paths), 2)
+
+    def test_all_paths_miter_with_udomain(self):
+        from tools.verify.all_paths_miter import check_instruction_miter
+        from tools.verify.lowering_semantics_extractor import LoweringSemanticsExtractor
+        ext = LoweringSemanticsExtractor()
+        r = check_instruction_miter(ext, "IADD", "s32", domain="udomain")
+        self.assertEqual(r.status, "UNSAT")
+
+
 if __name__ == "__main__":
     unittest.main()

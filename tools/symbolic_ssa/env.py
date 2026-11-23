@@ -120,6 +120,10 @@ def _real_cos(rx: z3.ArithRef) -> z3.ArithRef:
 
 
 def _as_bv32(v: Z3Val) -> z3.BitVecRef:
+
+    if hasattr(v, "kind") and hasattr(v, "raw_bv") and hasattr(v, "data"):
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        return getattr(SymbolicZ3UDomain(exact_bitcast=False), "as_z3_bv32")(v)
     if isinstance(v, tuple):
         return _as_bv32(v[0]) if v else bv32(0)
     if isinstance(v, z3.BoolRef):
@@ -135,6 +139,10 @@ def _as_bv32(v: Z3Val) -> z3.BitVecRef:
 
 
 def _as_bv64(v: Z3Val) -> z3.BitVecRef:
+
+    if hasattr(v, "kind") and hasattr(v, "raw_bv") and hasattr(v, "data"):
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        return getattr(SymbolicZ3UDomain(exact_bitcast=False), "as_z3_bv64")(v)
     if isinstance(v, tuple):
         return _as_bv64(v[0]) if v else bv64(0)
     if isinstance(v, z3.BitVecRef):
@@ -147,6 +155,10 @@ def _as_bv64(v: Z3Val) -> z3.BitVecRef:
 
 
 def _as_bool(v: Z3Val) -> z3.BoolRef:
+
+    if hasattr(v, "kind") and hasattr(v, "raw_bv") and hasattr(v, "data"):
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        return getattr(SymbolicZ3UDomain(exact_bitcast=False), "as_z3_bool")(v)
     if isinstance(v, tuple):
         return _as_bool(v[0]) if v else z3.BoolVal(False)
     if isinstance(v, z3.BoolRef):

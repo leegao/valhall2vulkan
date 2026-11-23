@@ -98,6 +98,7 @@ def run_concolic_equiv_fuzz(
     policy: Optional[DiffPolicy] = None,
     auto_shrink: bool = True,
     seed: int = 0x5A17,
+    domain: str = "bitvec",
 ) -> ConcolicEquivFuzzResult:
     """
     Concolically seed input vectors from `seed_side` (`direct` or `valhall`) to
@@ -153,6 +154,7 @@ def run_concolic_equiv_fuzz(
             max_paths=max_paths,
             timeout_ms=min(500, reach_budget),
             max_unroll=max_unroll,
+            domain=domain,
             total_timeout_ms=reach_budget,
         )
         blocks_reached = len(mres.reached_blocks)

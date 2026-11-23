@@ -11,14 +11,17 @@ from `SsaInterpreter` and `SsaDomain`.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import z3
 
-from tools.symbolic_ssa.domains import SymbolicZ3BitvecDomain
+from tools.symbolic_ssa.domains import SsaDomain, SymbolicZ3BitvecDomain, SymbolicZ3UDomain, UVal
 from tools.symbolic_ssa.env import (
     SharedShaderEnv,
     Z3Val,
+    _as_bool,
+    _as_bv32,
+    _as_bv64,
     _z3_and,
     _z3_if,
     _z3_not,
@@ -157,133 +160,201 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         fp_mode: str = "exact",
         max_unroll: int = 1,
         cutpoints: Optional[Dict[int, Any]] = None,
-        domain: Optional[SymbolicZ3BitvecDomain] = None,
+        domain: Union[str, SsaDomain, None] = None,
     ):
         self.ssa = ssa_json
         self.env = env
         self._env = env
         self.is_valhall = is_valhall_side
         self.fp_mode = fp_mode
-        self.domain: SymbolicZ3BitvecDomain = domain if domain is not None else SymbolicZ3BitvecDomain(fp_mode=fp_mode)
+        if isinstance(domain, str):
+            if domain == "udomain":
+                self.domain: SsaDomain = SymbolicZ3UDomain(exact_bitcast=False)
+            elif domain in ("bitvec", "default", ""):
+                self.domain = SymbolicZ3BitvecDomain(fp_mode=fp_mode)
+            else:
+                raise ValueError(f"Unknown symbolic SSA domain mode: {domain!r}")
+        elif domain is not None:
+            self.domain = domain
+        else:
+            self.domain = SymbolicZ3BitvecDomain(fp_mode=fp_mode)
+        self._is_udomain: bool = isinstance(self.domain, SymbolicZ3UDomain)
         self.max_unroll = max(1, int(max_unroll))
         self.cutpoints: Dict[int, Any] = cutpoints if cutpoints is not None else {}
         self.blocks: List[Dict[str, Any]] = ssa_json.get("blocks", [])
         self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
-        self.values: Dict[int, Z3Val] = {0: bv32(0)}
+        self.values: Dict[int, Any] = {0: self.domain.const_u32(0)}
         self.block_reach: Dict[int, z3.BoolRef] = {}
         self.iter_branch_decisions: List[Tuple[int, int, int, z3.BoolRef, z3.BoolRef]] = []
         self.has_loops: bool = False
         self.max_unroll_depth: int = 0
 
+    def _to_z3_bv32(self, v: Any) -> z3.BitVecRef:
+        if isinstance(v, UVal) and self._is_udomain:
+            return self.domain.as_z3_bv32(v)  # type: ignore[union-attr]
+        return _as_bv32(v)
+
+    def _to_z3_bv64(self, v: Any) -> z3.BitVecRef:
+        if isinstance(v, UVal) and self._is_udomain:
+            return self.domain.as_z3_bv64(v)  # type: ignore[union-attr]
+        return _as_bv64(v)
+
+    def _to_z3_bool(self, v: Any) -> z3.BoolRef:
+        if isinstance(v, UVal) and self._is_udomain:
+            return self.domain.as_z3_bool(v)  # type: ignore[union-attr]
+        return _as_bool(v)
+
+    def _to_z3_val(self, v: Any) -> Z3Val:
+        if isinstance(v, tuple):
+            return tuple(self._to_z3_val(x) for x in v)
+        if isinstance(v, UVal) and self._is_udomain:
+            return self.domain.as_z3_bv32(v)  # type: ignore[union-attr]
+        return v
+
     # Minimal Z3 BlockEffectState backend hooks
     def _active_mask(self, st: BlockEffectState, reach: z3.BoolRef) -> z3.BoolRef:
-        return _z3_and(reach, _z3_not(_z3_or(st.terminated, st.demoted)))
+        return _z3_and(self._to_z3_bool(reach), _z3_not(_z3_or(st.terminated, st.demoted)))
 
-    def _resolve_buf_addr(self, addr: z3.BitVecRef, hint_key: str) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
-        return self.env.resolve_addr(addr, hint_key=hint_key)
+    def _resolve_buf_addr(self, addr: Any, hint_key: str) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
+        return self.env.resolve_addr(self._to_z3_bv64(addr), hint_key=hint_key)
 
-    def _read_sym_slot(self, st: BlockEffectState, sym_tag: str, off: z3.BitVecRef) -> Optional[z3.BitVecRef]:
+    def _read_sym_slot(self, st: BlockEffectState, sym_tag: str, off: Any) -> Optional[Any]:
+        off_bv = self._to_z3_bv32(off)
         bkey_hint = sym_tag[4:].split("[", 1)[0]
         if not self.env.is_shared_sym_bkey(bkey_hint):
             return None
         if sym_tag in st.sym_buf_stores:
             w_cond, w_val, w_off = st.sym_buf_stores[sym_tag]
-            return _z3_if(_z3_and(w_cond, off == w_off), w_val, self.env.get_sym_buf_slot(sym_tag, off))
-        return self.env.get_sym_buf_slot(sym_tag, off)
+            raw = _z3_if(_z3_and(w_cond, off_bv == w_off), w_val, self.env.get_sym_buf_slot(sym_tag, off_bv))
+        else:
+            raw = self.env.get_sym_buf_slot(sym_tag, off_bv)
+        return UVal.bvec64(z3.ZeroExt(32, raw)) if self._is_udomain else raw
 
-    def _write_sym_slot(self, st: BlockEffectState, mask: z3.BoolRef, sym_tag: str, off: z3.BitVecRef, val: z3.BitVecRef, nid: int) -> bool:
+    def _write_sym_slot(self, st: BlockEffectState, mask: Any, sym_tag: str, off: Any, val: Any, nid: int) -> bool:
+        m_b = self._to_z3_bool(mask)
+        off_bv = self._to_z3_bv32(off)
+        val_bv = self._to_z3_bv32(val)
         bkey_hint = sym_tag[4:].split("[", 1)[0]
         if not self.env.is_shared_sym_bkey(bkey_hint):
             return False
         prev_w, prev_v, prev_o = st.sym_buf_stores.get(
-            sym_tag, (z3.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off), off)
+            sym_tag, (z3.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off_bv), off_bv)
         )
         st.sym_buf_stores[sym_tag] = (
-            _z3_or(prev_w, mask), _z3_if(mask, val, prev_v), _z3_if(mask, off, prev_o)
+            _z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v), _z3_if(m_b, off_bv, prev_o)
         )
         st.output_pcs.setdefault(sym_tag, set()).add(nid)
         return True
 
-    def _read_buf(self, st: BlockEffectState, bkey: Optional[str], const_off: Optional[int], off: z3.BitVecRef, addr: z3.BitVecRef) -> z3.BitVecRef:
+    def _read_buf(self, st: BlockEffectState, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any) -> Any:
+        off_bv = self._to_z3_bv32(off)
+        addr_bv = self._to_z3_bv64(addr)
         if bkey is None:
-            return z3.Select(st.fallback_mem, addr)
-        mem_v = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off)
-        if const_off is not None and (bkey, const_off) in st.const_stores:
-            w_cond, w_val = st.const_stores[(bkey, const_off)]
-            return _z3_if(w_cond, w_val, mem_v)
-        return mem_v
+            raw = z3.Select(st.fallback_mem, addr_bv)
+        else:
+            mem_v = z3.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off_bv)
+            if const_off is not None and (bkey, const_off) in st.const_stores:
+                w_cond, w_val = st.const_stores[(bkey, const_off)]
+                raw = _z3_if(w_cond, w_val, mem_v)
+            else:
+                raw = mem_v
+        return UVal.bvec64(z3.ZeroExt(32, raw)) if self._is_udomain else raw
 
-    def _write_buf(self, st: BlockEffectState, mask: z3.BoolRef, bkey: Optional[str], const_off: Optional[int], off: z3.BitVecRef, addr: z3.BitVecRef, val: z3.BitVecRef, nid: int) -> None:
+    def _write_buf(self, st: BlockEffectState, mask: Any, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any, val: Any, nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        off_bv = self._to_z3_bv32(off)
+        addr_bv = self._to_z3_bv64(addr)
+        val_bv = self._to_z3_bv32(val)
         if bkey is None:
-            st.fallback_mem = z3.If(mask, z3.Store(st.fallback_mem, addr, val), st.fallback_mem)
+            st.fallback_mem = z3.If(m_b, z3.Store(st.fallback_mem, addr_bv, val_bv), st.fallback_mem)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
             return
         cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-        st.buf_mems[bkey] = z3.Store(cur_mem, off, val) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_mem, off, val), cur_mem)
+        st.buf_mems[bkey] = z3.Store(cur_mem, off_bv, val_bv) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_mem, off_bv, val_bv), cur_mem)
         if const_off is not None:
-            prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off)))
-            st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, mask), _z3_if(mask, val, prev_v))
+            prev_w, prev_v = st.const_stores.get((bkey, const_off), (z3.BoolVal(False), z3.Select(cur_mem, off_bv)))
+            st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v))
             st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
         else:
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
 
-    def _extract_img_channel(self, addr: z3.BitVecRef) -> Tuple[int, z3.BitVecRef]:
-        if z3.is_app(addr) and addr.decl().kind() == z3.Z3_OP_BADD and len(addr.children()) == 2:
-            c0, c1 = addr.children()
+    def _extract_img_channel(self, addr: Any) -> Tuple[int, z3.BitVecRef]:
+        addr_bv = self._to_z3_bv64(addr)
+        if z3.is_app(addr_bv) and addr_bv.decl().kind() == z3.Z3_OP_BADD and len(addr_bv.children()) == 2:
+            c0, c1 = addr_bv.children()
             if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
                 return (c1.as_long() // 4, c0)
-        return (0, addr)
+        return (0, addr_bv)
 
-    def _write_img_channel(self, st: BlockEffectState, mask: z3.BoolRef, ikey: str, xy_addr: z3.BitVecRef, ch_idx: int, val: z3.BitVecRef, nid: int) -> None:
+    def _write_img_channel(self, st: BlockEffectState, mask: Any, ikey: str, xy_addr: Any, ch_idx: int, val: Any, nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        xy_bv = self._to_z3_bv64(xy_addr)
+        val_bv = self._to_z3_bv32(val)
         cur_im = list(st.image_mems.get(ikey, self.env.get_img_mem(ikey)))
         cur_im[ch_idx] = (
-            z3.Store(cur_im[ch_idx], xy_addr, val)
-            if z3.is_true(mask)
-            else z3.If(mask, z3.Store(cur_im[ch_idx], xy_addr, val), cur_im[ch_idx])
+            z3.Store(cur_im[ch_idx], xy_bv, val_bv)
+            if z3.is_true(m_b)
+            else z3.If(m_b, z3.Store(cur_im[ch_idx], xy_bv, val_bv), cur_im[ch_idx])
         )
         st.image_mems[ikey] = tuple(cur_im)
         st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
 
-    def _write_img_texel(self, st: BlockEffectState, mask: z3.BoolRef, ikey: str, xy: z3.BitVecRef, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
+    def _write_img_texel(self, st: BlockEffectState, mask: Any, ikey: str, xy: Any, vec4: Tuple[Any, ...], nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        xy_bv = self._to_z3_bv64(xy)
+        v4 = tuple(self._to_z3_bv32(v) for v in vec4)
         cur_im = st.image_mems.get(ikey, self.env.get_img_mem(ikey))
         st.image_mems[ikey] = tuple(
-            z3.Store(cur_im[c], xy, vec4[c]) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_im[c], xy, vec4[c]), cur_im[c])
+            z3.Store(cur_im[c], xy_bv, v4[c]) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_im[c], xy_bv, v4[c]), cur_im[c])
             for c in range(4)
         )
         st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
 
-    def _record_kill(self, st: BlockEffectState, eff: z3.BoolRef, is_demote: bool, nid: int) -> None:
+    def _record_kill(self, st: BlockEffectState, eff: Any, is_demote: bool, nid: int) -> None:
+        eff_b = self._to_z3_bool(eff)
         if is_demote:
-            st.demoted = _z3_or(st.demoted, eff)
+            st.demoted = _z3_or(st.demoted, eff_b)
         else:
-            st.terminated = _z3_or(st.terminated, eff)
+            st.terminated = _z3_or(st.terminated, eff_b)
         st.discarded = _z3_or(st.terminated, st.demoted)
         st.output_pcs.setdefault("discarded", set()).add(nid)
 
-    def _write_frag_color(self, st: BlockEffectState, mask: z3.BoolRef, rt: int, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
+    def _write_frag_color(self, st: BlockEffectState, mask: Any, rt: int, vec4: Tuple[Any, ...], nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        v4 = tuple(self._to_z3_bv32(v) for v in vec4)
         prev = st.frag_colors.get(rt, (bv32(0),) * 4)
-        st.frag_colors[rt] = tuple(_z3_if(mask, n, p) for n, p in zip(vec4, prev))
+        st.frag_colors[rt] = tuple(_z3_if(m_b, n, p) for n, p in zip(v4, prev))
         st.output_pcs.setdefault(f"frag_color[{rt}]", set()).add(nid)
 
-    def _write_builtin_output(self, st: BlockEffectState, mask: z3.BoolRef, bi: int, payload: Z3Val, nid: int) -> None:
-        st.builtin_outputs[bi] = _z3_if(mask, payload, st.builtin_outputs[bi]) if bi in st.builtin_outputs else payload
+    def _write_builtin_output(self, st: BlockEffectState, mask: Any, bi: int, payload: Any, nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        pl = self._to_z3_val(payload)
+        st.builtin_outputs[bi] = _z3_if(m_b, pl, st.builtin_outputs[bi]) if bi in st.builtin_outputs else pl
         st.output_pcs.setdefault(f"builtin_out[{bi}]", set()).add(nid)
 
-    def _write_vert_varying(self, st: BlockEffectState, mask: z3.BoolRef, loc: int, vec4: Tuple[z3.BitVecRef, ...], nid: int) -> None:
+    def _write_vert_varying(self, st: BlockEffectState, mask: Any, loc: int, vec4: Tuple[Any, ...], nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        v4 = tuple(self._to_z3_bv32(v) for v in vec4)
         prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
-        st.vert_varyings[loc] = tuple(_z3_if(mask, n, p) for n, p in zip(vec4, prev))
+        st.vert_varyings[loc] = tuple(_z3_if(m_b, n, p) for n, p in zip(v4, prev))
         st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(nid)
 
-    def _record_atomic(self, st: BlockEffectState, mask: z3.BoolRef, bkey: Optional[str], off: z3.BitVecRef, addr: z3.BitVecRef, op_tag: str, arg: z3.BitVecRef, cmp_val: z3.BitVecRef, new_val: z3.BitVecRef, nid: int) -> None:
+    def _record_atomic(self, st: BlockEffectState, mask: Any, bkey: Optional[str], off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None:
+        m_b = self._to_z3_bool(mask)
+        off_bv = self._to_z3_bv32(off)
+        addr_bv = self._to_z3_bv64(addr)
+        arg_bv = self._to_z3_bv32(arg)
+        cmp_bv = self._to_z3_bv32(cmp_val)
+        new_bv = self._to_z3_bv32(new_val)
         if bkey is not None:
             cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            st.buf_mems[bkey] = z3.Store(cur_mem, off, new_val) if z3.is_true(mask) else z3.If(mask, z3.Store(cur_mem, off, new_val), cur_mem)
-            st.atomic_events.setdefault(bkey, []).append((mask, op_tag, off, arg, cmp_val))
+            st.buf_mems[bkey] = z3.Store(cur_mem, off_bv, new_bv) if z3.is_true(m_b) else z3.If(m_b, z3.Store(cur_mem, off_bv, new_bv), cur_mem)
+            st.atomic_events.setdefault(bkey, []).append((m_b, op_tag, off_bv, arg_bv, cmp_bv))
             st.output_pcs.setdefault(f"atomic:{bkey}", set()).add(nid)
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
         else:
-            st.fallback_mem = z3.If(mask, z3.Store(st.fallback_mem, addr, new_val), st.fallback_mem)
-            st.atomic_events.setdefault("fallback_mem", []).append((mask, op_tag, addr, arg, cmp_val))
+            st.fallback_mem = z3.If(m_b, z3.Store(st.fallback_mem, addr_bv, new_bv), st.fallback_mem)
+            st.atomic_events.setdefault("fallback_mem", []).append((m_b, op_tag, addr_bv, arg_bv, cmp_bv))
             st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
 
@@ -422,7 +493,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                     fwd = [(int(p), int(v)) for p, v in incomings if int(p) in blk_out_state and int(v) in self.values]
                     if not fwd:
                         vt = pnode.get("type", "U32")
-                        self.values[int(pid)] = z3.BoolVal(False) if vt == "Bool" else bv32(0)
+                        self.values[int(pid)] = self.domain.const_bool(False) if vt == "Bool" else self.domain.const_u32(0)
                         continue
                     if len(fwd) == 1:
                         self.values[int(pid)] = self.values[fwd[0][1]]
@@ -430,7 +501,11 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                         acc = self.values[fwd[0][1]]
                         for pred_b, val_id in fwd[1:]:
                             ec = inc_cond_map.get(pred_b, z3.BoolVal(False))
-                            acc = _z3_if(ec, self.values[val_id], acc)
+                            v_in = self.values[val_id]
+                            if self._is_udomain and (isinstance(acc, UVal) or isinstance(v_in, UVal)):
+                                acc = self.domain.select(ec, v_in, acc)
+                            else:
+                                acc = _z3_if(ec, v_in, acc)
                         self.values[int(pid)] = acc
 
                 for nid in blk.get("nodes", []):
@@ -451,7 +526,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                 ft_rpo = rpo_index.get(ft, -1)
                 if is_cond and bt >= 0 and ft >= 0:
                     bcond_id = int(blk.get("branch_cond", 0))
-                    bcond = self.domain.as_bool(self.values.get(bcond_id, z3.BoolVal(False)))
+                    bcond = self._to_z3_bool(self.domain.as_bool(self.values.get(bcond_id, self.domain.const_bool(False))))
                     self.iter_branch_decisions.append((iter_idx, bid, bcond_id, cf_reach, bcond))
                     t_cond = _z3_and(cf_reach, bcond)
                     f_cond = _z3_and(cf_reach, _z3_not(bcond))

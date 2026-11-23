@@ -69,6 +69,7 @@ def check_instruction_miter(
     num_srcs: Optional[int] = None,
     xml_index: int = -1,
     timeout_ms: int = 3000,
+    domain: Optional[Any] = None,
 ) -> MiterResult:
     """Run Tier-2 Z3 miter on a single Valhall instruction configuration."""
     t0 = time.perf_counter()
@@ -150,7 +151,7 @@ def check_instruction_miter(
     )
     ssa_mod, tr = ext.lower_instruction(ins_ctx, xml_index=xml_index if xml_index >= 0 else None)
     ssa_eval = eval_ssa_module_z3(
-        ssa_mod, raw_srcs=raw_regs, dst_old=dst_old, dest_reg=dest_reg, state=st_pan, branch_offset=branch_off
+        ssa_mod, raw_srcs=raw_regs, dst_old=dst_old, dest_reg=dest_reg, state=st_pan, branch_offset=branch_off, domain=domain
     )
 
     if is_64_dest and dest_reg in ssa_eval.reg_writes and (dest_reg + 1) in ssa_eval.reg_writes:

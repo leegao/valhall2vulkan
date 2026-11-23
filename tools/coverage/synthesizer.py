@@ -258,10 +258,11 @@ def _build_target_formulas(
     fp_mode: str,
     max_unroll: int = 1,
     preconditions: Sequence[z3.BoolRef] = (),
+    domain: str = "bitvec",
 ) -> Tuple[Dict[Tuple[int, bool], z3.BoolRef], Dict[str, z3.ExprRef], bool]:
     """Symbolically evaluate the SSA module and build pruned (pid, polarity) formulas."""
     evaluator = SymbolicSsaInterpreter(
-        ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll
+        ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain
     )
     evaluator.evaluate()
     block_reach = getattr(evaluator, "block_reach", {})

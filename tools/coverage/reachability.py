@@ -94,6 +94,7 @@ def solve_maximal_reachability(
     timeout_ms: int = 500,
     max_unroll: int = 1,
     total_timeout_ms: Optional[int] = None,
+    domain: str = "bitvec",
 ) -> MaximalReachabilityResult:
     """
     Compute a pairwise-disjoint set of path reachability conditions covering
@@ -109,7 +110,7 @@ def solve_maximal_reachability(
 
     env = SharedShaderEnv(bundle)
     env.shared_sym_bkeys = set()
-    ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll)
+    ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
     ev.evaluate()
     preconditions = env.build_preconditions()
     raw_blk_reach: Dict[int, z3.BoolRef] = dict(getattr(ev, "block_reach", {}))

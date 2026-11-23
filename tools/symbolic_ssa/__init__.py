@@ -116,13 +116,14 @@ def evaluate_ssa(
     max_unroll: int = 1,
     vec_idx: int = 0,
     overrides: Optional[Dict[str, Any]] = None,
+    domain: str = "bitvec",
 ) -> Any:
     """Unified entrypoint for evaluating a ValhallSsaModule symbolically or concretely."""
     if mode == "concrete":
         cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, overrides=overrides)
         return ConcreteSsaInterpreter(ssa_json, is_valhall_side=is_valhall_side).execute_one(cenv)
     env = SharedShaderEnv(bundle)
-    ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll)
+    ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
     st = ev.evaluate()
     return ev, st, env
 

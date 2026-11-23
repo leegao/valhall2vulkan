@@ -37,7 +37,14 @@ from typing import Any, Dict, Optional, Tuple
 
 from tools.symbolic_ssa.domains.base import MASK32, MASK64, SsaDomain
 from tools.symbolic_ssa.domains.concrete_bitvec import ConcreteBitvecDomain
-from tools.symbolic_ssa.domains.symbolic_z3_bitvec import SymbolicZ3BitvecDomain
+from tools.symbolic_ssa.domains.symbolic_z3_bitvec import (
+    SymbolicZ3BitvecDomain,
+    _real_cos,
+    _real_exp2,
+    _real_log2,
+    _real_sin,
+    _real_sqrt,
+)
 
 try:
     import z3
@@ -825,6 +832,8 @@ class SymbolicZ3UDomain(_BaseUDomain):
         f = self._try_real_to_float(r)
         if f is not None:
             return z3.BitVecVal(_f32_to_u32(f), 32)
+        if z3.is_app(r) and r.decl().name() == "u_bv32_to_f32" and r.num_args() == 1:
+            return r.arg(0)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
             return z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), r, z3.Float32()))
@@ -834,6 +843,8 @@ class SymbolicZ3UDomain(_BaseUDomain):
         c = self.bv.const_int_val(bv32)
         if c is not None:
             return self._float_to_real(_u32_to_f32(c))
+        if z3.is_app(bv32) and bv32.decl().name() == "u_f32_to_bv32" and bv32.num_args() == 1:
+            return bv32.arg(0)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
             return z3.fpToReal(z3.fpBVToFP(bv32, z3.Float32()))
@@ -946,6 +957,28 @@ class SymbolicZ3UDomain(_BaseUDomain):
             return UVal.f32x2(z3.If(rx < 0, -rx, rx), self._zero_real)
         if op == "FNeg":
             return UVal.f32x2(-rx, self._zero_real)
+        if op == "Sin":
+            return UVal.f32x2(_real_sin(rx), self._zero_real)
+        if op == "Cos":
+            return UVal.f32x2(_real_cos(rx), self._zero_real)
+        if op == "Sqrt":
+            return UVal.f32x2(_real_sqrt(rx), self._zero_real)
+        if op == "InverseSqrt":
+            return UVal.f32x2(z3.RealVal(1) / _real_sqrt(rx), self._zero_real)
+        if op == "Exp2":
+            return UVal.f32x2(_real_exp2(rx), self._zero_real)
+        if op == "Log2":
+            return UVal.f32x2(_real_log2(rx), self._zero_real)
+        if op == "Floor":
+            return UVal.f32x2(z3.ToReal(z3.ToInt(rx)), self._zero_real)
+        if op == "Fract":
+            return UVal.f32x2(rx - z3.ToReal(z3.ToInt(rx)), self._zero_real)
+        if op == "Trunc":
+            fl = z3.ToReal(z3.ToInt(rx))
+            return UVal.f32x2(z3.If(rx >= 0, fl, z3.If(rx == fl, fl, fl + z3.RealVal(1))), self._zero_real)
+        if op == "Ceil":
+            fl = z3.ToReal(z3.ToInt(rx))
+            return UVal.f32x2(z3.If(rx == fl, fl, fl + z3.RealVal(1)), self._zero_real)
         return UVal.f32x2(self._get_fp_uf(op, 1)(rx), self._zero_real)
 
     def fp_binary(self, op: str, a: Any, b: Any) -> UVal:
@@ -1006,3 +1039,40 @@ class SymbolicZ3UDomain(_BaseUDomain):
         if op == "FMul": return UVal.f64(da * db)
         if op == "FDiv": return UVal.f64(da / db)
         return UVal.f64(self._get_fp_uf(f"f64_{op}", 2)(da, db))
+
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: Optional[str] = None) -> UVal:
+        bv_args = [self._to_bv32(a) for a in args]
+        res = self.bv.hw_uf(env, name, *bv_args, out_bits=out_bits, fallback_tag=fallback_tag)
+        return self._from_bv64(res) if out_bits == 64 else self._from_bv32(res)
+
+    def unknown_sideband_u64(self, env: Any, imm_u32: int) -> UVal:
+        return self._from_bv64(self.bv.unknown_sideband_u64(env, imm_u32))
+
+    def sideband_u32(self, env: Any, imm_u32: int, imm_u32_2: int) -> UVal:
+        return self._from_bv32(self.bv.sideband_u32(env, imm_u32, imm_u32_2))
+
+    def subgroup_ballot(self, env: Any, x: Any) -> UVal:
+        return self._from_bv32(self.bv.subgroup_ballot(env, self._to_bv32(x)))
+
+    def subgroup_shuffle(self, env: Any, x: Any, lane: Any) -> UVal:
+        return self._from_bv32(self.bv.subgroup_shuffle(env, self._to_bv32(x), self._to_bv32(lane)))
+
+    def atomic_compute(self, env: Any, op: str, op_tag: str, old_val: Any, arg: Any, cmp_val: Any) -> UVal:
+        res = self.bv.atomic_compute(env, op, op_tag, self._to_bv32(old_val), self._to_bv32(arg), self._to_bv32(cmp_val))
+        return self._from_bv32(res)
+
+    def as_z3_bv32(self, val: Any) -> Any:
+        return self._to_bv32(val)
+
+    def as_z3_bv64(self, val: Any) -> Any:
+        return self._to_bv64(val)
+
+    def as_z3_bool(self, val: Any) -> Any:
+        return self._to_bool(val)
+
+    def as_z3_val(self, val: Any) -> Any:
+        if isinstance(val, tuple):
+            return tuple(self.as_z3_val(v) for v in val)
+        if isinstance(val, UVal):
+            return self._to_bv32(val)
+        return val

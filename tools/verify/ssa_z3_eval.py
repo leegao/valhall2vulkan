@@ -11,7 +11,7 @@ model for `all_paths_miter.py`.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, Union
 
 import z3
 
@@ -98,7 +98,7 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
         raw_srcs: Optional[Sequence[z3.BitVecRef]] = None,
         dst_old: Optional[z3.BitVecRef] = None,
         dest_reg: int = 0,
-        domain: Optional[SsaDomain] = None,
+        domain: Union[str, SsaDomain, None] = None,
     ) -> None:
         env_adapter = _InstStateEnvAdapter(st)
         dom = domain if domain is not None else SymbolicZ3BitvecDomain(fp_mode="exact")
@@ -106,8 +106,8 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
             ssa_json={"blocks": [], "nodes": []},
             env=env_adapter,  # type: ignore[arg-type]
             is_valhall_side=True,
-            fp_mode=getattr(dom, "fp_mode", "exact"),
-            domain=dom,  # type: ignore[arg-type]
+            fp_mode=getattr(dom, "fp_mode", "exact") if not isinstance(dom, str) else "exact",
+            domain=dom,
         )
         self.st = st
         self.raw_srcs = raw_srcs
@@ -126,13 +126,13 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
         return self.domain.unknown_sideband_u64(self._env, imm_u32)
 
     def kill(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> z3.BitVecRef:
-        cond = self.domain.as_bool(args[0]) if args else z3.BoolVal(True)
+        cond = self._to_z3_bool(self.domain.as_bool(args[0])) if args else z3.BoolVal(True)
         self.st.discarded = z3.Or(self.st.discarded, cond)
         self.notes.append("Kill")
         return bv32(0)
 
     def psb_load(self, node: Dict[str, Any], args: List[Any], state: Any) -> Tuple[z3.BitVecRef, Z3Val]:
-        addr = self.domain.as_u64(args[0])
+        addr = self._to_z3_bv64(self.domain.as_u64(args[0]))
         eb = int(node.get("imm_u32", 0)) or 4
         if eb == 1:
             val = z3.ZeroExt(24, z3.Select(self.st.mem_global, addr))
@@ -151,16 +151,16 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
         return (val, args[1] if len(args) > 1 else bv32(0))
 
     def psb_store(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Z3Val:
-        addr = self.domain.as_u64(args[0])
-        val = self.domain.as_u32(args[1])
+        addr = self._to_z3_bv64(self.domain.as_u64(args[0]))
+        val = self._to_z3_bv32(self.domain.as_u32(args[1]))
         eb = int(node.get("imm_u32", 0)) or 4
         for j in range(min(eb, 4)):
             self.st.mem_global = z3.Store(self.st.mem_global, addr + bv64(j), z3.Extract(8 * j + 7, 8 * j, val))
         return args[2] if len(args) > 2 else bv32(0)
 
     def atomic_op(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Tuple[z3.BitVecRef, Z3Val]:
-        addr = self.domain.as_u64(args[0])
-        arg = self.domain.as_u32(args[1])
+        addr = self._to_z3_bv64(self.domain.as_u64(args[0]))
+        arg = self._to_z3_bv32(self.domain.as_u32(args[1]))
         uf = _hw_uf(f"ssa_{node['op']}_{node.get('aux_str', '')}", BV64, BV32, BV32)
         return (uf(addr, arg), args[-1] if args else bv32(0))
 
@@ -192,7 +192,7 @@ class InstructionSsaZ3Interpreter(SymbolicSsaInterpreter):
             return bv32(0)
         if op == "Branch":
             if node.args:
-                self.st.pc = self.domain.as_u64(values[node.args[0]])
+                self.st.pc = self._to_z3_bv64(self.domain.as_u64(values[node.args[0]]))
             return bv32(0)
         if op in ("BranchCond", "Return"):
             return bv32(0)
@@ -218,7 +218,7 @@ def eval_ssa_module_z3(
     dest_reg: int = 0,
     state: Optional[ValhallZ3State] = None,
     branch_offset: int = 0,
-    domain: Optional[SsaDomain] = None,
+    domain: Union[str, SsaDomain, None] = None,
 ) -> SsaZ3EvalResult:
     """Evaluate every node of a SymbolicSsaModule using `InstructionSsaZ3Interpreter`."""
     st = dataclasses.replace(state) if state is not None else ValhallZ3State.symbolic()
@@ -236,9 +236,9 @@ def eval_ssa_module_z3(
     reg_writes: Dict[int, z3.BitVecRef] = {}
     for r, sid in ssa.reg_writes.items():
         val = values[sid]
-        reg_writes[r] = interp.domain.as_u32(val) if not isinstance(val, z3.BitVecRef) else val
+        reg_writes[r] = interp._to_z3_bv32(val) if not isinstance(val, z3.BitVecRef) else val
 
-    bcond = interp.domain.as_bool(values[ssa.branch_cond]) if ssa.branch_cond is not None else None
+    bcond = interp._to_z3_bool(interp.domain.as_bool(values[ssa.branch_cond])) if ssa.branch_cond is not None else None
     if bcond is not None:
         st.pc = z3.If(bcond, st.pc + bv64(8) + bv64(branch_offset), st.pc + bv64(8))
     return SsaZ3EvalResult(

@@ -212,6 +212,7 @@ def verify_equivalence_bundle(
     fp_discharger: Optional[FpProofDischargerRegistry] = None,
     verbose: bool = False,
     canonicalize: bool = False,
+    domain: str = "bitvec",
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -251,8 +252,8 @@ def verify_equivalence_bundle(
                 ks.add(a[4:].split("[", 1)[0])
         return ks
     env.shared_sym_bkeys = _collect_sym_bkeys(bundle.get("direct_ssa", {})) & _collect_sym_bkeys(bundle.get("valhall_ssa", {}))
-    d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll)
-    v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll)
+    d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
+    v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
 
     d_st = d_eval.evaluate()
     v_st = v_eval.evaluate()
@@ -301,7 +302,9 @@ def verify_equivalence_bundle(
         # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
         if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
             if fp_mode == "real":
-                vp_conds = [_bv32_to_real(_as_bv32(do[3])) == _REAL_ONE]
+                _real_one = z3.RealVal(1)
+                w_real = d_eval.domain.to_f32x2(do[3])[0] if getattr(d_eval, '_is_udomain', False) else _bv32_to_real(_as_bv32(do[3]))
+                vp_conds = [w_real == _real_one]
             else:
                 vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
                 for c in range(3):
