@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import SimplificationContext
@@ -116,9 +116,9 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         # Constant-fold ZeroExt, SignExt, Concat
         case Z3OpZeroExt(k, Z3BvConst(val, w)):
             return z3.BitVecVal(val, w + k)
-        case Z3OpSignExt(k, Z3BvConst(_, w, raw)):
+        case Z3OpSignExt(k, Z3BvConst(_, w) as c):
             nw = w + k
-            return z3.BitVecVal(raw.as_signed_long() & ((1 << nw) - 1), nw)
+            return z3.BitVecVal(c.as_signed_long() & ((1 << nw) - 1), nw)
         case Z3OpConcat(args) if all(isinstance(a, z3.BitVecNumRef) for a in args):
             acc, tot_w = 0, 0
             for a in args:
@@ -138,9 +138,9 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return z3.IntVal(num // den)
 
         # Constant-fold BV comparisons
-        case Z3OpBvCmp(op, Z3BvConst(va, _, ra), Z3BvConst(vb, _, rb)):
+        case Z3OpBvCmp(op, Z3BvConst(va, _) as ca, Z3BvConst(vb, _) as cb):
             if op.is_signed:
-                sa, sb = ra.as_signed_long(), rb.as_signed_long()
+                sa, sb = ca.as_signed_long(), cb.as_signed_long()
                 if op is BvCmpOp.SLT: return z3.BoolVal(sa < sb)
                 if op is BvCmpOp.SLEQ: return z3.BoolVal(sa <= sb)
                 if op is BvCmpOp.SGT: return z3.BoolVal(sa > sb)
@@ -155,7 +155,7 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return unwrap(t_arm)
         case Z3OpIte(Z3BoolConst(False), _, f_arm):
             return unwrap(f_arm)
-        case Z3OpIte(_, t_arm, f_arm) if unwrap(t_arm).eq(unwrap(f_arm)):
+        case Z3OpIte(_, t_arm, f_arm) if z3.expr_eq(unwrap(t_arm), unwrap(f_arm)):
             return unwrap(t_arm)
         case Z3OpIte(cond, Z3BoolConst(True), Z3BoolConst(False)):
             return unwrap(cond)
@@ -167,9 +167,9 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return z3.BoolVal(ca == cb)
         case Z3OpDistinct(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return z3.BoolVal(ca != cb)
-        case Z3OpEq(a, b) if unwrap(a).eq(unwrap(b)):
+        case Z3OpEq(a, b) if z3.expr_eq(unwrap(a), unwrap(b)):
             return z3.BoolVal(True)
-        case Z3OpDistinct(a, b) if unwrap(a).eq(unwrap(b)):
+        case Z3OpDistinct(a, b) if z3.expr_eq(unwrap(a), unwrap(b)):
             return z3.BoolVal(False)
         case (
             Z3OpEq(Z3BvConst(0, _), Z3OpIte(oc, Z3BvConst(tc, _), Z3BvConst(fc, _)))
@@ -252,9 +252,9 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         case Z3OpBvMul(lhs, Z3BvConst(1, _)):
             return unwrap(lhs)
         case Z3OpBvMul(lhs, Z3BvConst(cb, _)) if (sh := _is_power_of_two(cb)) is not None and sh < w:
-            return unwrap(lhs) << z3.BitVecVal(sh, w)
+            return z3.Z3OpBvShl(unwrap(lhs), z3.BitVecVal(sh, w), w)
         case Z3OpBvMul(Z3BvConst(ca, _), rhs) if (sh := _is_power_of_two(ca)) is not None and sh < w:
-            return unwrap(rhs) << z3.BitVecVal(sh, w)
+            return z3.Z3OpBvShl(unwrap(rhs), z3.BitVecVal(sh, w), w)
 
         # BVAdd: const fold, 0 identity, and (x + c1) + c2 -> x + (c1 + c2)
         case Z3OpBvAdd(Z3BvConst(ca, _), Z3BvConst(cb, _)):
@@ -272,7 +272,7 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return z3.BitVecVal((ca - cb) & mask, w)
         case Z3OpBvSub(lhs, Z3BvConst(0, _)):
             return unwrap(lhs)
-        case Z3OpBvSub(lhs, rhs) if unwrap(lhs).eq(unwrap(rhs)):
+        case Z3OpBvSub(lhs, rhs) if z3.expr_eq(unwrap(lhs), unwrap(rhs)):
             return z3.BitVecVal(0, w)
 
         # Shifts: Shl, LShR, AShR
@@ -305,7 +305,7 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return unwrap(rhs)
         case Z3OpBvAnd(lhs, Z3BvConst(cb, _)) if cb == mask:
             return unwrap(lhs)
-        case Z3OpBvAnd(lhs, rhs) if unwrap(lhs).eq(unwrap(rhs)):
+        case Z3OpBvAnd(lhs, rhs) if z3.expr_eq(unwrap(lhs), unwrap(rhs)):
             return unwrap(lhs)
 
         case Z3OpBvOr(Z3BvConst(ca, _), Z3BvConst(cb, _)):
@@ -316,7 +316,7 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return unwrap(lhs)
         case Z3OpBvOr(Z3BvConst(ca, _), _) | Z3OpBvOr(_, Z3BvConst(ca, _)) if ca == mask:
             return z3.BitVecVal(mask, w)
-        case Z3OpBvOr(lhs, rhs) if unwrap(lhs).eq(unwrap(rhs)):
+        case Z3OpBvOr(lhs, rhs) if z3.expr_eq(unwrap(lhs), unwrap(rhs)):
             return unwrap(lhs)
 
         case Z3OpBvXor(Z3BvConst(ca, _), Z3BvConst(cb, _)):
@@ -325,7 +325,7 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return unwrap(rhs)
         case Z3OpBvXor(lhs, Z3BvConst(0, _)):
             return unwrap(lhs)
-        case Z3OpBvXor(lhs, rhs) if unwrap(lhs).eq(unwrap(rhs)):
+        case Z3OpBvXor(lhs, rhs) if z3.expr_eq(unwrap(lhs), unwrap(rhs)):
             return z3.BitVecVal(0, w)
 
     return None

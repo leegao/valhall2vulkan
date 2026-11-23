@@ -26,7 +26,7 @@ import struct
 import time
 from typing import Dict, List, Optional, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -59,7 +59,7 @@ def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         t_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
         f_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
         if t_br and f_br and t_arm.decl().name() == f_arm.decl().name():
-            return t_arm.decl()(z3.If(c, t_arm.arg(0), f_arm.arg(0)))
+            return t_arm.decl()(z3.lower(z3.If(c, t_arm.arg(0), f_arm.arg(0))))
         if t_br and t_arm.decl().name() == "u_f32_to_bv32" and isinstance(f_arm, z3.BitVecNumRef):
             fv = struct.unpack("<f", struct.pack("<I", f_arm.as_long() & 0xFFFFFFFF))[0]
             if math.isfinite(fv):

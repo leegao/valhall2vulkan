@@ -45,7 +45,7 @@ from __future__ import annotations
 import time
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (

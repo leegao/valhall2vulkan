@@ -1123,5 +1123,29 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertEqual(res.status, "UNSAT")
         self.assertEqual(res.max_unroll_depth, 0)
 
+    def test_v33_1_dump_ast_handles_non_identical_lhs_rhs(self) -> None:
+        """--dump-ast must handle non-identical LHS/RHS where simplifier realizes Z3."""
+        import io
+        from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
+
+        ssa = {
+            "blocks": [{"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7], "is_end": True}],
+            "nodes": [
+                {"id": 1, "op": "LoadFragVarying", "type": "Vec4", "imm_u32": 0, "args": []},
+                {"id": 2, "op": "VecExtract", "type": "U32", "imm_u32": 0, "args": [1]},
+                {"id": 3, "op": "ConstU32", "type": "U32", "imm_u32": 1, "args": []},
+                {"id": 4, "op": "IAdd", "type": "U32", "args": [2, 3]},
+                {"id": 5, "op": "VecConstruct4", "type": "Vec4", "args": [4, 4, 4, 4]},
+                {"id": 6, "op": "Nop", "type": "Token", "args": []},
+                {"id": 7, "op": "StoreFragColor", "type": "Token", "imm_u32": 0, "args": [5, 6]},
+            ],
+        }
+        ssa2 = dict(ssa, nodes=ssa["nodes"][:3] + [{"id": 4, "op": "IAdd", "type": "U32", "args": [3, 2]}] + ssa["nodes"][4:])
+        bundle = {"stage": "Fragment", "direct_ok": True, "valhall_ok": True, "direct_ssa": ssa, "valhall_ssa": ssa2, "mbs2_context": {}}
+        buf = io.StringIO()
+        res = verify_equivalence_bundle(bundle, timeout_ms=2000, dump_ast=True, dump_ast_stream=buf)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertIn("Check #0", buf.getvalue())
+
 if __name__ == "__main__":
     unittest.main()

@@ -873,7 +873,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return r.arg(0)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float32()))
+            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float32())), depth=1)
         return self._u_f32_to_bv32(r)
 
     def _bv32_to_real(self, bv32: Any) -> Any:
@@ -886,7 +886,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return bv32.arg(0)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToReal(z3.fpBVToFP(dsl.lower(bv32), z3.Float32()))
+            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv32), z3.Float32())), depth=1)
         return self._u_bv32_to_f32(bv32)
 
     def _real_to_bv16(self, r: Any) -> Any:
@@ -895,7 +895,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return dsl.BitVecVal(_f16_to_u16(f), 16)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float16()))
+            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float16())), depth=1)
         return self._u_f16_to_bv16(r)
 
     def _bv16_to_real(self, bv16: Any) -> Any:
@@ -904,7 +904,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._float_to_real(_u16_to_f16(c))
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToReal(z3.fpBVToFP(dsl.lower(bv16), z3.Float16()))
+            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv16), z3.Float16())), depth=1)
         return self._u_bv16_to_f16(bv16)
 
     def _real_to_bv64(self, r: Any) -> Any:
@@ -913,7 +913,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return dsl.BitVecVal(_f64_to_u64(f), 64)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float64()))
+            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float64())), depth=1)
         return self._u_f64_to_bv64(r)
 
     def _bv64_to_real(self, bv64: Any) -> Any:
@@ -922,7 +922,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._float_to_real(_u64_to_f64(c))
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return z3.fpToReal(z3.fpBVToFP(dsl.lower(bv64), z3.Float64()))
+            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv64), z3.Float64())), depth=1)
         return self._u_bv64_to_f64(bv64)
 
     def _to_bv32(self, val: Any) -> Any:

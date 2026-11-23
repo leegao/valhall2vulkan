@@ -39,7 +39,7 @@ from __future__ import annotations
 import time
 from typing import List, Optional, Sequence, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.context import (
     PassStats,
@@ -76,7 +76,7 @@ def build_extensionality_witness_axiom(
     """
     ext_w = z3.Function(witness_name, sort, sort, sort)
     w = ext_w(fn_f, fn_g)
-    return z3.Implies(apply_fn(fn_f, w) == apply_fn(fn_g, w), fn_f == fn_g)
+    return z3.Implies(apply_fn(z3.lower(fn_f), z3.lower(w)) == apply_fn(z3.lower(fn_g), z3.lower(w)), z3.lower(fn_f) == z3.lower(fn_g))
 
 
 class EmatchingUnifyPass(Z3QueryPass):

@@ -7,7 +7,7 @@ import math
 from typing import Any, Optional, Tuple
 
 from tools.symbolic_ssa.domains.base import SsaDomain
-from tools.symbolic_ssa.env import (
+from tools.symbolic_ssa.domains.shader_env.base import (
     MASK32,
     MASK64,
     _c_bool,

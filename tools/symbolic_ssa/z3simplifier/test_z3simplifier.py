@@ -468,5 +468,113 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         self.assertIsInstance(out_bv, dsl.Z3BitVecExpr)
         self.assertIsNone(out_bv._z3_cache)
 
+    def test_v33_1_dropin_z3_facade_no_raw_attr_and_is_true_semantics(self) -> None:
+        """Verify tools.symbolic_ssa.z3 drop-in API, zero raw attr on typed nodes, and syntactic is_true."""
+        from tools.symbolic_ssa import z3 as sz3
+        from tools.symbolic_ssa.domains.shader_env import ConcreteShaderEnv, SymbolicShaderEnv
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        from tools.symbolic_ssa.domains.base import LaneVal
+
+        # 1. Typed DSL nodes do not carry redundant `raw` attr (only Z3Other does)
+        x = sz3.BitVec("x", 32)
+        y = sz3.BitVec("y", 32)
+        add_xy = x + y
+        self.assertFalse(hasattr(x, "raw"))
+        self.assertFalse(hasattr(add_xy, "raw"))
+        self.assertTrue(hasattr(sz3.Z3Other(z3.BitVec("q", 32)), "raw"))
+
+        # 2. Syntactic is_true / is_false without forcing Z3 lowering
+        eq_xy = (x == y)
+        self.assertFalse(sz3.is_true(eq_xy))
+        self.assertIsNone(eq_xy._z3_cache)
+        self.assertTrue(sz3.is_true(sz3.BoolVal(True)))
+        self.assertTrue(sz3.is_true(sz3.Z3OpAnd(())))
+        self.assertTrue(sz3.is_true(sz3.Z3Other(z3.BoolVal(True))))
+        self.assertTrue(sz3.is_false(sz3.BoolVal(False)))
+        self.assertTrue(sz3.is_false(sz3.Z3OpOr(())))
+
+        # 3. Drop-in Solver, ModelRef, simplify(relift=True), substitute, ForAll
+        s = sz3.Solver()
+        s.add(x + y == sz3.BitVecVal(10, 32))
+        s.add(x == sz3.BitVecVal(3, 32))
+        self.assertEqual(s.check(), sz3.sat)
+        m = s.model()
+        self.assertEqual(m.eval(y, model_completion=True).as_long(), 7)
+
+        simp = sz3.simplify(sz3.BitVecVal(3, 32) + sz3.BitVecVal(4, 32), relift=True)
+        self.assertIsInstance(simp, sz3.Z3BvConst)
+        self.assertEqual(simp.as_long(), 7)
+
+        sub = sz3.substitute(x + y, (x, sz3.BitVecVal(1, 32)))
+        self.assertIsInstance(sub, sz3.Z3Expr)
+
+        q_fa = sz3.ForAll([x], x + sz3.BitVecVal(0, 32) == x)
+        self.assertTrue(sz3.is_quantifier(q_fa))
+
+        # 4. Modularized domain-aware SymbolicShaderEnv & ConcreteShaderEnv
+        bundle = {"stage": "Fragment", "mbs2_context": {}, "direct_bindings": []}
+        senv = SymbolicShaderEnv(bundle, domain="udomain", fp_mode="real")
+        self.assertIsInstance(senv.domain, SymbolicZ3UDomain)
+        cenv = ConcreteShaderEnv(bundle, vec_idx=0)
+        self.assertEqual(cenv.stage, "Fragment")
+
+        # 5. Lane-aware ValueDomain[V] & LaneVal
+        lv = LaneVal.vector([1, 2, 3, 4])
+        self.assertEqual(lv.num_lanes, 4)
+        self.assertEqual(lv[2], 3)
+        dom = SymbolicZ3UDomain(exact_bitcast=False)
+        packed = dom.pack_lanes([dom.const_u32(10), dom.const_u32(20)])
+        self.assertEqual(dom.num_lanes(packed), 2)
+        self.assertEqual(dom.const_int_val(dom.extract_lane(packed, 1)), 20)
+
+    def test_v33_2_bv_signext_and_bvcmp_constant_folding_patterns(self) -> None:
+        """Regression test for v33.2: SignExt and signed/unsigned BvCmp constant folding on 2-field Z3BvConst."""
+        from tools.symbolic_ssa.z3simplifier.passes_bv import BvWrapperPeepholePass
+
+        p = BvWrapperPeepholePass()
+        ctx = SimplificationContext()
+
+        # SignExt(24, BitVecVal(0xFF, 8)) == 0xFFFFFFFF (-1)
+        sext_expr = z3.SignExt(24, z3.BitVecVal(0xFF, 8))
+        out_sext, rw1 = p.rewrite_term(sext_expr, ctx)
+        self.assertGreaterEqual(rw1, 1)
+        self.assertEqual(z3.simplify(out_sext).as_long(), 0xFFFFFFFF)
+
+        # Signed & unsigned BvCmp constant folding: -1 <s 1 is True, 0xFFFFFFFF <u 1 is False
+        neg1 = z3.BitVecVal(0xFFFFFFFF, 32)
+        one = z3.BitVecVal(1, 32)
+        out_slt, rw2 = p.rewrite_term(neg1 < one, ctx)
+        out_ult, rw3 = p.rewrite_term(z3.ULT(neg1, one), ctx)
+        self.assertGreaterEqual(rw2, 1)
+        self.assertGreaterEqual(rw3, 1)
+        self.assertTrue(z3.is_true(out_slt))
+        self.assertTrue(z3.is_false(out_ult))
+
+    def test_v33_3_format_z3_ast_dsl_constants_and_udomain_exact_fp_cmp(self) -> None:
+        """Regression test for v33.3: format_z3_ast on DSL BV/Real/Int consts and udomain_exact fp_cmp."""
+        from tools.symbolic_ssa import z3 as sz3
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        from tools.symbolic_ssa.z3simplifier.ast_utils import format_z3_ast
+
+        # 1. Z3RealConst.as_decimal + format_z3_ast renders bv32(0x10) and 0.5 cleanly
+        bv_e = sz3.ULT(sz3.BitVec("x", 32), sz3.BitVecVal(16, 32))
+        s_bv = format_z3_ast(bv_e)
+        self.assertIn("bv32(0x10)", s_bv)
+        self.assertNotIn(" bv)", s_bv)
+
+        r_half = sz3.Q(1, 2)
+        self.assertEqual(r_half.as_decimal(6), "0.5")
+        r_third = sz3.Q(1, 3)
+        self.assertTrue(r_third.as_decimal(6).startswith("0.333333"))
+        s_r = format_z3_ast(sz3.Real("r") + r_half)
+        self.assertIn("0.5", s_r)
+
+        # 2. udomain_exact fp_cmp with symbolic BV + constant F32 stays in DSL without parser error
+        dom = SymbolicZ3UDomain(exact_bitcast=True)
+        a = dom.lift_z3_bv32(sz3.BitVec("a", 32))
+        b = dom.const_f32(1.0)
+        cmp_res = dom.fp_cmp("FCmpOrdEq", a, b)
+        self.assertIsInstance(dom.lower_z3_bool(cmp_res), sz3.Z3Expr)
+
 if __name__ == "__main__":
     unittest.main()

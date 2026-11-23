@@ -17,7 +17,9 @@ Provides:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Generic, Iterable, List, Optional, Set, Tuple, TypeVar
+
+V = TypeVar("V")
 
 from tools.symbolic_ssa.domains import AbstractTopDomain, SsaDomain
 
@@ -50,12 +52,12 @@ ATOMIC_OPS = frozenset({"AtomicRmw", "AtomicExchange", "AtomicCmpXchg"})
 CONTROL_PASSTHROUGH_OPS = frozenset({"ControlBarrier", "Branch", "BranchCond", "Return"})
 
 
-class SsaInterpreter:
+class SsaInterpreter(Generic[V]):
     """
     Unified denotational interpreter and graph-traversal engine for ValhallSsaModule.
     """
 
-    domain: SsaDomain = AbstractTopDomain()
+    domain: SsaDomain[V] = AbstractTopDomain()  # type: ignore[assignment]
     _env: Any = None
     is_valhall: bool = False
 
@@ -504,10 +506,10 @@ class SsaInterpreter:
     def eval_node(
         self,
         node: Dict[str, Any],
-        values: Dict[int, Any],
+        values: Dict[int, V],
         state: Any = None,
         reach: Any = None,
-    ) -> Any:
+    ) -> V:
         """Canonical denotational dispatch over a single ValhallSSA node."""
         op = node["op"]
         vt = node.get("type", "U32")
@@ -530,21 +532,17 @@ class SsaInterpreter:
             return self.cast_value(op, args[0], vt)
 
         if op in ("VecConstruct2", "VecConstruct3", "VecConstruct4"):
-            return tuple(args)
+            return self.domain.pack_lanes(args)
         if op == "VecExtract":
-            v = args[0]
-            return v[imm_u32] if isinstance(v, tuple) and imm_u32 < len(v) else self.cast_value("Copy", v, "U32")
+            return self.domain.extract_lane(args[0], imm_u32)
         if op == "VecShuffle":
-            a, b = args[0], args[1]
-            comb = (list(a) if isinstance(a, tuple) else [a]) + (list(b) if isinstance(b, tuple) else [b])
-            return (comb[imm_u32], comb[imm_u32_2])
+            return self.domain.shuffle_lanes(args[0], args[1], (imm_u32, imm_u32_2))
         if op in ("Pack64", "ImageTexelAddr"):
             return self.pack64(args[0], args[1])
         if op == "Split64":
             return self.split64(args[0])
         if op == "TupleExtract":
-            tup = args[0]
-            return tup[imm_u32] if isinstance(tup, tuple) and imm_u32 < len(tup) else tup
+            return self.domain.extract_tuple(args[0], imm_u32)
         if op == "UnpackHalf2x16":
             return self.unpack_half2x16(args[0])
         if op == "PackHalf2x16":
@@ -645,10 +643,5 @@ class SsaInterpreter:
             return args[-1] if args else self.default_value()
         return self.default_value()
 
-    @staticmethod
-    def _elemwise(fn, *xs):
-        lens = [len(x) for x in xs if isinstance(x, tuple)]
-        if not lens:
-            return fn(*xs)
-        n = min(lens)
-        return tuple(fn(*(x[i] if isinstance(x, tuple) else x for x in xs)) for i in range(n))
+    def _elemwise(self, fn: Callable[..., V], *xs: V) -> V:
+        return self.domain.map_lanes(fn, *xs)

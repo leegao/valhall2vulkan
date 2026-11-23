@@ -224,7 +224,7 @@ def _dump_check_asts(
         print("    " + format_z3_ast(lhs, max_depth=10, max_lines=40).replace("\n", "\n    "), file=stream)
         print(f"  RHS (valhall, sort={rhs.sort()}):", file=stream)
         print("    " + format_z3_ast(rhs, max_depth=10, max_lines=40).replace("\n", "\n    "), file=stream)
-        if not sq.lhs.eq(lhs) or not sq.rhs.eq(rhs):
+        if not dsl.expr_eq(sq.lhs, lhs) or not dsl.expr_eq(sq.rhs, rhs):
             print(f"  LHS (simplified, sort={sq.lhs.sort()}):", file=stream)
             print("    " + format_z3_ast(sq.lhs, max_depth=10, max_lines=30).replace("\n", "\n    "), file=stream)
             print(f"  RHS (simplified, sort={sq.rhs.sort()}):", file=stream)
@@ -285,7 +285,7 @@ def verify_equivalence_bundle(
         res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return res
 
-    env = SharedShaderEnv(bundle)
+    env = SharedShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
 
     def _collect_sym_bkeys(ssa_d: Dict[str, Any]) -> Set[str]:
         ks: Set[str] = set()

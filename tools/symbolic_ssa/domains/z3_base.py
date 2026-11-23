@@ -14,7 +14,7 @@ domain-specific value types (`UVal`, etc.) or branch on domain implementations.
 from __future__ import annotations
 
 import abc
-from typing import Any, Optional, Union
+from typing import Any, Generic, Optional, TypeVar, Union
 
 from tools.symbolic_ssa.domains.base import SsaDomain
 
@@ -24,7 +24,10 @@ except ImportError:
     z3 = None
 
 
-class Z3SymbolicDomain(SsaDomain, abc.ABC):
+V = TypeVar("V")
+
+
+class Z3SymbolicDomain(SsaDomain[V], Generic[V], abc.ABC):
     """Abstract interface for Z3-backed symbolic domains consumed by `SymbolicSsaInterpreter`."""
 
     @abc.abstractmethod
@@ -79,8 +82,6 @@ def make_z3_symbolic_domain(
     if domain == "bitvec":
         from tools.symbolic_ssa.domains.symbolic_z3_bitvec import SymbolicZ3BitvecDomain
         return SymbolicZ3BitvecDomain(fp_mode=fp_mode)
-        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
-        return SymbolicZ3UDomain(exact_bitcast=False)
     if domain == "udomain_exact":
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
         return SymbolicZ3UDomain(exact_bitcast=True)

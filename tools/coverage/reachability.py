@@ -110,7 +110,7 @@ def solve_maximal_reachability(
     blocks = ssa_json.get("blocks", [])
     all_bids = [int(b["id"]) for b in blocks]
 
-    env = SharedShaderEnv(bundle)
+    env = SharedShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
     env.shared_sym_bkeys = set()
     ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
     ev.evaluate()

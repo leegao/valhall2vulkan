@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.context import (
     RewriteStats,

@@ -12,7 +12,44 @@ primitives to concrete, symbolic, and abstract-interpretation subclasses.
 from __future__ import annotations
 
 import abc
-from typing import Any, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Callable, Generic, Optional, Sequence, Tuple, TypeVar
+
+V = TypeVar("V")
+S = TypeVar("S")
+
+
+@dataclass(frozen=True, slots=True)
+class LaneVal(Generic[S]):
+    """Fixed lane-aware value container for strictly-typed `ValueDomain[LaneVal[S]]`."""
+
+    lanes: Tuple[S, ...]
+    is_tuple: bool = False
+
+    @classmethod
+    def scalar(cls, val: S) -> "LaneVal[S]":
+        return cls((val,), is_tuple=False)
+
+    @classmethod
+    def vector(cls, lanes: Sequence[S]) -> "LaneVal[S]":
+        return cls(tuple(lanes), is_tuple=False)
+
+    @classmethod
+    def pack_tuple(cls, items: Sequence[S]) -> "LaneVal[S]":
+        return cls(tuple(items), is_tuple=True)
+
+    @property
+    def num_lanes(self) -> int:
+        return len(self.lanes)
+
+    def as_scalar(self) -> S:
+        return self.lanes[0]
+
+    def __len__(self) -> int:
+        return len(self.lanes)
+
+    def __getitem__(self, idx: int) -> S:
+        return self.lanes[idx]
 
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF
@@ -22,7 +59,7 @@ _F32_LOG2_E_BITS = 0x3FB8AA3B
 _F32_LN_2_BITS = 0x3F317218
 
 
-class SsaDomain(abc.ABC):
+class SsaDomain(Generic[V], abc.ABC):
     """
     Abstract value domain consumed by `SsaInterpreter`.
 
@@ -42,6 +79,54 @@ class SsaDomain(abc.ABC):
 
     def default_value(self) -> Any:
         return self.const_u32(0)
+
+    def pack_lanes(self, lanes: Sequence[V]) -> V:
+        """Pack multiple scalar lanes into a single domain value `V`."""
+        return tuple(lanes)  # type: ignore[return-value]
+
+    def unpack_lanes(self, val: V) -> Tuple[V, ...]:
+        """Return the scalar lanes of `val` as a tuple (1-tuple for scalars)."""
+        if isinstance(val, tuple):
+            return val  # type: ignore[return-value]
+        return (val,)
+
+    def num_lanes(self, val: V) -> int:
+        """Return lane count of `val` (1 for scalar, N for N-lane vector)."""
+        return len(val) if isinstance(val, tuple) else 1
+
+    def extract_lane(self, val: V, index: int) -> V:
+        """Extract lane `index` from a vector value `V` (or coerce scalar)."""
+        if isinstance(val, tuple) and index < len(val):
+            return val[index]  # type: ignore[return-value]
+        return self.cast_value("Copy", val, "U32")
+
+    def shuffle_lanes(self, a: V, b: V, indices: Sequence[int]) -> V:
+        """Construct a swizzled/shuffled vector from lanes of `a` and `b`."""
+        comb = list(self.unpack_lanes(a)) + list(self.unpack_lanes(b))
+        return self.pack_lanes([comb[i] for i in indices])
+
+    def pack_tuple(self, items: Sequence[V]) -> V:
+        """Pack heterogeneous `(value, token)` or `(lo, hi)` pair into `V`."""
+        return tuple(items)  # type: ignore[return-value]
+
+    def extract_tuple(self, val: V, index: int) -> V:
+        """Extract element `index` from a packed tuple value `V`."""
+        if isinstance(val, tuple) and index < len(val):
+            return val[index]  # type: ignore[return-value]
+        return val
+
+    def map_lanes(self, fn: Callable[..., V], *xs: V) -> V:
+        """Apply a scalar domain operation lane-wise across scalar/vector arguments `xs`."""
+        lens = [self.num_lanes(x) for x in xs if self.num_lanes(x) > 1]
+        if not lens:
+            return fn(*xs)
+        n = min(lens)
+        unpacked = [self.unpack_lanes(x) for x in xs]
+        return self.pack_lanes([
+            fn(*(u[i] if len(u) > 1 else u[0] for u in unpacked))
+            for i in range(n)
+        ])
+
 
     def bottom(self) -> Any:
         """Lattice bottom element (override in abstract lattice domains)."""
@@ -379,3 +464,6 @@ class SsaDomain(abc.ABC):
     def sideband_u32(self, env: Any, imm_u32: int, imm_u32_2: int) -> Any: return self.default_value()
     def subgroup_ballot(self, env: Any, x: Any) -> Any: return self.default_value()
     def subgroup_shuffle(self, env: Any, x: Any, lane: Any) -> Any: return self.default_value()
+
+
+ValueDomain = SsaDomain

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import (
     AstCensus,

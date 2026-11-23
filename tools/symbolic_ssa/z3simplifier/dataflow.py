@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rebuild_app
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -141,7 +141,7 @@ class EqualityTable:
         return self._exprs[self._find_id(eid)]
 
     def are_equal(self, a: z3.ExprRef, b: z3.ExprRef) -> bool:
-        if a.eq(b):
+        if z3.expr_eq(a, b):
             return True
         aid, bid = a.get_id(), b.get_id()
         if aid not in self._uf or bid not in self._uf:
@@ -164,7 +164,7 @@ class EqualityTable:
         return self._bool_vals.get(rep.get_id())
 
     def union(self, a: z3.ExprRef, b: z3.ExprRef) -> None:
-        if a.eq(b):
+        if z3.expr_eq(a, b):
             return
         aid, bid = a.get_id(), b.get_id()
         if aid not in self._uf:
@@ -440,7 +440,7 @@ def _rewrite_with_dataflow(
                 f_env.assume_bool(cr, False)
                 new_f = _run_path_sensitive(fr, f_env, depth - 1)
 
-                if new_t.eq(new_f):
+                if z3.expr_eq(new_t, new_f):
                     rewrites += 1
                     return new_t
                 if not new_t.eq(tr) or not new_f.eq(fr):
@@ -487,7 +487,7 @@ class DataflowPropagatePass(Z3QueryPass):
             query.rhs, env, max_path_depth=self.max_path_depth, max_nodes=ctx.max_dag_nodes
         )
 
-        if not new_lhs.eq(new_rhs) and env.are_equal(new_lhs, new_rhs):
+        if not z3.expr_eq(new_lhs, new_rhs) and env.are_equal(new_lhs, new_rhs):
             rep = env.find_rep(new_lhs)
             new_lhs, new_rhs = rep, rep
             r_l += 1

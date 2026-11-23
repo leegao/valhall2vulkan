@@ -1,8 +1,9 @@
 """Unified Valhall SSA value-domain package."""
 
 from tools.symbolic_ssa.domains.abstract_top import AbstractTopDomain
-from tools.symbolic_ssa.domains.base import SsaDomain
+from tools.symbolic_ssa.domains.base import LaneVal, SsaDomain, ValueDomain
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain, make_z3_symbolic_domain
+from tools.symbolic_ssa.domains.shader_env import ConcreteShaderEnv, ShaderEnvBase, SharedShaderEnv, SymbolicShaderEnv
 from tools.symbolic_ssa.domains.combinators import (
     MULTISET_BOTTOM,
     MULTISET_TOP,
@@ -52,7 +53,13 @@ __all__ = [
     "MultiSetVal",
     "PointwiseUnionDomain",
     "PtrVal",
+    "LaneVal",
     "SsaDomain",
+    "ValueDomain",
+    "ShaderEnvBase",
+    "SymbolicShaderEnv",
+    "SharedShaderEnv",
+    "ConcreteShaderEnv",
     "Z3SymbolicDomain",
     "make_z3_symbolic_domain",
     "SymVal",

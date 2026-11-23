@@ -357,7 +357,7 @@ def synthesize_coverage_vectors(
             covered_targets=covered,
         )
 
-    env = SharedShaderEnv(bundle)
+    env = SharedShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
     env.shared_sym_bkeys = set()
     cur_unroll = max(1, int(max_unroll))
     preconditions = env.build_preconditions()

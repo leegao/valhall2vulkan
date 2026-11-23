@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-import z3
+from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier import dsl
 
@@ -207,16 +207,19 @@ def rewrite_dag(
             for i in range(nargs):
                 orig_a = cur.arg(i)
                 new_a = cache.get(orig_a.get_id(), orig_a)
-                if not new_a.eq(orig_a):
+                if not z3.expr_eq(new_a, orig_a):
                     args_changed = True
                 new_args.append(new_a)
             rebuilt = rebuild_app(cur, new_args) if args_changed else cur
             repl = rule_fn(rebuilt)
-            if repl is not None and not repl.eq(rebuilt):
+            if repl is not None and not z3.expr_eq(repl, rebuilt):
                 rewrites += 1
-                cache[cid] = repl
+                res_node = repl
             else:
-                cache[cid] = rebuilt
+                res_node = rebuilt
+            if not isinstance(cur, dsl.Z3Expr) and isinstance(res_node, dsl.Z3Expr):
+                res_node = z3.lower(res_node)
+            cache[cid] = res_node
 
     return cache.get(root.get_id(), root), rewrites
 
@@ -229,6 +232,8 @@ def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
     (`Extract`, `ZeroExt`, `SignExt`, `Concat`, `If`, `And`, `Or`, `Not`,
     `Select`, `Store`, etc.) cleanly without Z3 FFI parameter-mismatch errors.
     """
+    if not isinstance(node, dsl.Z3Expr):
+        new_args = [z3.lower(a) for a in new_args]
     decl = node.decl()
     kind = decl.kind()
 
@@ -345,10 +350,12 @@ def format_z3_ast(
                 let_defs.append((lname, node))
 
     def _op_label(n: z3.ExprRef) -> str:
-        if isinstance(n, z3.BitVecNumRef):
+        if z3.is_bv_value(n):
             return f"bv{n.size()}(0x{n.as_long():x})"
         if z3.is_rational_value(n):
             return n.as_decimal(6).rstrip("?")
+        if z3.is_int_value(n):
+            return str(n.as_long())
         if z3.is_true(n):
             return "true"
         if z3.is_false(n):
