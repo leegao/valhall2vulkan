@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from tools.symbolic_ssa.domains.base import MASK32, MASK64, SsaDomain
+from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
 from tools.symbolic_ssa.domains.concrete_bitvec import ConcreteBitvecDomain
 from tools.symbolic_ssa.domains.symbolic_z3_bitvec import (
     SymbolicZ3BitvecDomain,
@@ -743,7 +744,7 @@ class ConcreteUDomain(_BaseUDomain):
         return self.const_f64(0.0)
 
 
-class SymbolicZ3UDomain(_BaseUDomain):
+class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
     """
     Symbolic Z3 unified lattice-typed domain:
       - `BVEC64` delegates to `SymbolicZ3BitvecDomain`.
@@ -1061,18 +1062,32 @@ class SymbolicZ3UDomain(_BaseUDomain):
         res = self.bv.atomic_compute(env, op, op_tag, self._to_bv32(old_val), self._to_bv32(arg), self._to_bv32(cmp_val))
         return self._from_bv32(res)
 
-    def as_z3_bv32(self, val: Any) -> Any:
+    # Z3SymbolicDomain boundary contract
+    def lift_z3_bv32(self, raw: Any) -> UVal:
+        return self._from_bv32(raw)
+
+    def lift_z3_bv64(self, raw: Any) -> UVal:
+        return self._from_bv64(raw)
+
+    def lift_z3_bool(self, raw: Any) -> UVal:
+        return self._from_bool(raw)
+
+    def lower_z3_bv32(self, val: Any) -> Any:
         return self._to_bv32(val)
 
-    def as_z3_bv64(self, val: Any) -> Any:
+    def lower_z3_bv64(self, val: Any) -> Any:
         return self._to_bv64(val)
 
-    def as_z3_bool(self, val: Any) -> Any:
+    def lower_z3_bool(self, val: Any) -> Any:
         return self._to_bool(val)
 
-    def as_z3_val(self, val: Any) -> Any:
+    def lower_z3_val(self, val: Any) -> Any:
         if isinstance(val, tuple):
-            return tuple(self.as_z3_val(v) for v in val)
-        if isinstance(val, UVal):
-            return self._to_bv32(val)
-        return val
+            return tuple(self.lower_z3_val(v) for v in val)
+        return self._to_bv32(val)
+
+    def merge_z3(self, cond: Any, t_val: Any, f_val: Any) -> UVal:
+        return self.select(self.lift_z3_bool(cond), t_val, f_val)
+
+    def to_z3_real_f32(self, val: Any) -> Any:
+        return self.to_f32x2(val)[0]

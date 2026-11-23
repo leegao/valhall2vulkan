@@ -2,6 +2,7 @@
 
 from tools.symbolic_ssa.domains.abstract_top import AbstractTopDomain
 from tools.symbolic_ssa.domains.base import SsaDomain
+from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.domains.combinators import (
     MULTISET_BOTTOM,
     MULTISET_TOP,
@@ -52,6 +53,8 @@ __all__ = [
     "PointwiseUnionDomain",
     "PtrVal",
     "SsaDomain",
+    "Z3SymbolicDomain",
+    "make_z3_symbolic_domain",
     "SymVal",
     "SymbolicDomain",
     "SymbolicZ3BitvecDomain",

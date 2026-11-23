@@ -61,7 +61,7 @@ def main() -> int:
     ap.add_argument("--side", choices=["direct", "valhall"], default="direct", help="SSA side to target/seed from")
     ap.add_argument("--k-init", type=int, default=32, help="Initial concrete seed vectors")
     ap.add_argument("--max-rounds", type=int, default=12, help="Maximum synthesis rounds")
-    ap.add_argument("--domain", choices=["bitvec", "udomain"], default="bitvec", help="Symbolic value domain")
+    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="bitvec", help="Symbolic value domain")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact", help="Z3 FP mode")
     ap.add_argument("--canonicalize", action="store_true", help="Canonicalize SSA before synthesis")
     ap.add_argument(
@@ -179,7 +179,7 @@ def main() -> int:
         traces,
         is_valhall_side=is_valhall,
         fp_mode=args.fp_mode,
-            domain=args.domain,
+        domain=args.domain,
         max_rounds=args.max_rounds,
         probe_timeout_ms=min(args.timeout_ms, 250),
         base_vec_idx=args.k_init,

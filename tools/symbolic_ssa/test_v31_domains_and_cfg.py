@@ -430,6 +430,35 @@ class TestUDomainIntegration(unittest.TestCase):
         r = check_instruction_miter(ext, "IADD", "s32", domain="udomain")
         self.assertEqual(r.status, "UNSAT")
 
+    def test_z3_symbolic_domain_interface_and_coverage_synth_wiring(self):
+        from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
+        from tools.coverage.synthesizer import synthesize_coverage_vectors
+        for mode in ("bitvec", "udomain", "udomain_exact"):
+            dom = make_z3_symbolic_domain(mode, fp_mode="exact")
+            self.assertIsInstance(dom, Z3SymbolicDomain)
+            v = dom.lift_z3_bv32(z3.BitVecVal(7, 32))
+            self.assertEqual(z3.simplify(dom.lower_z3_bv32(v)).as_long(), 7)
+            m = dom.merge_z3(z3.BoolVal(True), dom.const_u32(11), dom.const_u32(22))
+            self.assertEqual(z3.simplify(dom.lower_z3_bv32(m)).as_long(), 11)
+
+        ssa = {
+            "blocks": [
+                {"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4], "is_cond": True, "branch_cond": 4, "branch_target": 1, "fallthrough": 2},
+                {"id": 1, "preds": [0], "phis": [], "nodes": [], "is_end": True},
+                {"id": 2, "preds": [0], "phis": [], "nodes": [], "is_end": True},
+            ],
+            "nodes": [
+                {"id": 1, "op": "LoadFragVarying", "type": "Vec4", "imm_u32": 0, "args": []},
+                {"id": 2, "op": "VecExtract", "type": "F32", "imm_u32": 0, "args": [1]},
+                {"id": 3, "op": "ConstU32", "type": "U32", "imm_u32": 7, "args": []},
+                {"id": 4, "op": "ICmpUGt", "type": "Bool", "args": [2, 3]},
+            ],
+        }
+        bundle = {"stage": "Fragment", "direct_ssa": ssa, "valhall_ssa": ssa, "mbs2_context": {}}
+        res = synthesize_coverage_vectors(bundle, ssa, {}, fp_mode="exact", domain="udomain", time_budget_ms=1000)
+        self.assertEqual(res.total_targets, 2)
+        self.assertEqual(res.final_covered, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

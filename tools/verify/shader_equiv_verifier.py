@@ -302,9 +302,7 @@ def verify_equivalence_bundle(
         # constrain clip.w == 1.0f alongside identity viewport (scale=1, bias=0) for gl_Position.
         if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
             if fp_mode == "real":
-                _real_one = z3.RealVal(1)
-                w_real = d_eval.domain.to_f32x2(do[3])[0] if getattr(d_eval, '_is_udomain', False) else _bv32_to_real(_as_bv32(do[3]))
-                vp_conds = [w_real == _real_one]
+                vp_conds = [d_eval.domain.to_z3_real_f32(do[3]) == z3.RealVal(1)]
             else:
                 vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
                 for c in range(3):
@@ -500,6 +498,7 @@ def verify_equivalence_bundle(
                 timeout_ms=timeout_ms,
                 fp_mode="real",
                 allow_uf_fallback=False,
+                domain=domain,
                 max_unroll=max_unroll,
                 dump_smt2_path=dump_smt2_path,
                 fp_discharger=discharger,
@@ -519,6 +518,7 @@ def verify_equivalence_bundle(
                 timeout_ms=timeout_ms,
                 fp_mode="uf",
                 allow_uf_fallback=False,
+                domain=domain,
                 max_unroll=max_unroll,
                 dump_smt2_path=dump_smt2_path,
                 fp_discharger=discharger,
@@ -546,6 +546,7 @@ def verify_spv_file(
     dump_smt2_path: Optional[str] = None,
     verbose: bool = False,
     canonicalize: bool = False,
+    domain: str = "bitvec",
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -569,7 +570,7 @@ def verify_spv_file(
             )
         with open(tmp_json, "r", encoding="utf-8") as fh:
             bundle = json.load(fh)
-        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose, canonicalize=canonicalize)
+        return verify_equivalence_bundle(bundle, timeout_ms=timeout_ms, fp_mode=fp_mode, max_unroll=max_unroll, dump_smt2_path=dump_smt2_path, verbose=verbose, canonicalize=canonicalize, domain=domain)
     finally:
         if os.path.exists(tmp_json):
             os.remove(tmp_json)
@@ -580,6 +581,7 @@ def main() -> int:
     ap.add_argument("spv_or_json", help="Path to .spv shader or pre-dumped equivalence bundle .json")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--timeout-ms", type=int, default=3000, help="Per-output Z3 timeout in ms")
+    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="bitvec", help="Symbolic value domain")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
@@ -630,6 +632,7 @@ def main() -> int:
             bundle,
             timeout_ms=args.timeout_ms,
             fp_mode=args.fp_mode,
+            domain=args.domain,
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,
@@ -641,6 +644,7 @@ def main() -> int:
             spirv2valhall_bin=args.bin,
             timeout_ms=args.timeout_ms,
             fp_mode=args.fp_mode,
+            domain=args.domain,
             max_unroll=args.max_unroll,
             dump_smt2_path=args.dump_smt2,
             verbose=args.verbose,

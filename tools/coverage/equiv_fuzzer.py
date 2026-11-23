@@ -184,6 +184,7 @@ def run_concolic_equiv_fuzz(
             seed_traces,
             is_valhall_side=is_valhall_seed,
             fp_mode=fp_mode,
+            domain=domain,
             base_vec_idx=k_init + reach_vecs,
             max_unroll=max_unroll,
             time_budget_ms=rem_ms,

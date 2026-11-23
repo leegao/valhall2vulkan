@@ -272,7 +272,7 @@ def _build_target_formulas(
     for pid, bid in preds:
         if pid not in evaluator.values:
             continue
-        bval = _as_bool(evaluator.values[pid])
+        bval = evaluator.lower_bool_value(pid)
         reach = block_reach.get(bid)
         t_expr = z3.And(reach, bval) if reach is not None and not z3.is_true(reach) else bval
         f_expr = z3.And(reach, _z3_not(bval)) if reach is not None and not z3.is_true(reach) else _z3_not(bval)
@@ -304,6 +304,7 @@ def synthesize_coverage_vectors(
     adaptive_unroll: bool = True,
     max_adaptive_unroll: int = 3,
     time_budget_ms: int = 5000,
+    domain: str = "bitvec",
 ) -> CoverageFuzzResult:
     """
     Use incremental Z3 Solver + Unique-Call UF Pruning + AST-size ordering +
@@ -342,6 +343,7 @@ def synthesize_coverage_vectors(
         preds,
         fp_mode=fp_mode,
         max_unroll=cur_unroll,
+        domain=domain,
         preconditions=preconditions,
     )
     preconditions = env.build_preconditions()
@@ -395,6 +397,7 @@ def synthesize_coverage_vectors(
                     preds,
                     fp_mode=fp_mode,
                     max_unroll=cur_unroll,
+                    domain=domain,
                     preconditions=preconditions,
                 )
                 preconditions = env.build_preconditions()

@@ -9,7 +9,7 @@ from typing import Any, Optional, Tuple
 
 import z3
 
-from tools.symbolic_ssa.domains.base import SsaDomain
+from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
 from tools.symbolic_ssa.env import (
     BV32,
     BV64,
@@ -117,7 +117,7 @@ def _real_cos(rx: z3.ArithRef) -> z3.ArithRef:
     return _hw_uf("real_cos", REAL_SORT, REAL_SORT)(rx)
 
 
-class SymbolicZ3BitvecDomain(SsaDomain):
+class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
     """Z3 symbolic bitvector value domain supporting `exact` (QF_FP), `real` (QF_NRA), and `uf` FP modes."""
 
     def __init__(self, fp_mode: str = "exact"):
@@ -370,3 +370,31 @@ class SymbolicZ3BitvecDomain(SsaDomain):
         return _hw_uf("SubgroupShuffle", BV32, BV32, z3.BitVecSort(5), BV32)(
             self.as_u32(x), self.as_u32(lane), env.lane_id
         )
+
+    # Z3SymbolicDomain boundary contract (identity / pass-through for raw Z3 bitvecs)
+    def lift_z3_bv32(self, raw: Any) -> z3.BitVecRef:
+        return _as_bv32(raw)
+
+    def lift_z3_bv64(self, raw: Any) -> z3.BitVecRef:
+        return _as_bv64(raw)
+
+    def lift_z3_bool(self, raw: Any) -> z3.BoolRef:
+        return _as_bool(raw)
+
+    def lower_z3_bv32(self, val: Any) -> z3.BitVecRef:
+        return _as_bv32(val)
+
+    def lower_z3_bv64(self, val: Any) -> z3.BitVecRef:
+        return _as_bv64(val)
+
+    def lower_z3_bool(self, val: Any) -> z3.BoolRef:
+        return _as_bool(val)
+
+    def lower_z3_val(self, val: Any) -> Any:
+        return val
+
+    def merge_z3(self, cond: Any, t_val: Any, f_val: Any) -> Any:
+        return _z3_if(_as_bool(cond), t_val, f_val)
+
+    def to_z3_real_f32(self, val: Any) -> z3.ArithRef:
+        return _bv32_to_real(_as_bv32(val))
