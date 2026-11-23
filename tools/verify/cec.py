@@ -58,6 +58,9 @@ class ConcreteDiffResult:
     elapsed_ms: float
     d_node_traces: Dict[int, List[Any]]
     v_node_traces: Dict[int, List[Any]]
+    mismatches: List[str] = dataclasses.field(default_factory=list)
+    direct_only_channels: List[str] = dataclasses.field(default_factory=list)
+    valhall_only_channels: List[str] = dataclasses.field(default_factory=list)
 
 
 def run_concrete_diff(
@@ -76,11 +79,25 @@ def run_concrete_diff(
     v_node_traces: Dict[int, List[Any]] = {}
     d_out_traces: Dict[str, List[Any]] = {}
     v_out_traces: Dict[str, List[Any]] = {}
+    d_written_prefixes: Set[str] = set()
+    v_written_prefixes: Set[str] = set()
+    vec_input_summaries: List[str] = []
 
     for i in range(k):
         cenv = ConcreteShaderEnv(bundle, vec_idx=i, seed=seed)
         d_vals, d_outs = d_interp.execute_one(cenv)
         v_vals, v_outs = v_interp.execute_one(cenv)
+        for ok in d_outs:
+            d_written_prefixes.add(ok.split("+")[0].split("[")[0])
+        for ok in v_outs:
+            v_written_prefixes.add(ok.split("+")[0].split("[")[0])
+        bi_items = []
+        for bkey, bval in sorted(getattr(cenv, "builtins", {}).items())[:4]:
+            if isinstance(bval, (list, tuple)):
+                bi_items.append(f"bi_{bkey}=(" + ",".join(f"0x{int(x)&0xffffffff:x}" for x in bval[:3]) + ")")
+            elif isinstance(bval, int):
+                bi_items.append(f"bi_{bkey}=0x{bval&0xffffffff:x}")
+        vec_input_summaries.append(", ".join(bi_items) if bi_items else f"seed=0x{seed:x},vec={i}")
         for nid, val in d_vals.items():
             d_node_traces.setdefault(nid, [None] * k)[i] = val
         for nid, val in v_vals.items():
@@ -112,6 +129,7 @@ def run_concrete_diff(
     approx_cnt = 0
     mismatch_cnt = 0
     first_mm: Optional[str] = None
+    mm_list: List[str] = []
     for ok in all_keys:
         dl, vl = d_out_traces[ok], v_out_traces[ok]
         if dl == vl:
@@ -137,11 +155,15 @@ def run_concrete_diff(
             approx_cnt += 1
         else:
             mismatch_cnt += 1
+            dv0, vv0 = dl[first_idx], vl[first_idx]
+            d_str = f"0x{dv0:08x}" if isinstance(dv0, int) and not isinstance(dv0, bool) else str(dv0)
+            v_str = f"0x{vv0:08x}" if isinstance(vv0, int) and not isinstance(vv0, bool) else str(vv0)
+            inp_s = vec_input_summaries[first_idx] if first_idx < len(vec_input_summaries) else ""
+            mm_entry = f"{ok}@vec[{first_idx}]: direct={d_str} valhall={v_str}" + (f" ({inp_s})" if inp_s else "")
             if first_mm is None:
-                dv0, vv0 = dl[first_idx], vl[first_idx]
-                d_str = f"0x{dv0:08x}" if isinstance(dv0, int) and not isinstance(dv0, bool) else str(dv0)
-                v_str = f"0x{vv0:08x}" if isinstance(vv0, int) and not isinstance(vv0, bool) else str(vv0)
-                first_mm = f"{ok}@vec[{first_idx}]: direct={d_str} valhall={v_str}"
+                first_mm = mm_entry
+            if len(mm_list) < 10:
+                mm_list.append(mm_entry)
 
     if mismatch_cnt > 0:
         status = "MISMATCH"
@@ -160,6 +182,9 @@ def run_concrete_diff(
         elapsed_ms=(time.perf_counter() - t0) * 1000.0,
         d_node_traces=d_node_traces,
         v_node_traces=v_node_traces,
+        mismatches=mm_list,
+        direct_only_channels=sorted(d_written_prefixes - v_written_prefixes),
+        valhall_only_channels=sorted(v_written_prefixes - d_written_prefixes),
     )
 
 
@@ -350,6 +375,9 @@ class CecResult:
     sat_outputs: int
     first_mismatch: Optional[str] = None
     sweep_evals: int = 0
+    concrete_mismatches: List[str] = dataclasses.field(default_factory=list)
+    direct_only_channels: List[str] = dataclasses.field(default_factory=list)
+    valhall_only_channels: List[str] = dataclasses.field(default_factory=list)
 
 
 Stratum2Result = CecResult
@@ -398,6 +426,9 @@ def verify_with_cec(
             unknown_outputs=0,
             sat_outputs=cdiff.mismatched_outputs,
             first_mismatch=cdiff.first_mismatch,
+            concrete_mismatches=cdiff.mismatches,
+            direct_only_channels=cdiff.direct_only_channels,
+            valhall_only_channels=cdiff.valhall_only_channels,
         )
 
     t_sw = time.perf_counter()

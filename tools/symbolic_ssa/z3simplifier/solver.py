@@ -107,7 +107,7 @@ def solve_simplified_miter(
     pipeline: PassPipeline,
     *,
     timeout_ms: int = 1000,
-    rlimit: int = 2_000_000,
+    rlimit: Optional[int] = None,
     ctx: Optional[SimplificationContext] = None,
     smt2_out: Optional[List[str]] = None,
     check_name: str = "",
@@ -117,6 +117,10 @@ def solve_simplified_miter(
     over-approximation refinement.
     """
     eff_ctx = ctx if ctx is not None else SimplificationContext()
+    if rlimit is None:
+        eff_rlimit = 0 if timeout_ms >= 5000 else max(2_000_000, int(timeout_ms) * 20_000)
+    else:
+        eff_rlimit = int(rlimit)
     sim = pipeline.run(query, eff_ctx)
     q = sim.query
     exact_q = sim.exact_query
@@ -136,7 +140,7 @@ def solve_simplified_miter(
     status, model, dt, reason, used_nlsat = _check_query_with_z3(
         q,
         timeout_ms=timeout_ms,
-        rlimit=rlimit,
+        rlimit=eff_rlimit,
         smt2_out=smt2_out if not q.is_overapprox else None,
         check_name=check_name,
     )
@@ -164,7 +168,7 @@ def solve_simplified_miter(
         st_ex, m_ex, dt_ex, reason_ex, nlsat_ex = _check_query_with_z3(
             exact_q,
             timeout_ms=timeout_ms,
-            rlimit=rlimit,
+            rlimit=eff_rlimit,
             smt2_out=smt2_out,
             check_name=f"{check_name}[exact_confirm]",
         )

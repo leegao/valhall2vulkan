@@ -94,6 +94,74 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
                         return nt
                     return z3.If(c, nt, nf)
 
+    elif kind == z3.Z3_OP_ZERO_EXT and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.BitVecNumRef):
+            k = node.params()[0]
+            return z3.BitVecVal(src.as_long(), src.size() + k)
+
+    elif kind == z3.Z3_OP_SIGN_EXT and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.BitVecNumRef):
+            k = node.params()[0]
+            w = src.size()
+            val = src.as_signed_long()
+            nw = w + k
+            return z3.BitVecVal(val & ((1 << nw) - 1), nw)
+
+    elif kind == z3.Z3_OP_CONCAT and node.num_args() >= 2:
+        if all(isinstance(node.arg(i), z3.BitVecNumRef) for i in range(node.num_args())):
+            acc = 0
+            tot_w = 0
+            for i in range(node.num_args()):
+                arg = node.arg(i)
+                aw = arg.size()
+                acc = (acc << aw) | arg.as_long()
+                tot_w += aw
+            return z3.BitVecVal(acc, tot_w)
+
+    elif kind == z3.Z3_OP_BV2INT and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.BitVecNumRef):
+            return z3.IntVal(src.as_long())
+
+    elif kind == z3.Z3_OP_INT2BV and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.IntNumRef) and isinstance(node, z3.BitVecRef):
+            w = node.size()
+            return z3.BitVecVal(src.as_long() & ((1 << w) - 1), w)
+
+    elif kind == z3.Z3_OP_TO_REAL and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.IntNumRef):
+            return z3.RealVal(src.as_long())
+
+    elif kind == z3.Z3_OP_TO_INT and node.num_args() == 1:
+        src = node.arg(0)
+        if isinstance(src, z3.RatNumRef):
+            num = src.numerator_as_long()
+            den = src.denominator_as_long()
+            return z3.IntVal(num // den)
+
+    elif kind in (
+        z3.Z3_OP_SLT, z3.Z3_OP_SLEQ, z3.Z3_OP_SGT, z3.Z3_OP_SGEQ,
+        z3.Z3_OP_ULT, z3.Z3_OP_ULEQ, z3.Z3_OP_UGT, z3.Z3_OP_UGEQ,
+    ) and node.num_args() == 2:
+        a, b = node.arg(0), node.arg(1)
+        if isinstance(a, z3.BitVecNumRef) and isinstance(b, z3.BitVecNumRef):
+            if kind in (z3.Z3_OP_SLT, z3.Z3_OP_SLEQ, z3.Z3_OP_SGT, z3.Z3_OP_SGEQ):
+                va, vb = a.as_signed_long(), b.as_signed_long()
+                if kind == z3.Z3_OP_SLT: return z3.BoolVal(va < vb)
+                if kind == z3.Z3_OP_SLEQ: return z3.BoolVal(va <= vb)
+                if kind == z3.Z3_OP_SGT: return z3.BoolVal(va > vb)
+                return z3.BoolVal(va >= vb)
+            else:
+                va, vb = a.as_long(), b.as_long()
+                if kind == z3.Z3_OP_ULT: return z3.BoolVal(va < vb)
+                if kind == z3.Z3_OP_ULEQ: return z3.BoolVal(va <= vb)
+                if kind == z3.Z3_OP_UGT: return z3.BoolVal(va > vb)
+                return z3.BoolVal(va >= vb)
+
     elif kind == z3.Z3_OP_ITE and node.num_args() == 3:
         c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
         if z3.is_true(c):

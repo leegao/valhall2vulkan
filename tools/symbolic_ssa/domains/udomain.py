@@ -790,6 +790,10 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         self._u_bv16_to_f16 = z3.Function("u_bv16_to_f16", z3.BitVecSort(16), z3.RealSort())
         self._u_f64_to_bv64 = z3.Function("u_f64_to_bv64", z3.RealSort(), z3.BitVecSort(64))
         self._u_bv64_to_f64 = z3.Function("u_bv64_to_f64", z3.BitVecSort(64), z3.RealSort())
+        self._u_s32_to_f32 = z3.Function("u_s32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        self._u_u32_to_f32 = z3.Function("u_u32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        self._u_f32_to_s32 = z3.Function("u_f32_to_s32", z3.RealSort(), z3.BitVecSort(32))
+        self._u_f32_to_u32 = z3.Function("u_f32_to_u32", z3.RealSort(), z3.BitVecSort(32))
         self._fp_ufs: Dict[Tuple[str, int], Any] = {}
         self.bitcast_materializations: int = 0
 
@@ -1029,15 +1033,21 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return UVal.f32x2(_real_log2(rx), self._zero_real)
         if op == "Log":
             return UVal.f32x2(_real_log2(rx) * self._float_to_real(_u32_to_f32(0x3F317218)), self._zero_real)
-        if op == "Floor":
-            return UVal.f32x2(z3.ToReal(z3.ToInt(rx)), self._zero_real)
-        if op == "Fract":
-            return UVal.f32x2(rx - z3.ToReal(z3.ToInt(rx)), self._zero_real)
-        if op == "Trunc":
+        if op in ("Floor", "Fract", "Trunc", "Ceil"):
+            fx = self._try_real_to_float(rx)
+            if fx is not None and math.isfinite(fx):
+                if op == "Floor": return UVal.f32x2(self._float_to_real(math.floor(fx)), self._zero_real)
+                if op == "Fract": return UVal.f32x2(self._float_to_real(fx - math.floor(fx)), self._zero_real)
+                if op == "Trunc": return UVal.f32x2(self._float_to_real(math.trunc(fx)), self._zero_real)
+                if op == "Ceil": return UVal.f32x2(self._float_to_real(math.ceil(fx)), self._zero_real)
+            if not self.exact_bitcast:
+                if op == "Fract":
+                    return UVal.f32x2(rx - self._get_fp_uf("Floor", 1)(rx), self._zero_real)
+                return UVal.f32x2(self._get_fp_uf(op, 1)(rx), self._zero_real)
             fl = z3.ToReal(z3.ToInt(rx))
-            return UVal.f32x2(z3.If(rx >= 0, fl, z3.If(rx == fl, fl, fl + z3.RealVal(1))), self._zero_real)
-        if op == "Ceil":
-            fl = z3.ToReal(z3.ToInt(rx))
+            if op == "Floor": return UVal.f32x2(fl, self._zero_real)
+            if op == "Fract": return UVal.f32x2(rx - fl, self._zero_real)
+            if op == "Trunc": return UVal.f32x2(z3.If(rx >= 0, fl, z3.If(rx == fl, fl, fl + z3.RealVal(1))), self._zero_real)
             return UVal.f32x2(z3.If(rx == fl, fl, fl + z3.RealVal(1)), self._zero_real)
         return UVal.f32x2(self._get_fp_uf(op, 1)(rx), self._zero_real)
 
@@ -1079,11 +1089,31 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
 
     def convert(self, op: str, x: Any) -> UVal:
         if op == "ConvertSToF":
-            return UVal.f32x2(z3.ToReal(z3.BV2Int(self._to_bv32(x), is_signed=True)), self._zero_real)
+            bx = self._to_bv32(x)
+            c = self.bv.const_int_val(bx)
+            if c is not None:
+                sv = c - 0x100000000 if (c & 0x80000000) else c
+                return UVal.f32x2(self._float_to_real(float(sv)), self._zero_real)
+            if not self.exact_bitcast:
+                return UVal.f32x2(self._u_s32_to_f32(bx), self._zero_real)
+            return UVal.f32x2(z3.ToReal(z3.BV2Int(bx, is_signed=True)), self._zero_real)
         if op == "ConvertUToF":
-            return UVal.f32x2(z3.ToReal(z3.BV2Int(self._to_bv32(x), is_signed=False)), self._zero_real)
+            bx = self._to_bv32(x)
+            c = self.bv.const_int_val(bx)
+            if c is not None:
+                return UVal.f32x2(self._float_to_real(float(c & 0xFFFFFFFF)), self._zero_real)
+            if not self.exact_bitcast:
+                return UVal.f32x2(self._u_u32_to_f32(bx), self._zero_real)
+            return UVal.f32x2(z3.ToReal(z3.BV2Int(bx, is_signed=False)), self._zero_real)
         if op in ("ConvertFToS", "ConvertFToU"):
             rx = self.to_f32x2(x)[0]
+            fx = self._try_real_to_float(rx)
+            if fx is not None and math.isfinite(fx):
+                iv = int(math.trunc(fx))
+                return self._from_bv32(z3.BitVecVal(iv & 0xFFFFFFFF, 32))
+            if not self.exact_bitcast:
+                fn = self._u_f32_to_s32 if op == "ConvertFToS" else self._u_f32_to_u32
+                return self._from_bv32(fn(rx))
             return self._from_bv32(z3.Int2BV(z3.ToInt(rx), 32))
         if op == "UConvert32To64":
             return self._from_bv64(z3.ZeroExt(32, self._to_bv32(x)))

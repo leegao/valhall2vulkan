@@ -230,5 +230,40 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         self.assertIn("%t0", pretty)
 
 
+
+    def test_v32_1_intbv_constant_folding_and_udomain_avoids_intbv(self) -> None:
+        """Constant BV/Int/Real conversions fold cleanly and non-exact udomain emits zero IntBV ops."""
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        from tools.symbolic_ssa.z3simplifier.ast_utils import census_ast
+
+        # Constant-folding through Extract -> ZeroExt -> BVMul and BV2Int -> ToReal -> ToInt -> Int2BV
+        x = z3.BitVec("x", 32)
+        expr_mul = x * z3.ZeroExt(24, z3.Extract(31, 24, z3.BitVecVal(0x40000000, 32)))
+        q1 = SimplifyQuery(lhs=expr_mul, rhs=x << z3.BitVecVal(6, 32))
+        res1 = solve_simplified_miter(q1, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(res1.status, "UNSAT")
+
+        intbv_const = z3.Int2BV(z3.ToInt(z3.ToReal(z3.BV2Int(z3.BitVecVal(7, 32), is_signed=False))), 32)
+        q2 = SimplifyQuery(lhs=intbv_const, rhs=z3.BitVecVal(7, 32))
+        res2 = solve_simplified_miter(q2, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(res2.status, "UNSAT")
+
+        # Non-exact udomain must emit zero IntBV ops on ConvertSToF/ConvertFToS/Floor/Fract
+        dom = SymbolicZ3UDomain(exact_bitcast=False)
+        ux = dom.lift_z3_bv32(x)
+        r1 = dom.convert("ConvertSToF", ux)
+        r2 = dom.fp_unary("Floor", r1)
+        r3 = dom.fp_unary("Fract", r1)
+        b1 = dom.convert("ConvertFToS", r2)
+        cen = census_ast([dom.lower_z3_bv32(b1), dom.lower_z3_bv32(r3)])
+        self.assertEqual(cen.int_bv_ops, 0)
+        self.assertEqual(cen.fp_ops, 0)
+
+        # Constant conversion still folds exactly in non-exact udomain
+        c5 = dom.convert("ConvertSToF", dom.const_u32(5))
+        c5_back = dom.convert("ConvertFToS", c5)
+        self.assertEqual(dom.lower_z3_bv32(c5_back).as_long(), 5)
+
+
 if __name__ == "__main__":
     unittest.main()

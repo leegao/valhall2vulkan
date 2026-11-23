@@ -146,7 +146,7 @@ def _solve_miter_eq(
         q,
         pipe,
         timeout_ms=timeout_ms,
-        rlimit=2_000_000,
+        rlimit=None,
         ctx=ctx,
         smt2_out=smt2_out,
         check_name=check_name,
@@ -175,7 +175,7 @@ def _solve_miter_eq(
         rhs_kind = rhs.sort().kind() if hasattr(rhs, "sort") else "unknown"
         print(
             f"[equiv] check={check_name} result=UNKNOWN reason='{res.reason_unknown}' "
-            f"elapsed={res.solver_ms:.1f}ms timeout_ms={timeout_ms} rlimit=2000000 "
+            f"elapsed={res.solver_ms:.1f}ms timeout_ms={timeout_ms} "
             f"nlsat={res.used_nlsat} lhs_sort={lhs_kind} rhs_sort={rhs_kind} "
             f"simp=({res.stats.summary_line()})",
             file=sys.stderr,
@@ -204,13 +204,13 @@ def _dump_check_asts(
             f"  Raw census:  nodes={raw_c.total_nodes} depth={raw_c.max_depth} "
             f"FP={raw_c.fp_ops} NLinR={raw_c.nlin_real_ops} BVMul={raw_c.bv_mul_shift_ops} "
             f"ArrSel={raw_c.array_select_ops} ArrSt={raw_c.array_store_ops} "
-            f"Bridge={raw_c.bridge_ops} BoolWrap={raw_c.bool_wrapper_ops}",
+            f"Bridge={raw_c.bridge_ops} BoolWrap={raw_c.bool_wrapper_ops} IntBV={raw_c.int_bv_ops}",
             file=stream,
         )
         print(
             f"  Simp census: nodes={simp_c.total_nodes} depth={simp_c.max_depth} "
             f"FP={simp_c.fp_ops} NLinR={simp_c.nlin_real_ops} BVMul={simp_c.bv_mul_shift_ops} "
-            f"ArrSel={simp_c.array_select_ops} Bridge={simp_c.bridge_ops} "
+            f"ArrSel={simp_c.array_select_ops} Bridge={simp_c.bridge_ops} IntBV={simp_c.int_bv_ops} "
             f"theory={sq.pure_theory or 'ALL'} trivial_unsat={sq.is_trivially_unsat()}",
             file=stream,
         )
@@ -689,6 +689,19 @@ def main() -> int:
             f"cutpoints={s2r.cutpoints_proved}/{s2r.candidates_found} "
             f"cegar={s2r.cegar_refinements} elapsed={s2r.elapsed_ms:.1f}ms"
         )
+        if s2r.direct_only_channels or s2r.valhall_only_channels:
+            print(
+                f"  CHANNEL_ASYMMETRY: direct_only={s2r.direct_only_channels} "
+                f"valhall_only={s2r.valhall_only_channels}"
+            )
+        if s2r.concrete_mismatches:
+            shown = s2r.concrete_mismatches[:5]
+            for mm in shown:
+                print(f"  MISMATCH {mm}")
+            if s2r.sat_outputs > len(shown):
+                print(f"  ... ({s2r.sat_outputs - len(shown)} more mismatched concrete outputs out of {s2r.checked_outputs} checked)")
+        elif s2r.first_mismatch:
+            print(f"  MISMATCH {s2r.first_mismatch}")
         return 0 if s2r.status in ("UNSAT", "BOUNDED_UNSAT") else 1
 
     if args.spv_or_json.endswith(".json"):

@@ -30,6 +30,7 @@ class AstCensus:
     bridge_ops: int
     ite_ops: int
     bool_wrapper_ops: int
+    int_bv_ops: int = 0
 
 
 _BRIDGE_NAMES: Set[str] = {
@@ -96,6 +97,7 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
     bridges = 0
     ites = 0
     bool_wrappers = 0
+    int_bv = 0
 
     for node in post_order:
         if not z3.is_app(node):
@@ -141,6 +143,8 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
                 bool_wrappers += 1
         if name in _BRIDGE_NAMES:
             bridges += 1
+        if kind in (z3.Z3_OP_BV2INT, z3.Z3_OP_INT2BV, z3.Z3_OP_TO_INT, z3.Z3_OP_TO_REAL):
+            int_bv += 1
 
     max_d = max(depths.values()) if depths else 0
     return AstCensus(
@@ -154,6 +158,7 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
         bridge_ops=bridges,
         ite_ops=ites,
         bool_wrapper_ops=bool_wrappers,
+        int_bv_ops=int_bv,
     )
 
 
