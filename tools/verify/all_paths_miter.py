@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import z3
 
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.verify.clang_ast_evaluator import InstLoweringContext, SourceOperandDesc
 from tools.verify.lowering_semantics_extractor import LoweringSemanticsExtractor

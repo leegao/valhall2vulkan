@@ -49,7 +49,7 @@ from tools.symbolic_ssa.domains.symbolic_z3_bitvec import (
 
 try:
     import z3
-    from tools.symbolic_ssa.z3simplifier import dsl
+    from tools.symbolic_ssa.z3 import dsl
 except ImportError:
     z3 = None
     dsl = None

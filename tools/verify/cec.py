@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.symbolic_ssa.env import (
     MASK32,

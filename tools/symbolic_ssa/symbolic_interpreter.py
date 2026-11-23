@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import z3
 
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.env import (

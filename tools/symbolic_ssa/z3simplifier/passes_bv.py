@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BitVector and Boolean local peephole passes written in the `z3simplifier.dsl`
+BitVector and Boolean local peephole passes written in the `z3.dsl`
 `match`/`case` pattern-matching DSL.
 
 Responsibilities (strictly local single-node folding & algebraic rewrites;
@@ -21,7 +21,7 @@ from tools.symbolic_ssa import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import SimplificationContext
-from tools.symbolic_ssa.z3simplifier.dsl import (
+from tools.symbolic_ssa.z3.dsl import (
     BvCmpOp,
     Z3BoolConst,
     Z3BvConst,

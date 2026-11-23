@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import unittest
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.coverage import collect_predicate_nodes, synthesize_coverage_vectors
 from tools.verify.cec import run_concrete_diff

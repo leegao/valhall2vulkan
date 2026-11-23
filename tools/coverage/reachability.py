@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import z3
 
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.coverage.synthesizer import extract_concrete_overrides_from_model
 from tools.coverage.uf_pruning import lift_uf_proxies_into_overrides, prune_unique_hw_ufs

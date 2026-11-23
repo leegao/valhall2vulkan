@@ -9,7 +9,7 @@ from typing import Any, Optional, Tuple
 
 import z3
 
-from tools.symbolic_ssa.z3simplifier import dsl
+from tools.symbolic_ssa.z3 import dsl
 
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
 from tools.symbolic_ssa.z3.helpers import (

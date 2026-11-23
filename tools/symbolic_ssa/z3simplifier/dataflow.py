@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Z3-domain dataflow analysis and extensional-equality propagation engine,
-operating on lifted `z3simplifier.dsl` terms via Python `match`/`case` and
+operating on lifted `z3.dsl` terms via Python `match`/`case` and
 lowering back to `z3.ExprRef` via `.lower()`.
 
 Responsibilities (cleanly separated from local peephole folding):
@@ -33,7 +33,7 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplificationContext,
     SimplifyQuery,
 )
-from tools.symbolic_ssa.z3simplifier.dsl import (
+from tools.symbolic_ssa.z3.dsl import (
     Z3BoolConst,
     Z3BvConst,
     Z3Node,
