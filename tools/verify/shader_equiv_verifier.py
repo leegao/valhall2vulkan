@@ -42,7 +42,7 @@ from tools.verify.panfrost_z3_model import (
 from tools.symbolic_ssa import (
     BlockEffectState,
     DagSsaZ3Evaluator,
-    SharedShaderEnv,
+    SymbolicShaderEnv,
     _as_bool,
     _as_bv32,
     _as_bv64,
@@ -95,7 +95,7 @@ def _format_model_cex(
     m: z3.ModelRef,
     lhs: z3.ExprRef,
     rhs: z3.ExprRef,
-    env: SharedShaderEnv,
+    env: SymbolicShaderEnv,
 ) -> Tuple[str, str, str]:
     lv = m.eval(dsl.lower(lhs), model_completion=True)
     rv = m.eval(dsl.lower(rhs), model_completion=True)
@@ -116,7 +116,7 @@ def _solve_miter_eq(
     rhs: z3.ExprRef,
     guard: Optional[z3.BoolRef],
     timeout_ms: int,
-    env: SharedShaderEnv,
+    env: SymbolicShaderEnv,
     preconditions: Optional[List[z3.BoolRef]] = None,
     smt2_out: Optional[List[str]] = None,
     check_name: str = "",
@@ -285,7 +285,7 @@ def verify_equivalence_bundle(
         res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return res
 
-    env = SharedShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
+    env = SymbolicShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
 
     def _collect_sym_bkeys(ssa_d: Dict[str, Any]) -> Set[str]:
         ks: Set[str] = set()

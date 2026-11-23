@@ -436,7 +436,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
 
     def test_v33_zero_z3_churn_trivial_unsat_and_interpreter_lowering(self) -> None:
         """Identical DSL queries discharge UNSAT with zero Z3 lowering; interpreter emits pure DSL."""
-        from tools.symbolic_ssa import SharedShaderEnv, SymbolicSsaInterpreter
+        from tools.symbolic_ssa import SymbolicShaderEnv, SymbolicSsaInterpreter
         from tools.symbolic_ssa.z3 import dsl
 
         x = dsl.BitVec("x", 32)
@@ -461,7 +461,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
             ],
         }
         bundle = {"stage": "Fragment", "direct_ssa": ssa, "valhall_ssa": ssa, "mbs2_context": {}}
-        env = SharedShaderEnv(bundle)
+        env = SymbolicShaderEnv(bundle)
         interp = SymbolicSsaInterpreter(ssa, env, is_valhall_side=False, fp_mode="real", domain="udomain")
         interp.evaluate()
         out_bv = interp.domain.lower_z3_bv32(interp.values[4])

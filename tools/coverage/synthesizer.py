@@ -29,7 +29,7 @@ from tools.coverage.uf_pruning import (
 from tools.symbolic_ssa.env import (
     MASK32,
     ConcreteShaderEnv,
-    SharedShaderEnv,
+    SymbolicShaderEnv,
     _as_bool,
     _z3_not,
 )
@@ -155,7 +155,7 @@ def _extract_array_entries(
 
 def extract_concrete_overrides_from_model(
     model: z3.ModelRef,
-    env: SharedShaderEnv,
+    env: SymbolicShaderEnv,
 ) -> Dict[str, Any]:
     """
     Extract concrete BitVec, Bool, FAU-array, buffer-array, image-array, and
@@ -277,7 +277,7 @@ def extract_concrete_overrides_from_model(
 
 def _build_target_formulas(
     ssa_json: Dict[str, Any],
-    env: SharedShaderEnv,
+    env: SymbolicShaderEnv,
     is_valhall_side: bool,
     preds: List[Tuple[int, int]],
     fp_mode: str,
@@ -357,7 +357,7 @@ def synthesize_coverage_vectors(
             covered_targets=covered,
         )
 
-    env = SharedShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
+    env = SymbolicShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
     env.shared_sym_bkeys = set()
     cur_unroll = max(1, int(max_unroll))
     preconditions = env.build_preconditions()

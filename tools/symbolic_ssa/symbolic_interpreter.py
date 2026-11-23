@@ -19,7 +19,7 @@ from tools.symbolic_ssa.z3 import dsl
 
 from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.env import (
-    SharedShaderEnv,
+    SymbolicShaderEnv,
     Z3Val,
     _z3_and,
     _z3_if,
@@ -69,7 +69,7 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
 
 def _merge_states(
     cond_states: List[Tuple[z3.BoolRef, BlockEffectState]],
-    env: SharedShaderEnv,
+    env: SymbolicShaderEnv,
 ) -> BlockEffectState:
     if len(cond_states) == 1:
         return _clone_state(cond_states[0][1])
@@ -154,7 +154,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
     def __init__(
         self,
         ssa_json: Dict[str, Any],
-        env: SharedShaderEnv,
+        env: SymbolicShaderEnv,
         is_valhall_side: bool,
         fp_mode: str = "exact",
         max_unroll: int = 1,

@@ -31,7 +31,6 @@ from tools.symbolic_ssa.domains.shader_env.concrete_shader_env import (  # noqa:
     ConcreteShaderEnv,
 )
 from tools.symbolic_ssa.domains.shader_env.symbolic_shader_env import (  # noqa: F401
-    SharedShaderEnv,
     SymbolicShaderEnv,
 )
 
@@ -40,6 +39,5 @@ __all__ = [
     "MASK64",
     "ShaderEnvBase",
     "SymbolicShaderEnv",
-    "SharedShaderEnv",
     "ConcreteShaderEnv",
 ]

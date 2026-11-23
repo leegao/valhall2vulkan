@@ -62,14 +62,14 @@
                  +-----------------+-----------------+
                                    |
                                    v
-                 +-----------------------------------+
-                 | shader_equiv_verifier.py          |
-                 | 1. SharedShaderEnv + Preconditions|
-                 | 2. Whole-CFG Topological DAG Eval |
-                 | 3. Per-Output Z3 Miter Checks     |
-                 | 4. Layer-2 FP Discharger + UF     |
-                 | 5. orig_pc BFS Localization       |
-                 +-----------------------------------+
+                 +-------------------------------------+
+                 | shader_equiv_verifier.py            |
+                 | 1. SymbolicShaderEnv + Preconditions|
+                 | 2. Whole-CFG Topological DAG Eval   |
+                 | 3. Per-Output Z3 Miter Checks       |
+                 | 4. Layer-2 FP Discharger + UF       |
+                 | 5. orig_pc BFS Localization         |
+                 +-------------------------------------+
 ```
 
 ### Verification Objective
@@ -138,7 +138,7 @@ Floating-point values (`F32`) are stored canonically as 32-bit IEEE-754 bitvecto
 
 ## 4. Shared Symbolic Execution Environment
 
-`SharedShaderEnv` constructs a **single shared universe** of symbolic inputs so that both `direct_ssa` and `valhall_ssa` read identical symbolic values for every external input:
+`SymbolicShaderEnv` constructs a **single shared universe** of symbolic inputs so that both `direct_ssa` and `valhall_ssa` read identical symbolic values for every external input:
 
 1. **Builtins (`LoadBuiltinInput`)**: Indexed by SPIR-V `SpvBuiltIn` integer ID:
    - `V4F32` (e.g., `FragCoord`, `bi_15`): 4-tuple `(bi_15_0, bi_15_1, bi_15_2, bi_15_3)` of `BV32`.
@@ -242,7 +242,7 @@ When a CFG contains a backedge $u \to h$ with $h \le u$ (or a block lists a pred
 
 ### Disjoint 4 GB Virtual Address Partitioning
 
-To prevent spurious cross-buffer aliasing in Z3's flat memory space (e.g., an SSBO write colliding with a UBO or push-constant read), `SharedShaderEnv` assigns every canonical buffer key $k$ a unique, disjoint 4 GB virtual address region:
+To prevent spurious cross-buffer aliasing in Z3's flat memory space (e.g., an SSBO write colliding with a UBO or push-constant read), `SymbolicShaderEnv` assigns every canonical buffer key $k$ a unique, disjoint 4 GB virtual address region:
 
 $$\text{Base}(k) = r_k \cdot 2^{32}, \qquad r_k \in \{1, 2, 3, \dots\}$$
 
@@ -264,7 +264,7 @@ In SPIR-V compute shaders, shared memory variables (`StorageClassWorkgroup`) are
 Prior to v25.1, `"workgroup:<id>"` and `"wls_shared"` were allocated **different** 4 GB regions, and final output checks skipped `"wls_shared"` while **checking** `"workgroup:<id>"` — causing spurious `SAT` counterexamples on shared-memory compute encoders like `etc2_bc6.spv`.
 
 In v25.1:
-- If `direct_ssa` references a unique `workgroup:<id>` key, `SharedShaderEnv` aliases `buf_base_map["wls_shared"] = buf_base_map[unique_wg_key]` and routes `get_buf_mem("wls_shared")` to the same Z3 array.
+- If `direct_ssa` references a unique `workgroup:<id>` key, `SymbolicShaderEnv` aliases `buf_base_map["wls_shared"] = buf_base_map[unique_wg_key]` and routes `get_buf_mem("wls_shared")` to the same Z3 array.
 - Both `tls_private`, `wls_shared`, and `workgroup:*` are treated as thread/workgroup-local scratch at final external-output comparison: their writes are still fully tracked in `buf_mems` and `const_stores` during execution (so any load from shared memory feeding an SSBO/image output is verified), while dead post-exit scratch contents are excluded from external output checks.
 
 ---
@@ -283,7 +283,7 @@ Without these preconditions, Z3 is free to pick out-of-range invocation IDs such
 
 In v25.1:
 - `equiv_bundle.cpp` exports `"local_size": [wg_x, wg_y, wg_z]` inside `mbs2_context`.
-- `SharedShaderEnv.build_preconditions()` generates the exact Z3 `ULT` and identity constraints above for all active `bi_27_*`, `bi_28_*`, `bi_29` inputs, and `_solve_miter_eq` asserts them before checking `query`.
+- `SymbolicShaderEnv.build_preconditions()` generates the exact Z3 `ULT` and identity constraints above for all active `bi_27_*`, `bi_28_*`, `bi_29` inputs, and `_solve_miter_eq` asserts them before checking `query`.
 
 ---
 

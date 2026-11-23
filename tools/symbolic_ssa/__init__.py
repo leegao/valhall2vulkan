@@ -48,7 +48,7 @@ from tools.symbolic_ssa.env import (
     REAL_SORT,
     ConcreteShaderEnv,
     ShaderEnvBase,
-    SharedShaderEnv,
+    SymbolicShaderEnv,
     Z3Val,
     _CORNER_U32S,
     _as_bool,
@@ -124,7 +124,7 @@ def evaluate_ssa(
     if mode == "concrete":
         cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, overrides=overrides)
         return ConcreteSsaInterpreter(ssa_json, is_valhall_side=is_valhall_side).execute_one(cenv)
-    env = SharedShaderEnv(bundle)
+    env = SymbolicShaderEnv(bundle)
     ev = SymbolicSsaInterpreter(ssa_json, env, is_valhall_side=is_valhall_side, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
     st = ev.evaluate()
     return ev, st, env
@@ -157,7 +157,7 @@ __all__ = [
     "REAL_SORT",
     "SIDE_EFFECT_OPS",
     "ShaderEnvBase",
-    "SharedShaderEnv",
+    "SymbolicShaderEnv",
     "SsaDomain",
     "Z3SymbolicDomain",
     "make_z3_symbolic_domain",

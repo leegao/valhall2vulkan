@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Domain-Aware Symbolic Shader Environment (`SymbolicShaderEnv` / `SharedShaderEnv`).
+Domain-Aware Symbolic Shader Environment (`SymbolicShaderEnv`).
 
 Initialized with the requested `Z3SymbolicDomain` (e.g., `SymbolicZ3UDomain`,
 `SymbolicZ3BitvecDomain`, or any custom domain) so symbolic inputs, FAU loads,
@@ -213,7 +213,3 @@ class SymbolicShaderEnv(ShaderEnvBase):
             bkey, uoff = self.rloc_by_word[word_idx]
             return z3.Select(self.get_buf_mem(bkey), _dsl_bv32(uoff))
         return z3.Select(self.fau_sym, _dsl_bv32(word_idx))
-
-
-# Backwards-compatible alias
-SharedShaderEnv = SymbolicShaderEnv

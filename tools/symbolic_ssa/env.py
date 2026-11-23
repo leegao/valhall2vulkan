@@ -12,7 +12,6 @@ from tools.symbolic_ssa.domains.shader_env import (  # noqa: F401
     MASK32,
     MASK64,
     ShaderEnvBase,
-    SharedShaderEnv,
     SymbolicShaderEnv,
     _CORNER_U32S,
     _c_bool,

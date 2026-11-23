@@ -103,11 +103,11 @@ class TestCoverageSynthesizer(unittest.TestCase):
     def test_uf_and_image_array_override_decoding(self) -> None:
         import z3
         from tools.coverage import extract_concrete_overrides_from_model
-        from tools.verify.shader_equiv_verifier import BV32, SharedShaderEnv, bv32
+        from tools.verify.shader_equiv_verifier import BV32, SymbolicShaderEnv, bv32
         from tools.symbolic_ssa import ConcreteShaderEnv
 
         bundle = {"stage": "Compute", "direct_ok": True, "valhall_ok": True, "mbs2_context": {}, "direct_bindings": []}
-        env = SharedShaderEnv(bundle)
+        env = SymbolicShaderEnv(bundle)
         uf_val = env.get_sym_buf_slot("ssbo:0:0", bv32(16))
         img_arrs = env.get_img_mem("img:0:0")
         s = z3.Solver()
@@ -360,7 +360,7 @@ class TestV30CleanupAndEquivFuzz(unittest.TestCase):
 
     def test_concrete_symbolic_parity_idot4_and_atomics(self) -> None:
         import z3
-        from tools.symbolic_ssa import ConcreteShaderEnv, ConcreteSsaInterpreter, SharedShaderEnv, SymbolicSsaInterpreter
+        from tools.symbolic_ssa import ConcreteShaderEnv, ConcreteSsaInterpreter, SymbolicShaderEnv, SymbolicSsaInterpreter
 
         ssa = {
             "blocks": [{
@@ -391,7 +391,7 @@ class TestV30CleanupAndEquivFuzz(unittest.TestCase):
         self.assertEqual(cvals[5], 275)
         self.assertEqual(cvals[8], 10)
 
-        senv = SharedShaderEnv(bundle)
+        senv = SymbolicShaderEnv(bundle)
         sev = SymbolicSsaInterpreter(ssa, senv, is_valhall_side=False, fp_mode="exact")
         sev.evaluate()
         s = z3.Solver()

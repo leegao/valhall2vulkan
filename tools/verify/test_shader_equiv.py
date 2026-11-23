@@ -475,7 +475,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
     def test_smod_and_all_int_bit_fp_eval_paths(self) -> None:
         """Exercise every integer, bitwise, shift, div/rem/SMod, 64-bit, cmp, conv, and FP evaluator path."""
         import z3
-        from tools.verify.shader_equiv_verifier import SharedShaderEnv, DagSsaZ3Evaluator, bv32
+        from tools.verify.shader_equiv_verifier import SymbolicShaderEnv, DagSsaZ3Evaluator, bv32
 
         # Verify SMod exact SPIR-V §3.3.13 semantics across all 4 sign quadrants.
         smod_cases = [
@@ -502,7 +502,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
                     {"id": 6, "op": "PsbStore", "type": "Token", "blk": 0, "args": [5, 4, 1], "imm_u32": 4, "aux_str": "ssbo:0:0"},
                 ],
             }
-            env = SharedShaderEnv({"mbs2_context": {}})
+            env = SymbolicShaderEnv({"mbs2_context": {}})
             st = DagSsaZ3Evaluator(ssa, env, is_valhall_side=False, fp_mode="exact").evaluate()
             _, val_expr = st.const_stores[("ssbo:0:0", 0)]
             got = dsl.simplify(val_expr)

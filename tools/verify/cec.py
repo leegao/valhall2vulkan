@@ -27,7 +27,7 @@ from tools.symbolic_ssa.z3 import dsl
 from tools.symbolic_ssa.env import (
     MASK32,
     ConcreteShaderEnv,
-    SharedShaderEnv,
+    SymbolicShaderEnv,
     _as_bool,
     _as_bv32,
     _as_bv64,
@@ -339,7 +339,7 @@ def _extract_cutpoint_vars(expr: z3.ExprRef) -> Set[str]:
     return found
 
 
-def _empty_effect_state(env: SharedShaderEnv) -> BlockEffectState:
+def _empty_effect_state(env: SymbolicShaderEnv) -> BlockEffectState:
     return BlockEffectState(
         discarded=dsl.BoolVal(False),
         terminated=dsl.BoolVal(False),
@@ -434,7 +434,7 @@ def verify_with_cec(
         )
 
     t_sw = time.perf_counter()
-    env = SharedShaderEnv(bundle)
+    env = SymbolicShaderEnv(bundle)
     env.shared_sym_bkeys = set()
     preconditions = env.build_preconditions()
 

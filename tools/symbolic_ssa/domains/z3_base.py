@@ -4,7 +4,7 @@ Composable Z3 Symbolic Domain Interface (`Z3SymbolicDomain`).
 
 Defines the uniform boundary contract between any Z3-backed symbolic value
 domain (`SymbolicZ3BitvecDomain`, `SymbolicZ3UDomain`, or custom product/union
-Z3 domains) and `SymbolicSsaInterpreter` / `BlockEffectState` / `SharedShaderEnv`.
+Z3 domains) and `SymbolicSsaInterpreter` / `BlockEffectState` / `SymbolicShaderEnv`.
 
 By putting `lift_z3_*`, `lower_z3_*`, `merge_z3`, and `to_z3_real_f32` on this
 interface, `SymbolicSsaInterpreter` and downstream verifiers never inspect
@@ -32,7 +32,7 @@ class Z3SymbolicDomain(SsaDomain[V], Generic[V], abc.ABC):
 
     @abc.abstractmethod
     def lift_z3_bv32(self, raw: Any) -> Any:
-        """Lift a raw 32-bit Z3 BitVec from `SharedShaderEnv`/`BlockEffectState` into this domain."""
+        """Lift a raw 32-bit Z3 BitVec from `SymbolicShaderEnv`/`BlockEffectState` into this domain."""
 
     @abc.abstractmethod
     def lift_z3_bv64(self, raw: Any) -> Any:
