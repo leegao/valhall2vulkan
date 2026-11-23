@@ -499,6 +499,15 @@ class _BaseUDomain(SsaDomain):
         # Fast-path concrete bool condition
         if isinstance(cb, bool):
             return ut if cb else uf
+        if (ut.kind == UValKind.F32X2 and uf.kind == UValKind.BVEC64) or (
+            uf.kind == UValKind.F32X2 and ut.kind == UValKind.BVEC64
+        ):
+            ft = self.to_f32x2(ut)
+            ff = self.to_f32x2(uf)
+            return UVal.f32x2(
+                self._select_fp(cb, ft[0], ff[0]),
+                self._select_fp(cb, ft[1], ff[1]),
+            )
         if ut.kind == uf.kind:
             if ut.kind == UValKind.BOOL:
                 return UVal.bool_val(self.bv.select(cb, ut.data, uf.data))

@@ -308,5 +308,56 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         self.assertEqual(r_frag.solver_ms, 0.0)
 
 
+
+    def test_v32_3_autogen_dsl_enums_lower_and_ematching_extensionality(self) -> None:
+        """Verify auto-generated DSL enums, .lower() round-trip, UDomain F32X2 select, and E-matching extensionality."""
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain, UValKind
+        from tools.symbolic_ssa.z3simplifier.dsl import (
+            BridgeOp,
+            BvCmpOp,
+            Z3BvConst,
+            Z3OpBvAdd,
+            Z3OpBvCmp,
+            Z3OpExtract,
+            Z3OpKind,
+            Z3SortKind,
+            lift,
+        )
+        from tools.symbolic_ssa.z3simplifier.passes_ematch import (
+            EmatchingUnifyPass,
+            build_extensionality_witness_axiom,
+        )
+
+        # Auto-generated IntEnum / Enum checks + .lower() round-trip
+        self.assertEqual(int(Z3OpKind.EXTRACT), z3.Z3_OP_EXTRACT)
+        self.assertEqual(int(Z3SortKind.BV), z3.Z3_BV_SORT)
+        self.assertEqual(BridgeOp.F32_TO_BV32.value, "u_f32_to_bv32")
+        x = z3.BitVec("x", 32)
+        built = Z3OpBvCmp(BvCmpOp.ULT, Z3OpBvAdd(x, Z3BvConst(4, 32), 32), Z3BvConst(16, 32)).lower()
+        self.assertTrue(built.eq(z3.ULT(x + z3.BitVecVal(4, 32), z3.BitVecVal(16, 32))))
+        self.assertIsInstance(lift(z3.Extract(7, 0, x), depth=1), Z3OpExtract)
+
+        # UDomain.select preserves F32X2 across (F32X2, BVEC64) merges without demoting to BVEC64
+        dom = SymbolicZ3UDomain(exact_bitcast=False)
+        c = dom.lift_z3_bool(z3.Bool("c"))
+        f_arm = dom.fp_binary("FAdd", dom.lift_z3_bv32(x), dom.const_f32(1.0))
+        bv_arm = dom.lift_z3_bv32(z3.BitVec("y", 32))
+        merged = dom.select(c, f_arm, bv_arm)
+        self.assertEqual(merged.kind, UValKind.F32X2)
+
+        # Z3 E-matching Skolem-witness extensionality proof:
+        # ForAll([a], apply(fn_f, a) == apply(fn_g, a)) + ext_witness axiom => fn_f == fn_g
+        S = z3.DeclareSort("FnSort")
+        apply_fn = z3.Function("apply_fn", S, S, S)
+        fn_f, fn_g, a = z3.Consts("fn_f fn_g a", S)
+        pt_eq = z3.ForAll([a], apply_fn(fn_f, a) == apply_fn(fn_g, a), patterns=[apply_fn(fn_f, a)])
+        ext_ax = build_extensionality_witness_axiom(S, apply_fn, fn_f, fn_g)
+        q_ext = SimplifyQuery(lhs=fn_f, rhs=fn_g)
+        ematch = EmatchingUnifyPass(extra_axioms=(pt_eq, ext_ax), include_bridge_axioms=False)
+        out_q, st = ematch.run(q_ext, SimplificationContext())
+        self.assertTrue(st.changed)
+        self.assertTrue(out_q.is_trivially_unsat())
+
+
 if __name__ == "__main__":
     unittest.main()

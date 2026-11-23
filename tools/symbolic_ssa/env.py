@@ -464,6 +464,12 @@ class SharedShaderEnv(ShaderEnvBase):
         self.lane_id = z3.BitVec("lane_id", 5)
         self.inputs["lane_id"] = self.lane_id
 
+    def read_untyped_slot(self, domain: Any, raw_bv32: z3.BitVecRef) -> Any:
+        """Lift an untyped 32-bit shader input/memory word into `domain`'s untyped lattice value."""
+        if hasattr(domain, "lift_z3_bv32"):
+            return domain.lift_z3_bv32(raw_bv32)
+        return raw_bv32
+
     def is_shared_sym_bkey(self, bkey: str) -> bool:
         return bkey in getattr(self, "shared_sym_bkeys", set())
 

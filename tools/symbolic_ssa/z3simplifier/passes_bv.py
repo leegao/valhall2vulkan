@@ -22,6 +22,7 @@ import z3
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import SimplificationContext
 from tools.symbolic_ssa.z3simplifier.dsl import (
+    BvCmpOp,
     Z3BoolConst,
     Z3BvConst,
     Z3IntConst,
@@ -138,15 +139,15 @@ def _bv_wrapper_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
 
         # Constant-fold BV comparisons
         case Z3OpBvCmp(op, Z3BvConst(va, _, ra), Z3BvConst(vb, _, rb)):
-            if op.startswith("s"):
+            if op.is_signed:
                 sa, sb = ra.as_signed_long(), rb.as_signed_long()
-                if op == "slt": return z3.BoolVal(sa < sb)
-                if op == "sleq": return z3.BoolVal(sa <= sb)
-                if op == "sgt": return z3.BoolVal(sa > sb)
+                if op is BvCmpOp.SLT: return z3.BoolVal(sa < sb)
+                if op is BvCmpOp.SLEQ: return z3.BoolVal(sa <= sb)
+                if op is BvCmpOp.SGT: return z3.BoolVal(sa > sb)
                 return z3.BoolVal(sa >= sb)
-            if op == "ult": return z3.BoolVal(va < vb)
-            if op == "uleq": return z3.BoolVal(va <= vb)
-            if op == "ugt": return z3.BoolVal(va > vb)
+            if op is BvCmpOp.ULT: return z3.BoolVal(va < vb)
+            if op is BvCmpOp.ULEQ: return z3.BoolVal(va <= vb)
+            if op is BvCmpOp.UGT: return z3.BoolVal(va > vb)
             return z3.BoolVal(va >= vb)
 
         # ITE simplification

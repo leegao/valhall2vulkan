@@ -1,41 +1,22 @@
 #!/usr/bin/env python3
 """
-Z3-domain dataflow analysis and extensional-equality propagation engine.
+Z3-domain dataflow analysis and extensional-equality propagation engine,
+operating on lifted `z3simplifier.dsl` terms via Python `match`/`case` and
+lowering back to `z3.ExprRef` via `.lower()`.
 
-Cleanly separates global/relational dataflow reasoning from local peephole
-rewrites (`passes_bv.py`, `passes_real.py`):
+Responsibilities (cleanly separated from local peephole folding):
+  1. `EqualityTable` (Union-Find + Congruence): harvests ground truths and
+     extensional equalities (`a == b`) from `preconditions` and `guard`,
+     preferring concrete constants then smaller ASTs as canonical reps.
+  2. `KnownBits` (Forward BitVec Lattice): propagates `(zeros, ones)` bitmasks
+     via `match lift(node, depth=1): case ...` across `Z3BvConst`, `Z3OpZeroExt`,
+     `Z3OpSignExt`, `Z3OpExtract`, `Z3OpConcat`, `Z3OpBvAnd/Or/Xor/Shl/LShr`,
+     and `Z3OpIte`, collapsing fully-determined BitVecs via `Z3BvConst(...).lower()`.
+  3. Bounded Path-Sensitive `If` Propagation: refines `EqualityTable` along
+     `then`/`else` arms of `Z3OpIte` (bounded to `max_path_depth=2`, `<=512`
+     nodes) to collapse redundant guards and `discarded`-guarded fragment outputs.
 
-  1. Extensional Equality & Congruence (`EqualityTable` / Union-Find):
-     Harvests ground truths (`p`, `Not(p)`) and equalities (`a == b`) from
-     `preconditions` and `guard`. Maintains equivalence classes whose canonical
-     representative prefers concrete constants first, then smaller ASTs.
-     Applies extensional identities:
-       - `x ~ y` => `x == y -> True`, `x != y -> False`, `x - y -> 0`, `x ^ y -> 0`
-       - Congruence: replacing `x` with `rep(x)` normalizes `f(x)` and `f(y)`
-         to the same AST node in a single pass.
-
-  2. BitVec Known-Bits Forward Dataflow Lattice (`KnownBits`):
-     Propagates per-bit `(zeros, ones)` masks bottom-up through `BitVecVal`,
-     `ZeroExt`, `SignExt`, `Concat`, `Extract`, `BvAnd`, `BvOr`, `BvXor`,
-     `BvShl`, `LShR`, and `If` (join = bitwise intersection of known zeros/ones).
-     Whenever `(zeros | ones) == (1 << width) - 1`, collapses the node directly
-     to `BitVecVal(ones, width)` — soundly proving multi-step bit-mask/extract
-     identities such as `Extract(63, 32, ZeroExt(32, x)) == 0` or
-     `((x << 4) & 0xF) == 0` without ad-hoc peephole chains.
-
-  3. Path-Sensitive Conditional Propagation (`If(c, then_e, else_e)`):
-     Refines the dataflow environment along `then_e` with `c = True` (including
-     equalities inside `c`) and along `else_e` with `c = False`, collapsing
-     redundant nested guards (`If(c, If(c, a, b), d) -> If(c, a, d)`),
-     `discarded`-guarded fragment outputs (`guard = Not(discarded)` collapses
-     `If(discarded, undef, color) -> color`), and guarded constant substitutions
-     (`If(x == 0, x + y, z) -> If(x == 0, y, z)`).
-
-Soundness:
-  `DataflowPropagatePass` is **100% equivalence-preserving**
-  (`is_equivalence_preserving = True`): every fact is derived strictly from
-  `preconditions`, `guard`, dominating `If` conditions, or sound abstract
-  interpretation of BitVec semantics.
+100% equivalence-preserving (`is_equivalence_preserving = True`).
 """
 
 from __future__ import annotations
@@ -52,18 +33,37 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplificationContext,
     SimplifyQuery,
 )
+from tools.symbolic_ssa.z3simplifier.dsl import (
+    Z3BoolConst,
+    Z3BvConst,
+    Z3Node,
+    Z3OpAnd,
+    Z3OpBvAnd,
+    Z3OpBvLShr,
+    Z3OpBvOr,
+    Z3OpBvShl,
+    Z3OpBvSub,
+    Z3OpBvXor,
+    Z3OpConcat,
+    Z3OpDistinct,
+    Z3OpEq,
+    Z3OpExtract,
+    Z3OpIte,
+    Z3OpNot,
+    Z3OpOr,
+    Z3OpRealSub,
+    Z3OpSignExt,
+    Z3OpZeroExt,
+    Z3RealConst,
+    lift,
+    unwrap,
+)
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
 
 
 @dataclass(frozen=True, slots=True)
 class KnownBits:
-    """
-    Sound known-bits abstract domain element for a `width`-bit BitVector.
-
-    Invariant: `(zeros & ones) == 0` and `(zeros | ones) <= mask`.
-      - bit `i` of `zeros` is 1 iff bit `i` of the concrete value is provably 0.
-      - bit `i` of `ones`  is 1 iff bit `i` of the concrete value is provably 1.
-    """
+    """Sound known-bits abstract domain element for a `width`-bit BitVector."""
 
     width: int
     zeros: int
@@ -102,7 +102,6 @@ def _is_ground_const(e: z3.ExprRef) -> bool:
 
 
 def _rep_rank(e: z3.ExprRef) -> Tuple[int, int, int]:
-    """Ranking key for canonical equivalence-class representative (smaller is better)."""
     if _is_ground_const(e):
         return (0, 0, e.get_id())
     if z3.is_const(e):
@@ -112,10 +111,7 @@ def _rep_rank(e: z3.ExprRef) -> Tuple[int, int, int]:
 
 
 class EqualityTable:
-    """
-    Scoped Union-Find table of extensional equalities (`a == b`) and boolean
-    truth assignments (`cond == True/False`).
-    """
+    """Scoped Union-Find table of extensional equalities (`a == b`) and boolean truth facts."""
 
     def __init__(self, parent: Optional["EqualityTable"] = None) -> None:
         if parent is not None:
@@ -185,7 +181,6 @@ class EqualityTable:
             ra, rb = rb, ra
             ea, eb = eb, ea
         self._uf[rb] = ra
-        # Propagate boolean truth if either class had a known truth value
         ba = self._bool_vals.get(ra)
         bb = self._bool_vals.get(rb)
         if ba is None and bb is not None:
@@ -196,7 +191,7 @@ class EqualityTable:
             self._bool_vals[ra] = False
 
     def assume_bool(self, pred: z3.ExprRef, truth: bool) -> None:
-        """Harvest boolean truth and any nested `And`/`Not`/`Eq` facts from `pred == truth`."""
+        """Harvest boolean truth and nested `And`/`Or`/`Not`/`Eq`/`Distinct` facts via DSL `match`."""
         work: List[Tuple[z3.ExprRef, bool]] = [(pred, truth)]
         seen: Set[Tuple[int, bool]] = set()
         while work and len(seen) < 256:
@@ -208,140 +203,129 @@ class EqualityTable:
             if z3.is_true(cur) or z3.is_false(cur):
                 continue
             self._bool_vals[cur.get_id()] = val
-            self.union(cur, z3.BoolVal(val))
+            self.union(cur, Z3BoolConst(val).lower())
 
-            if not z3.is_app(cur):
-                continue
-            kind = cur.decl().kind()
-            if kind == z3.Z3_OP_NOT and cur.num_args() == 1:
-                work.append((cur.arg(0), not val))
-            elif kind == z3.Z3_OP_AND and val is True:
-                for i in range(cur.num_args()):
-                    work.append((cur.arg(i), True))
-            elif kind == z3.Z3_OP_OR and val is False:
-                for i in range(cur.num_args()):
-                    work.append((cur.arg(i), False))
-            elif kind == z3.Z3_OP_EQ and cur.num_args() == 2 and val is True:
-                a, b = cur.arg(0), cur.arg(1)
-                self.union(a, b)
-            elif kind == z3.Z3_OP_DISTINCT and cur.num_args() == 2 and val is False:
-                a, b = cur.arg(0), cur.arg(1)
-                self.union(a, b)
-
-    def has_facts(self) -> bool:
-        return bool(self._uf or self._bool_vals)
+            match lift(cur, depth=1):
+                case Z3OpNot(inner):
+                    work.append((unwrap(inner), not val))
+                case Z3OpAnd(args) if val is True:
+                    for a in args:
+                        work.append((unwrap(a), True))
+                case Z3OpOr(args) if val is False:
+                    for a in args:
+                        work.append((unwrap(a), False))
+                case Z3OpEq(a, b) if val is True:
+                    self.union(unwrap(a), unwrap(b))
+                case Z3OpDistinct(a, b) if val is False:
+                    self.union(unwrap(a), unwrap(b))
 
 
-def _transfer_known_bits(node: z3.ExprRef, kb_map: Dict[int, KnownBits]) -> Optional[KnownBits]:
-    """Compute sound `KnownBits` for a BitVec expression from its children's known bits."""
-    if not isinstance(node, z3.BitVecRef):
-        return None
-    w = node.size()
-    if isinstance(node, z3.BitVecNumRef):
-        return KnownBits.const(node.as_long(), w)
-    if not z3.is_app(node):
-        return KnownBits.top(w)
+def _transfer_known_bits(node: Z3Node, width: int, kb_map: Dict[int, KnownBits]) -> KnownBits:
+    """Compute sound `KnownBits` over lifted DSL `Z3Node` using structural `match`/`case`."""
+    mask = (1 << width) - 1
 
-    kind = node.decl().kind()
-    nargs = node.num_args()
-    mask = (1 << w) - 1
+    def get_kb(e: object) -> KnownBits:
+        raw = unwrap(e)
+        if isinstance(raw, z3.BitVecNumRef):
+            return KnownBits.const(raw.as_long(), raw.size())
+        return kb_map.get(raw.get_id(), KnownBits.top(raw.size()))
 
-    def get_kb(e: z3.ExprRef) -> KnownBits:
-        if isinstance(e, z3.BitVecNumRef):
-            return KnownBits.const(e.as_long(), e.size())
-        return kb_map.get(e.get_id(), KnownBits.top(e.size()))
-
-    if kind == z3.Z3_OP_ZERO_EXT and nargs == 1:
-        src = node.arg(0)
-        sk = get_kb(src)
-        k = node.params()[0]
-        hi_zeros = ((1 << k) - 1) << src.size()
-        return KnownBits(w, (sk.zeros | hi_zeros) & mask, sk.ones & mask)
-
-    if kind == z3.Z3_OP_SIGN_EXT and nargs == 1:
-        src = node.arg(0)
-        sk = get_kb(src)
-        sw = src.size()
-        k = node.params()[0]
-        sign_bit = 1 << (sw - 1)
-        hi_mask = ((1 << k) - 1) << sw
-        if sk.zeros & sign_bit:
-            return KnownBits(w, (sk.zeros | hi_mask) & mask, sk.ones & mask)
-        if sk.ones & sign_bit:
-            return KnownBits(w, sk.zeros & mask, (sk.ones | hi_mask) & mask)
-        return KnownBits(w, sk.zeros & mask, sk.ones & mask)
-
-    if kind == z3.Z3_OP_EXTRACT and nargs == 1:
-        hi, lo = node.params()
-        sk = get_kb(node.arg(0))
-        return KnownBits(w, (sk.zeros >> lo) & mask, (sk.ones >> lo) & mask)
-
-    if kind == z3.Z3_OP_CONCAT and nargs >= 2:
-        z_acc, o_acc = 0, 0
-        for i in range(nargs):
-            ch = node.arg(i)
-            ck = get_kb(ch)
-            cw = ch.size()
-            z_acc = (z_acc << cw) | ck.zeros
-            o_acc = (o_acc << cw) | ck.ones
-        return KnownBits(w, z_acc & mask, o_acc & mask)
-
-    if kind == z3.Z3_OP_BAND and nargs == 2:
-        ka, kb = get_kb(node.arg(0)), get_kb(node.arg(1))
-        return KnownBits(w, (ka.zeros | kb.zeros) & mask, (ka.ones & kb.ones) & mask)
-
-    if kind == z3.Z3_OP_BOR and nargs == 2:
-        ka, kb = get_kb(node.arg(0)), get_kb(node.arg(1))
-        return KnownBits(w, (ka.zeros & kb.zeros) & mask, (ka.ones | kb.ones) & mask)
-
-    if kind == z3.Z3_OP_BXOR and nargs == 2:
-        ka, kb = get_kb(node.arg(0)), get_kb(node.arg(1))
-        z = ((ka.zeros & kb.zeros) | (ka.ones & kb.ones)) & mask
-        o = ((ka.zeros & kb.ones) | (ka.ones & kb.zeros)) & mask
-        return KnownBits(w, z, o)
-
-    if kind == z3.Z3_OP_BSHL and nargs == 2:
-        rhs = node.arg(1)
-        if isinstance(rhs, z3.BitVecNumRef):
-            sh = rhs.as_long()
-            if sh >= w:
-                return KnownBits.const(0, w)
-            ka = get_kb(node.arg(0))
+    match node:
+        case Z3BvConst(val, w):
+            return KnownBits.const(val, w)
+        case Z3OpZeroExt(k, src):
+            sr = unwrap(src)
+            sk = get_kb(sr)
+            hi_zeros = ((1 << k) - 1) << sr.size()
+            return KnownBits(width, (sk.zeros | hi_zeros) & mask, sk.ones & mask)
+        case Z3OpSignExt(k, src):
+            sr = unwrap(src)
+            sk = get_kb(sr)
+            sw = sr.size()
+            sign_bit = 1 << (sw - 1)
+            hi_mask = ((1 << k) - 1) << sw
+            if sk.zeros & sign_bit:
+                return KnownBits(width, (sk.zeros | hi_mask) & mask, sk.ones & mask)
+            if sk.ones & sign_bit:
+                return KnownBits(width, sk.zeros & mask, (sk.ones | hi_mask) & mask)
+            return KnownBits(width, sk.zeros & mask, sk.ones & mask)
+        case Z3OpExtract(_, lo, src):
+            sk = get_kb(src)
+            return KnownBits(width, (sk.zeros >> lo) & mask, (sk.ones >> lo) & mask)
+        case Z3OpConcat(args):
+            z_acc, o_acc = 0, 0
+            for ch in args:
+                cr = unwrap(ch)
+                ck = get_kb(cr)
+                cw = cr.size()
+                z_acc = (z_acc << cw) | ck.zeros
+                o_acc = (o_acc << cw) | ck.ones
+            return KnownBits(width, z_acc & mask, o_acc & mask)
+        case Z3OpBvAnd(lhs, rhs, _):
+            ka, kb = get_kb(lhs), get_kb(rhs)
+            return KnownBits(width, (ka.zeros | kb.zeros) & mask, (ka.ones & kb.ones) & mask)
+        case Z3OpBvOr(lhs, rhs, _):
+            ka, kb = get_kb(lhs), get_kb(rhs)
+            return KnownBits(width, (ka.zeros & kb.zeros) & mask, (ka.ones | kb.ones) & mask)
+        case Z3OpBvXor(lhs, rhs, _):
+            ka, kb = get_kb(lhs), get_kb(rhs)
+            z = ((ka.zeros & kb.zeros) | (ka.ones & kb.ones)) & mask
+            o = ((ka.zeros & kb.ones) | (ka.ones & kb.zeros)) & mask
+            return KnownBits(width, z, o)
+        case Z3OpBvShl(lhs, Z3BvConst(sh, _), _):
+            if sh >= width:
+                return KnownBits.const(0, width)
+            ka = get_kb(lhs)
             lo_zeros = (1 << sh) - 1
-            return KnownBits(w, ((ka.zeros << sh) | lo_zeros) & mask, (ka.ones << sh) & mask)
+            return KnownBits(width, ((ka.zeros << sh) | lo_zeros) & mask, (ka.ones << sh) & mask)
+        case Z3OpBvLShr(lhs, Z3BvConst(sh, _), _):
+            if sh >= width:
+                return KnownBits.const(0, width)
+            ka = get_kb(lhs)
+            hi_zeros = ((1 << sh) - 1) << (width - sh)
+            return KnownBits(width, ((ka.zeros >> sh) | hi_zeros) & mask, (ka.ones >> sh) & mask)
+        case Z3OpIte(_, t_arm, f_arm):
+            return get_kb(t_arm).join(get_kb(f_arm))
+    return KnownBits.top(width)
 
-    if kind == z3.Z3_OP_BLSHR and nargs == 2:
-        rhs = node.arg(1)
-        if isinstance(rhs, z3.BitVecNumRef):
-            sh = rhs.as_long()
-            if sh >= w:
-                return KnownBits.const(0, w)
-            ka = get_kb(node.arg(0))
-            hi_zeros = ((1 << sh) - 1) << (w - sh)
-            return KnownBits(w, ((ka.zeros >> sh) | hi_zeros) & mask, (ka.ones >> sh) & mask)
 
-    if kind == z3.Z3_OP_ITE and nargs == 3:
-        kt, kf = get_kb(node.arg(1)), get_kb(node.arg(2))
-        return kt.join(kf)
+def _apply_extensional_rules(lifted: Z3Node, raw: z3.ExprRef, env: EqualityTable) -> Optional[z3.ExprRef]:
+    """Apply extensional equality & boolean truth identities via DSL `match`/`case` and `.lower()`."""
+    if z3.is_bool(raw):
+        bv = env.lookup_bool(raw)
+        if bv is not None and not (z3.is_true(raw) or z3.is_false(raw)):
+            return Z3BoolConst(bv).lower()
 
-    return KnownBits.top(w)
+    rep = env.find_rep(raw)
+    if not rep.eq(raw):
+        return rep
+
+    match lifted:
+        case Z3OpEq(a, b) if env.are_equal(unwrap(a), unwrap(b)):
+            return Z3BoolConst(True).lower()
+        case Z3OpDistinct(a, b) if env.are_equal(unwrap(a), unwrap(b)):
+            return Z3BoolConst(False).lower()
+        case Z3OpIte(Z3BoolConst(True), t_arm, _):
+            return unwrap(t_arm)
+        case Z3OpIte(Z3BoolConst(False), _, f_arm):
+            return unwrap(f_arm)
+        case Z3OpIte(_, t_arm, f_arm) if env.are_equal(unwrap(t_arm), unwrap(f_arm)):
+            return unwrap(t_arm)
+        case Z3OpBvSub(a, b, w) | Z3OpBvXor(a, b, w) if env.are_equal(unwrap(a), unwrap(b)):
+            return Z3BvConst(0, w).lower()
+        case Z3OpRealSub(a, b) if env.are_equal(unwrap(a), unwrap(b)):
+            return Z3RealConst(0).lower()
+    return None
 
 
 def _rewrite_with_dataflow(
     root: z3.ExprRef,
     eq_table: EqualityTable,
     *,
-    max_path_depth: int = 6,
+    max_path_depth: int = 2,
     max_nodes: int = 50000,
 ) -> Tuple[z3.ExprRef, int]:
-    """
-    Propagate `eq_table` (extensional equalities + boolean facts) and `KnownBits`
-    through `root`.
-
-    Uses a fast iterative bottom-up DAG pass for the main expression body, and
-    performs bounded path-sensitive specialization on `If(c, then_e, else_e)`
-    nodes up to `max_path_depth` when `c` carries new boolean/equality facts.
-    """
+    """Propagate `eq_table` and `KnownBits` through `root` using DSL-lifted match rules."""
     rewrites = 0
 
     def _run_dag(expr: z3.ExprRef, env: EqualityTable) -> z3.ExprRef:
@@ -357,10 +341,9 @@ def _rewrite_with_dataflow(
                 continue
 
             if not expanded:
-                # Check if `cur` already resolves via boolean truth or canonical equality rep
                 bv = env.lookup_bool(cur) if z3.is_bool(cur) else None
                 if bv is not None and not (z3.is_true(cur) or z3.is_false(cur)):
-                    memo[cid] = z3.BoolVal(bv)
+                    memo[cid] = Z3BoolConst(bv).lower()
                     rewrites += 1
                     continue
                 rep = env.find_rep(cur)
@@ -377,7 +360,6 @@ def _rewrite_with_dataflow(
                         kb_map[cid] = KnownBits.const(cur.as_long(), cur.size())
                     continue
 
-                # Short-circuit dead `If` arm before traversing it
                 if cur.decl().kind() == z3.Z3_OP_ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True:
@@ -397,17 +379,14 @@ def _rewrite_with_dataflow(
                     if ch.get_id() not in memo:
                         stack.append((ch, False))
             else:
-                # Short-circuit If when cond was already known
                 if cur.decl().kind() == z3.Z3_OP_ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True and cur.arg(1).get_id() in memo:
-                        res = memo[cur.arg(1).get_id()]
-                        memo[cid] = res
+                        memo[cid] = memo[cur.arg(1).get_id()]
                         rewrites += 1
                         continue
                     if cond_b is False and cur.arg(2).get_id() in memo:
-                        res = memo[cur.arg(2).get_id()]
-                        memo[cid] = res
+                        memo[cid] = memo[cur.arg(2).get_id()]
                         rewrites += 1
                         continue
 
@@ -417,22 +396,21 @@ def _rewrite_with_dataflow(
                 any_changed = any(not nc.eq(oc) for nc, oc in zip(new_children, orig_children))
                 rebuilt = rebuild_app(cur, new_children) if any_changed else cur
 
-                # Apply extensional equality rules on the rebuilt node
-                simplified = _apply_extensional_rules(rebuilt, env)
+                lifted = lift(rebuilt, depth=1)
+                simplified = _apply_extensional_rules(lifted, rebuilt, env)
                 if simplified is not None and not simplified.eq(rebuilt):
                     rebuilt = simplified
+                    lifted = lift(rebuilt, depth=1)
                     rewrites += 1
 
-                # Apply KnownBits lattice transfer & constant collapse
                 if isinstance(rebuilt, z3.BitVecRef) and not isinstance(rebuilt, z3.BitVecNumRef):
-                    kb = _transfer_known_bits(rebuilt, kb_map)
-                    if kb is not None:
-                        if kb.is_const:
-                            rebuilt = z3.BitVecVal(kb.ones, kb.width)
-                            kb_map[rebuilt.get_id()] = kb
-                            rewrites += 1
-                        else:
-                            kb_map[rebuilt.get_id()] = kb
+                    kb = _transfer_known_bits(lifted, rebuilt.size(), kb_map)
+                    if kb.is_const:
+                        rebuilt = Z3BvConst(kb.ones, kb.width).lower()
+                        kb_map[rebuilt.get_id()] = kb
+                        rewrites += 1
+                    else:
+                        kb_map[rebuilt.get_id()] = kb
                 elif isinstance(rebuilt, z3.BitVecNumRef):
                     kb_map[rebuilt.get_id()] = KnownBits.const(rebuilt.as_long(), rebuilt.size())
 
@@ -445,84 +423,40 @@ def _rewrite_with_dataflow(
         base = _run_dag(expr, env)
         if depth <= 0 or count_ast_nodes([base], limit=513) > 512:
             return base
-        if not (z3.is_app(base) and base.decl().kind() == z3.Z3_OP_ITE and base.num_args() == 3):
-            return base
-        cond, t_arm, f_arm = base.arg(0), base.arg(1), base.arg(2)
-        if z3.is_true(cond):
-            rewrites += 1
-            return _run_path_sensitive(t_arm, env, depth - 1)
-        if z3.is_false(cond):
-            rewrites += 1
-            return _run_path_sensitive(f_arm, env, depth - 1)
+        match lift(base, depth=1):
+            case Z3OpIte(Z3BoolConst(True), t_arm, _):
+                rewrites += 1
+                return _run_path_sensitive(unwrap(t_arm), env, depth - 1)
+            case Z3OpIte(Z3BoolConst(False), _, f_arm):
+                rewrites += 1
+                return _run_path_sensitive(unwrap(f_arm), env, depth - 1)
+            case Z3OpIte(cond, t_arm, f_arm):
+                cr, tr, fr = unwrap(cond), unwrap(t_arm), unwrap(f_arm)
+                t_env = EqualityTable(env)
+                t_env.assume_bool(cr, True)
+                new_t = _run_path_sensitive(tr, t_env, depth - 1)
 
-        t_env = EqualityTable(env)
-        t_env.assume_bool(cond, True)
-        new_t = _run_path_sensitive(t_arm, t_env, depth - 1)
+                f_env = EqualityTable(env)
+                f_env.assume_bool(cr, False)
+                new_f = _run_path_sensitive(fr, f_env, depth - 1)
 
-        f_env = EqualityTable(env)
-        f_env.assume_bool(cond, False)
-        new_f = _run_path_sensitive(f_arm, f_env, depth - 1)
-
-        if new_t.eq(new_f):
-            rewrites += 1
-            return new_t
-        if not new_t.eq(t_arm) or not new_f.eq(f_arm):
-            rewrites += 1
-            return z3.If(cond, new_t, new_f)
+                if new_t.eq(new_f):
+                    rewrites += 1
+                    return new_t
+                if not new_t.eq(tr) or not new_f.eq(fr):
+                    rewrites += 1
+                    return Z3OpIte(cr, new_t, new_f).lower()
         return base
 
     out = _run_path_sensitive(root, eq_table, max_path_depth)
     return out, rewrites
 
 
-def _apply_extensional_rules(node: z3.ExprRef, env: EqualityTable) -> Optional[z3.ExprRef]:
-    """Apply extensional equality & boolean truth identities on a single rebuilt node."""
-    if z3.is_bool(node):
-        bv = env.lookup_bool(node)
-        if bv is not None and not (z3.is_true(node) or z3.is_false(node)):
-            return z3.BoolVal(bv)
-
-    rep = env.find_rep(node)
-    if not rep.eq(node):
-        return rep
-
-    if not z3.is_app(node):
-        return None
-    kind = node.decl().kind()
-    nargs = node.num_args()
-
-    if kind == z3.Z3_OP_EQ and nargs == 2:
-        a, b = node.arg(0), node.arg(1)
-        if env.are_equal(a, b):
-            return z3.BoolVal(True)
-    elif kind == z3.Z3_OP_DISTINCT and nargs == 2:
-        a, b = node.arg(0), node.arg(1)
-        if env.are_equal(a, b):
-            return z3.BoolVal(False)
-    elif kind == z3.Z3_OP_ITE and nargs == 3:
-        c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
-        if z3.is_true(c):
-            return t_arm
-        if z3.is_false(c):
-            return f_arm
-        if env.are_equal(t_arm, f_arm):
-            return t_arm
-    elif kind in (z3.Z3_OP_BSUB, z3.Z3_OP_BXOR) and nargs == 2 and isinstance(node, z3.BitVecRef):
-        if env.are_equal(node.arg(0), node.arg(1)):
-            return z3.BitVecVal(0, node.size())
-    elif kind == z3.Z3_OP_SUB and nargs == 2 and isinstance(node, z3.ArithRef) and node.is_real():
-        if env.are_equal(node.arg(0), node.arg(1)):
-            return z3.RealVal(0)
-    return None
-
-
 class DataflowPropagatePass(Z3QueryPass):
     """
     Global Z3-domain dataflow pass: propagates precondition & guard equalities
     (`EqualityTable`), BitVec `KnownBits`, and path-sensitive `If` facts across
-    `lhs` and `rhs`.
-
-    100% equivalence-preserving (`is_equivalence_preserving = True`).
+    `lhs` and `rhs` using lifted `dsl.py` types.
     """
 
     name = "dataflow_propagate"
@@ -553,7 +487,6 @@ class DataflowPropagatePass(Z3QueryPass):
             query.rhs, env, max_path_depth=self.max_path_depth, max_nodes=ctx.max_dag_nodes
         )
 
-        # If `lhs` and `rhs` belong to the same equivalence class under `env`, discharge immediately
         if not new_lhs.eq(new_rhs) and env.are_equal(new_lhs, new_rhs):
             rep = env.find_rep(new_lhs)
             new_lhs, new_rhs = rep, rep

@@ -65,6 +65,11 @@ from tools.symbolic_ssa.z3simplifier.passes_real import (
     _bridge_cancel_rule,
     _real_algebraic_rule,
 )
+from tools.symbolic_ssa.z3simplifier.passes_ematch import (
+    EmatchingUnifyPass,
+    build_bridge_ematch_axioms,
+    build_extensionality_witness_axiom,
+)
 from tools.symbolic_ssa.z3simplifier.passes_unify import (
     ConditionedUnificationPass,
     ExactCseUnificationPass,
@@ -125,6 +130,7 @@ def build_default_pipeline(
     *,
     enable_cse_unify: bool = True,
     enable_conditioned_unify: bool = False,
+    enable_ematching: bool = False,
     enable_theory_purify: bool = True,
 ) -> PassPipeline:
     """
@@ -146,6 +152,8 @@ def build_default_pipeline(
         passes.append(ExactCseUnificationPass())
     if enable_conditioned_unify:
         passes.append(ConditionedUnificationPass())
+    if enable_ematching:
+        passes.append(EmatchingUnifyPass())
     if enable_theory_purify:
         passes.append(TheoryPurifyRealPass())
         passes.append(PolynomialNormalizePass())
@@ -180,6 +188,7 @@ __all__ = [
     "BvWrapperPeepholePass",
     "ConditionedUnificationPass",
     "DataflowPropagatePass",
+    "EmatchingUnifyPass",
     "EqualityTable",
     "ExactCseUnificationPass",
     "FixedPointPass",
@@ -203,7 +212,9 @@ __all__ = [
     "Z3QueryPass",
     "Z3TermPass",
     "build_default_pipeline",
+    "build_bridge_ematch_axioms",
     "build_exact_pipeline",
+    "build_extensionality_witness_axiom",
     "census_ast",
     "count_ast_nodes",
     "format_z3_ast",

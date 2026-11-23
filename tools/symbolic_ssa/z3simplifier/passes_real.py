@@ -56,11 +56,18 @@ def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         return None
     if node.decl().kind() == z3.Z3_OP_ITE and node.num_args() == 3:
         c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
-        if (
-            z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
-            and z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == t_arm.decl().name()
-        ):
+        t_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
+        f_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
+        if t_br and f_br and t_arm.decl().name() == f_arm.decl().name():
             return t_arm.decl()(z3.If(c, t_arm.arg(0), f_arm.arg(0)))
+        if t_br and t_arm.decl().name() == "u_f32_to_bv32" and isinstance(f_arm, z3.BitVecNumRef):
+            fv = struct.unpack("<f", struct.pack("<I", f_arm.as_long() & 0xFFFFFFFF))[0]
+            if math.isfinite(fv):
+                return t_arm.decl()(z3.If(c, t_arm.arg(0), z3.RealVal(repr(float(fv)))))
+        if f_br and f_arm.decl().name() == "u_f32_to_bv32" and isinstance(t_arm, z3.BitVecNumRef):
+            tv = struct.unpack("<f", struct.pack("<I", t_arm.as_long() & 0xFFFFFFFF))[0]
+            if math.isfinite(tv):
+                return f_arm.decl()(z3.If(c, z3.RealVal(repr(float(tv))), f_arm.arg(0)))
         return None
     if node.num_args() != 1:
         return None
