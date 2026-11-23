@@ -265,5 +265,48 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         self.assertEqual(dom.lower_z3_bv32(c5_back).as_long(), 5)
 
 
+
+    def test_v32_2_dataflow_extensional_equalities_and_known_bits(self) -> None:
+        """DataflowPropagatePass propagates Union-Find equalities and KnownBits constant collapses."""
+        a, b, x = z3.BitVecs("a b x", 32)
+        f = z3.Function("opaque_f", z3.BitVecSort(32), z3.BitVecSort(32))
+        # Extensional equality: precondition `a == b` => `f(a) == f(b)` and `(a - b) == 0`
+        q_eq = SimplifyQuery(lhs=f(a) + (a - b), rhs=f(b), preconditions=(a == b,))
+        r_eq = solve_simplified_miter(q_eq, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(r_eq.status, "UNSAT")
+        self.assertEqual(r_eq.solver_ms, 0.0)
+
+        # KnownBits: Extract(63, 32, ZeroExt(32, x)) == 0 and ((x << 4) & 0xF) == 0
+        hi_bits = z3.Extract(63, 32, z3.ZeroExt(32, x))
+        low_mask = (x << z3.BitVecVal(4, 32)) & z3.BitVecVal(0xF, 32)
+        q_kb = SimplifyQuery(lhs=hi_bits | low_mask, rhs=z3.BitVecVal(0, 32))
+        r_kb = solve_simplified_miter(q_kb, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(r_kb.status, "UNSAT")
+        self.assertEqual(r_kb.solver_ms, 0.0)
+
+    def test_v32_2_path_sensitive_if_and_bridge_over_if_unlock_qfnra(self) -> None:
+        """Path-sensitive DataflowPropagatePass + bridge-over-If collapse CFG diamonds & unlock QF_NRA."""
+        u_f2b = z3.Function("u_f32_to_bv32", z3.RealSort(), z3.BitVecSort(32))
+        u_b2f = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        discarded, cond = z3.Bools("discarded cond")
+        r1, r2 = z3.Reals("r1 r2")
+        undef = z3.BitVec("undef", 32)
+
+        # Bridge-over-If cancellation: u_bv32_to_f32(If(cond, u_f32_to_bv32(r1), u_f32_to_bv32(r2))) -> If(cond, r1, r2)
+        merged_bv = z3.If(cond, u_f2b(r1), u_f2b(r2))
+        q_br = SimplifyQuery(lhs=u_b2f(merged_bv), rhs=z3.If(cond, r1, r2))
+        r_br = solve_simplified_miter(q_br, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(r_br.status, "UNSAT")
+        self.assertEqual(r_br.solver_ms, 0.0)
+
+        # Fragment discarded guard: guard=Not(discarded) collapses If(discarded, undef, u_f2b(...))
+        lhs = z3.If(discarded, undef, u_f2b((r1 + r2) * r1))
+        rhs = z3.If(discarded, undef, u_f2b(r1 * r1 + r2 * r1))
+        q_frag = SimplifyQuery(lhs=lhs, rhs=rhs, guard=z3.Not(discarded))
+        r_frag = solve_simplified_miter(q_frag, build_default_pipeline(), timeout_ms=200)
+        self.assertEqual(r_frag.status, "UNSAT")
+        self.assertEqual(r_frag.solver_ms, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

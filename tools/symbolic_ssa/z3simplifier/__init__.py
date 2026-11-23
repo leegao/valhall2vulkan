@@ -1,38 +1,29 @@
 #!/usr/bin/env python3
 """
-General Z3 Term & Predicate Simplification Framework (`tools.symbolic_ssa.z3simplifier`).
+`tools.symbolic_ssa.z3simplifier` — General Z3 Term & Predicate Simplification Framework.
 
 Public API:
-  - Data models: `SimplifyQuery`, `SideObligation`, `SimplificationContext`,
-    `SimplifyResult`, `RewriteStats`, `PassStats`, `MiterSolveResult`, `AstCensus`.
-  - Pass interfaces: `Z3TermPass`, `Z3QueryPass`, `TermPassAdapter`,
-    `FixedPointPass`, `PassPipeline`.
-  - Built-in passes:
-      * `BvWrapperPeepholePass` (Issue 1: BV64/Bool wrapper elimination)
-      * `BvAlgebraicPass` (Issue 6: BV mul-by-pow2 -> shl, add/shift folding)
-      * `BridgeCancelPass` (round-trip `u_f32_to_bv32(u_bv32_to_f32(x))` cancel)
-      * `ReadOnlyArrayScalarizePass` (Issue 2: sound read-only array scalarization)
-      * `InjectiveBridgeUnwrapPass` (Issue 3: outer `u_f32_to_bv32` unwrapping)
-      * `PolynomialNormalizePass` (Issue 3: bounded `som=True` polynomial collapse)
-      * `TheoryPurifyRealPass` (Issue 2: `QF_AUFBVNRA -> QF_NRA` purification)
-      * `ExactCseUnificationPass` (cross-side exact subexpression lifting)
-      * `ConditionedUnificationPass` (WLP-justified near-identical subexpression lifting)
-  - Convenience builders:
-      * `build_exact_pipeline()` (100% equivalence-preserving passes only)
-      * `build_default_pipeline(...)` (exact passes + sound over-approx passes)
-      * `simplify_query(...)`, `solve_simplified_miter(...)`, `format_z3_ast(...)`.
+  - `SimplifyQuery`, `SimplificationContext`, `SimplifyResult`, `RewriteStats`, `PassStats`
+  - `Z3TermPass`, `Z3QueryPass`, `TermPassAdapter`, `FixedPointPass`, `PassPipeline`
+  - `dsl`: typed `match`/`case` AST pattern-matching DSL (`view`, `unwrap`, `Z3Op*`)
+  - `DataflowPropagatePass`: Z3-domain dataflow engine (`EqualityTable`, `KnownBits`, path-sensitive `If`)
+  - `MergedLocalPeepholePass`: single-walk fused BV + Real + Bridge peephole pass
+  - `build_exact_pipeline()`, `build_default_pipeline()`, `simplify_query()`
+  - `solve_simplified_miter()`, `MiterSolveResult`
+  - `format_z3_ast()`, `census_ast()`, `count_ast_nodes()`
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional, Sequence, Tuple
+
+import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import (
     AstCensus,
     census_ast,
     count_ast_nodes,
     format_z3_ast,
-    rebuild_app,
     rewrite_dag,
 )
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -42,6 +33,11 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplificationContext,
     SimplifyQuery,
     SimplifyResult,
+)
+from tools.symbolic_ssa.z3simplifier.dataflow import (
+    DataflowPropagatePass,
+    EqualityTable,
+    KnownBits,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import (
     FixedPointPass,
@@ -57,6 +53,8 @@ from tools.symbolic_ssa.z3simplifier.passes_array import (
 from tools.symbolic_ssa.z3simplifier.passes_bv import (
     BvAlgebraicPass,
     BvWrapperPeepholePass,
+    _bv_algebraic_rule,
+    _bv_wrapper_rule,
 )
 from tools.symbolic_ssa.z3simplifier.passes_real import (
     BridgeCancelPass,
@@ -64,6 +62,8 @@ from tools.symbolic_ssa.z3simplifier.passes_real import (
     PolynomialNormalizePass,
     PreconditionConstSubPass,
     RealAlgebraicPass,
+    _bridge_cancel_rule,
+    _real_algebraic_rule,
 )
 from tools.symbolic_ssa.z3simplifier.passes_unify import (
     ConditionedUnificationPass,
@@ -75,22 +75,46 @@ from tools.symbolic_ssa.z3simplifier.solver import (
 )
 
 
-def build_exact_pipeline(*, max_rounds: int = 3) -> PassPipeline:
-    """Build a pipeline containing only 100% equivalence-preserving passes."""
-    local_fp = FixedPointPass(
-        passes=[
-            TermPassAdapter(BvWrapperPeepholePass()),
-            TermPassAdapter(BvAlgebraicPass()),
-            TermPassAdapter(RealAlgebraicPass()),
-            TermPassAdapter(BridgeCancelPass()),
-        ],
-        name="local_exact_fp",
-        max_rounds=max_rounds,
-    )
+def _merged_local_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+    """Single-pass fused local peephole rule (BV wrapper + BV algebraic + Bridge + Real algebraic)."""
+    r = _bv_wrapper_rule(node)
+    if r is not None:
+        return r
+    r = _bv_algebraic_rule(node)
+    if r is not None:
+        return r
+    r = _bridge_cancel_rule(node)
+    if r is not None:
+        return r
+    return _real_algebraic_rule(node)
+
+
+class MergedLocalPeepholePass(Z3TermPass):
+    """Fuses BV wrapper, BV algebraic, bridge-cancel/If-hoist, and Real algebraic rules into 1 DAG walk."""
+
+    name = "merged_local_peephole"
+    is_equivalence_preserving = True
+
+    def rewrite_term(
+        self,
+        expr: z3.ExprRef,
+        ctx: SimplificationContext,
+    ) -> Tuple[z3.ExprRef, int]:
+        return rewrite_dag(expr, _merged_local_rule)
+
+
+def build_exact_pipeline() -> PassPipeline:
+    """
+    Build a strictly equivalence-preserving (`SAT(Q') <=> SAT(Q)`) simplification
+    pipeline with zero over-approximation.
+    """
     return PassPipeline(
-        passes=[
-            PreconditionConstSubPass(),
-            local_fp,
+        [
+            DataflowPropagatePass(max_path_depth=2),
+            FixedPointPass(
+                [TermPassAdapter(MergedLocalPeepholePass())],
+                name="local_exact_fp",
+            ),
             ReadOnlyArrayScalarizePass(),
             PolynomialNormalizePass(),
         ]
@@ -99,57 +123,54 @@ def build_exact_pipeline(*, max_rounds: int = 3) -> PassPipeline:
 
 def build_default_pipeline(
     *,
-    enable_cse: bool = True,
+    enable_cse_unify: bool = True,
     enable_conditioned_unify: bool = False,
-    enable_purify: bool = True,
-    max_rounds: int = 3,
+    enable_theory_purify: bool = True,
 ) -> PassPipeline:
     """
-    Build the standard miter simplification pipeline:
-      1. Equivalence-preserving local fixed-point (`BvWrapperPeephole`,
-         `BvAlgebraic`, `BridgeCancel`) + `ReadOnlyArrayScalarize`.
-      2. `InjectiveBridgeUnwrap` (strips outer `u_f32_to_bv32` on both sides).
-      3. `PolynomialNormalize` (collapses FMA/associativity diffs in < 1 ms).
-      4. `ExactCseUnification` (lifts shared subexpressions across `lhs`/`rhs`).
-      5. Optional `ConditionedUnification` (WLP-discharged near-match lifting).
-      6. `TheoryPurifyReal` + final `PolynomialNormalize` (unlocks `QF_NRA` `nlsat`).
+    Build the default miter simplification pipeline combining exact passes first
+    (preserving `exact_query` checkpoint) followed by UNSAT-sound over-approx
+    passes (bridge unwrap, CSE/conditioned unification, and `QF_NRA` purification).
     """
-    local_fp = FixedPointPass(
-        passes=[
-            TermPassAdapter(BvWrapperPeepholePass()),
-            TermPassAdapter(BvAlgebraicPass()),
-            TermPassAdapter(RealAlgebraicPass()),
-            TermPassAdapter(BridgeCancelPass()),
-        ],
-        name="local_exact_fp",
-        max_rounds=max_rounds,
-    )
-    passes: List[Z3QueryPass] = [
-        PreconditionConstSubPass(),
-        local_fp,
+    passes: list[Z3QueryPass] = [
+        DataflowPropagatePass(max_path_depth=2),
+        FixedPointPass(
+            [TermPassAdapter(MergedLocalPeepholePass())],
+            name="local_exact_fp",
+        ),
         ReadOnlyArrayScalarizePass(),
         InjectiveBridgeUnwrapPass(),
         PolynomialNormalizePass(),
     ]
-    if enable_cse:
-        passes.append(ExactCseUnificationPass(min_depth=2))
+    if enable_cse_unify:
+        passes.append(ExactCseUnificationPass())
     if enable_conditioned_unify:
-        passes.append(ConditionedUnificationPass(min_depth=2, max_depth=10, max_candidates=12))
-    if enable_purify:
+        passes.append(ConditionedUnificationPass())
+    if enable_theory_purify:
         passes.append(TheoryPurifyRealPass())
         passes.append(PolynomialNormalizePass())
-    return PassPipeline(passes=passes)
+    return PassPipeline(passes)
 
 
 def simplify_query(
-    query: SimplifyQuery,
+    lhs: z3.ExprRef,
+    rhs: z3.ExprRef,
     *,
-    ctx: Optional[SimplificationContext] = None,
+    guard: Optional[z3.BoolRef] = None,
+    preconditions: Sequence[z3.BoolRef] = (),
     pipeline: Optional[PassPipeline] = None,
+    ctx: Optional[SimplificationContext] = None,
 ) -> SimplifyResult:
-    """Convenience entry point running `pipeline` (or `build_default_pipeline()`) on `query`."""
+    """Convenience entry point to simplify a single `(lhs, rhs)` miter query."""
+    q = SimplifyQuery(
+        lhs=lhs,
+        rhs=rhs,
+        guard=guard,
+        preconditions=tuple(preconditions),
+    )
     pipe = pipeline if pipeline is not None else build_default_pipeline()
-    return pipe.run(query, ctx)
+    eff_ctx = ctx if ctx is not None else SimplificationContext()
+    return pipe.run(q, eff_ctx)
 
 
 __all__ = [
@@ -158,16 +179,20 @@ __all__ = [
     "BvAlgebraicPass",
     "BvWrapperPeepholePass",
     "ConditionedUnificationPass",
+    "DataflowPropagatePass",
+    "EqualityTable",
     "ExactCseUnificationPass",
     "FixedPointPass",
     "InjectiveBridgeUnwrapPass",
+    "KnownBits",
+    "MergedLocalPeepholePass",
     "MiterSolveResult",
     "PassPipeline",
     "PassStats",
     "PolynomialNormalizePass",
     "PreconditionConstSubPass",
-    "RealAlgebraicPass",
     "ReadOnlyArrayScalarizePass",
+    "RealAlgebraicPass",
     "RewriteStats",
     "SideObligation",
     "SimplificationContext",
@@ -182,7 +207,6 @@ __all__ = [
     "census_ast",
     "count_ast_nodes",
     "format_z3_ast",
-    "rebuild_app",
     "rewrite_dag",
     "simplify_query",
     "solve_simplified_miter",

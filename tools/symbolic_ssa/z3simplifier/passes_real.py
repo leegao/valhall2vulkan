@@ -52,13 +52,37 @@ _REAL_TO_BV_BRIDGES = {"u_f32_to_bv32", "u_f16_to_bv16", "u_f64_to_bv64", "real2
 
 
 def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
-    if not z3.is_app(node) or node.num_args() != 1:
+    if not z3.is_app(node):
+        return None
+    if node.decl().kind() == z3.Z3_OP_ITE and node.num_args() == 3:
+        c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
+        if (
+            z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
+            and z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == t_arm.decl().name()
+        ):
+            return t_arm.decl()(z3.If(c, t_arm.arg(0), f_arm.arg(0)))
+        return None
+    if node.num_args() != 1:
         return None
     outer_name = node.decl().name()
     inv_name = _BRIDGE_INVERSES.get(outer_name)
     if inv_name is None:
         return None
     arg0 = node.arg(0)
+    if (
+        outer_name == "u_bv32_to_f32"
+        and z3.is_app(arg0)
+        and arg0.decl().kind() == z3.Z3_OP_ITE
+        and arg0.num_args() == 3
+    ):
+        c, t_arm, f_arm = arg0.arg(0), arg0.arg(1), arg0.arg(2)
+        t_is_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() == "u_f32_to_bv32"
+        f_is_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == "u_f32_to_bv32"
+        if t_is_br or f_is_br or isinstance(t_arm, z3.BitVecNumRef) or isinstance(f_arm, z3.BitVecNumRef):
+            fn = node.decl()
+            nt = t_arm.arg(0) if t_is_br else fn(t_arm)
+            nf = f_arm.arg(0) if f_is_br else fn(f_arm)
+            return z3.If(c, nt, nf)
     if z3.is_app(arg0) and arg0.num_args() == 1 and arg0.decl().name() == inv_name:
         return arg0.arg(0)
     # Fold constant arguments across bridge boundaries (e.g. after PreconditionConstSubPass)
