@@ -18,11 +18,10 @@ import copy
 import os
 import tempfile
 import unittest
-from tools.symbolic_ssa.z3 import dsl
 
+from tools.symbolic_ssa.z3 import dsl
 from tools.verify.shader_equiv_verifier import (
     verify_equivalence_bundle,
-    verify_spv_file,
 )
 
 
@@ -474,8 +473,10 @@ class TestShaderEquivVerifier(unittest.TestCase):
 
     def test_smod_and_all_int_bit_fp_eval_paths(self) -> None:
         """Exercise every integer, bitwise, shift, div/rem/SMod, 64-bit, cmp, conv, and FP evaluator path."""
-        import z3
-        from tools.verify.shader_equiv_verifier import SymbolicShaderEnv, DagSsaZ3Evaluator, bv32
+        from tools.verify.shader_equiv_verifier import (
+            SymbolicShaderEnv,
+            SymbolicSsaInterpreter,
+        )
 
         # Verify SMod exact SPIR-V §3.3.13 semantics across all 4 sign quadrants.
         smod_cases = [
@@ -503,7 +504,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
                 ],
             }
             env = SymbolicShaderEnv({"mbs2_context": {}})
-            st = DagSsaZ3Evaluator(ssa, env, is_valhall_side=False, fp_mode="exact").evaluate()
+            st = SymbolicSsaInterpreter(ssa, env, is_valhall_side=False, fp_mode="exact").evaluate()
             _, val_expr = st.const_stores[("ssbo:0:0", 0)]
             got = dsl.simplify(val_expr)
             self.assertEqual(got.as_long(), expected & 0xFFFFFFFF, f"SMod({a_val}, {b_val}) expected {expected}")
@@ -877,7 +878,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
 
     def test_v25_1_smt2_and_ast_dump(self) -> None:
         """--dump-smt2 and --dump-ast export must work cleanly."""
-        import io, tempfile, os
+        import io
         ssa = {
             "blocks": [{
                 "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
@@ -1043,7 +1044,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         """Verify verbose=True emits Tier-1 Z3 and Layer-2 backend diagnostics to stderr."""
         import io
         from contextlib import redirect_stderr
-        import z3
+
 
         nodes = [
             {"id": 1, "op": "LoadFau", "type": "U32", "blk": 0, "args": [], "imm_u32": 0},
@@ -1126,6 +1127,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
     def test_v33_1_dump_ast_handles_non_identical_lhs_rhs(self) -> None:
         """--dump-ast must handle non-identical LHS/RHS where simplifier realizes Z3."""
         import io
+
         from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
 
         ssa = {

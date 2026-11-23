@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter` / `DagSsaZ3Evaluator`).
+Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter`).
 
 Subclasses `SsaInterpreter` with `SymbolicZ3BitvecDomain(fp_mode=...)`, implementing
 only the Z3 `BlockEffectState` storage backend and RPO bounded-unroll CFG
@@ -11,11 +11,9 @@ from `SsaInterpreter` and `SsaDomain`.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import z3
-
-from tools.symbolic_ssa.z3 import dsl
 
 from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.env import (
@@ -26,8 +24,9 @@ from tools.symbolic_ssa.env import (
     _z3_not,
     _z3_or,
 )
-from tools.symbolic_ssa.interpreter import SsaInterpreter
 from tools.symbolic_ssa.env import _dsl_bv32 as bv32
+from tools.symbolic_ssa.interpreter import SsaInterpreter
+from tools.symbolic_ssa.z3 import dsl
 
 
 @dataclasses.dataclass
@@ -37,16 +36,16 @@ class BlockEffectState:
     discarded: z3.BoolRef
     terminated: z3.BoolRef
     demoted: z3.BoolRef
-    frag_colors: Dict[int, Tuple[z3.BitVecRef, ...]]
-    builtin_outputs: Dict[int, Z3Val]
-    vert_varyings: Dict[int, Tuple[z3.BitVecRef, ...]]
-    const_stores: Dict[Tuple[str, int], Tuple[z3.BoolRef, z3.BitVecRef]]
-    sym_buf_stores: Dict[str, Tuple[z3.BoolRef, z3.BitVecRef, z3.BitVecRef]]
-    buf_mems: Dict[str, z3.ArrayRef]
-    image_mems: Dict[str, Tuple[z3.ArrayRef, ...]]
+    frag_colors: dict[int, tuple[z3.BitVecRef, ...]]
+    builtin_outputs: dict[int, Z3Val]
+    vert_varyings: dict[int, tuple[z3.BitVecRef, ...]]
+    const_stores: dict[tuple[str, int], tuple[z3.BoolRef, z3.BitVecRef]]
+    sym_buf_stores: dict[str, tuple[z3.BoolRef, z3.BitVecRef, z3.BitVecRef]]
+    buf_mems: dict[str, z3.ArrayRef]
+    image_mems: dict[str, tuple[z3.ArrayRef, ...]]
     fallback_mem: z3.ArrayRef
-    atomic_events: Dict[str, List[Tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]]]
-    output_pcs: Dict[str, Set[int]]
+    atomic_events: dict[str, list[tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]]]
+    output_pcs: dict[str, set[int]]
 
 
 def _clone_state(st: BlockEffectState) -> BlockEffectState:
@@ -68,7 +67,7 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
 
 
 def _merge_states(
-    cond_states: List[Tuple[z3.BoolRef, BlockEffectState]],
+    cond_states: list[tuple[z3.BoolRef, BlockEffectState]],
     env: SymbolicShaderEnv,
 ) -> BlockEffectState:
     if len(cond_states) == 1:
@@ -153,13 +152,13 @@ class SymbolicSsaInterpreter(SsaInterpreter):
 
     def __init__(
         self,
-        ssa_json: Dict[str, Any],
+        ssa_json: dict[str, Any],
         env: SymbolicShaderEnv,
         is_valhall_side: bool,
         fp_mode: str = "exact",
         max_unroll: int = 1,
-        cutpoints: Optional[Dict[int, Any]] = None,
-        domain: Union[str, Z3SymbolicDomain, None] = "udomain",
+        cutpoints: dict[int, Any] | None = None,
+        domain: str | Z3SymbolicDomain | None = "udomain",
     ):
         self.ssa = ssa_json
         self.env = env
@@ -168,12 +167,12 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         self.fp_mode = fp_mode
         self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(domain, fp_mode=fp_mode)
         self.max_unroll = max(1, int(max_unroll))
-        self.cutpoints: Dict[int, Any] = cutpoints if cutpoints is not None else {}
-        self.blocks: List[Dict[str, Any]] = ssa_json.get("blocks", [])
-        self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
-        self.values: Dict[int, Any] = {0: self.domain.const_u32(0)}
-        self.block_reach: Dict[int, z3.BoolRef] = {}
-        self.iter_branch_decisions: List[Tuple[int, int, int, z3.BoolRef, z3.BoolRef]] = []
+        self.cutpoints: dict[int, Any] = cutpoints if cutpoints is not None else {}
+        self.blocks: list[dict[str, Any]] = ssa_json.get("blocks", [])
+        self.nodes_by_id: dict[int, dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
+        self.values: dict[int, Any] = {0: self.domain.const_u32(0)}
+        self.block_reach: dict[int, z3.BoolRef] = {}
+        self.iter_branch_decisions: list[tuple[int, int, int, z3.BoolRef, z3.BoolRef]] = []
         self.has_loops: bool = False
         self.max_unroll_depth: int = 0
 
@@ -185,10 +184,10 @@ class SymbolicSsaInterpreter(SsaInterpreter):
     def _active_mask(self, st: BlockEffectState, reach: z3.BoolRef) -> z3.BoolRef:
         return _z3_and(self.domain.lower_z3_bool(reach), _z3_not(_z3_or(st.terminated, st.demoted)))
 
-    def _resolve_buf_addr(self, addr: Any, hint_key: str) -> Tuple[Optional[str], Optional[int], z3.BitVecRef]:
+    def _resolve_buf_addr(self, addr: Any, hint_key: str) -> tuple[str | None, int | None, z3.BitVecRef]:
         return self.env.resolve_addr(self.domain.lower_z3_bv64(addr), hint_key=hint_key)
 
-    def _read_sym_slot(self, st: BlockEffectState, sym_tag: str, off: Any) -> Optional[Any]:
+    def _read_sym_slot(self, st: BlockEffectState, sym_tag: str, off: Any) -> Any | None:
         off_bv = self.domain.lower_z3_bv32(off)
         bkey_hint = sym_tag[4:].split("[", 1)[0]
         if not self.env.is_shared_sym_bkey(bkey_hint):
@@ -216,7 +215,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         st.output_pcs.setdefault(sym_tag, set()).add(nid)
         return True
 
-    def _read_buf(self, st: BlockEffectState, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any) -> Any:
+    def _read_buf(self, st: BlockEffectState, bkey: str | None, const_off: int | None, off: Any, addr: Any) -> Any:
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
         if bkey is None:
@@ -230,7 +229,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
                 raw = mem_v
         return self.domain.lift_z3_bv32(raw)
 
-    def _write_buf(self, st: BlockEffectState, mask: Any, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any, val: Any, nid: int) -> None:
+    def _write_buf(self, st: BlockEffectState, mask: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, val: Any, nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
@@ -248,7 +247,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         else:
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
 
-    def _extract_img_channel(self, addr: Any) -> Tuple[int, z3.BitVecRef]:
+    def _extract_img_channel(self, addr: Any) -> tuple[int, z3.BitVecRef]:
         addr_bv = self.domain.lower_z3_bv64(addr)
         if isinstance(addr_bv, dsl.Z3OpBvAdd):
             c0, c1 = addr_bv.lhs, addr_bv.rhs
@@ -273,7 +272,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         st.image_mems[ikey] = tuple(cur_im)
         st.output_pcs.setdefault(f"img:{ikey}", set()).add(nid)
 
-    def _write_img_texel(self, st: BlockEffectState, mask: Any, ikey: str, xy: Any, vec4: Tuple[Any, ...], nid: int) -> None:
+    def _write_img_texel(self, st: BlockEffectState, mask: Any, ikey: str, xy: Any, vec4: tuple[Any, ...], nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         xy_bv = self.domain.lower_z3_bv64(xy)
         v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
@@ -293,7 +292,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         st.discarded = _z3_or(st.terminated, st.demoted)
         st.output_pcs.setdefault("discarded", set()).add(nid)
 
-    def _write_frag_color(self, st: BlockEffectState, mask: Any, rt: int, vec4: Tuple[Any, ...], nid: int) -> None:
+    def _write_frag_color(self, st: BlockEffectState, mask: Any, rt: int, vec4: tuple[Any, ...], nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
         prev = st.frag_colors.get(rt, (bv32(0),) * 4)
@@ -306,14 +305,14 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         st.builtin_outputs[bi] = _z3_if(m_b, pl, st.builtin_outputs[bi]) if bi in st.builtin_outputs else pl
         st.output_pcs.setdefault(f"builtin_out[{bi}]", set()).add(nid)
 
-    def _write_vert_varying(self, st: BlockEffectState, mask: Any, loc: int, vec4: Tuple[Any, ...], nid: int) -> None:
+    def _write_vert_varying(self, st: BlockEffectState, mask: Any, loc: int, vec4: tuple[Any, ...], nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
         prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
         st.vert_varyings[loc] = tuple(_z3_if(m_b, n, p) for n, p in zip(v4, prev))
         st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(nid)
 
-    def _record_atomic(self, st: BlockEffectState, mask: Any, bkey: Optional[str], off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None:
+    def _record_atomic(self, st: BlockEffectState, mask: Any, bkey: str | None, off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
@@ -332,14 +331,14 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
 
-    def _eval_node(self, node: Dict[str, Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
+    def _eval_node(self, node: dict[str, Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
         nid = int(node["id"])
         if nid in self.cutpoints:
             return self.cutpoints[nid]
         return self.eval_node(node, self.values, st, reach)
 
-    def collect_pcs_for_nodes(self, root_nids: Set[int], max_visit: int = 2048) -> List[int]:
-        pcs: Set[int] = set()
+    def collect_pcs_for_nodes(self, root_nids: set[int], max_visit: int = 2048) -> list[int]:
+        pcs: set[int] = set()
         seen = self.run_backward_worklist(
             self.nodes_by_id,
             root_nids,
@@ -355,9 +354,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         if target_nid in self.values:
             return self.values[target_nid]
 
-        order: List[int] = []
-        visited: Set[int] = set()
-        stack: List[Tuple[int, int]] = [(target_nid, 0)]
+        order: list[int] = []
+        visited: set[int] = set()
+        stack: list[tuple[int, int]] = [(target_nid, 0)]
         while stack:
             nid, step = stack.pop()
             if nid in self.values or nid in self.cutpoints:
@@ -382,10 +381,10 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             self.values[nid] = self._eval_node(self.nodes_by_id[nid], st, reach)
         return self.values.get(target_nid, bv32(0))
 
-    def invalidate_cone_from(self, root_nid: int, users_map: Dict[int, List[int]]) -> None:
+    def invalidate_cone_from(self, root_nid: int, users_map: dict[int, list[int]]) -> None:
         """Invalidate cached symbolic values downstream of a newly installed cutpoint."""
         queue = [root_nid]
-        seen: Set[int] = set()
+        seen: set[int] = set()
         while queue:
             cur = queue.pop()
             if cur in seen:
@@ -418,22 +417,22 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         if not self.blocks:
             return init_state
 
-        blk_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in self.blocks}
+        blk_by_id: dict[int, dict[str, Any]] = {int(b["id"]): b for b in self.blocks}
         rpo_ids = self.compute_rpo(blk_by_id, 0)
-        rpo_index: Dict[int, int] = {bid: idx for idx, bid in enumerate(rpo_ids)}
+        rpo_index: dict[int, int] = {bid: idx for idx, bid in enumerate(rpo_ids)}
         rpo_blocks = [blk_by_id[bid] for bid in rpo_ids]
 
-        blk_reach: Dict[int, z3.BoolRef] = {}
-        blk_out_state: Dict[int, BlockEffectState] = {}
-        edge_conds: Dict[int, List[Tuple[int, z3.BoolRef]]] = {int(b["id"]): [] for b in self.blocks}
-        exit_states: List[Tuple[z3.BoolRef, BlockEffectState]] = []
+        blk_reach: dict[int, z3.BoolRef] = {}
+        blk_out_state: dict[int, BlockEffectState] = {}
+        edge_conds: dict[int, list[tuple[int, z3.BoolRef]]] = {int(b["id"]): [] for b in self.blocks}
+        exit_states: list[tuple[z3.BoolRef, BlockEffectState]] = []
 
         def _eval_block_slice(
-            block_list: List[Dict[str, Any]],
+            block_list: list[dict[str, Any]],
             allow_backedges: bool,
             iter_idx: int,
-        ) -> List[Tuple[int, int, z3.BoolRef]]:
-            backedges: List[Tuple[int, int, z3.BoolRef]] = []
+        ) -> list[tuple[int, int, z3.BoolRef]]:
+            backedges: list[tuple[int, int, z3.BoolRef]] = []
             for blk in block_list:
                 bid = int(blk["id"])
                 b_rpo = rpo_index.get(bid, bid)
@@ -543,6 +542,3 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         if not exit_states:
             return blk_out_state.get(len(self.blocks) - 1, init_state)
         return _merge_states(exit_states, self.env)
-
-
-DagSsaZ3Evaluator = SymbolicSsaInterpreter

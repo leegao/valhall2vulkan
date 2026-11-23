@@ -198,7 +198,7 @@ Given incoming edges $\{(c_1, \sigma_1), \dots, (c_k, \sigma_k)\}$ entering a me
 
 Naive path-by-path symbolic execution explores $\mathcal{O}(2^k)$ paths on a shader with $k$ sequential `if/else` diamonds — completely intractable on real-world encoders like `etc2_astc_enc.spv` (3,132 blocks) or `etc2_bc6.spv` (1,846 blocks).
 
-`DagSsaZ3Evaluator.evaluate()` instead performs **single-pass whole-CFG topological DAG path-merging**:
+`SymbolicSsaInterpreter.evaluate()` instead performs **single-pass whole-CFG topological DAG path-merging**:
 
 1. **Reachability Propagation**:
    - Block $b_0$ starts with $R(b_0) = \text{True}$ and $\sigma_{\text{in}}(b_0) = \sigma_{\text{init}}$.
@@ -226,7 +226,7 @@ Each block and each SSA node is visited **once** per unroll pass, yielding $\mat
 
 When a CFG contains a backedge $u \to h$ with $h \le u$ (or a block lists a predecessor $p \ge b$):
 
-1. `DagSsaZ3Evaluator` sets `has_loops = True`.
+1. `SymbolicSsaInterpreter` sets `has_loops = True`.
 2. On the initial pass (`max_unroll = 1`), forward edges through the loop body execute **1 iteration** and backedges are recorded in `backedges = [(src, hdr, bcond)]`.
 3. When configured with `--max-unroll K` ($K > 1$), as long as `backedges` is non-empty (i.e., at least one backedge condition is not syntactically `False`) and `unroll_iter < K`:
    - Active backedges `(src, hdr, bcond)` are appended to `edge_conds[hdr]`.
@@ -326,7 +326,7 @@ In v25.1, every atomic instruction performs two synchronized state updates under
 
 `src/spirv2ssa/spirv2ssa_mem.cpp::lower_image_write` lowers `OpImageWrite` into per-channel `PsbStore` nodes on `aux_str = "img:<set>:<binding>"` with packed coordinate address `Pack64(x, y) + c * 4`. Conversely, `valhall_pass1` lowers Valhall `ST_TEX` / image stores into `StoreTexel` with `(coord_vec2, texel_vec4)`.
 
-In v25.1, `DagSsaZ3Evaluator._eval_node` intercepts `PsbStore` whenever `aux_str.startswith("img:")`, extracts the channel index $c \in \{0, 1, 2, 3\}$ and base coordinate `xy_addr = Concat(y, x)`, and writes directly into `st.image_mems[aux_str][c]` under `active_store_mask`. Both pipelines now populate the exact same 4-channel `Array(BV64, BV32)` image state.
+In v25.1, `SymbolicSsaInterpreter._eval_node` intercepts `PsbStore` whenever `aux_str.startswith("img:")`, extracts the channel index $c \in \{0, 1, 2, 3\}$ and base coordinate `xy_addr = Concat(y, x)`, and writes directly into `st.image_mems[aux_str][c]` under `active_store_mask`. Both pipelines now populate the exact same 4-channel `Array(BV64, BV32)` image state.
 
 ---
 

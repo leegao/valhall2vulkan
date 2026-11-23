@@ -23,27 +23,13 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import z3
 
-from tools.symbolic_ssa.z3 import dsl
-
-from tools.verify.panfrost_z3_model import (
-    BV8,
-    BV32,
-    BV64,
-    FP32_SORT,
-    bv32,
-    bv32_to_fp32,
-    bv64,
-)
-
 from tools.symbolic_ssa import (
-    BlockEffectState,
-    DagSsaZ3Evaluator,
     SymbolicShaderEnv,
-    _as_bool,
+    SymbolicSsaInterpreter,
     _as_bv32,
     _as_bv64,
     _bv32_to_real,
@@ -52,6 +38,7 @@ from tools.symbolic_ssa import (
     _z3_not,
     _z3_or,
 )
+from tools.symbolic_ssa.z3 import dsl
 from tools.symbolic_ssa.z3simplifier import (
     PassPipeline,
     SimplificationContext,
@@ -61,6 +48,10 @@ from tools.symbolic_ssa.z3simplifier import (
     format_z3_ast,
     solve_simplified_miter,
 )
+from tools.verify.panfrost_z3_model import (
+    bv32,
+    bv32_to_fp32,
+)
 
 
 @dataclasses.dataclass
@@ -69,7 +60,7 @@ class OutputMismatch:
     direct_hex: str
     valhall_hex: str
     model_summary: str
-    suspect_pcs: List[Tuple[int, str]]
+    suspect_pcs: list[tuple[int, str]]
 
 
 @dataclasses.dataclass
@@ -79,16 +70,16 @@ class ShaderEquivResult:
     status: str  # UNSAT, BOUNDED_UNSAT, SAT, UNKNOWN, SKIP, ERROR
     fp_mode: str
     elapsed_ms: float
-    checked_outputs: List[str] = dataclasses.field(default_factory=list)
-    mismatches: List[OutputMismatch] = dataclasses.field(default_factory=list)
-    notes: List[str] = dataclasses.field(default_factory=list)
+    checked_outputs: list[str] = dataclasses.field(default_factory=list)
+    mismatches: list[OutputMismatch] = dataclasses.field(default_factory=list)
+    notes: list[str] = dataclasses.field(default_factory=list)
     direct_nodes: int = 0
     valhall_nodes: int = 0
     direct_blocks: int = 0
     valhall_blocks: int = 0
     has_loops: bool = False
     max_unroll_depth: int = 0
-    asymmetric_outputs: List[str] = dataclasses.field(default_factory=list)
+    asymmetric_outputs: list[str] = dataclasses.field(default_factory=list)
 
 
 def _format_model_cex(
@@ -96,7 +87,7 @@ def _format_model_cex(
     lhs: z3.ExprRef,
     rhs: z3.ExprRef,
     env: SymbolicShaderEnv,
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
     lv = m.eval(dsl.lower(lhs), model_completion=True)
     rv = m.eval(dsl.lower(rhs), model_completion=True)
     lhex = f"0x{lv.as_long():08x}" if isinstance(lv, z3.BitVecNumRef) else str(lv)
@@ -114,16 +105,16 @@ def _format_model_cex(
 def _solve_miter_eq(
     lhs: z3.ExprRef,
     rhs: z3.ExprRef,
-    guard: Optional[z3.BoolRef],
+    guard: z3.BoolRef | None,
     timeout_ms: int,
     env: SymbolicShaderEnv,
-    preconditions: Optional[List[z3.BoolRef]] = None,
-    smt2_out: Optional[List[str]] = None,
+    preconditions: list[z3.BoolRef] | None = None,
+    smt2_out: list[str] | None = None,
     check_name: str = "",
     verbose: bool = False,
-    pipeline: Optional[PassPipeline] = None,
+    pipeline: PassPipeline | None = None,
     enable_conditioned_unify: bool = False,
-) -> Tuple[str, Optional[Tuple[str, str, str]]]:
+) -> tuple[str, tuple[str, str, str] | None]:
     """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
     if _is_real2bv(lhs) or _is_real2bv(rhs):
         lhs = _bv32_to_real(lhs) if dsl.is_bv(lhs) else lhs
@@ -186,8 +177,8 @@ def _solve_miter_eq(
 
 
 def _dump_check_asts(
-    checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef], str]],
-    preconditions: List[z3.BoolRef],
+    checks: list[tuple[str, z3.ExprRef, z3.ExprRef, z3.BoolRef | None, str]],
+    preconditions: list[z3.BoolRef],
     pipeline: PassPipeline,
     stream: Any,
 ) -> None:
@@ -232,14 +223,14 @@ def _dump_check_asts(
 
 
 def verify_equivalence_bundle(
-    bundle: Dict[str, Any],
+    bundle: dict[str, Any],
     timeout_ms: int = 3000,
     fp_mode: str = "exact",
     allow_uf_fallback: bool = True,
     max_unroll: int = 1,
-    dump_smt2_path: Optional[str] = None,
+    dump_smt2_path: str | None = None,
     verbose: bool = False,
-    canonicalize: Optional[bool] = None,
+    canonicalize: bool | None = None,
     domain: str = "udomain",
     dump_ast: bool = False,
     dump_ast_stream: Any = None,
@@ -287,8 +278,8 @@ def verify_equivalence_bundle(
 
     env = SymbolicShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
 
-    def _collect_sym_bkeys(ssa_d: Dict[str, Any]) -> Set[str]:
-        ks: Set[str] = set()
+    def _collect_sym_bkeys(ssa_d: dict[str, Any]) -> set[str]:
+        ks: set[str] = set()
         for n in ssa_d.get("nodes", []):
             a = n.get("aux_str", "")
             if a.startswith("sym:"):
@@ -296,22 +287,22 @@ def verify_equivalence_bundle(
         return ks
 
     env.shared_sym_bkeys = _collect_sym_bkeys(bundle.get("direct_ssa", {})) & _collect_sym_bkeys(bundle.get("valhall_ssa", {}))
-    d_eval = DagSsaZ3Evaluator(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
-    v_eval = DagSsaZ3Evaluator(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
+    d_eval = SymbolicSsaInterpreter(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
+    v_eval = SymbolicSsaInterpreter(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
 
     d_st = d_eval.evaluate()
     v_st = v_eval.evaluate()
     res.has_loops = d_eval.has_loops or v_eval.has_loops
     res.max_unroll_depth = max(d_eval.max_unroll_depth, v_eval.max_unroll_depth)
     preconditions = env.build_preconditions()
-    pc_disasm: Dict[str, str] = bundle.get("mbs2_context", {}).get("pc_disasm", {})
+    pc_disasm: dict[str, str] = bundle.get("mbs2_context", {}).get("pc_disasm", {})
 
-    def lookup_pcs(key: str) -> List[Tuple[int, str]]:
+    def lookup_pcs(key: str) -> list[tuple[int, str]]:
         nids = v_st.output_pcs.get(key, set())
         pcs = v_eval.collect_pcs_for_nodes(nids) if nids else []
         return [(pc, pc_disasm.get(str(pc), "")) for pc in pcs[-16:]]
 
-    checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef], str]] = []
+    checks: list[tuple[str, z3.ExprRef, z3.ExprRef, z3.BoolRef | None, str]] = []
 
     if stage == "Fragment" or not dsl.is_false(d_st.discarded) or not dsl.is_false(v_st.discarded):
         checks.append(("discarded", d_st.discarded, v_st.discarded, None, "discarded"))
@@ -448,7 +439,7 @@ def verify_equivalence_bundle(
     if dump_ast:
         _dump_check_asts(checks, preconditions, pipeline, dump_ast_stream or sys.stdout)
 
-    smt2_chunks: Optional[List[str]] = [] if dump_smt2_path else None
+    smt2_chunks: list[str] | None = [] if dump_smt2_path else None
     if smt2_chunks is not None:
         smt2_chunks.append(
             f"; Shader Equivalence Verification SMT-LIB2 Model\n"
@@ -475,7 +466,7 @@ def verify_equivalence_bundle(
     use_two_phase = len(checks) > 4 and timeout_ms > 150
     fast_ms = min(100, max(30, timeout_ms // 4)) if use_two_phase else timeout_ms
 
-    surviving_unknowns: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef], str]] = []
+    surviving_unknowns: list[tuple[str, z3.ExprRef, z3.ExprRef, z3.BoolRef | None, str]] = []
     for name, lhs, rhs, guard, pc_key in checks:
         res.checked_outputs.append(name)
         st_rc, cex = _solve_miter_eq(
@@ -593,9 +584,9 @@ def verify_spv_file(
     timeout_ms: int = 3000,
     fp_mode: str = "exact",
     max_unroll: int = 1,
-    dump_smt2_path: Optional[str] = None,
+    dump_smt2_path: str | None = None,
     verbose: bool = False,
-    canonicalize: Optional[bool] = None,
+    canonicalize: bool | None = None,
     domain: str = "udomain",
     dump_ast: bool = False,
     enable_conditioned_unify: bool = False,

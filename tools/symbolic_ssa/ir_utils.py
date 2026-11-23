@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.interpreter import SsaInterpreter
 
-SIDE_EFFECT_OPS: Set[str] = {
+SIDE_EFFECT_OPS: set[str] = {
     "PsbStore",
     "StoreFragColor",
     "StoreBuiltinOutput",
@@ -21,13 +21,13 @@ SIDE_EFFECT_OPS: Set[str] = {
     "ControlBarrier",
 }
 
-CONTROL_MARKER_OPS: Set[str] = {
+CONTROL_MARKER_OPS: set[str] = {
     "Branch",
     "BranchCond",
     "Return",
 }
 
-COMMUTATIVE_OPS: Set[str] = {
+COMMUTATIVE_OPS: set[str] = {
     "IAdd",
     "IMul",
     "BitAnd",
@@ -44,7 +44,7 @@ COMMUTATIVE_OPS: Set[str] = {
     "LogicalOr",
 }
 
-NEVER_GVN_OPS: Set[str] = SIDE_EFFECT_OPS | CONTROL_MARKER_OPS | {"Phi", "Nop"}
+NEVER_GVN_OPS: set[str] = SIDE_EFFECT_OPS | CONTROL_MARKER_OPS | {"Phi", "Nop"}
 
 
 @dataclasses.dataclass
@@ -68,7 +68,7 @@ class Stratum1Stats:
     dce_removed: int = 0
 
 
-def block_succs(blk: Dict[str, Any]) -> List[int]:
+def block_succs(blk: dict[str, Any]) -> list[int]:
     """Return outgoing successor block IDs in deterministic branch/fallthrough order."""
     if blk.get("is_end") or blk.get("is_discard"):
         return []
@@ -90,13 +90,13 @@ def block_succs(blk: Dict[str, Any]) -> List[int]:
     return []
 
 
-def compute_rpo(blocks_by_id: Dict[int, Dict[str, Any]], entry: int = 0) -> List[int]:
+def compute_rpo(blocks_by_id: dict[int, dict[str, Any]], entry: int = 0) -> list[int]:
     """Compute Reverse Post-Order traversal of reachable blocks from entry."""
     if entry not in blocks_by_id:
         return []
-    visited: Set[int] = set()
-    postorder: List[int] = []
-    stack: List[Tuple[int, int]] = [(entry, 0)]
+    visited: set[int] = set()
+    postorder: list[int] = []
+    stack: list[tuple[int, int]] = [(entry, 0)]
     while stack:
         u, step = stack.pop()
         if step == 0:
@@ -112,13 +112,13 @@ def compute_rpo(blocks_by_id: Dict[int, Dict[str, Any]], entry: int = 0) -> List
     return list(reversed(postorder))
 
 
-def compute_idom(blocks_by_id: Dict[int, Dict[str, Any]], rpo: List[int]) -> Dict[int, int]:
+def compute_idom(blocks_by_id: dict[int, dict[str, Any]], rpo: list[int]) -> dict[int, int]:
     """Compute immediate dominators via Cooper-Harvey-Kennedy iterative algorithm."""
     if not rpo:
         return {}
     entry = rpo[0]
     rpo_idx = {b: i for i, b in enumerate(rpo)}
-    idom: Dict[int, int] = {entry: entry}
+    idom: dict[int, int] = {entry: entry}
 
     def intersect(b1: int, b2: int) -> int:
         f1, f2 = b1, b2
@@ -145,9 +145,9 @@ def compute_idom(blocks_by_id: Dict[int, Dict[str, Any]], rpo: List[int]) -> Dic
     return idom
 
 
-def rebuild_preds(blocks_by_id: Dict[int, Dict[str, Any]], nodes_by_id: Dict[int, Dict[str, Any]]) -> None:
+def rebuild_preds(blocks_by_id: dict[int, dict[str, Any]], nodes_by_id: dict[int, dict[str, Any]]) -> None:
     """Recompute block predecessor lists and prune dead Phi incoming edges."""
-    new_preds: Dict[int, List[int]] = {bid: [] for bid in blocks_by_id}
+    new_preds: dict[int, list[int]] = {bid: [] for bid in blocks_by_id}
     for bid, blk in blocks_by_id.items():
         for s in block_succs(blk):
             if s in new_preds and bid not in new_preds[s]:
@@ -162,16 +162,16 @@ def rebuild_preds(blocks_by_id: Dict[int, Dict[str, Any]], nodes_by_id: Dict[int
 
 
 def replace_all_uses(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
-    repl: Dict[int, int],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
+    repl: dict[int, int],
 ) -> None:
     """Transitvely rewrite all node argument, Phi incoming, and branch_cond references."""
     if not repl:
         return
 
     def resolve(x: int) -> int:
-        seen: Set[int] = set()
+        seen: set[int] = set()
         while x in repl and x not in seen:
             seen.add(x)
             x = repl[x]
@@ -189,13 +189,13 @@ def replace_all_uses(
 
 
 def collapse_trivial_phis(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
 ) -> int:
     """Eliminate Phi nodes with exactly one unique non-self incoming value."""
-    repl: Dict[int, int] = {}
+    repl: dict[int, int] = {}
     for blk in blocks_by_id.values():
-        keep_phis: List[int] = []
+        keep_phis: list[int] = []
         for pid in blk.get("phis", []):
             pn = nodes_by_id.get(pid)
             if not pn:
@@ -213,7 +213,7 @@ def collapse_trivial_phis(
     return len(repl)
 
 
-def is_block_pure(blk: Dict[str, Any], nodes_by_id: Dict[int, Dict[str, Any]]) -> bool:
+def is_block_pure(blk: dict[str, Any], nodes_by_id: dict[int, dict[str, Any]]) -> bool:
     """Return True iff the block contains no side-effecting instructions."""
     for nid in blk.get("nodes", []):
         n = nodes_by_id.get(nid)
@@ -222,15 +222,15 @@ def is_block_pure(blk: Dict[str, Any], nodes_by_id: Dict[int, Dict[str, Any]]) -
     return True
 
 
-def next_node_id(nodes_by_id: Dict[int, Dict[str, Any]]) -> int:
+def next_node_id(nodes_by_id: dict[int, dict[str, Any]]) -> int:
     """Allocate the next unused integer SSA node ID."""
     return (max(nodes_by_id.keys()) + 1) if nodes_by_id else 1
 
 
 def insert_before_terminator(
-    blk: Dict[str, Any],
-    nodes_by_id: Dict[int, Dict[str, Any]],
-    new_ids: List[int],
+    blk: dict[str, Any],
+    nodes_by_id: dict[int, dict[str, Any]],
+    new_ids: list[int],
 ) -> None:
     """Insert node IDs immediately before trailing control marker nodes."""
     nodes = blk["nodes"]
@@ -240,12 +240,12 @@ def insert_before_terminator(
     blk["nodes"] = nodes[:idx] + new_ids + nodes[idx:]
 
 
-def extract_non_marker_nodes(blk: Dict[str, Any], nodes_by_id: Dict[int, Dict[str, Any]]) -> List[int]:
+def extract_non_marker_nodes(blk: dict[str, Any], nodes_by_id: dict[int, dict[str, Any]]) -> list[int]:
     """Return all node IDs in a block excluding trailing control markers."""
     return [nid for nid in blk.get("nodes", []) if nodes_by_id.get(nid, {}).get("op") not in CONTROL_MARKER_OPS]
 
 
-def cfg_isomorphic(ssa_a: Dict[str, Any], ssa_b: Dict[str, Any]) -> bool:
+def cfg_isomorphic(ssa_a: dict[str, Any], ssa_b: dict[str, Any]) -> bool:
     """
     Exact directed CFG isomorphism check up to block relabeling and conditional
     branch polarity flip (treating succs as an unordered pair for is_cond blocks).
@@ -272,8 +272,8 @@ def cfg_isomorphic(ssa_a: Dict[str, Any], ssa_b: Dict[str, Any]) -> bool:
     rpo_a = compute_rpo(ba, 0)
     if len(rpo_a) != len(ba):
         return False
-    mapping: Dict[int, int] = {0: 0}
-    used_b: Set[int] = {0}
+    mapping: dict[int, int] = {0: 0}
+    used_b: set[int] = {0}
     steps = [0]
     max_steps = 50000
 
@@ -299,7 +299,7 @@ def cfg_isomorphic(ssa_a: Dict[str, Any], ssa_b: Dict[str, Any]) -> bool:
         if idx == len(rpo_a):
             return True
         u = rpo_a[idx]
-        cands: Optional[Set[int]] = None
+        cands: set[int] | None = None
         for p in pa[u]:
             if p in mapping:
                 ps = set(sb[mapping[p]])
@@ -329,10 +329,10 @@ class AbstractSsaPass(SsaInterpreter):
     subclasses override only the transfer functions relevant to their analysis.
     """
 
-    def __init__(self, blocks_by_id: Dict[int, Dict[str, Any]], nodes_by_id: Dict[int, Dict[str, Any]]):
+    def __init__(self, blocks_by_id: dict[int, dict[str, Any]], nodes_by_id: dict[int, dict[str, Any]]):
         self.blocks_by_id = blocks_by_id
         self.nodes_by_id = nodes_by_id
-        self.abs_vals: Dict[int, Any] = {}
+        self.abs_vals: dict[int, Any] = {}
 
     def default_value(self) -> Any:
         return None
@@ -370,10 +370,10 @@ class AbstractSsaPass(SsaInterpreter):
     def fp_cmp(self, op: str, a: Any, b: Any) -> Any:
         return None
 
-    def eval_phi(self, node: Dict[str, Any]) -> Any:
+    def eval_phi(self, node: dict[str, Any]) -> Any:
         return None
 
-    def run_rpo(self) -> Dict[int, Any]:
+    def run_rpo(self) -> dict[int, Any]:
         """Evaluate every reachable Phi and node in RPO order."""
         rpo = compute_rpo(self.blocks_by_id, 0)
         for bid in rpo:
