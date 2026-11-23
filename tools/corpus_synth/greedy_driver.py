@@ -207,7 +207,7 @@ def synthesize_corpus(
     seed: int = 0xC0DE,
     candidates_per_shader: int = 4,
     verify_equiv: bool = False,
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> CorpusSynthResult:
     """
     Greedily synthesize `num_shaders` SPIR-V shaders (each with `num_blocks`

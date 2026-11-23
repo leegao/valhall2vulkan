@@ -157,7 +157,7 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         fp_mode: str = "exact",
         max_unroll: int = 1,
         cutpoints: Optional[Dict[int, Any]] = None,
-        domain: Union[str, Z3SymbolicDomain, None] = None,
+        domain: Union[str, Z3SymbolicDomain, None] = "udomain",
     ):
         self.ssa = ssa_json
         self.env = env

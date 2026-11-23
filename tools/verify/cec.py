@@ -364,6 +364,8 @@ def verify_with_cec(
     max_cutpoints: int = 128,
     max_cegar_rounds: int = 3,
     skip_smt_on_concrete_mismatch: bool = True,
+    domain: str = "udomain",
+    fp_mode: str = "real",
 ) -> CecResult:
     """
     Run Stratum 1 canonicalization (optional) + concrete differential simulation +
@@ -418,8 +420,8 @@ def verify_with_cec(
     if can_sweep and cands:
         d_users = _build_users_map(direct_ssa)
         v_users = _build_users_map(valhall_ssa)
-        de = SymbolicSsaInterpreter(direct_ssa, env, False, "exact", 1, cutpoints=d_cut_map)
-        ve = SymbolicSsaInterpreter(valhall_ssa, env, True, "exact", 1, cutpoints=v_cut_map)
+        de = SymbolicSsaInterpreter(direct_ssa, env, False, fp_mode, 1, cutpoints=d_cut_map, domain=domain)
+        ve = SymbolicSsaInterpreter(valhall_ssa, env, True, fp_mode, 1, cutpoints=v_cut_map, domain=domain)
         d_st = _empty_effect_state(env)
         v_st = _empty_effect_state(env)
 
@@ -432,14 +434,19 @@ def verify_with_cec(
 
             vt = d_nodes_by_id[d_nid].get("type", "U32")
             if vt == "Bool":
-                lhs = _as_bool(d_val)
-                rhs = _z3_not(_as_bool(v_val)) if kind == "NEGATED_BOOL" else _as_bool(v_val)
+                lhs = de.domain.lower_z3_bool(d_val)
+                rv_b = ve.domain.lower_z3_bool(v_val)
+                rhs = _z3_not(rv_b) if kind == "NEGATED_BOOL" else rv_b
             elif vt in ("U64", "S64"):
-                lhs = _as_bv64(d_val)
-                rhs = _as_bv64(v_val)
+                lhs = de.domain.lower_z3_bv64(d_val)
+                rhs = ve.domain.lower_z3_bv64(v_val)
+            elif vt == "F32" and kind == "FNEG" and (domain == "udomain" or fp_mode == "real"):
+                lhs = de.domain.to_z3_real_f32(d_val)
+                rhs = -ve.domain.to_z3_real_f32(v_val)
             else:
-                lhs = _as_bv32(d_val)
-                rhs = (_as_bv32(v_val) ^ bv32(0x80000000)) if kind == "FNEG" else _as_bv32(v_val)
+                lhs = de.domain.lower_z3_bv32(d_val)
+                rv_32 = ve.domain.lower_z3_bv32(v_val)
+                rhs = (rv_32 ^ bv32(0x80000000)) if kind == "FNEG" else rv_32
 
             rc, _ = _solve_miter_eq(lhs, rhs, None, cone_timeout_ms, env, preconditions=preconditions)
             if rc == "UNSAT":
@@ -447,14 +454,28 @@ def verify_with_cec(
                 if vt == "Bool":
                     cvar: z3.ExprRef = z3.Bool(cname)
                     v_cvar = _z3_not(cvar) if kind == "NEGATED_BOOL" else cvar
+                    d_cut_map[d_nid] = de.domain.lift_z3_bool(cvar)
+                    v_cut_map[v_nid] = ve.domain.lift_z3_bool(v_cvar)
                 elif vt in ("U64", "S64"):
                     cvar = z3.BitVec(cname, 64)
-                    v_cvar = cvar
+                    d_cut_map[d_nid] = de.domain.lift_z3_bv64(cvar)
+                    v_cut_map[v_nid] = ve.domain.lift_z3_bv64(cvar)
+                elif vt == "F32" and kind == "FNEG" and (domain == "udomain" or fp_mode == "real"):
+                    rvar = z3.Real(cname)
+                    # Lift via fresh F32 Real if domain supports it, else bv32
+                    if hasattr(de.domain, "fresh_f32") and hasattr(ve.domain, "fp_unary"):
+                        du = de.domain.fresh_f32(cname)
+                        d_cut_map[d_nid] = du
+                        v_cut_map[v_nid] = ve.domain.fp_unary("FNeg", du)
+                    else:
+                        cvar = z3.BitVec(cname, 32)
+                        d_cut_map[d_nid] = de.domain.lift_z3_bv32(cvar)
+                        v_cut_map[v_nid] = ve.domain.lift_z3_bv32(cvar ^ bv32(0x80000000))
                 else:
                     cvar = z3.BitVec(cname, 32)
                     v_cvar = (cvar ^ bv32(0x80000000)) if kind == "FNEG" else cvar
-                d_cut_map[d_nid] = cvar
-                v_cut_map[v_nid] = v_cvar
+                    d_cut_map[d_nid] = de.domain.lift_z3_bv32(cvar)
+                    v_cut_map[v_nid] = ve.domain.lift_z3_bv32(v_cvar)
                 de.invalidate_cone_from(d_nid, d_users)
                 ve.invalidate_cone_from(v_nid, v_users)
                 cut_name_to_pair[cname] = (d_nid, v_nid)
@@ -467,8 +488,8 @@ def verify_with_cec(
     stage = bundle.get("stage", "Unknown")
 
     def _build_output_checks(cur_d_cuts: Dict[int, z3.ExprRef], cur_v_cuts: Dict[int, z3.ExprRef]):
-        de = SymbolicSsaInterpreter(direct_ssa, env, False, "exact", 1, cutpoints=cur_d_cuts)
-        ve = SymbolicSsaInterpreter(valhall_ssa, env, True, "exact", 1, cutpoints=cur_v_cuts)
+        de = SymbolicSsaInterpreter(direct_ssa, env, False, fp_mode, 1, cutpoints=cur_d_cuts, domain=domain)
+        ve = SymbolicSsaInterpreter(valhall_ssa, env, True, fp_mode, 1, cutpoints=cur_v_cuts, domain=domain)
         d_st_out = de.evaluate()
         v_st_out = ve.evaluate()
         checks: List[Tuple[str, z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef]]] = []
@@ -488,11 +509,14 @@ def verify_with_cec(
                 continue
             bi_guard = not_disc
             if stage == "Vertex" and bi == 0 and env.viewport_fau_words and isinstance(do, tuple) and len(do) >= 4:
-                vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
-                for c in range(3):
-                    dbv = _as_bv32(do[c])
-                    vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
-                    vp_conds.append(dbv != bv32(0x80000000))
+                if fp_mode == "real" or domain == "udomain":
+                    vp_conds = [de.domain.to_z3_real_f32(do[3]) == z3.RealVal(1)]
+                else:
+                    vp_conds = [_as_bv32(do[3]) == bv32(0x3F800000)]
+                    for c in range(3):
+                        dbv = _as_bv32(do[c])
+                        vp_conds.append(z3.Not(z3.fpIsNaN(bv32_to_fp32(dbv))))
+                        vp_conds.append(dbv != bv32(0x80000000))
                 bi_guard = _z3_and(bi_guard, z3.And(*vp_conds))
             if isinstance(do, tuple) and isinstance(vo, tuple):
                 for c in range(min(len(do), len(vo))):

@@ -94,7 +94,7 @@ def solve_maximal_reachability(
     timeout_ms: int = 500,
     max_unroll: int = 1,
     total_timeout_ms: Optional[int] = None,
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> MaximalReachabilityResult:
     """
     Compute a pairwise-disjoint set of path reachability conditions covering

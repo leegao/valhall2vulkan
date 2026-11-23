@@ -127,6 +127,13 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
                 return a
             if ca == 1:
                 return b
+            if cb == 0:
+                return b
+            if ca == 0:
+                return a
+        elif op in ("Shl", "LShr", "AShr"):
+            if cb == 0:
+                return a
         return None
 
 
@@ -145,6 +152,54 @@ def pass_gvn_dce(
         replace_all_uses(blocks_by_id, nodes_by_id, simp.repl)
         stats.alg_simplified += len(simp.repl)
         changed = True
+
+    # Normalize IMul(x, 2^k) -> Shl(x, k) in-place before GVN so stride multiplies match Valhall shifts
+    next_nid = (max(nodes_by_id.keys()) + 1) if nodes_by_id else 1
+    entry_bid = 0 if 0 in blocks_by_id else (min(blocks_by_id.keys()) if blocks_by_id else 0)
+    shift_const_cache: Dict[int, int] = {}
+    for nid, n in list(nodes_by_id.items()):
+        if n.get("op") in ("ConstU32", "ConstS32"):
+            v = int(n.get("imm_u32", 0))
+            if 0 <= v < 32 and v not in shift_const_cache:
+                shift_const_cache[v] = nid
+
+    for nid, n in list(nodes_by_id.items()):
+        if n.get("op") != "IMul":
+            continue
+        args = n.get("args", [])
+        if len(args) != 2:
+            continue
+        a0, a1 = int(args[0]), int(args[1])
+        n0, n1 = nodes_by_id.get(a0), nodes_by_id.get(a1)
+        c_val = None
+        var_id = None
+        if n1 and n1.get("op") in ("ConstU32", "ConstS32"):
+            c_val = int(n1.get("imm_u32", 0))
+            var_id = a0
+        elif n0 and n0.get("op") in ("ConstU32", "ConstS32"):
+            c_val = int(n0.get("imm_u32", 0))
+            var_id = a1
+        if c_val is not None and c_val > 1 and (c_val & (c_val - 1)) == 0:
+            sh = c_val.bit_length() - 1
+            if sh < 32:
+                sh_nid = shift_const_cache.get(sh)
+                if sh_nid is None:
+                    sh_nid = next_nid
+                    next_nid += 1
+                    nodes_by_id[sh_nid] = {
+                        "id": sh_nid,
+                        "op": "ConstU32",
+                        "type": "U32",
+                        "args": [],
+                        "imm_u32": sh,
+                    }
+                    if entry_bid in blocks_by_id:
+                        blocks_by_id[entry_bid].setdefault("nodes", []).insert(0, sh_nid)
+                    shift_const_cache[sh] = sh_nid
+                n["op"] = "Shl"
+                n["args"] = [var_id, sh_nid]
+                stats.alg_simplified += 1
+                changed = True
 
     rpo = SsaInterpreter.compute_rpo(blocks_by_id, 0)
     gvn_repl: Dict[int, int] = {}

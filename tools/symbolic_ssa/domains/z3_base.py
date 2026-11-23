@@ -73,10 +73,12 @@ def make_z3_symbolic_domain(
     """Factory resolving a symbolic domain spec (`'bitvec'`, `'udomain'`, or instance)."""
     if isinstance(domain, Z3SymbolicDomain):
         return domain
-    if domain is None or domain in ("bitvec", "default", ""):
+    if domain is None or domain in ("udomain", "default", ""):
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        return SymbolicZ3UDomain(exact_bitcast=False)
+    if domain == "bitvec":
         from tools.symbolic_ssa.domains.symbolic_z3_bitvec import SymbolicZ3BitvecDomain
         return SymbolicZ3BitvecDomain(fp_mode=fp_mode)
-    if domain == "udomain":
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
         return SymbolicZ3UDomain(exact_bitcast=False)
     if domain == "udomain_exact":

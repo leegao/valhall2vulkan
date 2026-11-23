@@ -55,6 +55,7 @@ except ImportError:
 
 class UValKind(enum.Enum):
     UNKNOWN = "Unknown"
+    BOOL = "Bool"
     BVEC64 = "BVec64"
     F16X4 = "F16x4"
     F32X2 = "F32x2"
@@ -63,7 +64,7 @@ class UValKind(enum.Enum):
     SYM = "Sym"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PtrVal:
     """
     Structured pointer value supporting arithmetic, alignment masking, and
@@ -75,14 +76,14 @@ class PtrVal:
     readonly: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SymVal:
     """Non-pointer opaque symbolic value (e.g. texture handle, sampler, token)."""
     tag: str
     payload: Any = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UVal:
     """
     Tagged value in the unified lattice domain.
@@ -98,6 +99,10 @@ class UVal:
     @staticmethod
     def unknown() -> "UVal":
         return UVal(UValKind.UNKNOWN, None)
+
+    @staticmethod
+    def bool_val(b: Any) -> "UVal":
+        return UVal(UValKind.BOOL, b)
 
     @staticmethod
     def bvec64(bv: Any) -> "UVal":
@@ -126,6 +131,10 @@ class UVal:
     @property
     def is_unknown(self) -> bool:
         return self.kind == UValKind.UNKNOWN
+
+    @property
+    def is_bool(self) -> bool:
+        return self.kind == UValKind.BOOL
 
     @property
     def is_bvec(self) -> bool:
@@ -196,6 +205,8 @@ class _BaseUDomain(SsaDomain):
     def _ensure_uval(self, val: Any) -> UVal:
         if isinstance(val, UVal):
             return val
+        if isinstance(val, tuple):
+            return self._ensure_uval(val[0]) if val else UVal.unknown()
         if val is None:
             return UVal.unknown()
         if isinstance(val, bool):
@@ -204,6 +215,8 @@ class _BaseUDomain(SsaDomain):
             return UVal.bvec64(self.bv.const_u64(val & MASK64))
         if isinstance(val, float):
             return self.const_f32(val)
+        if z3 is not None and isinstance(val, z3.BoolRef):
+            return UVal.bool_val(val)
         return UVal.bvec64(self.bv.as_u64(val))
 
     def assign(self, current_slot: Any, new_val: Any) -> UVal:
@@ -223,7 +236,7 @@ class _BaseUDomain(SsaDomain):
         return UVal.bvec64(self.bv.const_u64(imm & MASK64))
 
     def const_bool(self, val: bool) -> UVal:
-        return UVal.bvec64(self.bv.const_u64(1 if val else 0))
+        return UVal.bool_val(self.bv.const_bool(bool(val)))
 
     def make_ptr(
         self,
@@ -278,12 +291,14 @@ class _BaseUDomain(SsaDomain):
         return UVal.bvec64(self.bv.as_u64(bv64))
 
     def _from_bool(self, b: Any) -> UVal:
-        return UVal.bvec64(self.bv.select(self.bv.as_bool(b), self.bv.const_u64(1), self.bv.const_u64(0)))
+        return UVal.bool_val(self.bv.as_bool(b))
 
     def _to_bool(self, val: Any) -> Any:
         uv = self._ensure_uval(val)
         if uv.is_unknown:
             return self.bv.const_bool(False)
+        if uv.is_bool:
+            return uv.data
         return self.bv.bv_ne(self._to_bv32(uv), self.bv.const_u32(0))
 
     def const_int_val(self, val: Any) -> Optional[int]:
@@ -485,6 +500,8 @@ class _BaseUDomain(SsaDomain):
         if isinstance(cb, bool):
             return ut if cb else uf
         if ut.kind == uf.kind:
+            if ut.kind == UValKind.BOOL:
+                return UVal.bool_val(self.bv.select(cb, ut.data, uf.data))
             if ut.kind == UValKind.BVEC64:
                 return self._from_bv64(self.bv.select(cb, ut.data, uf.data))
             if ut.kind == UValKind.F32X2:
@@ -571,6 +588,8 @@ class ConcreteUDomain(_BaseUDomain):
         uv = self._ensure_uval(val)
         if uv.is_unknown:
             return 0
+        if uv.is_bool:
+            return 1 if bool(uv.data) else 0
         if uv.is_bvec:
             return int(uv.data) & MASK64
         if uv.raw_bv is not None:
@@ -887,10 +906,45 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return z3.fpToReal(z3.fpBVToFP(bv64, z3.Float64()))
         return self._u_bv64_to_f64(bv64)
 
+    def _to_bv32(self, val: Any) -> Any:
+        uv = self._ensure_uval(val)
+        if uv.is_unknown:
+            return self.bv.const_u32(0)
+        if uv.is_bool:
+            if z3.is_true(uv.data):
+                return self.bv.const_u32(1)
+            if z3.is_false(uv.data):
+                return self.bv.const_u32(0)
+            return z3.If(uv.data, self.bv.const_u32(1), self.bv.const_u32(0))
+        if uv.kind == UValKind.F32X2 and uv.raw_bv is None:
+            return self._real_to_bv32(uv.data[0])
+        b64 = self.to_bvec64(uv)
+        if isinstance(b64, z3.BitVecNumRef):
+            return z3.BitVecVal(b64.as_long() & MASK32, 32)
+        if isinstance(b64, z3.BitVecRef) and b64.size() == 32:
+            return b64
+        if z3.is_app(b64):
+            k = b64.decl().kind()
+            if k == z3.Z3_OP_ZERO_EXT:
+                inner = b64.arg(0)
+                if isinstance(inner, z3.BitVecRef) and inner.size() == 32:
+                    return inner
+            elif k == z3.Z3_OP_CONCAT:
+                lsb = b64.arg(b64.num_args() - 1)
+                if isinstance(lsb, z3.BitVecRef) and lsb.size() == 32:
+                    return lsb
+        return z3.Extract(31, 0, b64)
+
     def to_bvec64(self, val: Any) -> Any:
         uv = self._ensure_uval(val)
         if uv.is_unknown:
             return self.bv.const_u64(0)
+        if uv.is_bool:
+            if z3.is_true(uv.data):
+                return self.bv.const_u64(1)
+            if z3.is_false(uv.data):
+                return self.bv.const_u64(0)
+            return z3.If(uv.data, self.bv.const_u64(1), self.bv.const_u64(0))
         if uv.is_bvec:
             return self.bv.as_u64(uv.data)
         if uv.raw_bv is not None:
@@ -968,8 +1022,13 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return UVal.f32x2(z3.RealVal(1) / _real_sqrt(rx), self._zero_real)
         if op == "Exp2":
             return UVal.f32x2(_real_exp2(rx), self._zero_real)
+        if op == "Exp":
+            # Match Valhall lowering Exp(x) = Exp2(x * log2(e)), where log2(e) as f32 is 0x3FB8AA3B
+            return UVal.f32x2(_real_exp2(rx * self._float_to_real(_u32_to_f32(0x3FB8AA3B))), self._zero_real)
         if op == "Log2":
             return UVal.f32x2(_real_log2(rx), self._zero_real)
+        if op == "Log":
+            return UVal.f32x2(_real_log2(rx) * self._float_to_real(_u32_to_f32(0x3F317218)), self._zero_real)
         if op == "Floor":
             return UVal.f32x2(z3.ToReal(z3.ToInt(rx)), self._zero_real)
         if op == "Fract":
@@ -990,6 +1049,18 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         if op == "FDiv": return UVal.f32x2(ra / rb, self._zero_real)
         if op in ("FMin", "NMin"): return UVal.f32x2(z3.If(ra <= rb, ra, rb), self._zero_real)
         if op in ("FMax", "NMax"): return UVal.f32x2(z3.If(ra >= rb, ra, rb), self._zero_real)
+        if op == "Pow":
+            fb = self._try_real_to_float(rb)
+            if fb is not None:
+                if fb == 0.0:
+                    return UVal.f32x2(z3.RealVal(1), self._zero_real)
+                if fb == 1.0:
+                    return UVal.f32x2(ra, self._zero_real)
+                if fb == 2.0:
+                    return UVal.f32x2(ra * ra, self._zero_real)
+                if fb == 0.5:
+                    return UVal.f32x2(_real_sqrt(ra), self._zero_real)
+            return UVal.f32x2(_real_exp2(rb * _real_log2(ra)), self._zero_real)
         return UVal.f32x2(self._get_fp_uf(op, 2)(ra, rb), self._zero_real)
 
     def fp_fma(self, a: Any, b: Any, c: Any) -> UVal:

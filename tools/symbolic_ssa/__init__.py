@@ -118,7 +118,7 @@ def evaluate_ssa(
     max_unroll: int = 1,
     vec_idx: int = 0,
     overrides: Optional[Dict[str, Any]] = None,
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> Any:
     """Unified entrypoint for evaluating a ValhallSsaModule symbolically or concretely."""
     if mode == "concrete":

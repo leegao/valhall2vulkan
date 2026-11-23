@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""Unit and regression tests for `tools.symbolic_ssa.z3simplifier` and Checkpoint v32 fixes."""
+
+from __future__ import annotations
+
+import unittest
+
+import z3
+
+from tools.symbolic_ssa.domains.udomain import ConcreteUDomain, SymbolicZ3UDomain, UValKind
+from tools.symbolic_ssa.domains.z3_base import make_z3_symbolic_domain
+from tools.symbolic_ssa.passes import canonicalize_ssa_module
+from tools.symbolic_ssa.z3simplifier import (
+    BridgeCancelPass,
+    BvAlgebraicPass,
+    BvWrapperPeepholePass,
+    ConditionedUnificationPass,
+    ExactCseUnificationPass,
+    InjectiveBridgeUnwrapPass,
+    PassPipeline,
+    PolynomialNormalizePass,
+    PreconditionConstSubPass,
+    ReadOnlyArrayScalarizePass,
+    RealAlgebraicPass,
+    SimplificationContext,
+    SimplifyQuery,
+    TermPassAdapter,
+    TheoryPurifyRealPass,
+    build_default_pipeline,
+    build_exact_pipeline,
+    census_ast,
+    format_z3_ast,
+    solve_simplified_miter,
+)
+
+
+class TestZ3SimplifierPasses(unittest.TestCase):
+    def test_issue1_bv_wrapper_peephole_collapses_nested_bool_wrappers(self) -> None:
+        b = z3.Bool("b")
+        # Construct 4-layer UDomain v31.2-style BV64 boolean wrapper bloat:
+        # If(0 != Extract(31, 0, ZeroExt(32, If(0 != Extract(31, 0, Concat(0, If(b, 1, 0))), 1, 0))), 1, 0) != 0
+        w1 = z3.If(b, z3.BitVecVal(1, 32), z3.BitVecVal(0, 32))
+        w2 = z3.Extract(31, 0, z3.Concat(z3.BitVecVal(0, 32), w1)) != z3.BitVecVal(0, 32)
+        w3 = z3.If(w2, z3.BitVecVal(1, 32), z3.BitVecVal(0, 32))
+        w4 = z3.Extract(31, 0, z3.ZeroExt(32, w3)) != z3.BitVecVal(0, 32)
+
+        p = BvWrapperPeepholePass()
+        ctx = SimplificationContext()
+        out, rw = p.rewrite_term(w4, ctx)
+        self.assertGreater(rw, 0)
+        self.assertTrue(out.eq(b), f"Expected raw Bool `b`, got {out}")
+
+    def test_issue1_udomain_bool_kind_avoids_bv64_wrapper_churn(self) -> None:
+        dom = SymbolicZ3UDomain(exact_bitcast=False)
+        x = dom.fresh_f32("x")
+        y = dom.fresh_f32("y")
+        c1 = dom.fp_cmp("FCmpOrdLt", x, y)
+        c2 = dom.logical_not(c1)
+        c3 = dom.logical_and(c1, c2)
+        self.assertEqual(c1.kind, UValKind.BOOL)
+        self.assertEqual(c2.kind, UValKind.BOOL)
+        self.assertEqual(c3.kind, UValKind.BOOL)
+        raw = dom.lower_z3_bool(c3)
+        self.assertNotIn("Extract", str(raw))
+        self.assertNotIn("ZeroExt", str(raw))
+
+        # Concrete UDomain BOOL round-trips cleanly
+        cdom = ConcreteUDomain()
+        cb = cdom.const_bool(True)
+        self.assertEqual(cb.kind, UValKind.BOOL)
+        self.assertEqual(cdom.to_bvec64(cb), 1)
+        self.assertEqual(cdom.to_bvec64(cdom.logical_not(cb)), 0)
+
+    def test_issue2_readonly_array_scalarize_soundness(self) -> None:
+        arr_ro = z3.Array("mem_ubo_0_1", z3.BitVecSort(32), z3.BitVecSort(32))
+        arr_dyn = z3.Array("mem_ssbo_0_0", z3.BitVecSort(32), z3.BitVecSort(32))
+        idx = z3.BitVec("dyn_idx", 32)
+
+        # Read-only array with only constant indices IS scalarized
+        q_ro = SimplifyQuery(
+            lhs=z3.Select(arr_ro, z3.BitVecVal(40, 32)) + z3.Select(arr_ro, z3.BitVecVal(44, 32)),
+            rhs=z3.Select(arr_ro, z3.BitVecVal(44, 32)) + z3.Select(arr_ro, z3.BitVecVal(40, 32)),
+        )
+        res_ro = PassPipeline([ReadOnlyArrayScalarizePass()]).run(q_ro)
+        self.assertEqual(census_ast([res_ro.query.lhs, res_ro.query.rhs]).array_select_ops, 0)
+        self.assertFalse(res_ro.query.is_overapprox)
+
+        # Array with a dynamic index MUST NOT be scalarized (soundness guard)
+        q_dyn = SimplifyQuery(
+            lhs=z3.Select(arr_dyn, z3.BitVecVal(40, 32)),
+            rhs=z3.Select(arr_dyn, idx),
+        )
+        res_dyn = PassPipeline([ReadOnlyArrayScalarizePass()]).run(q_dyn)
+        self.assertEqual(census_ast([res_dyn.query.lhs, res_dyn.query.rhs]).array_select_ops, 2)
+
+        # Array with a Store MUST NOT be scalarized
+        arr_st = z3.Store(arr_ro, z3.BitVecVal(40, 32), z3.BitVecVal(7, 32))
+        q_st = SimplifyQuery(
+            lhs=z3.Select(arr_st, z3.BitVecVal(40, 32)),
+            rhs=z3.BitVecVal(7, 32),
+        )
+        res_st = PassPipeline([ReadOnlyArrayScalarizePass()]).run(q_st)
+        self.assertGreater(census_ast([res_st.query.lhs, res_st.query.rhs]).array_store_ops, 0)
+
+    def test_issue3_injective_unwrap_and_som_discharges_mvp_dot_product(self) -> None:
+        u_f32_to_bv32 = z3.Function("u_f32_to_bv32", z3.RealSort(), z3.BitVecSort(32))
+        u_bv32_to_f32 = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        arr = z3.Array("mem_ubo_0_1", z3.BitVecSort(32), z3.BitVecSort(32))
+
+        v = [u_bv32_to_f32(z3.BitVec(f"v{i}", 32)) for i in range(4)]
+        m = [u_bv32_to_f32(z3.Select(arr, z3.BitVecVal(40 + 4 * i, 32))) for i in range(4)]
+
+        # Direct: ((v0*m0 + v1*m1) + v2*m2) + v3*m3 wrapped in Extract(31,0,Concat(0,u_f32_to_bv32(...)))
+        p_direct = ((v[0] * m[0] + v[1] * m[1]) + v[2] * m[2]) + v[3] * m[3]
+        # Valhall: reassociated FMA chain
+        p_valhall = v[3] * m[3] + (v[2] * m[2] + (v[1] * m[1] + v[0] * m[0]))
+
+        lhs = z3.Extract(31, 0, z3.Concat(z3.BitVecVal(0, 32), u_f32_to_bv32(p_direct)))
+        rhs = z3.Extract(31, 0, z3.Concat(z3.BitVecVal(0, 32), u_f32_to_bv32(p_valhall)))
+
+        res = solve_simplified_miter(SimplifyQuery(lhs=lhs, rhs=rhs), build_default_pipeline())
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(res.solver_ms, 0.0, "Expected <1ms polynomial discharge with zero SMT calls")
+
+    def test_issue2_theory_purify_real_routes_to_nlsat_and_guards_spurious_sat(self) -> None:
+        u_bv32_to_f32 = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        x_bv = z3.BitVec("x_bv", 32)
+        y_bv = z3.BitVec("y_bv", 32)
+        x = u_bv32_to_f32(x_bv)
+        y = u_bv32_to_f32(y_bv)
+
+        # Nonlinear algebraic identity: (x + y)^2 == x^2 + 2xy + y^2
+        # Disable polynomial_normalize to force TheoryPurifyRealPass -> QF_NRA nlsat
+        pipe = PassPipeline([TheoryPurifyRealPass()])
+        q_ok = SimplifyQuery(lhs=(x + y) * (x + y), rhs=x * x + z3.RealVal(2) * x * y + y * y)
+        res_ok = solve_simplified_miter(q_ok, pipe, timeout_ms=500)
+        self.assertEqual(res_ok.status, "UNSAT")
+        self.assertEqual(res_ok.simplified_query.pure_theory, "QF_NRA")
+        self.assertTrue(res_ok.used_nlsat)
+
+        # Genuine divergence must still return SAT (confirmed on exact_query)
+        q_bad = SimplifyQuery(lhs=x * y + z3.RealVal(1), rhs=x * y)
+        res_bad = solve_simplified_miter(q_bad, pipe, timeout_ms=500)
+        self.assertEqual(res_bad.status, "SAT")
+        self.assertTrue(res_bad.refined_from_overapprox)
+
+    def test_issue6_bv_algebraic_and_ssa_imul_pow2_to_shl(self) -> None:
+        x = z3.BitVec("idx", 32)
+        lhs = (x * z3.BitVecVal(64, 32)) + z3.BitVecVal(16, 32)
+        rhs = (x << z3.BitVecVal(6, 32)) + z3.BitVecVal(16, 32)
+        res = solve_simplified_miter(SimplifyQuery(lhs=lhs, rhs=rhs), build_exact_pipeline())
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(res.solver_ms, 0.0)
+
+        # Also test SSA pass_gvn_dce IMul(x, 64) -> Shl(x, 6)
+        ssa = {
+            "blocks": [{
+                "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5],
+                "branch_target": -1, "fallthrough": -1, "is_cond": False, "is_uncond": False,
+                "is_end": True, "is_discard": False, "branch_cond": 0,
+            }],
+            "nodes": [
+                {"id": 1, "op": "Nop", "type": "Token", "blk": 0, "args": []},
+                {"id": 2, "op": "LoadBuiltinInput", "type": "U32", "blk": 0, "args": [], "imm_u32": 29},
+                {"id": 3, "op": "ConstU32", "type": "U32", "blk": 0, "args": [], "imm_u32": 64},
+                {"id": 4, "op": "IMul", "type": "U32", "blk": 0, "args": [2, 3]},
+                {"id": 5, "op": "StoreFragColor", "type": "Token", "blk": 0, "args": [4, 1], "imm_u32": 0},
+            ],
+        }
+        canon, _ = canonicalize_ssa_module(ssa)
+        ops = [n["op"] for n in canon["nodes"]]
+        self.assertIn("Shl", ops)
+        self.assertNotIn("IMul", ops)
+
+    def test_exact_cse_unification_and_spurious_sat_fallback(self) -> None:
+        a = z3.BitVec("a", 32)
+        b = z3.BitVec("b", 32)
+        # Expensive shared subexpression: ((a * b) ^ (a + b))
+        shared = (a * b) ^ (a + b)
+        q = SimplifyQuery(lhs=shared + z3.BitVecVal(4, 32), rhs=z3.BitVecVal(4, 32) + shared)
+        sim = PassPipeline([ExactCseUnificationPass(min_depth=2)]).run(q)
+        self.assertTrue(sim.query.is_overapprox)
+        self.assertGreaterEqual(len(sim.query.abstraction_map), 1)
+        res = solve_simplified_miter(q, build_default_pipeline())
+        self.assertEqual(res.status, "UNSAT")
+
+        # Spurious SAT case: lhs = (a * b) + a, rhs = a * (b + 1).
+        # Even if CSE lifted something, exact fallback ensures UNSAT (not false SAT!).
+        q_corr = SimplifyQuery(lhs=(a * b) + a, rhs=a * (b + z3.BitVecVal(1, 32)))
+        res_corr = solve_simplified_miter(q_corr, build_default_pipeline())
+        self.assertEqual(res_corr.status, "UNSAT")
+
+    def test_conditioned_unification_unifies_fma_under_transcendental(self) -> None:
+        real_sqrt = z3.Function("real_sqrt", z3.RealSort(), z3.RealSort())
+        a, b, c, d = z3.Reals("a b c d")
+        # Non-identical subtrees under an uninterpreted `real_sqrt`:
+        # Direct:  1 / sqrt((a*b + c) + d*d)
+        # Valhall: 1 / sqrt(d*d + (c + b*a))
+        sub_l = (a * b + c) + d * d
+        sub_r = d * d + (c + b * a)
+        q = SimplifyQuery(
+            lhs=z3.RealVal(1) / real_sqrt(sub_l),
+            rhs=z3.RealVal(1) / real_sqrt(sub_r),
+        )
+        pipe = PassPipeline([ConditionedUnificationPass(min_depth=2, max_depth=8)])
+        sim = pipe.run(q)
+        self.assertTrue(sim.query.is_trivially_unsat(), f"Expected conditioned unification to collapse to UNSAT, got {sim.query.lhs} vs {sim.query.rhs}")
+        self.assertEqual(len(sim.query.side_obligations), 1)
+        self.assertTrue(sim.query.side_obligations[0].discharged)
+
+        # Negative test: genuinely different subtrees must NOT be unified
+        q_diff = SimplifyQuery(
+            lhs=z3.RealVal(1) / real_sqrt(a * b + c),
+            rhs=z3.RealVal(1) / real_sqrt(a * b + d),
+        )
+        sim_diff = pipe.run(q_diff)
+        self.assertEqual(len(sim_diff.query.side_obligations), 0)
+        self.assertFalse(sim_diff.query.is_trivially_unsat())
+
+    def test_default_domain_is_udomain_and_format_z3_ast(self) -> None:
+        dom = make_z3_symbolic_domain()
+        self.assertIsInstance(dom, SymbolicZ3UDomain)
+        self.assertFalse(dom.exact_bitcast)
+
+        x, y = z3.Reals("x y")
+        shared = x * y + z3.RealVal(1)
+        expr = shared * shared + shared
+        pretty = format_z3_ast(expr, let_bind_shared=True)
+        self.assertIn("(let (", pretty)
+        self.assertIn("%t0", pretty)
+
+
+if __name__ == "__main__":
+    unittest.main()

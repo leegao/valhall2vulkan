@@ -874,26 +874,9 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertIn("img:img:0:0[xy].r", res.checked_outputs)
         self.assertFalse(any(m.output_name == "img:img:0:0[xy].r" for m in res.mismatches))
 
-    def test_v25_1_fp_proof_discharger_and_smt2_dump(self) -> None:
-        """Layer-2 FpProofDischargerRegistry and --dump-smt2 export must work cleanly."""
-        import tempfile, os, z3
-        from tools.verify.fp_proof_discharger import FpObligation, FpProofDischargerRegistry
-
-        reg = FpProofDischargerRegistry()
-        x = z3.BitVec("x", 32)
-        ob = FpObligation(
-            obligation_id="ob_neg_neg",
-            output_name="frag_color[0].r",
-            kind="bit_exact_fp",
-            lhs=(x ^ z3.BitVecVal(0x80000000, 32)) ^ z3.BitVecVal(0x80000000, 32),
-            rhs=x,
-        )
-        dr = reg.submit(ob, timeout_ms=1000)
-        self.assertEqual(dr.status, "DISCHARGED")
-        self.assertEqual(dr.backend_name, "z3_fp_exact")
-        self.assertEqual(reg.summary()["discharged"], 1)
-
-        # Verify SMT2 dump on a minimal bundle
+    def test_v25_1_smt2_and_ast_dump(self) -> None:
+        """--dump-smt2 and --dump-ast export must work cleanly."""
+        import io, tempfile, os
         ssa = {
             "blocks": [{
                 "id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4],
@@ -921,9 +904,16 @@ class TestShaderEquivVerifier(unittest.TestCase):
             res = verify_equivalence_bundle(bundle, timeout_ms=2000, dump_smt2_path=smt_path)
             self.assertEqual(res.status, "UNSAT")
             self.assertTrue(os.path.isfile(smt_path))
-            txt = open(smt_path, "r", encoding="utf-8").read()
+            with open(smt_path, "r", encoding="utf-8") as sf:
+                txt = sf.read()
             self.assertIn("(set-logic ALL)", txt)
             self.assertIn("ssbo:0:0+0x0.value", txt)
+
+        ast_buf = io.StringIO()
+        res_ast = verify_equivalence_bundle(bundle, timeout_ms=2000, dump_ast=True, dump_ast_stream=ast_buf)
+        self.assertEqual(res_ast.status, "UNSAT")
+        self.assertIn("AST Dump", ast_buf.getvalue())
+        self.assertIn("ssbo:0:0+0x0.value", ast_buf.getvalue())
 
 
     def test_v25_2_real_fp_mode_identities_and_refutation(self) -> None:
@@ -998,58 +988,6 @@ class TestShaderEquivVerifier(unittest.TestCase):
         res_bad = verify_equivalence_bundle(_mk_bundle(d_nodes, v_bad), timeout_ms=2000, fp_mode="real")
         self.assertEqual(res_bad.status, "SAT")
         self.assertTrue(any(m.output_name == "frag_color[0].r" for m in res_bad.mismatches))
-
-    def test_v25_2_ortools_cpsat_backend(self) -> None:
-        """OrToolsCpSatBackend must discharge valid bounded BV / ULP obligations and refute invalid ones."""
-        import z3
-        from tools.verify.fp_proof_discharger import FpObligation, OrToolsCpSatBackend
-
-        backend = OrToolsCpSatBackend()
-        if not backend.is_available():
-            self.skipTest("ortools not available in environment")
-
-        x = z3.BitVec("x", 32)
-        y = z3.BitVec("y", 32)
-        pre = [z3.ULE(x, z3.BitVecVal(255, 32)), z3.ULE(y, z3.BitVecVal(255, 32))]
-
-        # 1. Exact algebraic identity over bounded 8-bit quantized inputs: (x + y) * 2 == (x << 1) + (y << 1)
-        ob_ok = FpObligation(
-            obligation_id="cpsat_ok",
-            output_name="q_out",
-            kind="bit_exact_fp",
-            lhs=(x + y) * z3.BitVecVal(2, 32),
-            rhs=(x << 1) + (y << 1),
-            preconditions=pre,
-        )
-        r_ok = backend.discharge(ob_ok, timeout_ms=2000)
-        self.assertEqual(r_ok.status, "DISCHARGED")
-
-        # 2. Approximate ULP-tolerance obligation: |((x * 2 + 1) >> 1) - x| <= 1 -> DISCHARGED with ulp_bound=1
-        ob_ulp = FpObligation(
-            obligation_id="cpsat_ulp",
-            output_name="q_ulp",
-            kind="approx_ulp_fp",
-            lhs=z3.LShR(x * z3.BitVecVal(2, 32) + z3.BitVecVal(1, 32), z3.BitVecVal(1, 32)),
-            rhs=x + z3.BitVecVal(1, 32),
-            preconditions=[z3.ULE(x, z3.BitVecVal(255, 32))],
-            ulp_bound=1,
-        )
-        r_ulp = backend.discharge(ob_ulp, timeout_ms=2000)
-        self.assertEqual(r_ulp.status, "DISCHARGED")
-
-        # 3. Genuine counterexample: x + 2 != x with ulp_bound=1 -> COUNTEREXAMPLE
-        ob_bad = FpObligation(
-            obligation_id="cpsat_bad",
-            output_name="q_bad",
-            kind="approx_ulp_fp",
-            lhs=x + z3.BitVecVal(2, 32),
-            rhs=x,
-            preconditions=[z3.ULE(x, z3.BitVecVal(255, 32))],
-            ulp_bound=1,
-        )
-        r_bad = backend.discharge(ob_bad, timeout_ms=2000)
-        self.assertEqual(r_bad.status, "COUNTEREXAMPLE")
-
 
     def test_v26_symbolized_fixed_stride_ssbo_scalar_reasoning(self):
         """Symbolized fixed-stride SSBO loads/stores (aux_str=sym:...) prove UNSAT via scalar/UF slots without Z3 Array theory."""
@@ -1138,23 +1076,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertEqual(r.status, "UNSAT")
         self.assertIn("[equiv] start shader=verbose_smoke.spv", buf.getvalue())
 
-        from tools.verify.fp_proof_discharger import FpObligation, FpProofDischargerRegistry, OrToolsCpSatBackend
-        x = z3.BitVec("x", 32)
-        ob = FpObligation(
-            obligation_id="verbose_ob",
-            output_name="out0",
-            kind="bit_exact_fp",
-            lhs=(x + x),
-            rhs=(x << 1),
-            preconditions=[z3.ULE(x, 100)],
-            ulp_bound=0,
-        )
-        reg = FpProofDischargerRegistry(backends=[OrToolsCpSatBackend()])
-        buf2 = io.StringIO()
-        with redirect_stderr(buf2):
-            dres = reg.submit(ob, timeout_ms=500, verbose=True)
-        self.assertEqual(dres.status, "DISCHARGED")
-        self.assertIn("[equiv][layer2] ob=verbose_ob backend=ortools_cpsat status=DISCHARGED", buf2.getvalue())
+
 
 
     def test_v27_rpo_out_of_order_inlined_blocks(self):

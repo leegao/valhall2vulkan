@@ -12,6 +12,7 @@ predicate polarities when a target formula is UNSAT.
 
 from __future__ import annotations
 
+import struct
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -160,6 +161,28 @@ def extract_concrete_overrides_from_model(
     """
     overrides: Dict[str, Any] = {}
 
+    # Check if Z3's model interprets `u_bv32_to_f32` (used by UDomain for FP predicates).
+    # When present, invert `u_bv32_to_f32(bv_val)` -> IEEE-754 f32 bits so concrete
+    # replay satisfies the exact same FP branches as the symbolic Real model.
+    u_bv32_to_f32_decl = None
+    for decl in model.decls():
+        if decl.name() == "u_bv32_to_f32" and decl.arity() == 1:
+            u_bv32_to_f32_decl = decl
+            break
+
+    def _maybe_invert_udomain_f32(bv_val: z3.BitVecNumRef) -> int:
+        raw_u32 = int(bv_val.as_long()) & MASK32
+        if u_bv32_to_f32_decl is None or bv_val.size() != 32:
+            return raw_u32
+        try:
+            r_eval = model.eval(u_bv32_to_f32_decl(bv_val), model_completion=False)
+            if z3.is_rational_value(r_eval):
+                fval = float(r_eval.numerator_as_long()) / float(r_eval.denominator_as_long())
+                return struct.unpack("<I", struct.pack("<f", fval))[0]
+        except Exception:
+            pass
+        return raw_u32
+
     for decl in model.decls():
         if decl.arity() != 0:
             continue
@@ -168,7 +191,7 @@ def extract_concrete_overrides_from_model(
             continue
         val = model[decl]
         if z3.is_bv_value(val):
-            overrides[name] = int(val.as_long()) & MASK32
+            overrides[name] = _maybe_invert_udomain_f32(val)
         elif z3.is_true(val):
             overrides[name] = True
         elif z3.is_false(val):
@@ -258,7 +281,7 @@ def _build_target_formulas(
     fp_mode: str,
     max_unroll: int = 1,
     preconditions: Sequence[z3.BoolRef] = (),
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> Tuple[Dict[Tuple[int, bool], z3.BoolRef], Dict[str, z3.ExprRef], bool]:
     """Symbolically evaluate the SSA module and build pruned (pid, polarity) formulas."""
     evaluator = SymbolicSsaInterpreter(
@@ -304,7 +327,7 @@ def synthesize_coverage_vectors(
     adaptive_unroll: bool = True,
     max_adaptive_unroll: int = 3,
     time_budget_ms: int = 5000,
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> CoverageFuzzResult:
     """
     Use incremental Z3 Solver + Unique-Call UF Pruning + AST-size ordering +

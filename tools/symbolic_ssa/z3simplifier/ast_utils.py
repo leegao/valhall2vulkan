@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+"""
+Pure Z3 AST utilities: iterative DAG traversal, memoized bottom-up rewriting,
+operator/theory census, and human-readable pretty-printing (`format_z3_ast`).
+
+All traversals are strictly iterative (explicit work stacks) so deep shader
+DAGs (10k+ nodes) never overflow Python's recursion limit and preserve DAG
+sharing in O(|V|) time.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+import z3
+
+
+@dataclass(frozen=True)
+class AstCensus:
+    """Operator and theory census over a set of Z3 AST roots."""
+
+    total_nodes: int
+    max_depth: int
+    fp_ops: int
+    nlin_real_ops: int
+    bv_mul_shift_ops: int
+    array_select_ops: int
+    array_store_ops: int
+    bridge_ops: int
+    ite_ops: int
+    bool_wrapper_ops: int
+
+
+_BRIDGE_NAMES: Set[str] = {
+    "u_f32_to_bv32",
+    "u_bv32_to_f32",
+    "u_f16_to_bv16",
+    "u_bv16_to_f16",
+    "u_f64_to_bv64",
+    "u_bv64_to_f64",
+    "real2bv32",
+    "bv32_to_real",
+}
+
+
+def count_ast_nodes(roots: Sequence[z3.ExprRef], limit: int = 100000) -> int:
+    """Count unique Z3 AST nodes reachable from `roots` (capped at `limit`)."""
+    visited: Set[int] = set()
+    stack: List[z3.ExprRef] = [r for r in roots if r is not None]
+    while stack and len(visited) < limit:
+        cur = stack.pop()
+        cid = cur.get_id()
+        if cid in visited:
+            continue
+        visited.add(cid)
+        if z3.is_app(cur):
+            for i in range(cur.num_args()):
+                stack.append(cur.arg(i))
+    return len(visited)
+
+
+def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
+    """Compute an operator and theory census over a Z3 DAG."""
+    visited: Set[int] = set()
+    depths: Dict[int, int] = {}
+    post_order: List[z3.ExprRef] = []
+    stack: List[Tuple[z3.ExprRef, bool]] = [(r, False) for r in roots if r is not None]
+
+    while stack and len(visited) < limit:
+        cur, expanded = stack.pop()
+        cid = cur.get_id()
+        if expanded:
+            if cid not in depths:
+                if z3.is_app(cur) and cur.num_args() > 0:
+                    depths[cid] = 1 + max(depths.get(cur.arg(i).get_id(), 0) for i in range(cur.num_args()))
+                else:
+                    depths[cid] = 0
+                post_order.append(cur)
+            continue
+        if cid in visited:
+            continue
+        visited.add(cid)
+        stack.append((cur, True))
+        if z3.is_app(cur):
+            for i in range(cur.num_args() - 1, -1, -1):
+                ch = cur.arg(i)
+                if ch.get_id() not in visited:
+                    stack.append((ch, False))
+
+    fp_ops = 0
+    nlin_real = 0
+    bv_mul_shift = 0
+    arr_sel = 0
+    arr_st = 0
+    bridges = 0
+    ites = 0
+    bool_wrappers = 0
+
+    for node in post_order:
+        if not z3.is_app(node):
+            continue
+        decl = node.decl()
+        kind = decl.kind()
+        name = decl.name()
+        sort_kind = node.sort().kind()
+
+        if sort_kind == z3.Z3_FLOATING_POINT_SORT:
+            fp_ops += 1
+        elif kind == z3.Z3_OP_MUL and sort_kind == z3.Z3_REAL_SORT:
+            non_const = sum(1 for i in range(node.num_args()) if not z3.is_rational_value(node.arg(i)))
+            if non_const >= 2:
+                nlin_real += 1
+        elif kind == z3.Z3_OP_DIV and sort_kind == z3.Z3_REAL_SORT:
+            if not z3.is_rational_value(node.arg(1)):
+                nlin_real += 1
+        elif kind in (
+            z3.Z3_OP_BMUL,
+            z3.Z3_OP_BSDIV,
+            z3.Z3_OP_BUDIV,
+            z3.Z3_OP_BSREM,
+            z3.Z3_OP_BUREM,
+            z3.Z3_OP_BSHL,
+            z3.Z3_OP_BLSHR,
+            z3.Z3_OP_BASHR,
+        ):
+            bv_mul_shift += 1
+        elif kind == z3.Z3_OP_SELECT:
+            arr_sel += 1
+        elif kind == z3.Z3_OP_STORE:
+            arr_st += 1
+        elif kind == z3.Z3_OP_ITE:
+            ites += 1
+            if (
+                node.num_args() == 3
+                and isinstance(node.arg(1), z3.BitVecNumRef)
+                and isinstance(node.arg(2), z3.BitVecNumRef)
+                and node.arg(1).as_long() == 1
+                and node.arg(2).as_long() == 0
+            ):
+                bool_wrappers += 1
+        if name in _BRIDGE_NAMES:
+            bridges += 1
+
+    max_d = max(depths.values()) if depths else 0
+    return AstCensus(
+        total_nodes=len(visited),
+        max_depth=max_d,
+        fp_ops=fp_ops,
+        nlin_real_ops=nlin_real,
+        bv_mul_shift_ops=bv_mul_shift,
+        array_select_ops=arr_sel,
+        array_store_ops=arr_st,
+        bridge_ops=bridges,
+        ite_ops=ites,
+        bool_wrapper_ops=bool_wrappers,
+    )
+
+
+def rewrite_dag(
+    root: z3.ExprRef,
+    rule_fn: Callable[[z3.ExprRef], Optional[z3.ExprRef]],
+    memo: Optional[Dict[int, z3.ExprRef]] = None,
+) -> Tuple[z3.ExprRef, int]:
+    """
+    Iterative, memoized bottom-up DAG rewriter.
+
+    Visits each unique node once. After rewriting a node's children, rebuilds
+    the parent only if any child changed, then invokes `rule_fn(rebuilt)`.
+    If `rule_fn` returns a non-None `ExprRef` different from `rebuilt`,
+    increments the rewrite counter and memoizes the result.
+    """
+    cache: Dict[int, z3.ExprRef] = memo if memo is not None else {}
+    rewrites = 0
+    stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
+
+    while stack:
+        cur, expanded = stack.pop()
+        cid = cur.get_id()
+        if cid in cache:
+            continue
+        if not expanded:
+            if not z3.is_app(cur) or cur.num_args() == 0:
+                repl = rule_fn(cur)
+                if repl is not None and not repl.eq(cur):
+                    rewrites += 1
+                    cache[cid] = repl
+                else:
+                    cache[cid] = cur
+                continue
+            stack.append((cur, True))
+            for i in range(cur.num_args() - 1, -1, -1):
+                ch = cur.arg(i)
+                if ch.get_id() not in cache:
+                    stack.append((ch, False))
+        else:
+            nargs = cur.num_args()
+            new_args: List[z3.ExprRef] = []
+            args_changed = False
+            for i in range(nargs):
+                orig_a = cur.arg(i)
+                new_a = cache.get(orig_a.get_id(), orig_a)
+                if not new_a.eq(orig_a):
+                    args_changed = True
+                new_args.append(new_a)
+            rebuilt = rebuild_app(cur, new_args) if args_changed else cur
+            repl = rule_fn(rebuilt)
+            if repl is not None and not repl.eq(rebuilt):
+                rewrites += 1
+                cache[cid] = repl
+            else:
+                cache[cid] = rebuilt
+
+    return cache.get(root.get_id(), root), rewrites
+
+
+def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
+    """
+    Safely rebuild a Z3 application node with rewritten children.
+
+    Handles built-in operators whose `decl()` requires special constructors
+    (`Extract`, `ZeroExt`, `SignExt`, `Concat`, `If`, `And`, `Or`, `Not`,
+    `Select`, `Store`, etc.) cleanly without Z3 FFI parameter-mismatch errors.
+    """
+    decl = node.decl()
+    kind = decl.kind()
+
+    if kind == z3.Z3_OP_EXTRACT:
+        hi = node.params()[0]
+        lo = node.params()[1]
+        return z3.Extract(hi, lo, new_args[0])
+    if kind == z3.Z3_OP_ZERO_EXT:
+        return z3.ZeroExt(node.params()[0], new_args[0])
+    if kind == z3.Z3_OP_SIGN_EXT:
+        return z3.SignExt(node.params()[0], new_args[0])
+    if kind == z3.Z3_OP_CONCAT:
+        return z3.Concat(*new_args)
+    if kind == z3.Z3_OP_ITE:
+        return z3.If(new_args[0], new_args[1], new_args[2])
+    if kind == z3.Z3_OP_AND:
+        return z3.And(*new_args)
+    if kind == z3.Z3_OP_OR:
+        return z3.Or(*new_args)
+    if kind == z3.Z3_OP_NOT:
+        return z3.Not(new_args[0])
+    if kind == z3.Z3_OP_EQ:
+        return new_args[0] == new_args[1]
+    if kind == z3.Z3_OP_DISTINCT and len(new_args) == 2:
+        return new_args[0] != new_args[1]
+    if kind == z3.Z3_OP_SELECT:
+        return z3.Select(new_args[0], new_args[1])
+    if kind == z3.Z3_OP_STORE:
+        return z3.Store(new_args[0], new_args[1], new_args[2])
+    if kind == z3.Z3_OP_ADD:
+        acc = new_args[0]
+        for a in new_args[1:]:
+            acc = acc + a
+        return acc
+    if kind == z3.Z3_OP_SUB and len(new_args) == 2:
+        return new_args[0] - new_args[1]
+    if kind == z3.Z3_OP_UMINUS and len(new_args) == 1:
+        return -new_args[0]
+    if kind == z3.Z3_OP_MUL:
+        acc = new_args[0]
+        for a in new_args[1:]:
+            acc = acc * a
+        return acc
+    if kind == z3.Z3_OP_DIV and len(new_args) == 2:
+        return new_args[0] / new_args[1]
+    if kind == z3.Z3_OP_BADD and len(new_args) == 2:
+        return new_args[0] + new_args[1]
+    if kind == z3.Z3_OP_BSUB and len(new_args) == 2:
+        return new_args[0] - new_args[1]
+    if kind == z3.Z3_OP_BMUL and len(new_args) == 2:
+        return new_args[0] * new_args[1]
+    if kind == z3.Z3_OP_BAND and len(new_args) == 2:
+        return new_args[0] & new_args[1]
+    if kind == z3.Z3_OP_BOR and len(new_args) == 2:
+        return new_args[0] | new_args[1]
+    if kind == z3.Z3_OP_BXOR and len(new_args) == 2:
+        return new_args[0] ^ new_args[1]
+    if kind == z3.Z3_OP_BSHL and len(new_args) == 2:
+        return new_args[0] << new_args[1]
+    if kind == z3.Z3_OP_BLSHR and len(new_args) == 2:
+        return z3.LShR(new_args[0], new_args[1])
+    if kind == z3.Z3_OP_BASHR and len(new_args) == 2:
+        return new_args[0] >> new_args[1]
+    return decl(*new_args)
+
+
+def format_z3_ast(
+    expr: z3.ExprRef,
+    *,
+    max_depth: int = 12,
+    max_lines: int = 120,
+    let_bind_shared: bool = True,
+) -> str:
+    """
+    Pretty-print a Z3 AST in readable, indented let-bound S-expression form.
+
+    Shared sub-DAGs referenced >= 2 times (with size >= 3) are hoisted into
+    compact `(let ((%t0 ...) (%t1 ...)) ...)` bindings when `let_bind_shared`
+    is enabled, keeping 10,000-node shader expressions scannable in `--dump-ast`.
+    """
+    if expr is None:
+        return "<None>"
+
+    # Pass 1: count parent references to identify shared subexpressions.
+    ref_count: Dict[int, int] = {}
+    order: List[z3.ExprRef] = []
+    visited: Set[int] = set()
+    stack: List[Tuple[z3.ExprRef, bool]] = [(expr, False)]
+    while stack:
+        cur, expanded = stack.pop()
+        cid = cur.get_id()
+        if expanded:
+            order.append(cur)
+            continue
+        ref_count[cid] = ref_count.get(cid, 0) + 1
+        if cid in visited:
+            continue
+        visited.add(cid)
+        stack.append((cur, True))
+        if z3.is_app(cur):
+            for i in range(cur.num_args() - 1, -1, -1):
+                stack.append((cur.arg(i), False))
+
+    let_names: Dict[int, str] = {}
+    let_defs: List[Tuple[str, z3.ExprRef]] = []
+    if let_bind_shared:
+        for node in order:
+            nid = node.get_id()
+            if nid == expr.get_id():
+                continue
+            if ref_count.get(nid, 0) >= 2 and z3.is_app(node) and node.num_args() > 0:
+                lname = f"%t{len(let_defs)}"
+                let_names[nid] = lname
+                let_defs.append((lname, node))
+
+    def _op_label(n: z3.ExprRef) -> str:
+        if isinstance(n, z3.BitVecNumRef):
+            return f"bv{n.size()}(0x{n.as_long():x})"
+        if z3.is_rational_value(n):
+            return n.as_decimal(6).rstrip("?")
+        if z3.is_true(n):
+            return "true"
+        if z3.is_false(n):
+            return "false"
+        d = n.decl()
+        k = d.kind()
+        if k == z3.Z3_OP_EXTRACT:
+            return f"Extract[{n.params()[0]}:{n.params()[1]}]"
+        if k == z3.Z3_OP_ZERO_EXT:
+            return f"ZeroExt[{n.params()[0]}]"
+        if k == z3.Z3_OP_SIGN_EXT:
+            return f"SignExt[{n.params()[0]}]"
+        return d.name()
+
+    lines: List[str] = []
+
+    def _fmt(n: z3.ExprRef, depth: int, indent: str, allow_let_ref: bool = True) -> str:
+        nid = n.get_id()
+        if allow_let_ref and nid in let_names:
+            return let_names[nid]
+        if not z3.is_app(n) or n.num_args() == 0:
+            return _op_label(n)
+        if depth >= max_depth:
+            return f"({_op_label(n)} ...)"
+        lbl = _op_label(n)
+        ch_strs = [_fmt(n.arg(i), depth + 1, indent + "  ", True) for i in range(n.num_args())]
+        one_line = f"({lbl} {' '.join(ch_strs)})"
+        if len(one_line) <= 76 and "\n" not in one_line:
+            return one_line
+        body = f"\n{indent}  ".join(ch_strs)
+        return f"({lbl}\n{indent}  {body})"
+
+    if let_defs:
+        lines.append("(let (")
+        for lname, lnode in let_defs[: max(1, max_lines // 2)]:
+            rendered = _fmt(lnode, 0, "    ", allow_let_ref=False)
+            lines.append(f"  ({lname} {rendered})")
+        if len(let_defs) > max(1, max_lines // 2):
+            lines.append(f"  ; ... ({len(let_defs) - max(1, max_lines // 2)} more shared bindings omitted)")
+        lines.append(")")
+        body_str = _fmt(expr, 0, "  ", allow_let_ref=True)
+        for bl in body_str.splitlines():
+            lines.append(f"  {bl}")
+        lines.append(")")
+    else:
+        lines.extend(_fmt(expr, 0, "", allow_let_ref=True).splitlines())
+
+    if len(lines) > max_lines:
+        omitted = len(lines) - max_lines
+        lines = lines[:max_lines] + [f"  ; ... ({omitted} lines truncated)"]
+    return "\n".join(lines)

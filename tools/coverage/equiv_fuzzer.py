@@ -98,7 +98,7 @@ def run_concolic_equiv_fuzz(
     policy: Optional[DiffPolicy] = None,
     auto_shrink: bool = True,
     seed: int = 0x5A17,
-    domain: str = "bitvec",
+    domain: str = "udomain",
 ) -> ConcolicEquivFuzzResult:
     """
     Concolically seed input vectors from `seed_side` (`direct` or `valhall`) to

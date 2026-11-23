@@ -394,10 +394,10 @@ class TestV30CleanupAndEquivFuzz(unittest.TestCase):
         sev = SymbolicSsaInterpreter(ssa, senv, is_valhall_side=False, fp_mode="exact")
         sev.evaluate()
         s = z3.Solver()
-        s.add(sev.values[4] != z3.BitVecVal(19, 32))
+        s.add(sev.domain.lower_z3_bv32(sev.values[4]) != z3.BitVecVal(19, 32))
         self.assertEqual(s.check(), z3.unsat)
         s2 = z3.Solver()
-        s2.add(sev.values[5] != z3.BitVecVal(275, 32))
+        s2.add(sev.domain.lower_z3_bv32(sev.values[5]) != z3.BitVecVal(275, 32))
         self.assertEqual(s2.check(), z3.unsat)
 
     def test_concolic_equiv_fuzz_detects_bug_and_passes_clean(self) -> None:
