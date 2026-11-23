@@ -179,6 +179,7 @@ def rewrite_dag(
     """
     cache: Dict[int, z3.ExprRef] = memo if memo is not None else {}
     rewrites = 0
+    root_id = root.get_id()
     stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
 
     while stack:
@@ -221,7 +222,7 @@ def rewrite_dag(
                 res_node = z3.lower(res_node)
             cache[cid] = res_node
 
-    return cache.get(root.get_id(), root), rewrites
+    return cache.get(root_id, cache.get(root.get_id(), root)), rewrites
 
 
 def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:

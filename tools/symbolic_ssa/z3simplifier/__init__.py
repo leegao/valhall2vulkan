@@ -146,16 +146,22 @@ def build_default_pipeline(
         ),
         ReadOnlyArrayScalarizePass(),
         InjectiveBridgeUnwrapPass(),
-        PolynomialNormalizePass(),
     ]
+    if not enable_conditioned_unify:
+        passes.append(PolynomialNormalizePass())
     if enable_cse_unify:
         passes.append(ExactCseUnificationPass())
     if enable_conditioned_unify:
-        passes.append(ConditionedUnificationPass())
+        passes.append(ConditionedUnificationPass(enable_anti_unify=not enable_theory_purify))
     if enable_ematching:
         passes.append(EmatchingUnifyPass())
     if enable_theory_purify:
         passes.append(TheoryPurifyRealPass())
+        passes.append(TermPassAdapter(RealAlgebraicPass()))
+        if enable_conditioned_unify:
+            passes.append(ConditionedUnificationPass(enable_anti_unify=True))
+        passes.append(PolynomialNormalizePass())
+    elif enable_conditioned_unify:
         passes.append(PolynomialNormalizePass())
     return PassPipeline(passes)
 

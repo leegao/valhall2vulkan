@@ -576,5 +576,152 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         cmp_res = dom.fp_cmp("FCmpOrdEq", a, b)
         self.assertIsInstance(dom.lower_z3_bool(cmp_res), sz3.Z3Expr)
 
+
+    def test_v33_4_conditioned_unify_structural_anti_unify_and_residuals(self) -> None:
+        """Structural anti-unification discharges congruence holes under preconditions and tracks residuals."""
+        cse_3, t2 = z3.Reals("cse_3 t2")
+        r15, r19, r35, r36, r37, r39, r40 = z3.Reals("r15 r19 r35 r36 r37 r39 r40")
+        r60, r63, r73, r74, r75 = z3.Reals("r60 r63 r73 r74 r75")
+
+        clamp = z3.If(z3.RealVal(1) >= t2, t2, z3.RealVal(1))
+        lhs = (
+            (r15 * z3.RealVal("0.003968"))
+            + ((clamp + cse_3) * (z3.RealVal(1) / (cse_3 + r19)))
+            + ((((r35 * r36) + r37) + (-r39)) * (z3.RealVal(1) / r40))
+        )
+        rhs = (
+            (r60 * z3.RealVal("0.003968"))
+            + ((clamp + cse_3) * r63)
+            + ((((r73 * r36) + r37) + (-(z3.RealVal(1) / (z3.RealVal(1) / r74)))) * r75)
+        )
+
+        # With nonlinear reciprocal preconditions (not syntactically substitutable by dataflow),
+        # structural anti-unification discharges all 5 congruence holes -> trivial UNSAT.
+        pres = (
+            r15 - r60 == z3.RealVal(0),
+            r63 * (cse_3 + r19) == z3.RealVal(1),
+            cse_3 + r19 != z3.RealVal(0),
+            r35 - r73 == z3.RealVal(0),
+            r39 - r74 == z3.RealVal(0),
+            r75 * r40 == z3.RealVal(1),
+            r40 != z3.RealVal(0),
+        )
+        pipe = build_default_pipeline(enable_conditioned_unify=True)
+        sim_ok = pipe.run(SimplifyQuery(lhs=lhs, rhs=rhs, preconditions=pres))
+        self.assertTrue(sim_ok.query.is_trivially_unsat(), f"Expected UNSAT, got residuals={sim_ok.query.residual_obligations}")
+        self.assertEqual(len(sim_ok.query.residual_obligations), 0)
+        self.assertGreaterEqual(len(sim_ok.query.side_obligations), 5)
+
+        # Without preconditions, no unsound unification occurs and exact residual holes are recorded.
+        sim_res = pipe.run(SimplifyQuery(lhs=lhs, rhs=rhs))
+        self.assertFalse(sim_res.query.is_trivially_unsat())
+        self.assertEqual(len(sim_res.query.side_obligations), 0)
+        self.assertEqual(len(sim_res.query.residual_obligations), 5)
+
+        # Bounded abstraction_map expansion discharges commutative BV holes behind purified leaves.
+        u_s32 = z3.Function("u_s32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        x_bv = z3.BitVec("x_bv", 32)
+        p_l = z3.Real("purify_l")
+        p_r = z3.Real("purify_r")
+        q_abs = SimplifyQuery(
+            lhs=p_l * z3.RealVal("0.003968") + cse_3,
+            rhs=p_r * z3.RealVal("0.003968") + cse_3,
+            abstraction_map=(
+                (p_l, u_s32(x_bv & z3.BitVecVal(252, 32))),
+                (p_r, u_s32(z3.BitVecVal(252, 32) & x_bv)),
+            ),
+        )
+        sim_abs = PassPipeline([ConditionedUnificationPass(enable_anti_unify=True)]).run(q_abs)
+        self.assertTrue(sim_abs.query.is_trivially_unsat())
+        self.assertEqual(len(sim_abs.query.side_obligations), 1)
+        self.assertIn("expanded", sim_abs.query.side_obligations[0].reason)
+
+        # Negated comparison alignment on If(x < 0, E, 0) vs If(0 <= x, 0, E)
+        x_r = z3.Real("x_r")
+        e_l = r15 + z3.RealVal(1)
+        e_r = r60 + z3.RealVal(1)
+        q_if = SimplifyQuery(
+            lhs=z3.If(x_r < z3.RealVal(0), e_l, z3.RealVal(0)),
+            rhs=z3.If(z3.RealVal(0) <= x_r, z3.RealVal(0), e_r),
+            preconditions=(r15 == r60,),
+        )
+        sim_if = PassPipeline([ConditionedUnificationPass(enable_anti_unify=True)]).run(q_if)
+        self.assertTrue(sim_if.query.is_trivially_unsat())
+
+    def test_v33_4_theory_purify_real_bool_queries_and_dsl_bridge_hoist(self) -> None:
+        """Bool-over-Real queries (e.g. discarded) purify into QF_NRA; pure-BV Bool queries stay untouched."""
+        from tools.symbolic_ssa import z3 as sz3
+
+        u_bv32_to_f32 = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
+        hw_tex = z3.Function("hw_tex_0", z3.BitVecSort(32), z3.BitVecSort(32), z3.BitVecSort(32))
+        u_coord, v_coord = z3.BitVecs("u_coord v_coord", 32)
+        ubo0, ubo1 = z3.BitVecs("ubo0 ubo1", 32)
+
+        t = u_bv32_to_f32(hw_tex(u_coord, v_coord))
+        s = u_bv32_to_f32(ubo0)
+        thr = u_bv32_to_f32(ubo1)
+
+        q_bool_real = SimplifyQuery(
+            lhs=((t + s) * (t + s)) <= thr,
+            rhs=(t * t + z3.RealVal(2) * t * s + s * s) <= thr,
+        )
+        res = solve_simplified_miter(q_bool_real, PassPipeline([TheoryPurifyRealPass()]), timeout_ms=500)
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(res.simplified_query.pure_theory, "QF_NRA")
+        self.assertEqual(census_ast([res.simplified_query.lhs, res.simplified_query.rhs]).bridge_ops, 0)
+        self.assertTrue(res.used_nlsat)
+
+        # Pure-BV Bool query (no Real subterms) must NOT be modified by TheoryPurifyRealPass.
+        q_bv_only = SimplifyQuery(
+            lhs=z3.ULT(u_coord, v_coord),
+            rhs=z3.ULT(v_coord, u_coord),
+        )
+        sim_bv = PassPipeline([TheoryPurifyRealPass()]).run(q_bv_only)
+        self.assertIsNone(sim_bv.query.pure_theory)
+        self.assertFalse(sim_bv.query.is_overapprox)
+
+        # BridgeCancelPass hoists u_f32_to_bv32 across If even with DSL Z3BvConst false arm.
+        u_f32_to_bv32_dsl = sz3.Function("u_f32_to_bv32", sz3.RealSort(), sz3.BitVecSort(32))
+        c_dsl = sz3.Bool("c_dsl")
+        r_dsl = sz3.Real("r_dsl")
+        ite_dsl = sz3.If(c_dsl, u_f32_to_bv32_dsl(r_dsl), sz3.BitVecVal(0, 32))
+        out_ite, rw = BridgeCancelPass().rewrite_term(ite_dsl, SimplificationContext())
+        self.assertGreaterEqual(rw, 1)
+        self.assertEqual(out_ite.decl().name(), "u_f32_to_bv32")
+
+    def test_v33_4_real_algebraic_identities(self) -> None:
+        """RealAlgebraicPass folds constants, cancels signs/inverses, collapses 1/(1/x), and canonicalizes cmps."""
+        x, y = z3.Reals("x y")
+        p = RealAlgebraicPass()
+        ctx = SimplificationContext()
+
+        # Double reciprocal: 1 / (1 / x) -> x, (-1) / (1 / x) -> -x, y / (1 / x) -> y * x
+        out1, _ = p.rewrite_term(z3.RealVal(1) / (z3.RealVal(1) / x), ctx)
+        self.assertTrue(out1.eq(x), f"Expected x, got {out1}")
+        out2, _ = p.rewrite_term(z3.RealVal(-1) / (z3.RealVal(1) / x), ctx)
+        self.assertTrue(out2.eq(-x), f"Expected -x, got {out2}")
+
+        # Negation distribution & additive inverse cancellation
+        out3, _ = p.rewrite_term(-(x + y), ctx)
+        self.assertTrue(z3.is_false(z3.simplify(out3 != (-x) + (-y))))
+        out4, _ = p.rewrite_term(x + (-x), ctx)
+        self.assertTrue(out4.eq(z3.RealVal(0)), f"Expected 0, got {out4}")
+
+        # Multiplicative sign cancellation & constant folding
+        out5, _ = p.rewrite_term((-x) * (-y), ctx)
+        self.assertTrue(out5.eq(x * y), f"Expected x*y, got {out5}")
+        out6, _ = p.rewrite_term((x / z3.RealVal(4)) * z3.RealVal(4), ctx)
+        # Fixed-point applies x/4 -> x*(1/4), then (1/4)*4 -> 1 -> x
+        sim6 = build_exact_pipeline().run(SimplifyQuery(lhs=out6, rhs=x))
+        self.assertTrue(sim6.query.is_trivially_unsat())
+
+        # Comparison canonicalization & negation cancellation
+        out7, _ = p.rewrite_term((-x) <= (-y), ctx)
+        self.assertTrue(out7.eq(y <= x), f"Expected y <= x, got {out7}")
+        out8, _ = p.rewrite_term(x >= y, ctx)
+        self.assertTrue(out8.eq(y <= x), f"Expected y <= x, got {out8}")
+        out9, _ = p.rewrite_term(x <= x, ctx)
+        self.assertTrue(z3.is_true(out9))
+
 if __name__ == "__main__":
     unittest.main()

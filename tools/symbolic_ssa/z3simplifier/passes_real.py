@@ -17,10 +17,13 @@ Addresses:
         `z3.simplify(lhs - rhs, som=True, arith_lhs=True)`. Any algebraically
         equivalent FMA / associativity / distributivity lowering collapses to
         `0 == 0` (trivial `UNSAT`) in < 1 ms without invoking the SMT solver.
+      * `RealAlgebraicPass`: applies terminating Real arithmetic, reciprocal,
+        comparison, and ITE canonicalization identities.
 """
 
 from __future__ import annotations
 
+from fractions import Fraction
 import math
 import struct
 import time
@@ -58,16 +61,19 @@ def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
         t_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
         f_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
+        def _apply_bridge(br_node: z3.ExprRef, inner: z3.ExprRef) -> z3.ExprRef:
+            return br_node.decl()(z3.lower(inner))
+
         if t_br and f_br and t_arm.decl().name() == f_arm.decl().name():
-            return t_arm.decl()(z3.lower(z3.If(c, t_arm.arg(0), f_arm.arg(0))))
-        if t_br and t_arm.decl().name() == "u_f32_to_bv32" and isinstance(f_arm, z3.BitVecNumRef):
+            return _apply_bridge(t_arm, z3.If(c, t_arm.arg(0), f_arm.arg(0)))
+        if t_br and t_arm.decl().name() == "u_f32_to_bv32" and z3.is_bv_value(f_arm):
             fv = struct.unpack("<f", struct.pack("<I", f_arm.as_long() & 0xFFFFFFFF))[0]
             if math.isfinite(fv):
-                return t_arm.decl()(z3.If(c, t_arm.arg(0), z3.RealVal(repr(float(fv)))))
-        if f_br and f_arm.decl().name() == "u_f32_to_bv32" and isinstance(t_arm, z3.BitVecNumRef):
+                return _apply_bridge(t_arm, z3.If(c, t_arm.arg(0), z3.RealVal(repr(float(fv)))))
+        if f_br and f_arm.decl().name() == "u_f32_to_bv32" and z3.is_bv_value(t_arm):
             tv = struct.unpack("<f", struct.pack("<I", t_arm.as_long() & 0xFFFFFFFF))[0]
             if math.isfinite(tv):
-                return f_arm.decl()(z3.If(c, z3.RealVal(repr(float(tv))), f_arm.arg(0)))
+                return _apply_bridge(f_arm, z3.If(c, z3.RealVal(repr(float(tv))), f_arm.arg(0)))
         return None
     if node.num_args() != 1:
         return None
@@ -85,15 +91,14 @@ def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         c, t_arm, f_arm = arg0.arg(0), arg0.arg(1), arg0.arg(2)
         t_is_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() == "u_f32_to_bv32"
         f_is_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == "u_f32_to_bv32"
-        if t_is_br or f_is_br or isinstance(t_arm, z3.BitVecNumRef) or isinstance(f_arm, z3.BitVecNumRef):
+        if t_is_br or f_is_br or z3.is_bv_value(t_arm) or z3.is_bv_value(f_arm):
             fn = node.decl()
-            nt = t_arm.arg(0) if t_is_br else fn(t_arm)
-            nf = f_arm.arg(0) if f_is_br else fn(f_arm)
+            nt = t_arm.arg(0) if t_is_br else fn(z3.lower(t_arm))
+            nf = f_arm.arg(0) if f_is_br else fn(z3.lower(f_arm))
             return z3.If(c, nt, nf)
     if z3.is_app(arg0) and arg0.num_args() == 1 and arg0.decl().name() == inv_name:
         return arg0.arg(0)
-    # Fold constant arguments across bridge boundaries (e.g. after PreconditionConstSubPass)
-    if outer_name in ("u_bv32_to_f32", "bv32_to_real") and isinstance(arg0, z3.BitVecNumRef):
+    if outer_name in ("u_bv32_to_f32", "bv32_to_real") and z3.is_bv_value(arg0):
         fval = struct.unpack("<f", struct.pack("<I", arg0.as_long() & 0xFFFFFFFF))[0]
         if math.isfinite(fval):
             return z3.RealVal(repr(float(fval)))
@@ -124,7 +129,7 @@ class PreconditionConstSubPass(Z3QueryPass):
     @staticmethod
     def _is_const_literal(e: z3.ExprRef) -> bool:
         return (
-            isinstance(e, z3.BitVecNumRef)
+            z3.is_bv_value(e)
             or z3.is_rational_value(e)
             or z3.is_int_value(e)
             or z3.is_true(e)
@@ -136,7 +141,7 @@ class PreconditionConstSubPass(Z3QueryPass):
         if z3.is_const(e) and e.decl().kind() == z3.Z3_OP_UNINTERPRETED:
             return True
         if z3.is_app(e) and e.decl().kind() == z3.Z3_OP_SELECT and e.num_args() == 2:
-            return isinstance(e.arg(1), (z3.BitVecNumRef, z3.IntNumRef))
+            return z3.is_bv_value(e.arg(1)) or z3.is_int_value(e.arg(1))
         return False
 
     def run(
@@ -150,7 +155,6 @@ class PreconditionConstSubPass(Z3QueryPass):
 
         subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
         seen_ids = set()
-        # Flatten top-level Ands in preconditions
         work: List[z3.ExprRef] = list(query.preconditions)
         if query.guard is not None:
             work.append(query.guard)
@@ -270,9 +274,7 @@ class PolynomialNormalizePass(Z3QueryPass):
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
 
-        if not (isinstance(query.lhs, z3.ArithRef) and isinstance(query.rhs, z3.ArithRef)):
-            return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
-        if not (query.lhs.is_real() and query.rhs.is_real()):
+        if query.lhs.sort().kind() != z3.Z3_REAL_SORT or query.rhs.sort().kind() != z3.Z3_REAL_SORT:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         sz = count_ast_nodes([query.lhs, query.rhs], limit=ctx.max_som_nodes + 1)
@@ -280,7 +282,7 @@ class PolynomialNormalizePass(Z3QueryPass):
             dt = (time.perf_counter() - t0) * 1000.0
             return query, PassStats(self.name, False, 0, dt, f"skipped_size={sz}>{ctx.max_som_nodes}")
 
-        diff = z3.simplify(query.lhs - query.rhs, som=True, arith_lhs=True)
+        diff = z3.simplify(z3.lower(query.lhs) - z3.lower(query.rhs), som=True, arith_lhs=True)
         if z3.is_rational_value(diff) and diff.numerator_as_long() == 0:
             out_q = query.with_terms(
                 lhs=z3.RealVal(0),
@@ -291,7 +293,6 @@ class PolynomialNormalizePass(Z3QueryPass):
             dt = (time.perf_counter() - t0) * 1000.0
             return out_q, PassStats(self.name, True, 1, dt, "discharged_unsat")
 
-        # Even if non-zero, rewriting `lhs != rhs` to `diff != 0` can shrink the term
         diff_sz = count_ast_nodes([diff], limit=sz + 1)
         if diff_sz < sz:
             out_q = query.with_terms(
@@ -306,87 +307,302 @@ class PolynomialNormalizePass(Z3QueryPass):
         return query, PassStats(self.name, False, 0, dt)
 
 
-def _rat_val(e: z3.ExprRef) -> Optional[Tuple[int, int]]:
+def _rat_frac(e: z3.ExprRef) -> Optional[Fraction]:
     if z3.is_rational_value(e):
-        return (int(e.numerator_as_long()), int(e.denominator_as_long()))
+        return Fraction(int(e.numerator_as_long()), int(e.denominator_as_long()))
+    return None
+
+
+def _frac_to_real(f: Fraction) -> z3.ExprRef:
+    if f.denominator == 1:
+        return z3.lower(z3.RealVal(f.numerator))
+    return z3.lower(z3.RealVal(f"{f.numerator}/{f.denominator}"))
+
+
+def _is_uminus(e: z3.ExprRef) -> bool:
+    return z3.is_app(e) and e.decl().kind() == z3.Z3_OP_UMINUS and e.num_args() == 1
+
+
+def _strip_uminus(e: z3.ExprRef) -> Tuple[z3.ExprRef, bool]:
+    if _is_uminus(e):
+        return e.arg(0), True
+    return e, False
+
+
+def _real_cmp_rule(node: z3.ExprRef, kind: int) -> Optional[z3.ExprRef]:
+    if node.num_args() != 2:
+        return None
+    a, b = node.arg(0), node.arg(1)
+    if a.sort().kind() != z3.Z3_REAL_SORT or b.sort().kind() != z3.Z3_REAL_SORT:
+        return None
+    fa, fb = _rat_frac(a), _rat_frac(b)
+    if fa is not None and fb is not None:
+        if kind == z3.Z3_OP_LT:
+            return z3.lower(z3.BoolVal(fa < fb))
+        if kind == z3.Z3_OP_LE:
+            return z3.lower(z3.BoolVal(fa <= fb))
+        if kind == z3.Z3_OP_GT:
+            return z3.lower(z3.BoolVal(fa > fb))
+        if kind == z3.Z3_OP_GE:
+            return z3.lower(z3.BoolVal(fa >= fb))
+    if a.eq(b):
+        return z3.lower(z3.BoolVal(kind in (z3.Z3_OP_LE, z3.Z3_OP_GE)))
+    if _is_uminus(a) and _is_uminus(b):
+        na, nb = a.arg(0), b.arg(0)
+        if kind == z3.Z3_OP_LT:
+            return nb < na
+        if kind == z3.Z3_OP_LE:
+            return nb <= na
+        if kind == z3.Z3_OP_GT:
+            return na < nb
+        if kind == z3.Z3_OP_GE:
+            return na <= nb
+    # Canonicalize `>` to `<` and `>=` to `<=` so flipped clamps match structurally.
+    if kind == z3.Z3_OP_GT:
+        return b < a
+    if kind == z3.Z3_OP_GE:
+        return b <= a
+    return None
+
+
+def _real_add_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+    nargs = node.num_args()
+    const_sum = Fraction(0)
+    const_count = 0
+    non_const: List[z3.ExprRef] = []
+    for i in range(nargs):
+        ch = node.arg(i)
+        fc = _rat_frac(ch)
+        if fc is not None:
+            const_sum += fc
+            const_count += 1
+        else:
+            non_const.append(ch)
+
+    # Cancel exact additive inverse pairs `(t, -t)` among non-constant summands.
+    cancelled = False
+    if len(non_const) >= 2:
+        pos_idx: Dict[int, List[int]] = {}
+        neg_idx: Dict[int, List[int]] = {}
+        for idx, term in enumerate(non_const):
+            base, is_neg = _strip_uminus(term)
+            bid = base.get_id()
+            (neg_idx if is_neg else pos_idx).setdefault(bid, []).append(idx)
+        removed: set[int] = set()
+        for bid, pids in pos_idx.items():
+            nids = neg_idx.get(bid)
+            if nids:
+                pairs = min(len(pids), len(nids))
+                for k in range(pairs):
+                    removed.add(pids[k])
+                    removed.add(nids[k])
+                cancelled = True
+        if cancelled:
+            non_const = [t for idx, t in enumerate(non_const) if idx not in removed]
+
+    needs_rewrite = (
+        cancelled
+        or const_count >= 2
+        or (const_count == 1 and const_sum == 0)
+    )
+    if not needs_rewrite:
+        return None
+    terms = list(non_const)
+    if const_sum != 0:
+        terms.append(_frac_to_real(const_sum))
+    if not terms:
+        return z3.lower(z3.RealVal(0))
+    acc = terms[0]
+    for t in terms[1:]:
+        acc = acc + t
+    return acc
+
+
+def _real_mul_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+    nargs = node.num_args()
+    const_prod = Fraction(1)
+    const_count = 0
+    neg_count = 0
+    raw_non_const: List[z3.ExprRef] = []
+    stripped_non_const: List[z3.ExprRef] = []
+    for i in range(nargs):
+        ch = node.arg(i)
+        fc = _rat_frac(ch)
+        if fc is not None:
+            if fc == 0:
+                return z3.lower(z3.RealVal(0))
+            const_prod *= fc
+            const_count += 1
+        else:
+            raw_non_const.append(ch)
+            base, is_neg = _strip_uminus(ch)
+            if is_neg:
+                neg_count += 1
+            stripped_non_const.append(base)
+
+    # Strip unary minus only when it cancels in pairs (`(-a)*(-b) -> a*b`) or
+    # absorbs into a rational constant (`(-a)*c -> (-c)*a`); pulling a lone `-`
+    # out of `(-a)*b` breaks CSE on shared negated terms like `-frag_var`.
+    strip_negs = neg_count >= 2 or (neg_count == 1 and const_count > 0)
+    non_const = stripped_non_const if strip_negs else raw_non_const
+    odd_neg = (neg_count % 2) == 1 if strip_negs else False
+    if odd_neg and const_count > 0:
+        const_prod = -const_prod
+        odd_neg = False
+
+    needs_rewrite = (
+        strip_negs
+        or const_count >= 2
+        or (const_count == 1 and const_prod in (Fraction(1), Fraction(-1)))
+    )
+    if not needs_rewrite:
+        return None
+
+    if not non_const:
+        return _frac_to_real(-const_prod if odd_neg else const_prod)
+
+    if const_prod == Fraction(-1):
+        odd_neg = not odd_neg
+        const_prod = Fraction(1)
+
+    factors: List[z3.ExprRef] = []
+    if const_prod != Fraction(1):
+        factors.append(_frac_to_real(const_prod))
+    factors.extend(non_const)
+
+    acc = factors[0]
+    for f in factors[1:]:
+        acc = acc * f
+    return -acc if odd_neg else acc
+
+
+def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+    a, b = node.arg(0), node.arg(1)
+    fa, fb = _rat_frac(a), _rat_frac(b)
+    if fb is not None and fb != 0:
+        if fa is not None:
+            return _frac_to_real(fa / fb)
+        if fb == Fraction(1):
+            return a
+        if fb == Fraction(-1):
+            return -a
+        return a * _frac_to_real(Fraction(1) / fb)
+    # Double reciprocal: `1 / (1 / x) -> x`, `(-1) / (1 / x) -> -x`, `a / (1 / x) -> a * x`.
+    # Matches IEEE-754 finite reciprocal semantics (Valhall lowers `sqrt(x)` as `FRCP(FRSQ(x))`).
+    if z3.is_app(b) and b.decl().kind() == z3.Z3_OP_DIV and b.num_args() == 2:
+        b_num = _rat_frac(b.arg(0))
+        if b_num is not None and b_num != 0:
+            b_den = b.arg(1)
+            if fa is not None:
+                scale = fa / b_num
+                if scale == Fraction(1):
+                    return b_den
+                if scale == Fraction(-1):
+                    return -b_den
+                return _frac_to_real(scale) * b_den
+            if b_num == Fraction(1):
+                return a * b_den
+            if b_num == Fraction(-1):
+                return -(a * b_den)
+            return (a * _frac_to_real(Fraction(1) / b_num)) * b_den
+    return None
+
+
+def _real_uminus_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+    a = node.arg(0)
+    fa = _rat_frac(a)
+    if fa is not None:
+        return _frac_to_real(-fa)
+    if _is_uminus(a):
+        return a.arg(0)
+    if z3.is_app(a):
+        ak = a.decl().kind()
+        if ak == z3.Z3_OP_SUB and a.num_args() == 2:
+            return a.arg(1) - a.arg(0)
+        if ak == z3.Z3_OP_ADD and a.num_args() >= 2:
+            acc = -a.arg(0)
+            for i in range(1, a.num_args()):
+                acc = acc + (-a.arg(i))
+            return acc
+        if ak == z3.Z3_OP_MUL and a.num_args() >= 2:
+            c0 = _rat_frac(a.arg(0))
+            if c0 is not None:
+                acc = _frac_to_real(-c0)
+                for i in range(1, a.num_args()):
+                    acc = acc * a.arg(i)
+                return acc
     return None
 
 
 def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
-    if not z3.is_app(node) or not (isinstance(node, z3.ArithRef) and node.is_real()):
+    if not z3.is_app(node):
         return None
     kind = node.decl().kind()
     nargs = node.num_args()
+    sk = node.sort().kind()
+
+    if sk == z3.Z3_BOOL_SORT and kind in (z3.Z3_OP_LT, z3.Z3_OP_LE, z3.Z3_OP_GT, z3.Z3_OP_GE):
+        return _real_cmp_rule(node, kind)
+
+    if sk != z3.Z3_REAL_SORT:
+        return None
+
+    if kind == z3.Z3_OP_ITE and nargs == 3:
+        c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
+        if z3.is_true(c):
+            return t_arm
+        if z3.is_false(c):
+            return f_arm
+        if t_arm.eq(f_arm):
+            return t_arm
+        if z3.is_app(c) and c.decl().kind() == z3.Z3_OP_NOT and c.num_args() == 1:
+            return z3.If(c.arg(0), f_arm, t_arm)
+        return None
 
     if kind == z3.Z3_OP_ADD and nargs >= 2:
-        kept = []
-        changed = False
-        for i in range(nargs):
-            ch = node.arg(i)
-            rv = _rat_val(ch)
-            if rv is not None and rv[0] == 0:
-                changed = True
-                continue
-            kept.append(ch)
-        if changed:
-            if not kept:
-                return z3.RealVal(0)
-            acc = kept[0]
-            for k in kept[1:]:
-                acc = acc + k
-            return acc
+        return _real_add_rule(node)
 
-    elif kind == z3.Z3_OP_SUB and nargs == 2:
+    if kind == z3.Z3_OP_SUB and nargs == 2:
         a, b = node.arg(0), node.arg(1)
-        rb = _rat_val(b)
-        if rb is not None and rb[0] == 0:
+        fa, fb = _rat_frac(a), _rat_frac(b)
+        if fa is not None and fb is not None:
+            return _frac_to_real(fa - fb)
+        if fb is not None and fb == 0:
             return a
+        if fa is not None and fa == 0:
+            return -b
         if a.eq(b):
-            return z3.RealVal(0)
+            return z3.lower(z3.RealVal(0))
+        if _is_uminus(b):
+            if _is_uminus(a):
+                return b.arg(0) - a.arg(0)
+            return a + b.arg(0)
+        if fb is not None and fb < 0:
+            return a + _frac_to_real(-fb)
+        return None
 
-    elif kind == z3.Z3_OP_MUL and nargs >= 2:
-        kept = []
-        changed = False
-        for i in range(nargs):
-            ch = node.arg(i)
-            rv = _rat_val(ch)
-            if rv is not None:
-                if rv[0] == 0:
-                    return z3.RealVal(0)
-                if rv[0] == rv[1]:
-                    changed = True
-                    continue
-            kept.append(ch)
-        if changed:
-            if not kept:
-                return z3.RealVal(1)
-            acc = kept[0]
-            for k in kept[1:]:
-                acc = acc * k
-            return acc
+    if kind == z3.Z3_OP_MUL and nargs >= 2:
+        return _real_mul_rule(node)
 
-    elif kind == z3.Z3_OP_DIV and nargs == 2:
-        a, b = node.arg(0), node.arg(1)
-        rb = _rat_val(b)
-        if rb is not None and rb[0] == rb[1] and rb[0] != 0:
-            return a
-        ra = _rat_val(a)
-        if ra is not None and ra[0] == 0 and rb is not None and rb[0] != 0:
-            return z3.RealVal(0)
+    if kind == z3.Z3_OP_DIV and nargs == 2:
+        return _real_div_rule(node)
 
-    elif kind == z3.Z3_OP_UMINUS and nargs == 1:
-        a = node.arg(0)
-        ra = _rat_val(a)
-        if ra is not None and ra[0] == 0:
-            return z3.RealVal(0)
-        if z3.is_app(a) and a.decl().kind() == z3.Z3_OP_UMINUS and a.num_args() == 1:
-            return a.arg(0)
+    if kind == z3.Z3_OP_UMINUS and nargs == 1:
+        return _real_uminus_rule(node)
 
     return None
 
 
 class RealAlgebraicPass(Z3TermPass):
-    """Applies equivalence-preserving Real arithmetic identities (`x + 0 -> x`, `x * 1 -> x`, `x * 0 -> 0`, `x / 1 -> x`, `--x -> x`)."""
+    """
+    Applies terminating Real arithmetic, reciprocal, comparison, and ITE identities:
+      - Exact rational constant folding across `+`, `-`, `*`, `/`, unary `-`, and `<`/`<=`/`>`/`>=`
+      - Additive identity, inverse cancellation (`x + (-x) -> 0`), and `-(a + b) -> (-a) + (-b)`
+      - Multiplicative identity, zero annihilation, sign normalization (`(-a)*(-b) -> a*b`, `(-1)*x -> -x`)
+      - Constant divisor reciprocal folding (`x / c -> x * (1/c)`) and double-reciprocal (`1 / (1 / x) -> x`)
+      - Comparison orientation canonicalization (`a >= b -> b <= a`, `a > b -> b < a`, `-a <= -b -> b <= a`)
+      - Real `If` simplification (`If(Not(c), t, f) -> If(c, f, t)`, `If(c, x, x) -> x`)
+    """
 
     name = "real_algebraic"
     is_equivalence_preserving = True

@@ -16,12 +16,13 @@ Addresses Issue 2 (Mixed-theory `QF_AUFBVNRA` blocking Z3's `nlsat` engine):
      UBO, push-constant, and read-only SSBO queries.
 
   2. `TheoryPurifyRealPass` (UNSAT-sound over-approximation):
-     When `lhs` and `rhs` are Z3 `Real` expressions (and `guard`/`preconditions`
-     do not constrain the abstracted foreign leaves or are purified alongside),
+     When `lhs` and `rhs` are Z3 `Real` expressions — or `Bool` expressions
+     containing `Real`-sorted comparisons (such as fragment `discarded` checks) —
      replaces maximal non-Real-theory subterms of `Real` sort (such as
      `u_bv32_to_f32(bv_expr)`, `ToReal(BV2Int(...))`, or transcendental UFs
-     `real_sin(...)`) with shared fresh `Real` constants. Identical subterms
-     across `lhs` and `rhs` map to the SAME fresh `Real` constant!
+     `real_sin(...)`) and foreign `Bool`-sorted atoms (such as BV comparisons)
+     with shared fresh constants. Identical subterms across `lhs`, `rhs`, and
+     `guard` map to the SAME fresh constant!
      The resulting query is pure `QF_NRA`, allowing Z3 to dispatch directly
      to `nlsat` (`Tactic("qfnra")`).
 """
@@ -43,16 +44,16 @@ from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
 
 
 def _is_concrete_index(idx: z3.ExprRef) -> Optional[str]:
-    if isinstance(idx, z3.BitVecNumRef):
+    if z3.is_bv_value(idx):
         return f"bv{idx.size()}_{idx.as_long():x}"
-    if isinstance(idx, z3.IntNumRef):
+    if z3.is_int_value(idx):
         return f"int_{idx.as_long()}"
     return None
 
 
 def _is_uninterpreted_array_const(expr: z3.ExprRef) -> bool:
     return (
-        isinstance(expr, z3.ArrayRef)
+        expr.sort().kind() == z3.Z3_ARRAY_SORT
         and z3.is_const(expr)
         and expr.decl().kind() == z3.Z3_OP_UNINTERPRETED
     )
@@ -84,7 +85,6 @@ def _find_scalarizable_arrays(roots: List[z3.ExprRef]) -> Set[int]:
                 seen_arrays.add(aid)
                 if _is_concrete_index(idx) is None:
                     disqualified.add(aid)
-                # Do not push `arr` as a bare occurrence; only push `idx`
                 if idx.get_id() not in visited:
                     stack.append(idx)
                 continue
@@ -93,7 +93,6 @@ def _find_scalarizable_arrays(roots: List[z3.ExprRef]) -> Set[int]:
             if _is_uninterpreted_array_const(arr):
                 disqualified.add(arr.get_id())
         if _is_uninterpreted_array_const(cur):
-            # Bare array occurrence (e.g. equality between arrays or UF arg)
             disqualified.add(cid)
             continue
         for i in range(cur.num_args()):
@@ -202,6 +201,26 @@ _PURE_REAL_ARITH_KINDS: Set[int] = {
 }
 
 
+def _contains_real_sort(roots: List[z3.ExprRef], limit: int = 50000) -> bool:
+    """Return True if any reachable subterm in `roots` has `Real` sort."""
+    visited: Set[int] = set()
+    stack: List[z3.ExprRef] = [r for r in roots if r is not None]
+    while stack and len(visited) < limit:
+        cur = stack.pop()
+        cid = cur.get_id()
+        if cid in visited:
+            continue
+        visited.add(cid)
+        if cur.sort().kind() == z3.Z3_REAL_SORT:
+            return True
+        if z3.is_app(cur):
+            for i in range(cur.num_args()):
+                ch = cur.arg(i)
+                if ch.get_id() not in visited:
+                    stack.append(ch)
+    return False
+
+
 def _is_pure_qfnra_expr(expr: z3.ExprRef) -> bool:
     """Return True if every node in `expr` belongs strictly to `QF_NRA`."""
     visited: Set[int] = set()
@@ -228,14 +247,15 @@ def _is_pure_qfnra_expr(expr: z3.ExprRef) -> bool:
 
 class TheoryPurifyRealPass(Z3QueryPass):
     """
-    Purifies a `Real`-sorted miter into pure `QF_NRA` by abstracting maximal
-    foreign-theory `Real`-sorted subterms (e.g., `u_bv32_to_f32(bv_expr)`,
-    `ToReal(...)`, transcendental UFs) into shared fresh `Real` constants.
+    Purifies a `Real`-sorted or `Bool`-over-`Real` miter into pure `QF_NRA` by
+    abstracting maximal foreign-theory `Real`-sorted subterms (e.g.,
+    `u_bv32_to_f32(bv_expr)`, `ToReal(...)`, transcendental UFs) and foreign
+    `Bool`-sorted atoms (e.g., BV comparisons) into shared fresh constants.
 
     Identical foreign subterms across `lhs`, `rhs`, and `guard` map to the
-    same fresh `Real` constant (preserving congruence!). If the resulting
-    formula is pure `QF_NRA`, sets `pure_theory="QF_NRA"` so the solver can
-    invoke Z3's complete `nlsat` engine.
+    same fresh constant (preserving congruence!). If the resulting formula is
+    pure `QF_NRA`, sets `pure_theory="QF_NRA"` so the solver can invoke Z3's
+    complete `nlsat` engine.
 
     Marked `is_equivalence_preserving = False` (sound for UNSAT; any SAT must
     be validated against `exact_query`).
@@ -253,43 +273,49 @@ class TheoryPurifyRealPass(Z3QueryPass):
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
 
-        if not (
-            isinstance(query.lhs, z3.ArithRef)
-            and isinstance(query.rhs, z3.ArithRef)
-            and query.lhs.is_real()
-            and query.rhs.is_real()
-        ):
+        l_sk = query.lhs.sort().kind()
+        r_sk = query.rhs.sort().kind()
+        if l_sk != r_sk:
+            return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
+        if l_sk == z3.Z3_BOOL_SORT:
+            if not _contains_real_sort([query.lhs, query.rhs], limit=ctx.max_dag_nodes):
+                return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
+        elif l_sk != z3.Z3_REAL_SORT:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         abs_pairs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
         foreign_map: Dict[int, z3.ExprRef] = {}
 
+        def _abstract_node(node: z3.ExprRef, prefix: str, sort: z3.SortRef) -> z3.ExprRef:
+            nid = node.get_id()
+            existing = foreign_map.get(nid)
+            if existing is not None:
+                return existing
+            fv = ctx.fresh_const(prefix, sort)
+            foreign_map[nid] = fv
+            abs_pairs.append((fv, node))
+            return fv
+
         def _purify_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             if not z3.is_app(node) or z3.is_const(node):
                 return None
             sk = node.sort().kind()
-            if sk != z3.Z3_REAL_SORT:
-                return None
             kind = node.decl().kind()
-            # Keep native Real arithmetic and Real-condition ITEs intact
-            if kind in _PURE_REAL_ARITH_KINDS:
-                if kind == z3.Z3_OP_ITE:
-                    # If ITE condition contains non-Real/non-Bool terms, abstract the ITE
-                    if not _is_pure_qfnra_expr(node.arg(0)):
-                        nid = node.get_id()
-                        if nid not in foreign_map:
-                            fv = ctx.fresh_const("purify_ite", z3.RealSort())
-                            foreign_map[nid] = fv
-                            abs_pairs.append((fv, node))
-                        return foreign_map[nid]
+            if sk == z3.Z3_REAL_SORT:
+                if kind in _PURE_REAL_ARITH_KINDS:
+                    if kind == z3.Z3_OP_ITE and not _is_pure_qfnra_expr(node.arg(0)):
+                        return _abstract_node(node, "purify_ite", z3.RealSort())
+                    return None
+                return _abstract_node(node, "purify_r", z3.RealSort())
+            if sk == z3.Z3_BOOL_SORT:
+                if kind not in _PURE_REAL_ARITH_KINDS:
+                    return _abstract_node(node, "purify_b", z3.BoolSort())
+                if kind in (z3.Z3_OP_EQ, z3.Z3_OP_DISTINCT):
+                    for i in range(node.num_args()):
+                        if node.arg(i).sort().kind() not in (z3.Z3_REAL_SORT, z3.Z3_BOOL_SORT):
+                            return _abstract_node(node, "purify_b", z3.BoolSort())
                 return None
-            # Foreign-theory Real-producing application (e.g. u_bv32_to_f32, ToReal, real_sin)
-            nid = node.get_id()
-            if nid not in foreign_map:
-                fv = ctx.fresh_const("purify_r", z3.RealSort())
-                foreign_map[nid] = fv
-                abs_pairs.append((fv, node))
-            return foreign_map[nid]
+            return None
 
         memo: Dict[int, z3.ExprRef] = {}
         new_lhs, r1 = rewrite_dag(query.lhs, _purify_rule, memo=memo)
@@ -301,8 +327,6 @@ class TheoryPurifyRealPass(Z3QueryPass):
             new_guard, rg = rewrite_dag(query.guard, _purify_rule, memo=memo)
             total_rw += rg
 
-        # Keep only preconditions that are pure QF_NRA if we purified; drop foreign preconditions
-        # (dropping preconditions is an over-approximation -> UNSAT-sound!)
         pure_pres: List[z3.BoolRef] = []
         dropped_pres = 0
         for pre in query.preconditions:
@@ -312,7 +336,6 @@ class TheoryPurifyRealPass(Z3QueryPass):
             else:
                 dropped_pres += 1
 
-        # If guard itself still has foreign BV/Array atoms, drop guard (UNSAT-sound over-approx)
         eff_guard = new_guard
         if eff_guard is not None and not _is_pure_qfnra_expr(eff_guard):
             eff_guard = None

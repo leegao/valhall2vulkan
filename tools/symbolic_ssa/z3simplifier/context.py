@@ -60,6 +60,11 @@ class SimplifyQuery:
     `ExactCseUnificationPass`) has transformed the query. Callers must never
     treat a `SAT` result on an over-approximated query as a true counterexample
     without refining or falling back to the exact/equivalence-preserving query.
+
+    `side_obligations` holds discharged WLP obligations (`discharged=True`)
+    that justified `cu_k` unifications. `residual_obligations` holds undischarged
+    structural anti-unification congruence conditions (`discharged=False`) whose
+    conjunction implies `lhs == rhs`.
     """
 
     lhs: z3.ExprRef
@@ -68,6 +73,7 @@ class SimplifyQuery:
     preconditions: Tuple[z3.BoolRef, ...] = ()
     predicate: Optional[z3.BoolRef] = None
     side_obligations: Tuple[SideObligation, ...] = ()
+    residual_obligations: Tuple[SideObligation, ...] = ()
     is_overapprox: bool = False
     pure_theory: Optional[str] = None
     abstraction_map: Tuple[Tuple[z3.ExprRef, z3.ExprRef], ...] = ()

@@ -220,6 +220,22 @@ def _dump_check_asts(
             print("    " + format_z3_ast(sq.lhs, max_depth=10, max_lines=30).replace("\n", "\n    "), file=stream)
             print(f"  RHS (simplified, sort={sq.rhs.sort()}):", file=stream)
             print("    " + format_z3_ast(sq.rhs, max_depth=10, max_lines=30).replace("\n", "\n    "), file=stream)
+        if sq.side_obligations:
+            print(f"  Discharged obligations ({len(sq.side_obligations)}):", file=stream)
+            for ob in sq.side_obligations[:12]:
+                l_s = format_z3_ast(ob.lhs, max_depth=4, max_lines=3, let_bind_shared=False).replace("\n", " ")
+                r_s = format_z3_ast(ob.rhs, max_depth=4, max_lines=3, let_bind_shared=False).replace("\n", " ")
+                print(f"    [{ob.obligation_id}] {l_s} == {r_s}  ({ob.reason}, {ob.elapsed_ms:.2f}ms)", file=stream)
+            if len(sq.side_obligations) > 12:
+                print(f"    ... ({len(sq.side_obligations) - 12} more discharged obligations)", file=stream)
+        if sq.residual_obligations:
+            print(f"  Residual congruence conditions ({len(sq.residual_obligations)}):", file=stream)
+            for ob in sq.residual_obligations[:16]:
+                l_s = format_z3_ast(ob.lhs, max_depth=4, max_lines=3, let_bind_shared=False).replace("\n", " ")
+                r_s = format_z3_ast(ob.rhs, max_depth=4, max_lines=3, let_bind_shared=False).replace("\n", " ")
+                print(f"    [{ob.obligation_id}] {l_s} == {r_s}  ({ob.reason}, {ob.elapsed_ms:.2f}ms)", file=stream)
+            if len(sq.residual_obligations) > 16:
+                print(f"    ... ({len(sq.residual_obligations) - 16} more residual conditions)", file=stream)
 
 
 def verify_equivalence_bundle(
