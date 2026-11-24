@@ -14,7 +14,8 @@ and standard declarative CFG tiles built on `CfgRewriter`:
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from tools.symbolic_ssa.cfg_rewriter.rewriter import CfgRewriter
 from tools.symbolic_ssa.ir_utils import (
@@ -30,10 +31,10 @@ from tools.symbolic_ssa.ir_utils import (
 class CfgRewriteContext:
     """Mutable IR state, `CfgRewriter`, and RPO ordering snapshot passed to CFG tile rules."""
 
-    blocks_by_id: Dict[int, Dict[str, Any]]
-    nodes_by_id: Dict[int, Dict[str, Any]]
+    blocks_by_id: dict[int, dict[str, Any]]
+    nodes_by_id: dict[int, dict[str, Any]]
     stats: Stratum1Stats
-    rpo_idx: Dict[int, int]
+    rpo_idx: dict[int, int]
     rewriter: CfgRewriter
 
 
@@ -51,14 +52,14 @@ class CfgTileRule:
     """Declarative CFG tile rewrite rule."""
 
     name: str
-    match_fn: Callable[[CfgRewriteContext, int], Optional[TileMatch]]
+    match_fn: Callable[[CfgRewriteContext, int], TileMatch | None]
     rewrite_fn: Callable[[CfgRewriteContext, TileMatch], None]
     priority: int = 0
 
 
 def apply_cfg_tile_rules(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
     stats: Stratum1Stats,
     rules: Sequence[CfgTileRule],
 ) -> bool:
@@ -105,7 +106,7 @@ def apply_cfg_tile_rules(
 def make_degenerate_branch_rule() -> CfgTileRule:
     """Collapse conditional branches whose true and false targets are identical (`H -> {M, M}`)."""
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         h = ctx.blocks_by_id[hid]
         if not h.get("is_cond"):
             return None
@@ -130,7 +131,7 @@ def make_empty_jump_thread_rule() -> CfgTileRule:
     or does not already have `H` as a predecessor, guaranteeing Phi uniqueness.
     """
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         h = ctx.blocks_by_id[hid]
         for succ_id in block_succs(h):
             if succ_id == hid or not ctx.rewriter.is_empty_forwarding_block(succ_id):
@@ -162,7 +163,7 @@ def make_empty_jump_thread_rule() -> CfgTileRule:
 def make_pure_triangle_rule(max_arm_nodes: int = 128) -> CfgTileRule:
     """Declarative tile rule for pure forward triangles (`H -> {A, M}, A -> M`)."""
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         h = ctx.blocks_by_id[hid]
         if not h.get("is_cond"):
             return None
@@ -194,7 +195,7 @@ def make_pure_triangle_rule(max_arm_nodes: int = 128) -> CfgTileRule:
 def make_pure_diamond_rule(max_arm_nodes: int = 128) -> CfgTileRule:
     """Declarative tile rule for pure forward diamonds (`H -> {T, F}, T -> M, F -> M`)."""
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         h = ctx.blocks_by_id[hid]
         if not h.get("is_cond"):
             return None
@@ -232,7 +233,7 @@ def make_pure_diamond_rule(max_arm_nodes: int = 128) -> CfgTileRule:
 def make_predicated_kill_rule() -> CfgTileRule:
     """Declarative tile rule folding `if (c) { pure; Kill; } else { C }` into `pure; Kill(c); br C`."""
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         h = ctx.blocks_by_id[hid]
         if not h.get("is_cond"):
             return None
@@ -249,7 +250,7 @@ def make_predicated_kill_rule() -> CfgTileRule:
         kill_blk = ctx.blocks_by_id.pop(kill_bid)
         header = ctx.blocks_by_id[m.header_id]
 
-        hoisted: List[int] = []
+        hoisted: list[int] = []
         pred_id = bcond
         if not kill_on_true:
             pred_id = ctx.rewriter.emit_node(m.header_id, "LogicalNot", "Bool", [bcond])
@@ -286,7 +287,7 @@ def make_predicated_kill_rule() -> CfgTileRule:
 def make_chain_contract_rule() -> CfgTileRule:
     """Declarative tile rule contracting trivial unconditional `A -> B` chains."""
 
-    def match(ctx: CfgRewriteContext, hid: int) -> Optional[TileMatch]:
+    def match(ctx: CfgRewriteContext, hid: int) -> TileMatch | None:
         pred = ctx.blocks_by_id.get(hid)
         if pred is None or pred.get("is_cond") or pred.get("is_end") or pred.get("is_discard"):
             return None

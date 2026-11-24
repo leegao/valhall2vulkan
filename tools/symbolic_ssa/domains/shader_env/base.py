@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import math
 import struct
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF
@@ -24,7 +24,7 @@ def _vec_len(vt: str) -> int:
     return 1
 
 
-def _eval_elementwise(vt: str, args: List[Any], fn: Any) -> Any:
+def _eval_elementwise(vt: str, args: list[Any], fn: Any) -> Any:
     lens = [len(a) for a in args if isinstance(a, tuple)]
     if not lens:
         return fn(*args)
@@ -77,7 +77,7 @@ def _f32_to_f16_u16(u: int) -> int:
         return 0x7C00 if f > 0 else 0xFC00
 
 
-def _f32_ulp_diff(a_u32: int, b_u32: int) -> Optional[int]:
+def _f32_ulp_diff(a_u32: int, b_u32: int) -> int | None:
     """Return exact IEEE-754 float32 ULP distance, or None if either is NaN/Inf."""
     a = a_u32 & MASK32
     b = b_u32 & MASK32
@@ -150,18 +150,18 @@ _CORNER_U32S = [
 class ShaderEnvBase:
     """Shared ABI / MBS2 / FAU / viewport / VA-region layout for concrete and symbolic envs."""
 
-    def _init_abi_layout(self, bundle: Dict[str, Any]) -> None:
+    def _init_abi_layout(self, bundle: dict[str, Any]) -> None:
         self.bundle = bundle
         self.stage: str = bundle.get("stage", "Compute")
-        self.mbs2: Dict[str, Any] = bundle.get("mbs2_context", {})
-        self.direct_bindings: List[Dict[str, Any]] = bundle.get("direct_bindings", [])
-        self.buf_base_map: Dict[str, int] = {}
-        self.base_to_buf: Dict[int, str] = {}
+        self.mbs2: dict[str, Any] = bundle.get("mbs2_context", {})
+        self.direct_bindings: list[dict[str, Any]] = bundle.get("direct_bindings", [])
+        self.buf_base_map: dict[str, int] = {}
+        self.base_to_buf: dict[int, str] = {}
         self._next_region = 1
 
         ls_raw = self.mbs2.get("local_size")
         if isinstance(ls_raw, list) and len(ls_raw) == 3 and all(int(x) > 0 for x in ls_raw):
-            self.local_size: Optional[Tuple[int, int, int]] = (int(ls_raw[0]), int(ls_raw[1]), int(ls_raw[2]))
+            self.local_size: tuple[int, int, int] | None = (int(ls_raw[0]), int(ls_raw[1]), int(ls_raw[2]))
         else:
             self.local_size = None
 
@@ -170,13 +170,13 @@ class ShaderEnvBase:
             if b.get("kind") in ("UBO", "SSBO", "PushConstant") and key:
                 self.get_buf_base(key)
 
-        wg_keys: List[str] = []
+        wg_keys: list[str] = []
         for n in bundle.get("direct_ssa", {}).get("nodes", []):
             astr = n.get("aux_str", "")
             if n.get("op") == "LoadSidebandU64" and astr.startswith("workgroup:"):
                 if astr not in wg_keys:
                     wg_keys.append(astr)
-        self.unique_workgroup_key: Optional[str] = wg_keys[0] if len(wg_keys) == 1 else None
+        self.unique_workgroup_key: str | None = wg_keys[0] if len(wg_keys) == 1 else None
         if self.unique_workgroup_key is not None:
             self.buf_base_map["wls_shared"] = self.get_buf_base(self.unique_workgroup_key)
 
@@ -187,11 +187,11 @@ class ShaderEnvBase:
         for rl in self.mbs2.get("rlocs", []):
             self.get_buf_base(f"ubo:0:{rl.get('binding', 0)}")
 
-        self.fcst_by_word: Dict[int, int] = {
+        self.fcst_by_word: dict[int, int] = {
             int(fc["word_idx"]): int(fc["value"]) & MASK32 for fc in self.mbs2.get("fcsts", [])
         }
-        self.viewport_fau_words: Dict[int, int] = {}
-        self.pilot_by_word: Dict[int, Tuple[Dict[str, Any], bool]] = {}
+        self.viewport_fau_words: dict[int, int] = {}
+        self.pilot_by_word: dict[int, tuple[dict[str, Any], bool]] = {}
         for pf in self.mbs2.get("pilot_fau", []):
             vkind = pf.get("value_kind", "")
             is_const = vkind == "const_int" and pf.get("has_const_value", False)
@@ -204,7 +204,7 @@ class ShaderEnvBase:
                     if (w + 1) not in self.pilot_by_word:
                         self.pilot_by_word[w + 1] = (pf, True)
 
-        self.rloc_by_word: Dict[int, Tuple[str, int]] = {}
+        self.rloc_by_word: dict[int, tuple[str, int]] = {}
         for rl in self.mbs2.get("rlocs", []):
             sym = rl.get("symbol", "")
             w0 = int(rl["word_idx"])
@@ -219,10 +219,10 @@ class ShaderEnvBase:
             for k in range(nwords):
                 self.rloc_by_word[w0 + k] = (bkey, uoff + k * 4)
 
-        self.sinp_addr_to_loc: Dict[int, int] = {
+        self.sinp_addr_to_loc: dict[int, int] = {
             int(s["addr"]): int(s["location"]) for s in self.mbs2.get("sinp", []) if int(s.get("location", -1)) >= 0
         }
-        self.sout_addr_to_loc: Dict[int, int] = {
+        self.sout_addr_to_loc: dict[int, int] = {
             int(s["addr"]): int(s["location"]) for s in self.mbs2.get("sout", []) if int(s.get("location", -1)) >= 0
         }
 

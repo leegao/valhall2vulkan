@@ -9,10 +9,10 @@ so individual optimization passes stay declarative and DRY.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from tools.symbolic_ssa.ir_utils import (
-    CONTROL_MARKER_OPS,
     SIDE_EFFECT_OPS,
     Stratum1Stats,
     block_succs,
@@ -50,9 +50,9 @@ class CfgRewriter:
 
     def __init__(
         self,
-        blocks_by_id: Dict[int, Dict[str, Any]],
-        nodes_by_id: Dict[int, Dict[str, Any]],
-        stats: Optional[Stratum1Stats] = None,
+        blocks_by_id: dict[int, dict[str, Any]],
+        nodes_by_id: dict[int, dict[str, Any]],
+        stats: Stratum1Stats | None = None,
     ):
         self.blocks_by_id = blocks_by_id
         self.nodes_by_id = nodes_by_id
@@ -68,7 +68,7 @@ class CfgRewriter:
     ) -> int:
         """Allocate and register a new SSA node belonging to block `bid`."""
         nid = next_node_id(self.nodes_by_id)
-        node: Dict[str, Any] = {
+        node: dict[str, Any] = {
             "id": nid,
             "op": op,
             "type": val_type,
@@ -88,7 +88,7 @@ class CfgRewriter:
         blk["fallthrough"] = -1
         blk["branch_cond"] = 0
 
-    def copy_terminator(self, dst_bid: int, src_blk: Dict[str, Any]) -> None:
+    def copy_terminator(self, dst_bid: int, src_blk: dict[str, Any]) -> None:
         """Copy all terminator/CFG metadata fields from `src_blk` onto `dst_bid`."""
         dst = self.blocks_by_id[dst_bid]
         for field in TERMINATOR_FIELDS:
@@ -132,14 +132,14 @@ class CfgRewriter:
         cond_id: int,
         true_pred: int,
         false_pred: int,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Lower Phis in `merge_id` arriving from `(true_pred, false_pred)` into
         `Select(cond_id, v_true, v_false)` nodes placed in `header_id`,
         replacing both incoming Phi edges with `[header_id, merged_val]`.
         """
         merge_blk = self.blocks_by_id[merge_id]
-        select_ids: List[int] = []
+        select_ids: list[int] = []
 
         for pid in merge_blk.get("phis", []):
             pn = self.nodes_by_id.get(pid)
@@ -175,15 +175,15 @@ class CfgRewriter:
         header_id: int,
         arm_ids: Sequence[int],
         extra_node_ids: Sequence[int] = (),
-        new_target_id: Optional[int] = None,
-    ) -> List[int]:
+        new_target_id: int | None = None,
+    ) -> list[int]:
         """
         Pop each block in `arm_ids`, move its non-marker nodes + `extra_node_ids`
         into `header_id` before the terminator, and optionally rewire `header_id`
         unconditionally to `new_target_id`.
         """
         header = self.blocks_by_id[header_id]
-        hoisted: List[int] = []
+        hoisted: list[int] = []
         for arm_id in arm_ids:
             arm_blk = self.blocks_by_id.pop(arm_id)
             moved = extract_non_marker_nodes(arm_blk, self.nodes_by_id)
@@ -211,7 +211,7 @@ class CfgRewriter:
         pred = self.blocks_by_id[pred_id]
         succ = self.blocks_by_id.pop(succ_id)
 
-        phi_repl: Dict[int, int] = {}
+        phi_repl: dict[int, int] = {}
         for pid in succ.get("phis", []):
             pn = self.nodes_by_id.get(pid)
             if pn and pn.get("phi"):
@@ -246,8 +246,8 @@ class CfgRewriter:
             removed += 1
         return removed
 
-    def _referenced_node_ids(self) -> Set[int]:
-        used: Set[int] = set()
+    def _referenced_node_ids(self) -> set[int]:
+        used: set[int] = set()
         for nid, n in self.nodes_by_id.items():
             for a in n.get("args", []):
                 used.add(int(a))
@@ -273,11 +273,11 @@ class CfgRewriter:
         while True:
             rebuild_preds(self.blocks_by_id, self.nodes_by_id)
             used = self._referenced_node_ids()
-            repl: Dict[int, int] = {}
+            repl: dict[int, int] = {}
             removed_round = 0
 
             for blk in self.blocks_by_id.values():
-                keep_phis: List[int] = []
+                keep_phis: list[int] = []
                 for pid in blk.get("phis", []):
                     pn = self.nodes_by_id.get(pid)
                     if pn is None:
@@ -352,9 +352,9 @@ class CfgRewriter:
 
 
 def pass_cleanup_phis(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
-    stats: Optional[Stratum1Stats] = None,
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
+    stats: Stratum1Stats | None = None,
 ) -> bool:
     """Dedicated generic dead & trivial Phi cleanup pass."""
     rewriter = CfgRewriter(blocks_by_id, nodes_by_id, stats)

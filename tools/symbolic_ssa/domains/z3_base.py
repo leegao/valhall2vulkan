@@ -13,7 +13,7 @@ domain-specific value types (`UVal`, etc.) or branch on domain implementations.
 from __future__ import annotations
 
 import abc
-from typing import Any, Generic, Optional, TypeVar, Union
+from typing import Any, Generic, TypeVar
 
 from tools.symbolic_ssa.domains.base import SsaDomain
 
@@ -69,7 +69,7 @@ class Z3SymbolicDomain(SsaDomain[V], Generic[V], abc.ABC):
 
 
 def make_z3_symbolic_domain(
-    domain: Union[str, Z3SymbolicDomain, None] = None,
+    domain: str | Z3SymbolicDomain | None = None,
     fp_mode: str = "exact",
 ) -> Z3SymbolicDomain:
     """Factory resolving a symbolic domain spec (`'bitvec'`, `'udomain'`, or instance)."""

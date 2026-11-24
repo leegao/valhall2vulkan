@@ -13,8 +13,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import z3
-
 from tools.symbolic_ssa.z3utils import dsl
 
 

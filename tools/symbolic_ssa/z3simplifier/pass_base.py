@@ -21,9 +21,7 @@ from __future__ import annotations
 
 import abc
 import time
-from typing import List, Optional, Sequence, Tuple
-
-from tools.symbolic_ssa.z3utils import dsl
+from collections.abc import Sequence
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -33,6 +31,7 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplifyQuery,
     SimplifyResult,
 )
+from tools.symbolic_ssa.z3utils import dsl
 
 
 class Z3TermPass(abc.ABC):
@@ -46,7 +45,7 @@ class Z3TermPass(abc.ABC):
         self,
         expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[dsl.ExprRef, int]:
+    ) -> tuple[dsl.ExprRef, int]:
         """
         Rewrite `expr` and return `(new_expr, rewrite_count)`.
 
@@ -66,7 +65,7 @@ class Z3QueryPass(abc.ABC):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         """Transform `query` and return `(new_query, pass_stats)`."""
 
 
@@ -82,7 +81,7 @@ class TermPassAdapter(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -96,7 +95,7 @@ class TermPassAdapter(Z3QueryPass):
             new_guard, rg = self.term_pass.rewrite_term(query.guard, ctx)
             total_rw += rg
 
-        new_pres: List[dsl.BoolRef] = []
+        new_pres: list[dsl.BoolRef] = []
         pres_changed = False
         for pre in query.preconditions:
             np, rp = self.term_pass.rewrite_term(pre, ctx)
@@ -135,7 +134,7 @@ class FixedPointPass(Z3QueryPass):
         name: str = "fixed_point",
         max_rounds: int = 4,
     ):
-        self.passes: List[Z3QueryPass] = list(passes)
+        self.passes: list[Z3QueryPass] = list(passes)
         self.name = name
         self.max_rounds = max(1, int(max_rounds))
         self.is_equivalence_preserving = all(p.is_equivalence_preserving for p in self.passes)
@@ -144,7 +143,7 @@ class FixedPointPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         cur = query
         total_rw = 0
@@ -177,12 +176,12 @@ class PassPipeline:
     """
 
     def __init__(self, passes: Sequence[Z3QueryPass]):
-        self.passes: List[Z3QueryPass] = list(passes)
+        self.passes: list[Z3QueryPass] = list(passes)
 
     def run(
         self,
         query: SimplifyQuery,
-        ctx: Optional[SimplificationContext] = None,
+        ctx: SimplificationContext | None = None,
     ) -> SimplifyResult:
         eff_ctx = ctx if ctx is not None else SimplificationContext()
         t0 = time.perf_counter()

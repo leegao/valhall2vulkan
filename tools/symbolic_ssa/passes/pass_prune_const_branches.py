@@ -10,7 +10,7 @@ conditional branches, pruning unreachable blocks, and collapsing trivial Phis.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 from tools.symbolic_ssa.cfg_rewriter import CfgRewriter
 from tools.symbolic_ssa.domains import ConcreteBitvecDomain, SsaDomain
@@ -34,14 +34,14 @@ class ConstVal:
     value: Any
 
 
-def join_const(a: Optional[ConstVal], b: Optional[ConstVal]) -> Optional[ConstVal]:
+def join_const(a: ConstVal | None, b: ConstVal | None) -> ConstVal | None:
     """Flat lattice join over tagged ConstVal elements."""
     if a is None or b is None:
         return None
     return a if a == b else None
 
 
-def _mask_uniform_ptr(bkey: str, off: int, mask: int) -> Optional[ConstVal]:
+def _mask_uniform_ptr(bkey: str, off: int, mask: int) -> ConstVal | None:
     """
     Propagate `uniform_ptr(bkey, off) & mask` when `mask` preserves the base
     address (either 48-bit VA tag-bit clearing or low-bit alignment masking
@@ -70,7 +70,7 @@ class ConstantPropDomain(SsaDomain):
     def __init__(self) -> None:
         self._concrete = ConcreteBitvecDomain()
 
-    def default_value(self) -> Optional[ConstVal]:
+    def default_value(self) -> ConstVal | None:
         return None
 
     def const_u32(self, imm: int) -> ConstVal:
@@ -82,7 +82,7 @@ class ConstantPropDomain(SsaDomain):
     def const_bool(self, val: bool) -> ConstVal:
         return ConstVal("bool", bool(val))
 
-    def cast_value(self, op: str, val: Any, val_type: str) -> Optional[ConstVal]:
+    def cast_value(self, op: str, val: Any, val_type: str) -> ConstVal | None:
         if not isinstance(val, ConstVal):
             return None
         if op == "Copy":
@@ -94,12 +94,12 @@ class ConstantPropDomain(SsaDomain):
                 return ConstVal("int", int(val.value) & MASK32)
         return None
 
-    def logical_not(self, a: Any) -> Optional[ConstVal]:
+    def logical_not(self, a: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and a.kind == "bool":
             return ConstVal("bool", not a.value)
         return None
 
-    def logical_and(self, a: Any, b: Any) -> Optional[ConstVal]:
+    def logical_and(self, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and a.kind == "bool" and a.value is False:
             return ConstVal("bool", False)
         if isinstance(b, ConstVal) and b.kind == "bool" and b.value is False:
@@ -108,7 +108,7 @@ class ConstantPropDomain(SsaDomain):
             return ConstVal("bool", a.value and b.value)
         return None
 
-    def logical_or(self, a: Any, b: Any) -> Optional[ConstVal]:
+    def logical_or(self, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and a.kind == "bool" and a.value is True:
             return ConstVal("bool", True)
         if isinstance(b, ConstVal) and b.kind == "bool" and b.value is True:
@@ -117,17 +117,17 @@ class ConstantPropDomain(SsaDomain):
             return ConstVal("bool", a.value or b.value)
         return None
 
-    def int32_unary(self, op: str, x: Any) -> Optional[ConstVal]:
+    def int32_unary(self, op: str, x: Any) -> ConstVal | None:
         if isinstance(x, ConstVal) and x.kind == "int":
             return ConstVal("int", self._concrete.int32_unary(op, x.value))
         return None
 
-    def int32_binary(self, op: str, a: Any, b: Any) -> Optional[ConstVal]:
+    def int32_binary(self, op: str, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and isinstance(b, ConstVal) and a.kind == "int" and b.kind == "int":
             return ConstVal("int", self._concrete.int32_binary(op, a.value, b.value))
         return None
 
-    def int64_binary(self, op: str, a: Any, b: Any) -> Optional[ConstVal]:
+    def int64_binary(self, op: str, a: Any, b: Any) -> ConstVal | None:
         if op == "IAdd64":
             if isinstance(a, ConstVal) and a.kind == "uniform_ptr" and isinstance(b, ConstVal) and b.kind == "int":
                 bkey, off = a.value
@@ -154,27 +154,27 @@ class ConstantPropDomain(SsaDomain):
             return ConstVal("int", self._concrete.int64_binary(op, a.value, b.value))
         return None
 
-    def icmp(self, op: str, a: Any, b: Any) -> Optional[ConstVal]:
+    def icmp(self, op: str, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and isinstance(b, ConstVal) and a.kind == "int" and b.kind == "int":
             return ConstVal("bool", self._concrete.icmp(op, a.value, b.value))
         return None
 
-    def fp_unary(self, op: str, x: Any) -> Optional[ConstVal]:
+    def fp_unary(self, op: str, x: Any) -> ConstVal | None:
         if isinstance(x, ConstVal) and x.kind in ("float", "int"):
             return ConstVal("float", self._concrete.fp_unary(op, x.value))
         return None
 
-    def fp_binary(self, op: str, a: Any, b: Any) -> Optional[ConstVal]:
+    def fp_binary(self, op: str, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and isinstance(b, ConstVal) and a.kind in ("float", "int") and b.kind in ("float", "int"):
             return ConstVal("float", self._concrete.fp_binary(op, a.value, b.value))
         return None
 
-    def fp_cmp(self, op: str, a: Any, b: Any) -> Optional[ConstVal]:
+    def fp_cmp(self, op: str, a: Any, b: Any) -> ConstVal | None:
         if isinstance(a, ConstVal) and isinstance(b, ConstVal) and a.kind in ("float", "int") and b.kind in ("float", "int"):
             return ConstVal("bool", self._concrete.fp_cmp(op, a.value, b.value))
         return None
 
-    def select(self, cond: Any, t_val: Any, f_val: Any) -> Optional[ConstVal]:
+    def select(self, cond: Any, t_val: Any, f_val: Any) -> ConstVal | None:
         if isinstance(cond, ConstVal) and cond.kind == "bool":
             return t_val if cond.value else f_val
         return join_const(t_val, f_val)
@@ -183,20 +183,20 @@ class ConstantPropDomain(SsaDomain):
 class ConstantFoldInterpreter(SsaInterpreter):
     """Fixpoint constant-propagation interpreter backed by ConstantPropDomain."""
 
-    def __init__(self, blocks_by_id: Dict[int, Dict[str, Any]], nodes_by_id: Dict[int, Dict[str, Any]]):
+    def __init__(self, blocks_by_id: dict[int, dict[str, Any]], nodes_by_id: dict[int, dict[str, Any]]):
         self.blocks_by_id = blocks_by_id
         self.nodes_by_id = nodes_by_id
         self.domain = ConstantPropDomain()
-        self.values: Dict[int, Optional[ConstVal]] = {}
+        self.values: dict[int, ConstVal | None] = {}
 
-    def load_sideband_u64(self, imm_u32: int, aux_str: str) -> Optional[ConstVal]:
+    def load_sideband_u64(self, imm_u32: int, aux_str: str) -> ConstVal | None:
         if aux_str and (aux_str.startswith("ubo:") or aux_str == "push_const"):
             return ConstVal("uniform_ptr", (aux_str, 0))
         return None
 
-    def _eval_phi(self, node: Dict[str, Any]) -> Optional[ConstVal]:
+    def _eval_phi(self, node: dict[str, Any]) -> ConstVal | None:
         nid = int(node["id"])
-        acc: Optional[ConstVal] = None
+        acc: ConstVal | None = None
         seen_any = False
         for _, v in node.get("phi", []):
             vid = int(v)
@@ -212,7 +212,7 @@ class ConstantFoldInterpreter(SsaInterpreter):
                 return None
         return acc if seen_any else None
 
-    def run(self) -> Dict[int, Optional[ConstVal]]:
+    def run(self) -> dict[int, ConstVal | None]:
         return self.run_fixpoint(
             self.blocks_by_id,
             self.nodes_by_id,
@@ -223,8 +223,8 @@ class ConstantFoldInterpreter(SsaInterpreter):
 
 
 def pass_prune_const_branches(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
     stats: Stratum1Stats,
 ) -> bool:
     """Fold constant/degenerate conditional branches, prune unreachable blocks, and collapse trivial Phis."""
@@ -238,7 +238,7 @@ def pass_prune_const_branches(
         bt = int(blk.get("branch_target", -1))
         ft = int(blk.get("fallthrough", -1))
         bc = int(blk.get("branch_cond", 0))
-        taken: Optional[int] = None
+        taken: int | None = None
 
         if bt == ft and bt >= 0:
             taken = bt

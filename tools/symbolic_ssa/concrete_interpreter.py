@@ -10,7 +10,7 @@ opcode, memory, kill, atomic, and output semantics are inherited from
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.domains import ConcreteBitvecDomain
 from tools.symbolic_ssa.env import ConcreteShaderEnv
@@ -21,14 +21,14 @@ from tools.symbolic_ssa.interpreter import SsaInterpreter
 class _ConcreteState:
     terminated: bool = False
     demoted: bool = False
-    frag_colors: Dict[int, Tuple[int, ...]] = dataclasses.field(default_factory=dict)
-    builtin_outputs: Dict[int, Any] = dataclasses.field(default_factory=dict)
-    vert_varyings: Dict[int, Tuple[int, ...]] = dataclasses.field(default_factory=dict)
-    buf_writes: Dict[Tuple[str, int], int] = dataclasses.field(default_factory=dict)
-    sym_buf_writes: Dict[Tuple[str, int], int] = dataclasses.field(default_factory=dict)
-    img_writes: Dict[Tuple[str, int], List[int]] = dataclasses.field(default_factory=dict)
-    fallback_writes: Dict[int, int] = dataclasses.field(default_factory=dict)
-    atomic_events: Dict[str, List[Tuple[str, int, int, int]]] = dataclasses.field(default_factory=dict)
+    frag_colors: dict[int, tuple[int, ...]] = dataclasses.field(default_factory=dict)
+    builtin_outputs: dict[int, Any] = dataclasses.field(default_factory=dict)
+    vert_varyings: dict[int, tuple[int, ...]] = dataclasses.field(default_factory=dict)
+    buf_writes: dict[tuple[str, int], int] = dataclasses.field(default_factory=dict)
+    sym_buf_writes: dict[tuple[str, int], int] = dataclasses.field(default_factory=dict)
+    img_writes: dict[tuple[str, int], list[int]] = dataclasses.field(default_factory=dict)
+    fallback_writes: dict[int, int] = dataclasses.field(default_factory=dict)
+    atomic_events: dict[str, list[tuple[str, int, int, int]]] = dataclasses.field(default_factory=dict)
 
 
 class ConcreteSsaInterpreter(SsaInterpreter):
@@ -36,28 +36,28 @@ class ConcreteSsaInterpreter(SsaInterpreter):
 
     def __init__(
         self,
-        ssa_json: Dict[str, Any],
+        ssa_json: dict[str, Any],
         is_valhall_side: bool,
         max_block_steps: int = 256,
-        domain: Optional[ConcreteBitvecDomain] = None,
+        domain: ConcreteBitvecDomain | None = None,
     ):
-        self.blocks_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in ssa_json.get("blocks", [])}
-        self.nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
+        self.blocks_by_id: dict[int, dict[str, Any]] = {int(b["id"]): b for b in ssa_json.get("blocks", [])}
+        self.nodes_by_id: dict[int, dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
         self.is_valhall = is_valhall_side
         self.max_block_steps = max_block_steps
         self.domain: ConcreteBitvecDomain = domain if domain is not None else ConcreteBitvecDomain()
-        self._env: Optional[ConcreteShaderEnv] = None
+        self._env: ConcreteShaderEnv | None = None
 
     # Minimal concrete _ConcreteState backend hooks
     def _active_mask(self, st: _ConcreteState, reach: Any) -> bool:
         return bool(reach) and not (st.terminated or st.demoted)
 
-    def _resolve_buf_addr(self, addr: int, hint_key: str) -> Tuple[Optional[str], Optional[int], int]:
+    def _resolve_buf_addr(self, addr: int, hint_key: str) -> tuple[str | None, int | None, int]:
         assert self._env is not None
         bkey, off = self._env.resolve_addr(addr, hint_key=hint_key)
         return (bkey, off, off)
 
-    def _read_sym_slot(self, st: _ConcreteState, sym_tag: str, off: int) -> Optional[int]:
+    def _read_sym_slot(self, st: _ConcreteState, sym_tag: str, off: int) -> int | None:
         assert self._env is not None
         if (sym_tag, off) in st.sym_buf_writes:
             return st.sym_buf_writes[(sym_tag, off)]
@@ -71,13 +71,13 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         # Also fall through to underlying buffer write so concrete buf_writes stays synchronized.
         return False
 
-    def _read_buf(self, st: _ConcreteState, bkey: Optional[str], const_off: Optional[int], off: int, addr: int) -> int:
+    def _read_buf(self, st: _ConcreteState, bkey: str | None, const_off: int | None, off: int, addr: int) -> int:
         assert self._env is not None
         if bkey is not None:
             return st.buf_writes.get((bkey, off), self._env.read_init_buf(bkey, off))
         return st.fallback_writes.get(addr, self._env.read_fallback_mem(addr))
 
-    def _write_buf(self, st: _ConcreteState, mask: bool, bkey: Optional[str], const_off: Optional[int], off: int, addr: int, val: int, nid: int) -> None:
+    def _write_buf(self, st: _ConcreteState, mask: bool, bkey: str | None, const_off: int | None, off: int, addr: int, val: int, nid: int) -> None:
         if not mask:
             return
         if bkey is not None:
@@ -85,7 +85,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         else:
             st.fallback_writes[addr] = val
 
-    def _extract_img_channel(self, addr: int) -> Tuple[int, int]:
+    def _extract_img_channel(self, addr: int) -> tuple[int, int]:
         if (addr & 0xF) in (4, 8, 12):
             return ((addr & 0xF) // 4, addr - (addr & 0xF))
         return (0, addr)
@@ -100,7 +100,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         cur[ch_idx] = val
         st.img_writes[(ikey, xy_addr)] = cur
 
-    def _write_img_texel(self, st: _ConcreteState, mask: bool, ikey: str, xy: int, vec4: Tuple[int, ...], nid: int) -> None:
+    def _write_img_texel(self, st: _ConcreteState, mask: bool, ikey: str, xy: int, vec4: tuple[int, ...], nid: int) -> None:
         if mask:
             st.img_writes[(ikey, xy)] = list(vec4)
 
@@ -111,7 +111,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
             else:
                 st.terminated = True
 
-    def _write_frag_color(self, st: _ConcreteState, mask: bool, rt: int, vec4: Tuple[int, ...], nid: int) -> None:
+    def _write_frag_color(self, st: _ConcreteState, mask: bool, rt: int, vec4: tuple[int, ...], nid: int) -> None:
         if mask:
             st.frag_colors[rt] = vec4
 
@@ -119,11 +119,11 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         if mask:
             st.builtin_outputs[bi] = payload
 
-    def _write_vert_varying(self, st: _ConcreteState, mask: bool, loc: int, vec4: Tuple[int, ...], nid: int) -> None:
+    def _write_vert_varying(self, st: _ConcreteState, mask: bool, loc: int, vec4: tuple[int, ...], nid: int) -> None:
         if mask:
             st.vert_varyings[loc] = vec4
 
-    def _record_atomic(self, st: _ConcreteState, mask: bool, bkey: Optional[str], off: int, addr: int, op_tag: str, arg: int, cmp_val: int, new_val: int, nid: int) -> None:
+    def _record_atomic(self, st: _ConcreteState, mask: bool, bkey: str | None, off: int, addr: int, op_tag: str, arg: int, cmp_val: int, new_val: int, nid: int) -> None:
         if not mask:
             return
         if bkey is not None:
@@ -133,10 +133,10 @@ class ConcreteSsaInterpreter(SsaInterpreter):
             st.fallback_writes[addr] = new_val
             st.atomic_events.setdefault("fallback_mem", []).append((op_tag, addr, arg, cmp_val))
 
-    def evaluate(self, env: ConcreteShaderEnv) -> Tuple[Dict[int, Any], Dict[str, Any]]:
+    def evaluate(self, env: ConcreteShaderEnv) -> tuple[dict[int, Any], dict[str, Any]]:
         """Execute the CFG concretely against `env`, returning `(node_values, flat_outputs)`."""
         self._env = env
-        vals: Dict[int, Any] = {0: 0}
+        vals: dict[int, Any] = {0: 0}
         st = _ConcreteState()
 
         if 0 not in self.blocks_by_id:
@@ -184,7 +184,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
             else:
                 break
 
-        outs: Dict[str, Any] = {}
+        outs: dict[str, Any] = {}
         if env.stage == "Fragment" or st.terminated or st.demoted:
             outs["discarded"] = bool(st.terminated or st.demoted)
         if not (st.terminated or st.demoted):

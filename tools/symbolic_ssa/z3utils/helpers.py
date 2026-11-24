@@ -12,7 +12,7 @@ from __future__ import annotations
 import fractions
 import math
 import struct
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Union
 
 import z3
 
@@ -55,7 +55,7 @@ def f32_bv_to_f16_bv(x32: Any, rm: Any = None) -> dsl.Z3BitVecExpr:
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF
 
-Z3Val = Union[Any, Tuple[Any, ...]]
+Z3Val = Union[Any, tuple[Any, ...]]
 
 REAL_SORT = z3.RealSort()
 BOOL_SORT = z3.BoolSort()
@@ -69,7 +69,7 @@ _REAL_HALF = dsl.Q(1, 2)
 _REAL_NEG_HALF = dsl.Q(-1, 2)
 _REAL_NEG_ONE = dsl.RealVal(-1)
 
-_DSL_HW_UF_CACHE: Dict[Tuple[str, Tuple[z3.SortRef, ...]], dsl.Z3FuncDecl] = {}
+_DSL_HW_UF_CACHE: dict[tuple[str, tuple[z3.SortRef, ...]], dsl.Z3FuncDecl] = {}
 
 
 def _dsl_hw_uf(name: str, *sorts: z3.SortRef) -> dsl.Z3FuncDecl:
@@ -93,7 +93,7 @@ def _dsl_bv64(v: int) -> dsl.Z3BvConst:
     return dsl.BitVecVal(v & MASK64, 64)
 
 
-def _f32_bits_to_real_const(u32: int) -> Optional[dsl.Z3ArithExpr]:
+def _f32_bits_to_real_const(u32: int) -> dsl.Z3ArithExpr | None:
     f = struct.unpack("<f", struct.pack("<I", u32 & MASK32))[0]
     if not math.isfinite(f):
         return None
@@ -275,7 +275,7 @@ def _z3_if(cond: Any, t_val: Z3Val, f_val: Z3Val) -> Z3Val:
     return t_val
 
 
-def _try_const_u64(e: Any) -> Optional[int]:
+def _try_const_u64(e: Any) -> int | None:
     if dsl.is_bv_value(e):
         return dsl.as_long(e)
     if dsl.is_bv(e):

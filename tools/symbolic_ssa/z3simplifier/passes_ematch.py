@@ -36,7 +36,7 @@ Soundness:
 from __future__ import annotations
 
 import time
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import z3
 
@@ -50,7 +50,7 @@ from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
 from tools.symbolic_ssa.z3utils import dsl
 
 
-def build_bridge_ematch_axioms() -> List[z3.BoolRef]:
+def build_bridge_ematch_axioms() -> list[z3.BoolRef]:
     """Build trigger-guarded `ForAll` round-trip axioms for `udomain` f32/bv32 bridges."""
     u_f2b = dsl.Function("u_f32_to_bv32", dsl.RealSort(), dsl.BitVecSort(32))
     u_b2f = dsl.Function("u_bv32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
@@ -110,12 +110,12 @@ class EmatchingUnifyPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
 
-        axioms: List[z3.BoolRef] = []
+        axioms: list[z3.BoolRef] = []
         if self.include_bridge_axioms:
             axioms.extend(build_bridge_ematch_axioms())
         axioms.extend(self.extra_axioms)

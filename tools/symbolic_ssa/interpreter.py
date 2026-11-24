@@ -16,7 +16,12 @@ Provides:
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Generic, Iterable, List, Optional, Set, Tuple, TypeVar
+from collections.abc import Callable, Iterable
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+)
 
 V = TypeVar("V")
 
@@ -64,7 +69,7 @@ class SsaInterpreter(Generic[V]):
     # Reusable CFG & SSA traversal / dataflow primitives
     # ------------------------------------------------------------------
     @staticmethod
-    def block_succs(blk: Dict[str, Any]) -> List[int]:
+    def block_succs(blk: dict[str, Any]) -> list[int]:
         if blk.get("is_end") or blk.get("is_discard"):
             return []
         bt = int(blk.get("branch_target", -1))
@@ -81,12 +86,12 @@ class SsaInterpreter(Generic[V]):
         return []
 
     @classmethod
-    def compute_rpo(cls, blocks_by_id: Dict[int, Dict[str, Any]], entry: int = 0) -> List[int]:
+    def compute_rpo(cls, blocks_by_id: dict[int, dict[str, Any]], entry: int = 0) -> list[int]:
         if entry not in blocks_by_id:
             return []
-        visited: Set[int] = set()
-        postorder: List[int] = []
-        stack: List[Tuple[int, int]] = [(entry, 0)]
+        visited: set[int] = set()
+        postorder: list[int] = []
+        stack: list[tuple[int, int]] = [(entry, 0)]
         while stack:
             u, step = stack.pop()
             if step == 0:
@@ -102,12 +107,12 @@ class SsaInterpreter(Generic[V]):
         return list(reversed(postorder))
 
     @staticmethod
-    def compute_idom(blocks_by_id: Dict[int, Dict[str, Any]], rpo: List[int]) -> Dict[int, int]:
+    def compute_idom(blocks_by_id: dict[int, dict[str, Any]], rpo: list[int]) -> dict[int, int]:
         if not rpo:
             return {}
         entry = rpo[0]
         rpo_idx = {b: i for i, b in enumerate(rpo)}
-        idom: Dict[int, int] = {entry: entry}
+        idom: dict[int, int] = {entry: entry}
 
         def intersect(b1: int, b2: int) -> int:
             f1, f2 = b1, b2
@@ -136,16 +141,16 @@ class SsaInterpreter(Generic[V]):
     @classmethod
     def walk_dom_tree(
         cls,
-        blocks_by_id: Dict[int, Dict[str, Any]],
-        rpo: List[int],
+        blocks_by_id: dict[int, dict[str, Any]],
+        rpo: list[int],
         on_enter: Callable[[int], Any],
-        on_exit: Optional[Callable[[int, Any], None]] = None,
+        on_exit: Callable[[int, Any], None] | None = None,
     ) -> None:
         """Pre-order / post-order walk of the dominator tree rooted at `rpo[0]`."""
         if not rpo:
             return
         idom = cls.compute_idom(blocks_by_id, rpo)
-        children: Dict[int, List[int]] = {b: [] for b in rpo}
+        children: dict[int, list[int]] = {b: [] for b in rpo}
         for b in rpo[1:]:
             p = idom.get(b)
             if p is not None and p != b:
@@ -163,17 +168,17 @@ class SsaInterpreter(Generic[V]):
     @classmethod
     def run_dfs(
         cls,
-        blocks_by_id: Dict[int, Dict[str, Any]],
+        blocks_by_id: dict[int, dict[str, Any]],
         entry: int = 0,
-        on_enter: Optional[Callable[[int], None]] = None,
-        on_exit: Optional[Callable[[int], None]] = None,
-    ) -> List[int]:
+        on_enter: Callable[[int], None] | None = None,
+        on_exit: Callable[[int], None] | None = None,
+    ) -> list[int]:
         """Iterative DFS returning postorder block IDs."""
         if entry not in blocks_by_id:
             return []
-        visited: Set[int] = set()
-        postorder: List[int] = []
-        stack: List[Tuple[int, int]] = [(entry, 0)]
+        visited: set[int] = set()
+        postorder: list[int] = []
+        stack: list[tuple[int, int]] = [(entry, 0)]
         while stack:
             u, step = stack.pop()
             if step == 0:
@@ -194,13 +199,13 @@ class SsaInterpreter(Generic[V]):
 
     @staticmethod
     def run_backward_worklist(
-        nodes_by_id: Dict[int, Dict[str, Any]],
+        nodes_by_id: dict[int, dict[str, Any]],
         roots: Iterable[int],
-        on_visit: Optional[Callable[[int, Dict[str, Any]], None]] = None,
-    ) -> Set[int]:
+        on_visit: Callable[[int, dict[str, Any]], None] | None = None,
+    ) -> set[int]:
         """Standard backward dataflow/liveness worklist from root SSA node IDs."""
-        visited: Set[int] = set()
-        worklist: List[int] = []
+        visited: set[int] = set()
+        worklist: list[int] = []
 
         def mark(nid: int) -> None:
             if nid > 0 and nid not in visited and nid in nodes_by_id:
@@ -223,12 +228,12 @@ class SsaInterpreter(Generic[V]):
 
     def run_rpo_pass(
         self,
-        blocks_by_id: Dict[int, Dict[str, Any]],
-        nodes_by_id: Dict[int, Dict[str, Any]],
-        values: Dict[int, Any],
-        eval_phi: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        blocks_by_id: dict[int, dict[str, Any]],
+        nodes_by_id: dict[int, dict[str, Any]],
+        values: dict[int, Any],
+        eval_phi: Callable[[dict[str, Any]], Any] | None = None,
         state: Any = None,
-    ) -> Dict[int, Any]:
+    ) -> dict[int, Any]:
         """Single forward RPO evaluation pass over all reachable blocks."""
         for bid in self.compute_rpo(blocks_by_id, 0):
             blk = blocks_by_id[bid]
@@ -244,14 +249,14 @@ class SsaInterpreter(Generic[V]):
 
     def run_fixpoint(
         self,
-        blocks_by_id: Dict[int, Dict[str, Any]],
-        nodes_by_id: Dict[int, Dict[str, Any]],
-        values: Dict[int, Any],
-        eval_phi: Callable[[Dict[str, Any]], Any],
+        blocks_by_id: dict[int, dict[str, Any]],
+        nodes_by_id: dict[int, dict[str, Any]],
+        values: dict[int, Any],
+        eval_phi: Callable[[dict[str, Any]], Any],
         join_fn: Callable[[Any, Any], Any],
         max_iters: int = 32,
         state: Any = None,
-    ) -> Dict[int, Any]:
+    ) -> dict[int, Any]:
         """Chaotic RPO fixpoint iteration until all SSA lattice values stabilize."""
         rpo = self.compute_rpo(blocks_by_id, 0)
         for _ in range(max_iters):
@@ -284,14 +289,14 @@ class SsaInterpreter(Generic[V]):
     # Domain-delegated value & environment operations
     # ------------------------------------------------------------------
     def default_value(self) -> Any: return self.domain.default_value()
-    def lookup_arg(self, values: Dict[int, Any], aid: int) -> Any: return values.get(aid, self.default_value())
+    def lookup_arg(self, values: dict[int, Any], aid: int) -> Any: return values.get(aid, self.default_value())
     def const_u32(self, imm: int) -> Any: return self.domain.const_u32(imm)
     def const_u64(self, imm: int) -> Any: return self.domain.const_u64(imm)
     def const_bool(self, val: bool) -> Any: return self.domain.const_bool(val)
     def cast_value(self, op: str, val: Any, val_type: str) -> Any: return self.domain.cast_value(op, val, val_type)
     def pack64(self, lo: Any, hi: Any) -> Any: return self.domain.pack64(lo, hi)
-    def split64(self, val64: Any) -> Tuple[Any, Any]: return self.domain.split64(val64)
-    def unpack_half2x16(self, u: Any) -> Tuple[Any, Any]: return self.domain.unpack_half2x16(u)
+    def split64(self, val64: Any) -> tuple[Any, Any]: return self.domain.split64(val64)
+    def unpack_half2x16(self, u: Any) -> tuple[Any, Any]: return self.domain.unpack_half2x16(u)
     def pack_half2x16(self, v2: Any) -> Any: return self.domain.pack_half2x16(v2)
     def int32_unary(self, op: str, x: Any) -> Any: return self.domain.int32_unary(op, x)
     def int32_binary(self, op: str, a: Any, b: Any) -> Any: return self.domain.int32_binary(op, a, b)
@@ -352,7 +357,7 @@ class SsaInterpreter(Generic[V]):
         qkey = (aux_str or "img").replace(":", "_")
         return self.domain.hw_uf(self._env, f"imgq_{qkey}_c{imm_u32}", lod, fallback_tag=f"imgq_{qkey}_{imm_u32}")
 
-    def tex_sample(self, op: str, args: List[Any], imm_u32: int, aux_str: str) -> Any:
+    def tex_sample(self, op: str, args: list[Any], imm_u32: int, aux_str: str) -> Any:
         if self._env is None:
             return (tuple(self.default_value() for _ in range(4)), args[-1] if args else self.default_value())
         uv = args[0] if args else (self.const_u32(0), self.const_u32(0))
@@ -372,32 +377,32 @@ class SsaInterpreter(Generic[V]):
     # Unified stateful memory / kill / atomic / output semantics
     # ------------------------------------------------------------------
     def _active_mask(self, state: Any, reach: Any) -> Any: return self.const_bool(False)
-    def _resolve_buf_addr(self, addr: Any, hint_key: str) -> Tuple[Optional[str], Optional[int], Any]: return (None, None, self.const_u32(0))
-    def _read_sym_slot(self, state: Any, sym_tag: str, off: Any) -> Optional[Any]: return None
+    def _resolve_buf_addr(self, addr: Any, hint_key: str) -> tuple[str | None, int | None, Any]: return (None, None, self.const_u32(0))
+    def _read_sym_slot(self, state: Any, sym_tag: str, off: Any) -> Any | None: return None
     def _write_sym_slot(self, state: Any, mask: Any, sym_tag: str, off: Any, val: Any, nid: int) -> bool: return False
-    def _read_buf(self, state: Any, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any) -> Any: return self.default_value()
-    def _write_buf(self, state: Any, mask: Any, bkey: Optional[str], const_off: Optional[int], off: Any, addr: Any, val: Any, nid: int) -> None: pass
-    def _extract_img_channel(self, addr: Any) -> Tuple[int, Any]: return (0, addr)
+    def _read_buf(self, state: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any) -> Any: return self.default_value()
+    def _write_buf(self, state: Any, mask: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, val: Any, nid: int) -> None: pass
+    def _extract_img_channel(self, addr: Any) -> tuple[int, Any]: return (0, addr)
     def _write_img_channel(self, state: Any, mask: Any, ikey: str, xy_addr: Any, ch_idx: int, val: Any, nid: int) -> None: pass
-    def _write_img_texel(self, state: Any, mask: Any, ikey: str, xy: Any, vec4: Tuple[Any, ...], nid: int) -> None: pass
+    def _write_img_texel(self, state: Any, mask: Any, ikey: str, xy: Any, vec4: tuple[Any, ...], nid: int) -> None: pass
     def _record_kill(self, state: Any, eff: Any, is_demote: bool, nid: int) -> None: pass
-    def _write_frag_color(self, state: Any, mask: Any, rt: int, vec4: Tuple[Any, ...], nid: int) -> None: pass
+    def _write_frag_color(self, state: Any, mask: Any, rt: int, vec4: tuple[Any, ...], nid: int) -> None: pass
     def _write_builtin_output(self, state: Any, mask: Any, bi: int, payload: Any, nid: int) -> None: pass
-    def _write_vert_varying(self, state: Any, mask: Any, loc: int, vec4: Tuple[Any, ...], nid: int) -> None: pass
-    def _record_atomic(self, state: Any, mask: Any, bkey: Optional[str], off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None: pass
+    def _write_vert_varying(self, state: Any, mask: Any, loc: int, vec4: tuple[Any, ...], nid: int) -> None: pass
+    def _record_atomic(self, state: Any, mask: Any, bkey: str | None, off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None: pass
 
-    def _normalize_bkey(self, bkey: Optional[str]) -> Optional[str]:
+    def _normalize_bkey(self, bkey: str | None) -> str | None:
         if bkey == "wls_shared" and self._env is not None and self._env.unique_workgroup_key is not None:
             return self._env.unique_workgroup_key
         return bkey
 
-    def _as_vec4(self, vec: Any) -> Tuple[Any, ...]:
+    def _as_vec4(self, vec: Any) -> tuple[Any, ...]:
         return tuple(
             self.domain.as_u32(vec[c]) if isinstance(vec, tuple) and c < len(vec) else self.const_u32(0)
             for c in range(4)
         )
 
-    def psb_load(self, node: Dict[str, Any], args: List[Any], state: Any) -> Any:
+    def psb_load(self, node: dict[str, Any], args: list[Any], state: Any) -> Any:
         if state is None or self._env is None:
             return (self.default_value(), args[1] if len(args) > 1 else self.default_value())
         addr = self.domain.as_u64(args[0])
@@ -415,7 +420,7 @@ class SsaInterpreter(Generic[V]):
         val = self._read_buf(state, bkey, const_off, off, addr)
         return (val, args[1] if len(args) > 1 else self.const_u32(0))
 
-    def psb_store(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def psb_store(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[2] if len(args) > 2 else self.const_u32(0)
         if state is None or self._env is None:
             return tok
@@ -441,7 +446,7 @@ class SsaInterpreter(Generic[V]):
         self._write_buf(state, mask, bkey, const_off, off, addr, val, nid)
         return tok
 
-    def kill(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def kill(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         if state is None:
             return self.default_value()
         aux_bool = bool(node.get("aux_bool", False))
@@ -450,19 +455,19 @@ class SsaInterpreter(Generic[V]):
         self._record_kill(state, eff, bool(node.get("aux_bool2", False)), int(node["id"]))
         return self.const_u32(0)
 
-    def store_frag_color(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def store_frag_color(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[-1] if args else self.const_u32(0)
         if state is not None:
             self._write_frag_color(state, self._active_mask(state, reach), int(node.get("imm_u32", 0)), self._as_vec4(args[0]), int(node["id"]))
         return tok
 
-    def store_builtin_output(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def store_builtin_output(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[-1] if args else self.const_u32(0)
         if state is not None:
             self._write_builtin_output(state, self._active_mask(state, reach), int(node.get("imm_u32", 0)), args[0], int(node["id"]))
         return tok
 
-    def store_vert_varying(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def store_vert_varying(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[-1] if args else self.const_u32(0)
         if state is not None and self._env is not None:
             imm32 = int(node.get("imm_u32", 0))
@@ -470,7 +475,7 @@ class SsaInterpreter(Generic[V]):
             self._write_vert_varying(state, self._active_mask(state, reach), loc, self._as_vec4(args[0]), int(node["id"]))
         return tok
 
-    def store_texel(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def store_texel(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[-1] if args else self.const_u32(0)
         if state is not None:
             coord = args[0]
@@ -482,7 +487,7 @@ class SsaInterpreter(Generic[V]):
             self._write_img_texel(state, self._active_mask(state, reach), ikey, xy, self._as_vec4(texel), int(node["id"]))
         return tok
 
-    def atomic_op(self, node: Dict[str, Any], args: List[Any], state: Any, reach: Any) -> Any:
+    def atomic_op(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
         tok = args[-1] if args else self.const_u32(0)
         if state is None or self._env is None:
             return (self.default_value(), tok)
@@ -504,8 +509,8 @@ class SsaInterpreter(Generic[V]):
     # ------------------------------------------------------------------
     def eval_node(
         self,
-        node: Dict[str, Any],
-        values: Dict[int, V],
+        node: dict[str, Any],
+        values: dict[int, V],
         state: Any = None,
         reach: Any = None,
     ) -> V:

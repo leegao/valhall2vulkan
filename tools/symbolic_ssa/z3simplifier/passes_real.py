@@ -22,13 +22,10 @@ Addresses:
 
 from __future__ import annotations
 
-from fractions import Fraction
 import math
 import struct
 import time
-from typing import Dict, List, Optional, Tuple
-
-from tools.symbolic_ssa.z3utils import dsl
+from fractions import Fraction
 
 from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
@@ -38,9 +35,9 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplifyQuery,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass, Z3TermPass
+from tools.symbolic_ssa.z3utils import dsl
 
-
-_BRIDGE_INVERSES: Dict[str, str] = {
+_BRIDGE_INVERSES: dict[str, str] = {
     "u_f32_to_bv32": "u_bv32_to_f32",
     "u_bv32_to_f32": "u_f32_to_bv32",
     "u_f16_to_bv16": "u_bv16_to_f16",
@@ -54,7 +51,7 @@ _BRIDGE_INVERSES: Dict[str, str] = {
 _REAL_TO_BV_BRIDGES = {"u_f32_to_bv32", "u_f16_to_bv16", "u_f64_to_bv64", "real2bv32"}
 
 
-def _bridge_cancel_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _bridge_cancel_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     if not isinstance(node, dsl.Z3Expr):
         node = dsl.view(node)
     if not dsl.is_app(node):
@@ -156,17 +153,17 @@ class PreconditionConstSubPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat() or not query.preconditions:
             return query, PassStats(self.name, False, 0, 0.0)
 
-        subs: List[Tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        subs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
         seen_ids = set()
-        work: List[dsl.ExprRef] = list(query.preconditions)
+        work: list[dsl.ExprRef] = list(query.preconditions)
         if query.guard is not None:
             work.append(query.guard)
-        atoms: List[dsl.ExprRef] = []
+        atoms: list[dsl.ExprRef] = []
         while work:
             cur = work.pop()
             if dsl.is_app(cur) and cur.decl().kind() == dsl.Z3OpKind.AND:
@@ -209,7 +206,7 @@ class BridgeCancelPass(Z3TermPass):
         self,
         expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[dsl.ExprRef, int]:
+    ) -> tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _bridge_cancel_rule)
 
 
@@ -231,7 +228,7 @@ class InjectiveBridgeUnwrapPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -277,7 +274,7 @@ class PolynomialNormalizePass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -315,13 +312,13 @@ class PolynomialNormalizePass(Z3QueryPass):
         return query, PassStats(self.name, False, 0, dt)
 
 
-def _rat_frac(e: dsl.ExprRef) -> Optional[Fraction]:
+def _rat_frac(e: dsl.ExprRef) -> Fraction | None:
     if dsl.is_rational_value(e):
         return Fraction(int(e.numerator_as_long()), int(e.denominator_as_long()))
     return None
 
 
-def _homog_pair(a: dsl.ExprRef, b: dsl.ExprRef) -> Tuple[dsl.ExprRef, dsl.ExprRef]:
+def _homog_pair(a: dsl.ExprRef, b: dsl.ExprRef) -> tuple[dsl.ExprRef, dsl.ExprRef]:
     if isinstance(a, dsl.Z3Expr) != isinstance(b, dsl.Z3Expr):
         return dsl.view(a), dsl.view(b)
     return a, b
@@ -352,13 +349,13 @@ def _is_uminus(e: dsl.ExprRef) -> bool:
     return dsl.is_app(e) and e.decl().kind() == dsl.Z3OpKind.UMINUS and e.num_args() == 1
 
 
-def _strip_uminus(e: dsl.ExprRef) -> Tuple[dsl.ExprRef, bool]:
+def _strip_uminus(e: dsl.ExprRef) -> tuple[dsl.ExprRef, bool]:
     if _is_uminus(e):
         return e.arg(0), True
     return e, False
 
 
-def _real_cmp_rule(node: dsl.ExprRef, kind: int) -> Optional[dsl.ExprRef]:
+def _real_cmp_rule(node: dsl.ExprRef, kind: int) -> dsl.ExprRef | None:
     if node.num_args() != 2:
         return None
     a, b = node.arg(0), node.arg(1)
@@ -394,11 +391,11 @@ def _real_cmp_rule(node: dsl.ExprRef, kind: int) -> Optional[dsl.ExprRef]:
     return None
 
 
-def _real_add_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _real_add_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     nargs = node.num_args()
     const_sum = Fraction(0)
     const_count = 0
-    non_const: List[dsl.ExprRef] = []
+    non_const: list[dsl.ExprRef] = []
     for i in range(nargs):
         ch = node.arg(i)
         fc = _rat_frac(ch)
@@ -411,8 +408,8 @@ def _real_add_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     # Cancel exact additive inverse pairs `(t, -t)` among non-constant summands.
     cancelled = False
     if len(non_const) >= 2:
-        pos_idx: Dict[int, List[int]] = {}
-        neg_idx: Dict[int, List[int]] = {}
+        pos_idx: dict[int, list[int]] = {}
+        neg_idx: dict[int, list[int]] = {}
         for idx, term in enumerate(non_const):
             base, is_neg = _strip_uminus(term)
             bid = base.get_id()
@@ -447,13 +444,13 @@ def _real_add_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     return acc
 
 
-def _real_mul_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _real_mul_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     nargs = node.num_args()
     const_prod = Fraction(1)
     const_count = 0
     neg_count = 0
-    raw_non_const: List[dsl.ExprRef] = []
-    stripped_non_const: List[dsl.ExprRef] = []
+    raw_non_const: list[dsl.ExprRef] = []
+    stripped_non_const: list[dsl.ExprRef] = []
     for i in range(nargs):
         ch = node.arg(i)
         fc = _rat_frac(ch)
@@ -494,7 +491,7 @@ def _real_mul_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
         odd_neg = not odd_neg
         const_prod = Fraction(1)
 
-    factors: List[dsl.ExprRef] = []
+    factors: list[dsl.ExprRef] = []
     if const_prod != Fraction(1):
         factors.append(_frac_to_real(const_prod))
     factors.extend(non_const)
@@ -505,7 +502,7 @@ def _real_mul_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     return -acc if odd_neg else acc
 
 
-def _real_div_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _real_div_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     a, b = node.arg(0), node.arg(1)
     fa, fb = _rat_frac(a), _rat_frac(b)
     if fb is not None and fb != 0:
@@ -537,7 +534,7 @@ def _real_div_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     return None
 
 
-def _real_uminus_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _real_uminus_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     a = node.arg(0)
     fa = _rat_frac(a)
     if fa is not None:
@@ -563,7 +560,7 @@ def _real_uminus_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     return None
 
 
-def _real_algebraic_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _real_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     if not dsl.is_app(node):
         return None
     kind = node.decl().kind()
@@ -640,5 +637,5 @@ class RealAlgebraicPass(Z3TermPass):
         self,
         expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[dsl.ExprRef, int]:
+    ) -> tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _real_algebraic_rule)

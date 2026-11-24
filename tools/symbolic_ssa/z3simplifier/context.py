@@ -16,8 +16,9 @@ Defines:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import z3
 
@@ -38,9 +39,9 @@ class SideObligation:
     fresh_var: dsl.ExprRef
     lhs: dsl.ExprRef
     rhs: dsl.ExprRef
-    guard: Optional[dsl.BoolRef] = None
+    guard: dsl.BoolRef | None = None
     reason: str = ""
-    discharged: Optional[bool] = None
+    discharged: bool | None = None
     elapsed_ms: float = 0.0
 
 
@@ -68,24 +69,24 @@ class SimplifyQuery:
 
     lhs: dsl.ExprRef
     rhs: dsl.ExprRef
-    guard: Optional[dsl.BoolRef] = None
-    preconditions: Tuple[dsl.BoolRef, ...] = ()
-    predicate: Optional[dsl.ExprRef] = None
-    side_obligations: Tuple[SideObligation, ...] = ()
-    residual_obligations: Tuple[SideObligation, ...] = ()
+    guard: dsl.BoolRef | None = None
+    preconditions: tuple[dsl.BoolRef, ...] = ()
+    predicate: dsl.ExprRef | None = None
+    side_obligations: tuple[SideObligation, ...] = ()
+    residual_obligations: tuple[SideObligation, ...] = ()
     is_overapprox: bool = False
-    pure_theory: Optional[str] = None
-    abstraction_map: Tuple[Tuple[dsl.ExprRef, dsl.ExprRef], ...] = ()
-    notes: Tuple[str, ...] = ()
+    pure_theory: str | None = None
+    abstraction_map: tuple[tuple[dsl.ExprRef, dsl.ExprRef], ...] = ()
+    notes: tuple[str, ...] = ()
 
     def with_terms(
         self,
         lhs: dsl.ExprRef,
         rhs: dsl.ExprRef,
-        guard: Optional[dsl.BoolRef] = None,
-        preconditions: Optional[Tuple[dsl.BoolRef, ...]] = None,
+        guard: dsl.BoolRef | None = None,
+        preconditions: tuple[dsl.BoolRef, ...] | None = None,
         **kwargs: Any,
-    ) -> "SimplifyQuery":
+    ) -> SimplifyQuery:
         """Return a shallow updated copy preserving metadata."""
         return replace(
             self,
@@ -96,7 +97,7 @@ class SimplifyQuery:
             **kwargs,
         )
 
-    def realize_z3(self) -> "SimplifyQuery":
+    def realize_z3(self) -> SimplifyQuery:
         """Realize all DSL `Z3Expr` terms in this query into concrete `z3.ExprRef`s (memoized)."""
         lhs = dsl.lower(self.lhs)
         rhs = dsl.lower(self.rhs)
@@ -154,7 +155,7 @@ class PassStats:
 class RewriteStats:
     """Aggregated telemetry for a complete simplification pipeline run."""
 
-    pass_stats: List[PassStats] = field(default_factory=list)
+    pass_stats: list[PassStats] = field(default_factory=list)
     total_ms: float = 0.0
     rounds: int = 0
     initial_ast_nodes: int = 0
@@ -189,9 +190,9 @@ class SimplificationContext:
     wlp_timeout_ms: int = 50
     enable_overapprox: bool = True
     verbose: bool = False
-    trace_fn: Optional[Callable[[str], None]] = None
+    trace_fn: Callable[[str], None] | None = None
     _fresh_counter: int = 0
-    _symbol_cache: Dict[Tuple[str, Any], dsl.ExprRef] = field(default_factory=dict)
+    _symbol_cache: dict[tuple[str, Any], dsl.ExprRef] = field(default_factory=dict)
 
     def fresh_const(self, prefix: str, sort: dsl.SortRef) -> dsl.ExprRef:
         """Allocate a deterministic fresh DSL constant of the requested sort."""
@@ -199,7 +200,7 @@ class SimplificationContext:
         self._fresh_counter += 1
         return dsl.Const(f"{prefix}_{idx}", sort)
 
-    def intern_const(self, cache_key: Tuple[str, Any], name: str, sort: dsl.SortRef) -> dsl.ExprRef:
+    def intern_const(self, cache_key: tuple[str, Any], name: str, sort: dsl.SortRef) -> dsl.ExprRef:
         """Return a cached DSL constant for `cache_key`, creating it on first use."""
         existing = self._symbol_cache.get(cache_key)
         if existing is not None:

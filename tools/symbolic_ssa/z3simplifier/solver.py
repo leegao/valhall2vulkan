@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import z3
 
@@ -37,7 +36,7 @@ class MiterSolveResult:
     """Outcome of simplifying and solving a miter equivalence query."""
 
     status: str  # "UNSAT", "SAT", "UNKNOWN"
-    model: Optional[z3.ModelRef]
+    model: z3.ModelRef | None
     simplified_query: SimplifyQuery
     exact_query: SimplifyQuery
     stats: RewriteStats
@@ -47,7 +46,7 @@ class MiterSolveResult:
     refined_from_overapprox: bool = False
 
 
-def _make_solver(timeout_ms: int, rlimit: int, pure_theory: Optional[str]) -> Tuple[z3.Solver, bool]:
+def _make_solver(timeout_ms: int, rlimit: int, pure_theory: str | None) -> tuple[z3.Solver, bool]:
     """Create a Z3 solver, selecting `qfnra` (`nlsat`) when the query is pure `QF_NRA`."""
     use_nlsat = pure_theory == "QF_NRA"
     if use_nlsat:
@@ -68,9 +67,9 @@ def _check_query_with_z3(
     q: SimplifyQuery,
     timeout_ms: int,
     rlimit: int,
-    smt2_out: Optional[List[str]] = None,
+    smt2_out: list[str] | None = None,
     check_name: str = "",
-) -> Tuple[str, Optional[z3.ModelRef], float, str, bool]:
+) -> tuple[str, z3.ModelRef | None, float, str, bool]:
     """Run Z3 on a single `SimplifyQuery`."""
     if q.is_trivially_unsat():
         if smt2_out is not None:
@@ -110,11 +109,11 @@ def solve_simplified_miter(
     pipeline: PassPipeline,
     *,
     timeout_ms: int = 1000,
-    rlimit: Optional[int] = None,
-    ctx: Optional[SimplificationContext] = None,
-    smt2_out: Optional[List[str]] = None,
+    rlimit: int | None = None,
+    ctx: SimplificationContext | None = None,
+    smt2_out: list[str] | None = None,
     check_name: str = "",
-    pre_simplified: Optional[SimplifyResult] = None,
+    pre_simplified: SimplifyResult | None = None,
 ) -> MiterSolveResult:
     """
     Simplify `query` through `pipeline` (or reuse `pre_simplified`) and

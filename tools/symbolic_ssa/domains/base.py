@@ -11,8 +11,9 @@ primitives to concrete, symbolic, and abstract-interpretation subclasses.
 from __future__ import annotations
 
 import abc
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Generic, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Generic, TypeVar
 
 V = TypeVar("V")
 S = TypeVar("S")
@@ -22,19 +23,19 @@ S = TypeVar("S")
 class LaneVal(Generic[S]):
     """Fixed lane-aware value container for strictly-typed `ValueDomain[LaneVal[S]]`."""
 
-    lanes: Tuple[S, ...]
+    lanes: tuple[S, ...]
     is_tuple: bool = False
 
     @classmethod
-    def scalar(cls, val: S) -> "LaneVal[S]":
+    def scalar(cls, val: S) -> LaneVal[S]:
         return cls((val,), is_tuple=False)
 
     @classmethod
-    def vector(cls, lanes: Sequence[S]) -> "LaneVal[S]":
+    def vector(cls, lanes: Sequence[S]) -> LaneVal[S]:
         return cls(tuple(lanes), is_tuple=False)
 
     @classmethod
-    def pack_tuple(cls, items: Sequence[S]) -> "LaneVal[S]":
+    def pack_tuple(cls, items: Sequence[S]) -> LaneVal[S]:
         return cls(tuple(items), is_tuple=True)
 
     @property
@@ -83,7 +84,7 @@ class SsaDomain(Generic[V], abc.ABC):
         """Pack multiple scalar lanes into a single domain value `V`."""
         return tuple(lanes)  # type: ignore[return-value]
 
-    def unpack_lanes(self, val: V) -> Tuple[V, ...]:
+    def unpack_lanes(self, val: V) -> tuple[V, ...]:
         """Return the scalar lanes of `val` as a tuple (1-tuple for scalars)."""
         if isinstance(val, tuple):
             return val  # type: ignore[return-value]
@@ -147,7 +148,7 @@ class SsaDomain(Generic[V], abc.ABC):
         """Lattice partial order (`a <= b`)."""
         return a == b or b == self.top() or a == self.bottom()
 
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         """Return concrete Python int if `val` is a known constant in this domain, else None."""
         return None
 
@@ -230,7 +231,7 @@ class SsaDomain(Generic[V], abc.ABC):
     def logical_not(self, a: Any) -> Any: return self.const_bool(False)
     def select(self, cond: Any, t_val: Any, f_val: Any) -> Any: return t_val
 
-    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: Optional[str] = None) -> Any:
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> Any:
         """Evaluate a domain-specific hardware uninterpreted function."""
         return self.default_value()
 
@@ -241,14 +242,14 @@ class SsaDomain(Generic[V], abc.ABC):
             return self.const_u64(((chi & MASK32) << 32) | (clo & MASK32))
         return self.bv_concat(bhi, blo)
 
-    def split64(self, val64: Any) -> Tuple[Any, Any]:
+    def split64(self, val64: Any) -> tuple[Any, Any]:
         v64 = self.as_u64(val64)
         c64 = self.const_int_val(v64)
         if c64 is not None:
             return (self.const_u32(c64 & MASK32), self.const_u32((c64 >> 32) & MASK32))
         return (self.bv_extract(31, 0, v64), self.bv_extract(63, 32, v64))
 
-    def unpack_half2x16(self, u: Any) -> Tuple[Any, Any]:
+    def unpack_half2x16(self, u: Any) -> tuple[Any, Any]:
         return (self.default_value(), self.default_value())
 
     def pack_half2x16(self, v2: Any) -> Any:

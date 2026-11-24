@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.domains.base import SsaDomain
 from tools.symbolic_ssa.domains.shader_env.base import (
@@ -28,7 +28,7 @@ class ConcreteBitvecDomain(SsaDomain):
     def const_u32(self, imm: int) -> int: return imm & MASK32
     def const_u64(self, imm: int) -> int: return imm & MASK64
     def const_bool(self, val: bool) -> bool: return bool(val)
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         return val if isinstance(val, int) and not isinstance(val, bool) else None
     def mask32(self, val: Any) -> int: return int(val) & MASK32
     def mask64(self, val: Any) -> int: return int(val) & MASK64
@@ -95,13 +95,13 @@ class ConcreteBitvecDomain(SsaDomain):
     def logical_not(self, a: Any) -> bool: return not self.as_bool(a)
     def select(self, cond: Any, t_val: Any, f_val: Any) -> Any: return t_val if self.as_bool(cond) else f_val
 
-    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: Optional[str] = None) -> int:
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> int:
         cargs = [self.as_u32(a) for a in args]
         if env is not None and hasattr(env, "eval_hw_uf"):
             return env.eval_hw_uf(f"hw_{name}", *cargs, fallback_tag=fallback_tag or name)
         return _det_hash_u32(name, *cargs)
 
-    def unpack_half2x16(self, u: Any) -> Tuple[int, int]:
+    def unpack_half2x16(self, u: Any) -> tuple[int, int]:
         cu = self.as_u32(u)
         return (_f16_to_f32_u32(cu & 0xFFFF), _f16_to_f32_u32((cu >> 16) & 0xFFFF))
 

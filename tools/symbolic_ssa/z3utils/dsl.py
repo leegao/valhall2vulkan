@@ -612,29 +612,29 @@ def _wrap_raw_if_needed(x: Any) -> Any:
 
 def _coerce_bv(other: Any, width: int) -> BitVecRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3BvConst(other & ((1 << width) - 1), width)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {type(other).__name__} to BitVec({width})")
 
 
 def _coerce_bool(other: Any) -> BoolRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, bool):
         return Z3BoolConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {type(other).__name__} to Bool")
 
 
 def _coerce_real(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         if is_int(other):
-            return Z3OpToReal(other)
-        return other
+            return Z3OpToReal(other)  # pyright: ignore[reportArgumentType]
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, bool):
         raise TypeError("Cannot coerce bool to Real")
     if isinstance(other, int):
@@ -649,17 +649,17 @@ def _coerce_real(other: Any) -> ArithRef:
         return Z3RealConst(frac.numerator, frac.denominator)
     if isinstance(other, z3.ExprRef):
         w = lift(other, depth=1)
-        return Z3OpToReal(w) if is_int(w) else w  # type: ignore
+        return Z3OpToReal(w) if is_int(w) else w  # type: ignore  # pyright: ignore[reportReturnType, reportArgumentType]
     raise TypeError(f"Cannot coerce {type(other).__name__} to Real")
 
 
 def _coerce_int(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3IntConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {type(other).__name__} to Int")
 
 
@@ -716,11 +716,12 @@ class Z3Expr:
     """
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     @property
     def to_z3(self) -> Any:
         """Lazily lower this DSL node to a concrete `z3.ExprRef` and memoize the result."""
-        cached = self._z3_cache  # type: ignore
+        cached = self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
         built = self._build_z3()
@@ -815,11 +816,11 @@ class Z3Expr:
         return True
 
     def __hash__(self) -> int:
-        cached = self._hash_cache  # type: ignore
+        cached = self._hash_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
         acc = hash(type(self))
-        for fname in self._struct_fields:  # type: ignore
+        for fname in self._struct_fields:
             acc = hash((acc, _struct_hash_val(getattr(self, fname))))
         object.__setattr__(self, "_hash_cache", acc)
         return acc
@@ -846,6 +847,7 @@ class Z3BoolExpr(Z3Expr):
     """Sort-typed base for Boolean DSL expressions (compatible with `z3.BoolRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.BOOL
@@ -870,6 +872,7 @@ class Z3BitVecExpr(Z3Expr):
     """Sort-typed base for BitVector DSL expressions (compatible with `z3.BitVecRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.BV
@@ -986,6 +989,7 @@ class Z3ArithExpr(Z3Expr):
     """Sort-typed base for Real/Int arithmetic DSL expressions (compatible with `z3.ArithRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def is_real(self) -> bool:
         return True
@@ -1099,6 +1103,7 @@ class Z3FPExpr(Z3Expr):
     """Sort-typed base for IEEE-754 Floating-Point DSL expressions (compatible with `z3.FPRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.FLOATING_POINT
@@ -1147,6 +1152,7 @@ class Z3ArrayExpr(Z3Expr):
     """Sort-typed base for Array DSL expressions (compatible with `z3.ArrayRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.ARRAY
@@ -1171,6 +1177,7 @@ class Z3PolyExpr(Z3Expr):
     """
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def is_real(self) -> bool:
         return self.sort_kind() == Z3SortKind.REAL
@@ -1495,7 +1502,7 @@ class Z3FuncDecl:
 
     def params(self) -> tuple[int, ...]:
         raw = self.to_z3.params()
-        return tuple(raw) if raw is not None else ()
+        return tuple(raw) if raw is not None else ()  # pyright: ignore[reportReturnType]
 
     def rebuild(self, args: Sequence[Any]) -> Z3Expr:
         """Reconstruct a DSL node from this decl and rewritten args."""
@@ -1531,7 +1538,7 @@ class Z3BvConst(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('val', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.BitVecVal(self.val & ((1 << self.width) - 1), self.width)
 
     def op_kind(self) -> Z3OpKind:
@@ -1557,7 +1564,7 @@ class Z3RealConst(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('num', 'den')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Q(self.num, self.den) if self.den != 1 else z3.RealVal(self.num)
 
     def op_kind(self) -> Z3OpKind:
@@ -1609,7 +1616,7 @@ class Z3IntConst(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('val',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.IntVal(self.val)
 
     def op_kind(self) -> Z3OpKind:
@@ -1635,7 +1642,7 @@ class Z3BoolConst(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('val',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.BoolVal(self.val)
 
     def op_kind(self) -> Z3OpKind:
@@ -1651,7 +1658,7 @@ class Z3FPConst(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('val', 'ebits_val', 'sbits_val')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.FPVal(self.val, z3.FPSort(self.ebits_val, self.sbits_val))
 
     def op_kind(self) -> Z3OpKind:
@@ -1672,7 +1679,7 @@ class Z3ConstArray(Z3ArrayExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('dom_sort', 'val')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.K(self.dom_sort, lower(self.val))
 
     def children(self) -> tuple[Any, ...]:
@@ -1696,7 +1703,7 @@ class Z3BvVar(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.BitVec(self.name, self.width)
 
     def op_kind(self) -> Z3OpKind:
@@ -1713,7 +1720,7 @@ class Z3RealVar(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Real(self.name)
 
     def op_kind(self) -> Z3OpKind:
@@ -1733,7 +1740,7 @@ class Z3IntVar(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Int(self.name)
 
     def op_kind(self) -> Z3OpKind:
@@ -1753,7 +1760,7 @@ class Z3BoolVar(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Bool(self.name)
 
     def op_kind(self) -> Z3OpKind:
@@ -1769,7 +1776,7 @@ class Z3FPVar(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name', 'ebits_val', 'sbits_val')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.FP(self.name, z3.FPSort(self.ebits_val, self.sbits_val))
 
     def op_kind(self) -> Z3OpKind:
@@ -1791,7 +1798,7 @@ class Z3ArrayVar(Z3ArrayExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name', 'dom_sort', 'rng_sort')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Array(self.name, self.dom_sort, self.rng_sort)
 
     def op_kind(self) -> Z3OpKind:
@@ -1814,7 +1821,7 @@ class Z3GenericVar(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('name', 'z3_sort')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Const(self.name, self.z3_sort)
 
     def op_kind(self) -> Z3OpKind:
@@ -1833,12 +1840,12 @@ class Z3GenericVar(Z3PolyExpr):
 class Z3OpExtract(Z3BitVecExpr):
     hi: int
     lo: int
-    src: ExprRef
+    src: BitVecRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('hi', 'lo', 'src')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Extract(self.hi, self.lo, lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -1861,12 +1868,12 @@ class Z3OpExtract(Z3BitVecExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpZeroExt(Z3BitVecExpr):
     k: int
-    src: ExprRef
+    src: BitVecRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('k', 'src')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.ZeroExt(self.k, lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -1885,12 +1892,12 @@ class Z3OpZeroExt(Z3BitVecExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpSignExt(Z3BitVecExpr):
     k: int
-    src: ExprRef
+    src: BitVecRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('k', 'src')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.SignExt(self.k, lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -1908,12 +1915,12 @@ class Z3OpSignExt(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpConcat(Z3BitVecExpr):
-    args: tuple[ExprRef, ...]
+    args: tuple[BitVecRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Concat(*[lower(a) for a in self.args])
 
     def children(self) -> tuple[Any, ...]:
@@ -1935,7 +1942,7 @@ class Z3OpIte(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('cond', 'then_expr', 'else_expr')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.If(lower(self.cond), lower(self.then_expr), lower(self.else_expr))
 
     def children(self) -> tuple[Any, ...]:
@@ -1977,7 +1984,7 @@ class Z3OpEq(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) == lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -1995,7 +2002,7 @@ class Z3OpDistinct(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) != lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2012,7 +2019,7 @@ class Z3OpNot(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Not(lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -2029,7 +2036,7 @@ class Z3OpAnd(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.BoolVal(True)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.And(*[lower(a) for a in self.args])
@@ -2048,7 +2055,7 @@ class Z3OpOr(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.BoolVal(False)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.Or(*[lower(a) for a in self.args])
@@ -2068,7 +2075,7 @@ class Z3OpXor(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Xor(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2086,7 +2093,7 @@ class Z3OpImplies(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Implies(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2105,7 +2112,7 @@ class Z3OpBvMul(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) * lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2126,7 +2133,7 @@ class Z3OpBvAdd(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) + lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2147,7 +2154,7 @@ class Z3OpBvSub(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) - lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2168,7 +2175,7 @@ class Z3OpBvSDiv(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) / lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2189,7 +2196,7 @@ class Z3OpBvUDiv(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.UDiv(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2210,7 +2217,7 @@ class Z3OpBvSRem(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.SRem(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2231,7 +2238,7 @@ class Z3OpBvURem(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.URem(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2252,7 +2259,7 @@ class Z3OpBvSMod(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a = lower(self.lhs)
         b = lower(self.rhs)
         return z3.BitVecRef(z3.Z3_mk_bvsmod(a.ctx.ref(), a.as_ast(), b.as_ast()), a.ctx)
@@ -2275,7 +2282,7 @@ class Z3OpBvShl(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) << lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2296,7 +2303,7 @@ class Z3OpBvLShr(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.LShR(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2317,7 +2324,7 @@ class Z3OpBvAShr(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) >> lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2338,7 +2345,7 @@ class Z3OpBvAnd(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) & lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2359,7 +2366,7 @@ class Z3OpBvOr(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) | lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2380,7 +2387,7 @@ class Z3OpBvXor(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) ^ lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2400,7 +2407,7 @@ class Z3OpBvNot(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return ~lower(self.src)
 
     def children(self) -> tuple[Any, ...]:
@@ -2420,7 +2427,7 @@ class Z3OpBvNeg(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return -lower(self.src)
 
     def children(self) -> tuple[Any, ...]:
@@ -2441,7 +2448,7 @@ class Z3OpBvRotateLeft(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.RotateLeft(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2462,7 +2469,7 @@ class Z3OpBvRotateRight(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.RotateRight(lower(self.lhs), lower(self.rhs))
 
     def children(self) -> tuple[Any, ...]:
@@ -2483,7 +2490,7 @@ class Z3OpBvCmp(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
         if self.op is BvCmpOp.SLT: return a < b
         if self.op is BvCmpOp.SLEQ: return a <= b
@@ -2509,7 +2516,7 @@ class Z3OpBv2Int(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'is_signed')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.BV2Int(lower(self.src), is_signed=self.is_signed)
 
     def children(self) -> tuple[Any, ...]:
@@ -2533,7 +2540,7 @@ class Z3OpInt2Bv(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Int2BV(lower(self.src), self.width)
 
     def children(self) -> tuple[Any, ...]:
@@ -2552,7 +2559,7 @@ class Z3OpToReal(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.ToReal(lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -2575,7 +2582,7 @@ class Z3OpToInt(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.ToInt(lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -2598,7 +2605,7 @@ class Z3OpRealAdd(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.RealVal(0)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.Sum(*[lower(a) for a in self.args])
@@ -2623,7 +2630,7 @@ class Z3OpRealMul(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.RealVal(1)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.Product(*[lower(a) for a in self.args])
@@ -2649,7 +2656,7 @@ class Z3OpRealSub(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) - lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2673,7 +2680,7 @@ class Z3OpRealDiv(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) / lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2696,7 +2703,7 @@ class Z3OpRealNeg(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return -lower(self.src)
 
     def children(self) -> tuple[Any, ...]:
@@ -2719,7 +2726,7 @@ class Z3OpIntAdd(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.IntVal(0)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.Sum(*[lower(a) for a in self.args])
@@ -2741,7 +2748,7 @@ class Z3OpIntSub(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) - lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2760,7 +2767,7 @@ class Z3OpIntMul(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         if not self.args: return z3.IntVal(1)
         if len(self.args) == 1: return lower(self.args[0])
         return z3.Product(*[lower(a) for a in self.args])
@@ -2782,7 +2789,7 @@ class Z3OpIntDiv(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) / lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2802,7 +2809,7 @@ class Z3OpIntMod(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) % lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2821,7 +2828,7 @@ class Z3OpIntNeg(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return -lower(self.src)
 
     def children(self) -> tuple[Any, ...]:
@@ -2842,7 +2849,7 @@ class Z3OpArithPow(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs', 'real_result')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return lower(self.lhs) ** lower(self.rhs)
 
     def children(self) -> tuple[Any, ...]:
@@ -2863,7 +2870,7 @@ class Z3OpArithCmp(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
         if self.op is ArithCmpOp.LT: return a < b
         if self.op is ArithCmpOp.LE: return a <= b
@@ -2885,7 +2892,7 @@ class Z3OpSelect(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('arr', 'idx')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Select(lower(self.arr), lower(self.idx))
 
     def children(self) -> tuple[Any, ...]:
@@ -2913,7 +2920,7 @@ class Z3OpStore(Z3ArrayExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('arr', 'idx', 'val')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.Store(lower(self.arr), lower(self.idx), lower(self.val))
 
     def children(self) -> tuple[Any, ...]:
@@ -2938,7 +2945,7 @@ class Z3OpFPUnary(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src', 'rm')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a = lower(self.src)
         if self.op is FpUnaryOp.ABS: return z3.fpAbs(a)
         if self.op is FpUnaryOp.NEG: return z3.fpNeg(a)
@@ -2966,7 +2973,7 @@ class Z3OpFPBinary(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs', 'rm')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
         if self.op is FpBinaryOp.MIN: return z3.fpMin(a, b)
         if self.op is FpBinaryOp.MAX: return z3.fpMax(a, b)
@@ -2997,7 +3004,7 @@ class Z3OpFPFMA(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('rm', 'a', 'b', 'c')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.fpFMA(lower(self.rm), lower(self.a), lower(self.b), lower(self.c))
 
     def children(self) -> tuple[Any, ...]:
@@ -3019,7 +3026,7 @@ class Z3OpFPCmp(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
         if self.op is FpCmpOp.LT: return z3.fpLT(a, b)
         if self.op is FpCmpOp.LEQ: return z3.fpLEQ(a, b)
@@ -3039,7 +3046,7 @@ class Z3OpFPPred(Z3BoolExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a = lower(self.src)
         if self.op is FpPredOp.IS_NAN: return z3.fpIsNaN(a)
         if self.op is FpPredOp.IS_INF: return z3.fpIsInf(a)
@@ -3062,7 +3069,7 @@ class Z3OpFPBVToFP(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'ebits_val', 'sbits_val')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.fpBVToFP(lower(self.src), z3.FPSort(self.ebits_val, self.sbits_val))
 
     def children(self) -> tuple[Any, ...]:
@@ -3083,7 +3090,7 @@ class Z3OpFPToIEEEBV(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src', 'width')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.fpToIEEEBV(lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -3103,7 +3110,7 @@ class Z3OpFPToFP(Z3FPExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('rm', 'src', 'ebits_val', 'sbits_val', 'mode')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         rm, s = lower(self.rm), lower(self.src)
         sort = z3.FPSort(self.ebits_val, self.sbits_val)
         if self.mode == 'sbv': return z3.fpSignedToFP(rm, s, sort)
@@ -3131,7 +3138,7 @@ class Z3OpFPToBV(Z3BitVecExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('rm', 'src', 'width', 'signed')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         rm, s = lower(self.rm), lower(self.src)
         sort = z3.BitVecSort(self.width)
         return z3.fpToSBV(rm, s, sort) if self.signed else z3.fpToUBV(rm, s, sort)
@@ -3149,7 +3156,7 @@ class Z3OpFPToReal(Z3ArithExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return z3.fpToReal(lower(self.src))
 
     def children(self) -> tuple[Any, ...]:
@@ -3170,7 +3177,7 @@ class Z3OpBridge(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         a = lower(self.src)
         return _bridge_z3_decl(self.op)(a)
 
@@ -3204,7 +3211,7 @@ class Z3OpUFApp(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('func', 'args')
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return self.func.to_z3(*[lower(a) for a in self.args])
 
     def children(self) -> tuple[Any, ...]:
@@ -3245,7 +3252,7 @@ class Z3Other(Z3PolyExpr):
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('raw',)
 
-    def _build_z3(self) -> z3.ExprRef:
+    def _build_z3(self) -> Any:
         return self.raw
 
     def children(self) -> tuple[Any, ...]:
@@ -3600,9 +3607,9 @@ def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3PolyExpr:
     elif isinstance(f, Z3Expr) and not isinstance(t, Z3Expr):
         t = _coerce_like(f, t)
     if isinstance(c, Z3BoolConst):
-        return t if c.val else f  # type: ignore
+        return t if c.val else f  # type: ignore  # pyright: ignore[reportReturnType]
     if isinstance(t, Z3Expr) and t.eq(f):
-        return t  # type: ignore
+        return t  # type: ignore  # pyright: ignore[reportReturnType]
     return Z3OpIte(c, t, f)
 
 
@@ -4048,14 +4055,14 @@ def substitute(x: Any, *m: Any) -> z3.ExprRef:
     return z3.substitute(lower(x), *pairs)
 
 
-def ForAll(vs: Any, body: Any, **kwargs: Any) -> z3.QuantifierRef:
+def ForAll(vs: Any, body: Any, **kwargs: Any) -> Any:
     v_list = [lower(v) for v in (vs if isinstance(vs, (list, tuple)) else [vs])]
     if "patterns" in kwargs:
         kwargs["patterns"] = [lower(p) for p in kwargs["patterns"]]
     return z3.ForAll(v_list, lower(body), **kwargs)
 
 
-def Exists(vs: Any, body: Any, **kwargs: Any) -> z3.QuantifierRef:
+def Exists(vs: Any, body: Any, **kwargs: Any) -> Any:
     v_list = [lower(v) for v in (vs if isinstance(vs, (list, tuple)) else [vs])]
     if "patterns" in kwargs:
         kwargs["patterns"] = [lower(p) for p in kwargs["patterns"]]
@@ -4072,7 +4079,7 @@ def _seed_z3(node: Any, raw_z3: Any) -> Any:
 def view(expr: Any, depth: int = 2) -> Z3Node:
     """Lift a `z3.ExprRef` (or pass through a `Z3Expr`) into a typed `Z3Node` dataclass."""
     if isinstance(expr, Z3Expr):
-        return expr  # type: ignore[return-value]
+        return expr  # pyright: ignore[reportReturnType][return-value]
     if isinstance(expr, z3.BitVecNumRef):
         return _seed_z3(Z3BvConst(int(expr.as_long()), expr.size()), expr)
     if isinstance(expr, z3.RatNumRef):

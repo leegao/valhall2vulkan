@@ -7,7 +7,7 @@ and pure forward diamond tiles bottom-up via `apply_cfg_tile_rules`.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from tools.symbolic_ssa.cfg_rewriter import (
     apply_cfg_tile_rules,
@@ -20,8 +20,8 @@ from tools.symbolic_ssa.passes.ir_utils import Stratum1Stats
 
 
 def pass_if_convert(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
     stats: Stratum1Stats,
     max_arm_nodes: int = 128,
 ) -> bool:

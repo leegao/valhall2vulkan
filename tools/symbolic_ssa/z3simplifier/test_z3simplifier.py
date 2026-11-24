@@ -7,7 +7,11 @@ import unittest
 
 import z3
 
-from tools.symbolic_ssa.domains.udomain import ConcreteUDomain, SymbolicZ3UDomain, UValKind
+from tools.symbolic_ssa.domains.udomain import (
+    ConcreteUDomain,
+    SymbolicZ3UDomain,
+    UValKind,
+)
 from tools.symbolic_ssa.domains.z3_base import make_z3_symbolic_domain
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
 from tools.symbolic_ssa.z3simplifier import (
@@ -16,15 +20,11 @@ from tools.symbolic_ssa.z3simplifier import (
     BvWrapperPeepholePass,
     ConditionedUnificationPass,
     ExactCseUnificationPass,
-    InjectiveBridgeUnwrapPass,
     PassPipeline,
-    PolynomialNormalizePass,
-    PreconditionConstSubPass,
     ReadOnlyArrayScalarizePass,
     RealAlgebraicPass,
     SimplificationContext,
     SimplifyQuery,
-    TermPassAdapter,
     TheoryPurifyRealPass,
     build_default_pipeline,
     build_exact_pipeline,
@@ -312,6 +312,10 @@ class TestZ3SimplifierPasses(unittest.TestCase):
     def test_v32_3_autogen_dsl_enums_lower_and_ematching_extensionality(self) -> None:
         """Verify auto-generated DSL enums, .lower() round-trip, UDomain F32X2 select, and E-matching extensionality."""
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain, UValKind
+        from tools.symbolic_ssa.z3simplifier.passes_ematch import (
+            EmatchingUnifyPass,
+            build_extensionality_witness_axiom,
+        )
         from tools.symbolic_ssa.z3utils.dsl import (
             BridgeOp,
             BvCmpOp,
@@ -322,10 +326,6 @@ class TestZ3SimplifierPasses(unittest.TestCase):
             Z3OpKind,
             Z3SortKind,
             lift,
-        )
-        from tools.symbolic_ssa.z3simplifier.passes_ematch import (
-            EmatchingUnifyPass,
-            build_extensionality_witness_axiom,
         )
 
         # Auto-generated IntEnum / Enum checks + .lower() round-trip
@@ -413,6 +413,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
     def test_v33_dag_eq_and_hash_avoid_exponential_blowup(self) -> None:
         """Comparing two 20-level diamond DAGs via .eq() must stay O(|V|) with zero Z3 lowering."""
         import time
+
         from tools.symbolic_ssa.z3utils import dsl
 
         def build_diamond(depth: int) -> dsl.Z3BitVecExpr:
@@ -469,9 +470,12 @@ class TestZ3SimplifierPasses(unittest.TestCase):
     def test_v33_1_dropin_z3_facade_no_raw_attr_and_is_true_semantics(self) -> None:
         """Verify tools.symbolic_ssa.z3utils drop-in API, zero raw attr on typed nodes, and syntactic is_true."""
         from tools.symbolic_ssa import z3utils as sz3
-        from tools.symbolic_ssa.domains.shader_env import ConcreteShaderEnv, SymbolicShaderEnv
-        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
         from tools.symbolic_ssa.domains.base import LaneVal
+        from tools.symbolic_ssa.domains.shader_env import (
+            ConcreteShaderEnv,
+            SymbolicShaderEnv,
+        )
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
 
         # 1. Typed DSL nodes do not carry redundant `raw` attr (only Z3Other does)
         x = sz3.BitVec("x", 32)
@@ -726,7 +730,6 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         """Regression tests for v33.5: rebuild_app mixed args, BVAdd const fold, and >256-node Z3OpAnd."""
         from tools.symbolic_ssa import z3utils as sz3
         from tools.symbolic_ssa.z3simplifier.ast_utils import rebuild_app
-        from tools.symbolic_ssa.z3simplifier.passes_bv import _bv_algebraic_rule
 
         # 1. rebuild_app when parent is DSL Z3OpDistinct and one child was rewritten to raw z3.RatNumRef
         dsl_node = sz3.Distinct(sz3.Real("a"), sz3.If(sz3.Bool("c"), sz3.RealVal(1), sz3.RealVal(2)))

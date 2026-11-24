@@ -9,7 +9,7 @@ instead of constructing ad-hoc raw Z3 expressions.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.domains.shader_env.base import MASK32, MASK64, ShaderEnvBase
@@ -29,21 +29,21 @@ class SymbolicShaderEnv(ShaderEnvBase):
 
     def __init__(
         self,
-        bundle: Dict[str, Any],
-        domain: Union[str, Z3SymbolicDomain, None] = None,
+        bundle: dict[str, Any],
+        domain: str | Z3SymbolicDomain | None = None,
         fp_mode: str = "exact",
     ):
         self._init_abi_layout(bundle)
         self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(domain, fp_mode=fp_mode)
-        self.inputs: Dict[str, Any] = {}
-        self.init_buf_mem: Dict[str, Any] = {}
-        self.init_img_mem: Dict[str, Tuple[Any, ...]] = {}
+        self.inputs: dict[str, Any] = {}
+        self.init_buf_mem: dict[str, Any] = {}
+        self.init_img_mem: dict[str, tuple[Any, ...]] = {}
         self.fallback_mem: Any = dsl.Array("mem_fallback", BV64, BV32)
         self.fau_sym: Any = dsl.Array("fau_sym", BV32, BV32)
         self.lane_id: Any = dsl.BitVec("lane_id", 5)
         self.inputs["lane_id"] = self.lane_id
 
-    def read_untyped_slot(self, domain: Optional[Z3SymbolicDomain], raw_bv32: Any) -> Any:
+    def read_untyped_slot(self, domain: Z3SymbolicDomain | None, raw_bv32: Any) -> Any:
         """Lift an untyped 32-bit shader input/memory word into `domain` (or `self.domain`)."""
         dom = domain if domain is not None else self.domain
         if hasattr(dom, "lift_z3_bv32"):
@@ -55,7 +55,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
 
     def get_sym_buf_slot(self, sym_tag: str, off32: Any) -> Any:
         if not hasattr(self, "sym_buf_ufs"):
-            self.sym_buf_ufs: Dict[str, Any] = {}
+            self.sym_buf_ufs: dict[str, Any] = {}
         if sym_tag not in self.sym_buf_ufs:
             safe = "".join(c if c.isalnum() or c == "_" else "_" for c in sym_tag)
             self.sym_buf_ufs[sym_tag] = dsl.Function(f"sym_slot_{safe}", BV32, BV32)
@@ -69,9 +69,9 @@ class SymbolicShaderEnv(ShaderEnvBase):
             self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, BV32)
         return self.init_buf_mem[key]
 
-    def build_preconditions(self) -> List[Any]:
+    def build_preconditions(self) -> list[Any]:
         """Build semantic execution-environment preconditions (e.g. Compute LocalSize bounds)."""
-        conds: List[Any] = []
+        conds: list[Any] = []
         if self.stage == "Compute" and self.local_size is not None:
             lx, ly, lz = self.local_size
             for c, lim in enumerate((lx, ly, lz)):
@@ -94,15 +94,15 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     conds.append(dsl.ULT(self.inputs["bi_29"], _dsl_bv32(lx * ly * lz)))
         return conds
 
-    def get_img_mem(self, key: str) -> Tuple[Any, ...]:
+    def get_img_mem(self, key: str) -> tuple[Any, ...]:
         if key not in self.init_img_mem:
             safe = key.replace(":", "_")
             self.init_img_mem[key] = tuple(dsl.Array(f"img_{safe}_c{c}", BV64, BV32) for c in range(4))
         return self.init_img_mem[key]
 
-    def _find_base_region_in_add(self, expr: Any) -> Optional[str]:
-        found: Set[str] = set()
-        stack: List[Any] = [expr]
+    def _find_base_region_in_add(self, expr: Any) -> str | None:
+        found: set[str] = set()
+        stack: list[Any] = [expr]
         visited = 0
         while stack and visited < 64:
             cur = stack.pop()
@@ -122,7 +122,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
         self,
         addr_expr: Any,
         hint_key: str = "",
-    ) -> Tuple[Optional[str], Optional[int], Any]:
+    ) -> tuple[str | None, int | None, Any]:
         """Decompose a 64-bit address into (buf_key, const_offset_or_None, offset_bv32)."""
         c = _try_const_u64(addr_expr)
         if c is not None:
@@ -175,7 +175,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
         self.inputs[name] = v
         return v
 
-    def get_input_vec4(self, kind: str, location: int) -> Tuple[Any, ...]:
+    def get_input_vec4(self, kind: str, location: int) -> tuple[Any, ...]:
         lanes = tuple(dsl.BitVec(f"{kind}_loc{location}_{c}", 32) for c in range(4))
         for c, lv in enumerate(lanes):
             self.inputs[f"{kind}_loc{location}_{c}"] = lv

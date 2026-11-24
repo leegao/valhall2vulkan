@@ -16,7 +16,10 @@ from tools.symbolic_ssa.passes.ir_utils import (
     cfg_isomorphic,
 )
 from tools.symbolic_ssa.passes.pass_contract_chains import pass_contract_chains
-from tools.symbolic_ssa.passes.pass_gvn_dce import AlgebraicSimplifierInterpreter, pass_gvn_dce
+from tools.symbolic_ssa.passes.pass_gvn_dce import (
+    AlgebraicSimplifierInterpreter,
+    pass_gvn_dce,
+)
 from tools.symbolic_ssa.passes.pass_if_convert import (
     make_pure_diamond_rule,
     make_pure_triangle_rule,
@@ -37,18 +40,18 @@ from tools.symbolic_ssa.passes.pass_readonly_tokens import (
 from tools.symbolic_ssa.passes.pipeline import canonicalize_ssa_module
 
 __all__ = [
+    "COMMUTATIVE_OPS",
+    "CONTROL_MARKER_OPS",
+    "NEVER_GVN_OPS",
+    "SIDE_EFFECT_OPS",
     "AbstractSsaPass",
     "AlgebraicSimplifierInterpreter",
     "BufferProvenanceInterpreter",
-    "COMMUTATIVE_OPS",
-    "CONTROL_MARKER_OPS",
     "CfgRewriteContext",
     "CfgTileRule",
     "ConstVal",
     "ConstantFoldInterpreter",
     "ConstantPropDomain",
-    "NEVER_GVN_OPS",
-    "SIDE_EFFECT_OPS",
     "Stratum1Stats",
     "TileMatch",
     "apply_cfg_tile_rules",

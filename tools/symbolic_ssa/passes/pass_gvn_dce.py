@@ -10,7 +10,7 @@ hash-consing GVN and mark-and-sweep DCE.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.interpreter import SsaInterpreter
 from tools.symbolic_ssa.passes.ir_utils import (
@@ -31,12 +31,12 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
     any nontrivial rewrite into `self.repl[nid] = canonical_id`.
     """
 
-    def __init__(self, blocks_by_id: Dict[int, Dict[str, Any]], nodes_by_id: Dict[int, Dict[str, Any]]):
+    def __init__(self, blocks_by_id: dict[int, dict[str, Any]], nodes_by_id: dict[int, dict[str, Any]]):
         super().__init__(blocks_by_id, nodes_by_id)
-        self.repl: Dict[int, int] = {}
-        self._cur_node: Optional[Dict[str, Any]] = None
+        self.repl: dict[int, int] = {}
+        self._cur_node: dict[str, Any] | None = None
 
-    def lookup_arg(self, values: Dict[int, Any], aid: int) -> Any:
+    def lookup_arg(self, values: dict[int, Any], aid: int) -> Any:
         return values.get(aid, aid)
 
     def _const_u32_val(self, nid: Any) -> Any:
@@ -47,7 +47,7 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
             return int(n.get("imm_u32", 0))
         return None
 
-    def eval_node(self, node: Dict[str, Any], values: Dict[int, Any], state: Any = None, reach: Any = None) -> Any:
+    def eval_node(self, node: dict[str, Any], values: dict[int, Any], state: Any = None, reach: Any = None) -> Any:
         nid = int(node["id"])
         self._cur_node = node
         res = super().eval_node(node, values, state, reach)
@@ -77,7 +77,7 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
     def pack64(self, lo: Any, hi: Any) -> Any:
         return ("__pack64__", lo, hi)
 
-    def split64(self, val64: Any) -> Tuple[Any, Any]:
+    def split64(self, val64: Any) -> tuple[Any, Any]:
         if isinstance(val64, tuple) and len(val64) == 3 and val64[0] == "__pack64__":
             return (val64[1], val64[2])
         return (None, None)
@@ -137,9 +137,9 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
 
 
 def pass_gvn_dce(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
-    readonly_load_ids: Set[int],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
+    readonly_load_ids: set[int],
     stats: Stratum1Stats,
 ) -> bool:
     """Run algebraic simplification, dominator-scoped GVN, and mark-and-sweep DCE."""
@@ -155,7 +155,7 @@ def pass_gvn_dce(
     # Normalize IMul(x, 2^k) -> Shl(x, k) in-place before GVN so stride multiplies match Valhall shifts
     next_nid = (max(nodes_by_id.keys()) + 1) if nodes_by_id else 1
     entry_bid = 0 if 0 in blocks_by_id else (min(blocks_by_id.keys()) if blocks_by_id else 0)
-    shift_const_cache: Dict[int, int] = {}
+    shift_const_cache: dict[int, int] = {}
     for nid, n in list(nodes_by_id.items()):
         if n.get("op") in ("ConstU32", "ConstS32"):
             v = int(n.get("imm_u32", 0))
@@ -201,14 +201,14 @@ def pass_gvn_dce(
                 changed = True
 
     rpo = SsaInterpreter.compute_rpo(blocks_by_id, 0)
-    gvn_repl: Dict[int, int] = {}
+    gvn_repl: dict[int, int] = {}
 
     def resolve_gvn(x: int) -> int:
         while x in gvn_repl:
             x = gvn_repl[x]
         return x
 
-    def can_gvn(nid: int, n: Dict[str, Any]) -> bool:
+    def can_gvn(nid: int, n: dict[str, Any]) -> bool:
         op = n["op"]
         if op in NEVER_GVN_OPS:
             return False
@@ -216,7 +216,7 @@ def pass_gvn_dce(
             return nid in readonly_load_ids
         return True
 
-    def gvn_key(n: Dict[str, Any]) -> Tuple[Any, ...]:
+    def gvn_key(n: dict[str, Any]) -> tuple[Any, ...]:
         op = n["op"]
         args = [resolve_gvn(int(a)) for a in n.get("args", [])]
         if op in COMMUTATIVE_OPS and len(args) == 2 and args[0] > args[1]:
@@ -234,10 +234,10 @@ def pass_gvn_dce(
             n.get("aux_str", ""),
         )
 
-    gvn_table: Dict[Tuple[Any, ...], int] = {}
+    gvn_table: dict[tuple[Any, ...], int] = {}
 
-    def _on_dom_enter(bid: int) -> List[Tuple[Any, ...]]:
-        local_keys: List[Tuple[Any, ...]] = []
+    def _on_dom_enter(bid: int) -> list[tuple[Any, ...]]:
+        local_keys: list[tuple[Any, ...]] = []
         for nid in blocks_by_id[bid].get("nodes", []):
             n = nodes_by_id.get(nid)
             if not n or not can_gvn(nid, n):
@@ -251,7 +251,7 @@ def pass_gvn_dce(
                 local_keys.append(key)
         return local_keys
 
-    def _on_dom_exit(_bid: int, local_keys: List[Tuple[Any, ...]]) -> None:
+    def _on_dom_exit(_bid: int, local_keys: list[tuple[Any, ...]]) -> None:
         for k in local_keys:
             gvn_table.pop(k, None)
 
@@ -262,7 +262,7 @@ def pass_gvn_dce(
         stats.gvn_merged += len(gvn_repl)
         changed = True
 
-    roots: List[int] = []
+    roots: list[int] = []
     for blk in blocks_by_id.values():
         bc = int(blk.get("branch_cond", 0))
         if bc > 0:

@@ -1436,7 +1436,18 @@ def _solve_term_types(specs: tuple[NodeSpec, ...]) -> dict[tuple[str, str], str]
             return frozenset({"BOOL"})
         if cls_name == "Z3OpIte":
             return frozenset({"BOOL"}) if fname == "cond" else all_sorts
-        if cls_name.startswith("Z3OpBv") or cls_name == "Z3OpBV2Int":
+        if (
+            cls_name.startswith("Z3OpBv")
+            or cls_name in (
+                "Z3OpBV2Int",
+                "Z3OpConcat",
+                "Z3OpExtract",
+                "Z3OpZeroExt",
+                "Z3OpSignExt",
+                "Z3OpRotateLeft",
+                "Z3OpRotateRight",
+            )
+        ):
             return frozenset({"BV"})
         if cls_name == "Z3OpInt2BV":
             return frozenset({"INT"})
@@ -1518,7 +1529,7 @@ def _emit_node_class(spec: NodeSpec, term_types: dict[tuple[str, str], str] | No
         f"    _struct_fields: ClassVar[tuple[str, ...]] = {struct_fnames!r}"
     )
     lines.append("")
-    lines.append("    def _build_z3(self) -> z3.ExprRef:")
+    lines.append("    def _build_z3(self) -> Any:")
     lines.append(f"        {spec.lower_body}")
     if spec.children_expr != "()":
         lines.append("")
@@ -1838,29 +1849,29 @@ def _wrap_raw_if_needed(x: Any) -> Any:
 
 def _coerce_bv(other: Any, width: int) -> BitVecRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3BvConst(other & ((1 << width) - 1), width)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to BitVec({{width}})")
 
 
 def _coerce_bool(other: Any) -> BoolRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, bool):
         return Z3BoolConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Bool")
 
 
 def _coerce_real(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         if is_int(other):
-            return Z3OpToReal(other)
-        return other
+            return Z3OpToReal(other)  # pyright: ignore[reportArgumentType]
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, bool):
         raise TypeError("Cannot coerce bool to Real")
     if isinstance(other, int):
@@ -1875,17 +1886,17 @@ def _coerce_real(other: Any) -> ArithRef:
         return Z3RealConst(frac.numerator, frac.denominator)
     if isinstance(other, z3.ExprRef):
         w = lift(other, depth=1)
-        return Z3OpToReal(w) if is_int(w) else w  # type: ignore
+        return Z3OpToReal(w) if is_int(w) else w  # type: ignore  # pyright: ignore[reportReturnType, reportArgumentType]
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Real")
 
 
 def _coerce_int(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
-        return other
+        return other  # pyright: ignore[reportReturnType]
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3IntConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)  # type: ignore
+        return lift(other, depth=1)  # type: ignore  # pyright: ignore[reportReturnType]
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Int")
 
 
@@ -1942,11 +1953,12 @@ class Z3Expr:
     """
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     @property
     def to_z3(self) -> Any:
         """Lazily lower this DSL node to a concrete `z3.ExprRef` and memoize the result."""
-        cached = self._z3_cache  # type: ignore
+        cached = self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
         built = self._build_z3()
@@ -2041,11 +2053,11 @@ class Z3Expr:
         return True
 
     def __hash__(self) -> int:
-        cached = self._hash_cache  # type: ignore
+        cached = self._hash_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
         acc = hash(type(self))
-        for fname in self._struct_fields:  # type: ignore
+        for fname in self._struct_fields:
             acc = hash((acc, _struct_hash_val(getattr(self, fname))))
         object.__setattr__(self, "_hash_cache", acc)
         return acc
@@ -2072,6 +2084,7 @@ class Z3BoolExpr(Z3Expr):
     """Sort-typed base for Boolean DSL expressions (compatible with `z3.BoolRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.BOOL
@@ -2096,6 +2109,7 @@ class Z3BitVecExpr(Z3Expr):
     """Sort-typed base for BitVector DSL expressions (compatible with `z3.BitVecRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.BV
@@ -2212,6 +2226,7 @@ class Z3ArithExpr(Z3Expr):
     """Sort-typed base for Real/Int arithmetic DSL expressions (compatible with `z3.ArithRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def is_real(self) -> bool:
         return True
@@ -2325,6 +2340,7 @@ class Z3FPExpr(Z3Expr):
     """Sort-typed base for IEEE-754 Floating-Point DSL expressions (compatible with `z3.FPRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.FLOATING_POINT
@@ -2373,6 +2389,7 @@ class Z3ArrayExpr(Z3Expr):
     """Sort-typed base for Array DSL expressions (compatible with `z3.ArrayRef`)."""
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def sort_kind(self) -> Z3SortKind:
         return Z3SortKind.ARRAY
@@ -2397,6 +2414,7 @@ class Z3PolyExpr(Z3Expr):
     """
 
     __slots__ = ()
+    _struct_fields: ClassVar[tuple[str, ...]] = ()
 
     def is_real(self) -> bool:
         return self.sort_kind() == Z3SortKind.REAL
@@ -2721,7 +2739,7 @@ class Z3FuncDecl:
 
     def params(self) -> tuple[int, ...]:
         raw = self.to_z3.params()
-        return tuple(raw) if raw is not None else ()
+        return tuple(raw) if raw is not None else ()  # pyright: ignore[reportReturnType]
 
     def rebuild(self, args: Sequence[Any]) -> Z3Expr:
         """Reconstruct a DSL node from this decl and rewritten args."""
@@ -3007,9 +3025,9 @@ def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3PolyExpr:
     elif isinstance(f, Z3Expr) and not isinstance(t, Z3Expr):
         t = _coerce_like(f, t)
     if isinstance(c, Z3BoolConst):
-        return t if c.val else f  # type: ignore
+        return t if c.val else f  # type: ignore  # pyright: ignore[reportReturnType]
     if isinstance(t, Z3Expr) and t.eq(f):
-        return t  # type: ignore
+        return t  # type: ignore  # pyright: ignore[reportReturnType]
     return Z3OpIte(c, t, f)
 
 
@@ -3455,14 +3473,14 @@ def substitute(x: Any, *m: Any) -> z3.ExprRef:
     return z3.substitute(lower(x), *pairs)
 
 
-def ForAll(vs: Any, body: Any, **kwargs: Any) -> z3.QuantifierRef:
+def ForAll(vs: Any, body: Any, **kwargs: Any) -> Any:
     v_list = [lower(v) for v in (vs if isinstance(vs, (list, tuple)) else [vs])]
     if "patterns" in kwargs:
         kwargs["patterns"] = [lower(p) for p in kwargs["patterns"]]
     return z3.ForAll(v_list, lower(body), **kwargs)
 
 
-def Exists(vs: Any, body: Any, **kwargs: Any) -> z3.QuantifierRef:
+def Exists(vs: Any, body: Any, **kwargs: Any) -> Any:
     v_list = [lower(v) for v in (vs if isinstance(vs, (list, tuple)) else [vs])]
     if "patterns" in kwargs:
         kwargs["patterns"] = [lower(p) for p in kwargs["patterns"]]
@@ -3479,7 +3497,7 @@ def _seed_z3(node: Any, raw_z3: Any) -> Any:
 def view(expr: Any, depth: int = 2) -> Z3Node:
     """Lift a `z3.ExprRef` (or pass through a `Z3Expr`) into a typed `Z3Node` dataclass."""
     if isinstance(expr, Z3Expr):
-        return expr  # type: ignore[return-value]
+        return expr  # pyright: ignore[reportReturnType][return-value]
     if isinstance(expr, z3.BitVecNumRef):
         return _seed_z3(Z3BvConst(int(expr.as_long()), expr.size()), expr)
     if isinstance(expr, z3.RatNumRef):

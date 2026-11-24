@@ -19,10 +19,10 @@ from tools.symbolic_ssa.cfg_rewriter.tiles import (
 )
 
 __all__ = [
+    "TERMINATOR_FIELDS",
     "CfgRewriteContext",
     "CfgRewriter",
     "CfgTileRule",
-    "TERMINATOR_FIELDS",
     "TileMatch",
     "apply_cfg_tile_rules",
     "make_chain_contract_rule",

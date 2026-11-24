@@ -15,7 +15,8 @@ Provides:
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 from tools.symbolic_ssa.domains.base import SsaDomain
 
@@ -24,7 +25,7 @@ from tools.symbolic_ssa.domains.base import SsaDomain
 class TupleVal:
     """Product-domain value holding one component per wrapped `SsaDomain`."""
 
-    elems: Tuple[Any, ...]
+    elems: tuple[Any, ...]
 
     def __getitem__(self, idx: int) -> Any:
         return self.elems[idx]
@@ -44,9 +45,9 @@ class TupleDomain(SsaDomain):
     def __init__(self, *domains: SsaDomain):
         if not domains:
             raise ValueError("TupleDomain requires at least one wrapped SsaDomain")
-        self.domains: Tuple[SsaDomain, ...] = tuple(domains)
+        self.domains: tuple[SsaDomain, ...] = tuple(domains)
 
-    def _unpack(self, val: Any) -> Tuple[Any, ...]:
+    def _unpack(self, val: Any) -> tuple[Any, ...]:
         if isinstance(val, TupleVal) and len(val.elems) == len(self.domains):
             return val.elems
         return tuple(val for _ in self.domains)
@@ -78,7 +79,7 @@ class TupleDomain(SsaDomain):
     def const_u64(self, imm: int) -> TupleVal: return self._map0("const_u64", imm)
     def const_bool(self, val: bool) -> TupleVal: return self._map0("const_bool", val)
 
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         for d, xi in zip(self.domains, self._unpack(val)):
             c = d.const_int_val(xi)
             if c is not None:
@@ -100,12 +101,12 @@ class TupleDomain(SsaDomain):
 
     def pack64(self, lo: Any, hi: Any) -> TupleVal: return self._map2("pack64", lo, hi)
 
-    def split64(self, val64: Any) -> Tuple[TupleVal, TupleVal]:
+    def split64(self, val64: Any) -> tuple[TupleVal, TupleVal]:
         xs = self._unpack(val64)
         pairs = [d.split64(xi) for d, xi in zip(self.domains, xs)]
         return (TupleVal(tuple(p[0] for p in pairs)), TupleVal(tuple(p[1] for p in pairs)))
 
-    def unpack_half2x16(self, u: Any) -> Tuple[TupleVal, TupleVal]:
+    def unpack_half2x16(self, u: Any) -> tuple[TupleVal, TupleVal]:
         xs = self._unpack(u)
         pairs = [d.unpack_half2x16(xi) for d, xi in zip(self.domains, xs)]
         return (TupleVal(tuple(p[0] for p in pairs)), TupleVal(tuple(p[1] for p in pairs)))
@@ -174,7 +175,7 @@ class TupleDomain(SsaDomain):
         xs = self._unpack(x)
         return TupleVal(tuple(d.convert(op, xi) for d, xi in zip(self.domains, xs)))
 
-    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: Optional[str] = None) -> TupleVal:
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> TupleVal:
         unpacked = [self._unpack(a) for a in args]
         return TupleVal(tuple(
             d.hw_uf(env, name, *(u[i] for u in unpacked), out_bits=out_bits, fallback_tag=fallback_tag)
@@ -226,16 +227,16 @@ class PointwiseUnionDomain(SsaDomain):
     def __init__(
         self,
         members: Mapping[str, SsaDomain],
-        default_tag: Optional[str] = None,
-        cross_ops: Optional[Dict[Tuple[str, str, str], CrossDomainHandler]] = None,
+        default_tag: str | None = None,
+        cross_ops: dict[tuple[str, str, str], CrossDomainHandler] | None = None,
     ):
         if not members:
             raise ValueError("PointwiseUnionDomain requires at least one member domain")
-        self.members: Dict[str, SsaDomain] = dict(members)
+        self.members: dict[str, SsaDomain] = dict(members)
         self.default_tag: str = default_tag if default_tag is not None else next(iter(self.members))
         if self.default_tag not in self.members:
             raise KeyError(f"default_tag {self.default_tag!r} not in members")
-        self.cross_ops: Dict[Tuple[str, str, str], CrossDomainHandler] = dict(cross_ops or {})
+        self.cross_ops: dict[tuple[str, str, str], CrossDomainHandler] = dict(cross_ops or {})
 
     def register_cross_op(self, method: str, tag_a: str, tag_b: str, handler: CrossDomainHandler) -> None:
         self.cross_ops[(method, tag_a, tag_b)] = handler
@@ -291,7 +292,7 @@ class PointwiseUnionDomain(SsaDomain):
     def const_bool(self, val: bool) -> UnionVal:
         return UnionVal(self.default_tag, self.members[self.default_tag].const_bool(val))
 
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         u = self._as_union(val)
         if u.is_bottom or u.is_top:
             return None
@@ -326,7 +327,7 @@ class PointwiseUnionDomain(SsaDomain):
 
     def pack64(self, lo: Any, hi: Any) -> UnionVal: return self._binary("pack64", lo, hi)
 
-    def split64(self, val64: Any) -> Tuple[UnionVal, UnionVal]:
+    def split64(self, val64: Any) -> tuple[UnionVal, UnionVal]:
         ux = self._as_union(val64)
         if ux.is_bottom: return (UNION_BOTTOM, UNION_BOTTOM)
         if ux.is_top: return (UNION_TOP, UNION_TOP)
@@ -369,7 +370,7 @@ class MultiSetVal:
     `is_top=False` represents Bottom.
     """
 
-    items: Tuple[Tuple[Any, int], ...] = ()
+    items: tuple[tuple[Any, int], ...] = ()
     is_top: bool = False
 
     @property
@@ -380,7 +381,7 @@ class MultiSetVal:
     def is_singleton(self) -> bool:
         return (not self.is_top) and len(self.items) == 1
 
-    def elements(self) -> Tuple[Any, ...]:
+    def elements(self) -> tuple[Any, ...]:
         return tuple(e for e, _ in self.items)
 
     def multiplicity(self, elem: Any) -> int:
@@ -415,8 +416,8 @@ class MultiSetDomain(SsaDomain):
         self.max_k = max_k
         self.track_counts = track_counts
 
-    def _build(self, pairs: Sequence[Tuple[Any, int]]) -> MultiSetVal:
-        merged: list[Tuple[Any, int]] = []
+    def _build(self, pairs: Sequence[tuple[Any, int]]) -> MultiSetVal:
+        merged: list[tuple[Any, int]] = []
         for elem, cnt in pairs:
             if cnt <= 0:
                 continue
@@ -451,7 +452,7 @@ class MultiSetDomain(SsaDomain):
         if mb.is_bottom: return ma
         if ma.is_top or mb.is_top: return MULTISET_TOP
         if self.track_counts:
-            merged: list[Tuple[Any, int]] = list(ma.items)
+            merged: list[tuple[Any, int]] = list(ma.items)
             for eb, cb in mb.items:
                 found = False
                 for idx, (ea, ca) in enumerate(merged):
@@ -477,7 +478,7 @@ class MultiSetDomain(SsaDomain):
         if ma.is_top: return mb
         if mb.is_top: return ma
         if ma.is_bottom or mb.is_bottom: return MULTISET_BOTTOM
-        out: list[Tuple[Any, int]] = []
+        out: list[tuple[Any, int]] = []
         for ea, ca in ma.items:
             cb = mb.multiplicity(ea)
             if cb > 0:
@@ -497,7 +498,7 @@ class MultiSetDomain(SsaDomain):
     def const_u64(self, imm: int) -> MultiSetVal: return self.singleton(self.elem_domain.const_u64(imm))
     def const_bool(self, val: bool) -> MultiSetVal: return self.singleton(self.elem_domain.const_bool(val))
 
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         m = self._as_ms(val)
         if m.is_singleton:
             return self.elem_domain.const_int_val(m.items[0][0])
@@ -522,7 +523,7 @@ class MultiSetDomain(SsaDomain):
     def pack64(self, lo: Any, hi: Any) -> MultiSetVal:
         return self._lift_binary(self.elem_domain.pack64, lo, hi)
 
-    def split64(self, val64: Any) -> Tuple[MultiSetVal, MultiSetVal]:
+    def split64(self, val64: Any) -> tuple[MultiSetVal, MultiSetVal]:
         m = self._as_ms(val64)
         if m.is_bottom: return (MULTISET_BOTTOM, MULTISET_BOTTOM)
         if m.is_top: return (MULTISET_TOP, MULTISET_TOP)

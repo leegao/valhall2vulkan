@@ -11,7 +11,7 @@ rebound to root_tok so subsequent GVN can unify identical loads.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.passes.ir_utils import (
     AbstractSsaPass,
@@ -49,8 +49,8 @@ class BufferProvenanceInterpreter(AbstractSsaPass):
             return t_val
         return None
 
-    def eval_phi(self, node: Dict[str, Any]) -> Any:
-        keys: Set[str] = set()
+    def eval_phi(self, node: dict[str, Any]) -> Any:
+        keys: set[str] = set()
         for _, v in node.get("phi", []):
             vid = int(v)
             if vid == int(node["id"]):
@@ -62,7 +62,7 @@ class BufferProvenanceInterpreter(AbstractSsaPass):
         return next(iter(keys)) if len(keys) == 1 else None
 
 
-def _node_buf_key(node: Dict[str, Any], prov_env: Dict[int, Any]) -> Optional[str]:
+def _node_buf_key(node: dict[str, Any], prov_env: dict[int, Any]) -> str | None:
     astr = node.get("aux_str", "")
     if astr.startswith("sym:"):
         return astr[4:].split("[", 1)[0]
@@ -78,16 +78,16 @@ def _node_buf_key(node: Dict[str, Any], prov_env: Dict[int, Any]) -> Optional[st
 
 
 def pass_readonly_tokens(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
     stats: Stratum1Stats,
-) -> Tuple[bool, Set[int]]:
+) -> tuple[bool, set[int]]:
     """Detach Token chains from provably read-only PsbLoad and TexSample ops."""
     prov_env = BufferProvenanceInterpreter(blocks_by_id, nodes_by_id).run_rpo()
 
-    mutated_bkeys: Set[str] = set()
+    mutated_bkeys: set[str] = set()
     has_unknown_store = False
-    mutated_imgs: Set[str] = set()
+    mutated_imgs: set[str] = set()
 
     for n in nodes_by_id.values():
         op = n["op"]
@@ -118,7 +118,7 @@ def pass_readonly_tokens(
             }
             blocks_by_id[0]["nodes"].insert(0, root_tok)
 
-    readonly_load_ids: Set[int] = set()
+    readonly_load_ids: set[int] = set()
     for nid, n in nodes_by_id.items():
         op = n["op"]
         if op == "PsbLoad":
@@ -135,7 +135,7 @@ def pass_readonly_tokens(
     if not readonly_load_ids:
         return False, set()
 
-    tok_repl: Dict[int, int] = {}
+    tok_repl: dict[int, int] = {}
     for nid, n in nodes_by_id.items():
         if n["op"] == "TupleExtract" and int(n.get("imm_u32", 0)) == 1 and n.get("args"):
             src = int(n["args"][0])

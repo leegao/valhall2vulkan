@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Set, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.cfg_rewriter import pass_cleanup_phis
 from tools.symbolic_ssa.passes.ir_utils import Stratum1Stats, compute_rpo
@@ -11,26 +11,28 @@ from tools.symbolic_ssa.passes.pass_contract_chains import pass_contract_chains
 from tools.symbolic_ssa.passes.pass_gvn_dce import pass_gvn_dce
 from tools.symbolic_ssa.passes.pass_if_convert import pass_if_convert
 from tools.symbolic_ssa.passes.pass_predicated_kill import pass_predicated_kill
-from tools.symbolic_ssa.passes.pass_prune_const_branches import pass_prune_const_branches
+from tools.symbolic_ssa.passes.pass_prune_const_branches import (
+    pass_prune_const_branches,
+)
 from tools.symbolic_ssa.passes.pass_readonly_tokens import pass_readonly_tokens
 
 
 def canonicalize_ssa_module(
-    ssa_json: Dict[str, Any],
+    ssa_json: dict[str, Any],
     max_rounds: int = 8,
     max_arm_nodes: int = 128,
-) -> Tuple[Dict[str, Any], Stratum1Stats]:
+) -> tuple[dict[str, Any], Stratum1Stats]:
     """Run all Stratum 1 canonicalization passes (including generic dead/trivial Phi cleanup) to fixed point."""
     mod = copy.deepcopy(ssa_json)
-    blocks_by_id: Dict[int, Dict[str, Any]] = {int(b["id"]): b for b in mod.get("blocks", [])}
-    nodes_by_id: Dict[int, Dict[str, Any]] = {int(n["id"]): n for n in mod.get("nodes", [])}
+    blocks_by_id: dict[int, dict[str, Any]] = {int(b["id"]): b for b in mod.get("blocks", [])}
+    nodes_by_id: dict[int, dict[str, Any]] = {int(n["id"]): n for n in mod.get("nodes", [])}
 
     stats = Stratum1Stats(
         orig_blocks=len(blocks_by_id),
         orig_nodes=len(nodes_by_id),
     )
 
-    readonly_load_ids: Set[int] = set()
+    readonly_load_ids: set[int] = set()
     for rnd in range(1, max_rounds + 1):
         stats.rounds = rnd
         c1 = pass_prune_const_branches(blocks_by_id, nodes_by_id, stats)

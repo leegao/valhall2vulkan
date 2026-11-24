@@ -8,7 +8,7 @@ Merges sequential single-edge blocks `A -> B` whenever `outdeg(A) == 1`,
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from tools.symbolic_ssa.cfg_rewriter import (
     apply_cfg_tile_rules,
@@ -18,8 +18,8 @@ from tools.symbolic_ssa.passes.ir_utils import Stratum1Stats
 
 
 def pass_contract_chains(
-    blocks_by_id: Dict[int, Dict[str, Any]],
-    nodes_by_id: Dict[int, Dict[str, Any]],
+    blocks_by_id: dict[int, dict[str, Any]],
+    nodes_by_id: dict[int, dict[str, Any]],
     stats: Stratum1Stats,
 ) -> bool:
     """Contract trivial unconditional `A -> B` block chains to fixed point."""

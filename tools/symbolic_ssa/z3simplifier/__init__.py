@@ -14,7 +14,8 @@ Public API:
 
 from __future__ import annotations
 
-from typing import Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Optional, Tuple
 
 import z3
 
@@ -79,7 +80,7 @@ from tools.symbolic_ssa.z3simplifier.solver import (
 )
 
 
-def _merged_local_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+def _merged_local_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     """Single-pass fused local peephole rule (BV wrapper + BV algebraic + Bridge + Real algebraic)."""
     r = _bv_wrapper_rule(node)
     if r is not None:
@@ -103,7 +104,7 @@ class MergedLocalPeepholePass(Z3TermPass):
         self,
         expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[dsl.ExprRef, int]:
+    ) -> tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _merged_local_rule)
 
 
@@ -169,10 +170,10 @@ def simplify_query(
     lhs: z3.ExprRef,
     rhs: z3.ExprRef,
     *,
-    guard: Optional[z3.BoolRef] = None,
+    guard: z3.BoolRef | None = None,
     preconditions: Sequence[z3.BoolRef] = (),
-    pipeline: Optional[PassPipeline] = None,
-    ctx: Optional[SimplificationContext] = None,
+    pipeline: PassPipeline | None = None,
+    ctx: SimplificationContext | None = None,
 ) -> SimplifyResult:
     """Convenience entry point to simplify a single `(lhs, rhs)` miter query."""
     q = SimplifyQuery(

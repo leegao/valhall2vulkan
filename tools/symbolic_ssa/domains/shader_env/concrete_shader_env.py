@@ -8,13 +8,13 @@ with `SymbolicShaderEnv`, with zero Z3 dependency.
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from tools.symbolic_ssa.domains.shader_env.base import (
+    _CORNER_U32S,
     MASK32,
     MASK64,
     ShaderEnvBase,
-    _CORNER_U32S,
     _det_hash_u32,
     _f32_to_u32,
 )
@@ -25,15 +25,15 @@ class ConcreteShaderEnv(ShaderEnvBase):
 
     def __init__(
         self,
-        bundle: Dict[str, Any],
+        bundle: dict[str, Any],
         vec_idx: int,
         seed: int = 0x5A17,
-        overrides: Optional[Dict[str, Any]] = None,
+        overrides: dict[str, Any] | None = None,
     ):
         self._init_abi_layout(bundle)
         self.vec_idx = vec_idx
         self.seed = seed
-        self.overrides: Dict[str, Any] = overrides if overrides is not None else {}
+        self.overrides: dict[str, Any] = overrides if overrides is not None else {}
         self.lane_id = int(self.overrides.get("lane_id", vec_idx & 31)) & 31
 
     def sample_u32(self, name: str) -> int:
@@ -71,7 +71,7 @@ class ConcreteShaderEnv(ShaderEnvBase):
             return int(self.overrides[dkey]) & MASK32
         return self.sample_u32(key)
 
-    def read_init_img(self, ikey: str, xy64: int) -> Tuple[int, int, int, int]:
+    def read_init_img(self, ikey: str, xy64: int) -> tuple[int, int, int, int]:
         xy = int(xy64) & MASK64
         out = []
         for c in range(4):
@@ -106,7 +106,7 @@ class ConcreteShaderEnv(ShaderEnvBase):
         tag = fallback_tag or uf_name
         return _det_hash_u32(tag, self.seed, self.vec_idx, *(int(a) & MASK32 for a in args))
 
-    def resolve_addr(self, addr64: int, hint_key: str = "") -> Tuple[Optional[str], int]:
+    def resolve_addr(self, addr64: int, hint_key: str = "") -> tuple[str | None, int]:
         region = (addr64 >> 32) << 32
         off = addr64 & MASK32
         if region in self.base_to_buf:
@@ -148,7 +148,7 @@ class ConcreteShaderEnv(ShaderEnvBase):
             return (self.sample_u32(f"bi_{bi}") & 1) != 0
         return self.sample_u32(f"bi_{bi}")
 
-    def get_input_vec4(self, kind: str, loc: int) -> Tuple[int, ...]:
+    def get_input_vec4(self, kind: str, loc: int) -> tuple[int, ...]:
         return tuple(self.sample_u32(f"{kind}_loc{loc}_{c}") for c in range(4))
 
     def _sample_fau_word(self, word_idx: int) -> int:

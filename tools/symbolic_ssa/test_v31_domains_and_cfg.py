@@ -20,10 +20,8 @@ import time
 import unittest
 
 import z3
-from tools.symbolic_ssa.z3utils import dsl
 
 from tools.symbolic_ssa.cfg_rewriter import (
-    CfgRewriter,
     apply_cfg_tile_rules,
     make_chain_contract_rule,
     make_degenerate_branch_rule,
@@ -58,6 +56,7 @@ from tools.symbolic_ssa.passes.pass_prune_const_branches import (
     ConstVal,
 )
 from tools.symbolic_ssa.passes.pass_readonly_tokens import BufferProvenanceInterpreter
+from tools.symbolic_ssa.z3utils import dsl
 from tools.verify.ssa_z3_eval import InstructionSsaZ3Interpreter
 
 
@@ -432,8 +431,8 @@ class TestUDomainIntegration(unittest.TestCase):
         self.assertEqual(r.status, "UNSAT")
 
     def test_z3_symbolic_domain_interface_and_coverage_synth_wiring(self):
-        from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
         from tools.coverage.synthesizer import synthesize_coverage_vectors
+        from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
         for mode in ("bitvec", "udomain", "udomain_exact"):
             dom = make_z3_symbolic_domain(mode, fp_mode="exact")
             self.assertIsInstance(dom, Z3SymbolicDomain)

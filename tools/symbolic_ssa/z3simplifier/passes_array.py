@@ -29,9 +29,6 @@ Addresses Issue 2 (Mixed-theory `QF_AUFBVNRA` blocking Z3's `nlsat` engine):
 from __future__ import annotations
 
 import time
-from typing import Dict, List, Optional, Set, Tuple
-
-import tools.symbolic_ssa.z3utils.dsl as dsl
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -40,9 +37,10 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplifyQuery,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
+from tools.symbolic_ssa.z3utils import dsl
 
 
-def _is_concrete_index(idx: dsl.ExprRef) -> Optional[str]:
+def _is_concrete_index(idx: dsl.ExprRef) -> str | None:
     if dsl.is_bv_value(idx):
         return f"bv{idx.size()}_{idx.as_long():x}"
     if dsl.is_int_value(idx):
@@ -58,15 +56,15 @@ def _is_uninterpreted_array_const(expr: dsl.ExprRef) -> bool:
     )
 
 
-def _find_scalarizable_arrays(roots: List[dsl.ExprRef]) -> Set[int]:
+def _find_scalarizable_arrays(roots: list[dsl.ExprRef]) -> set[int]:
     """
     Return the set of Z3 AST IDs of uninterpreted Array constants that are
     purely read-only with strictly concrete indices across all `roots`.
     """
-    seen_arrays: Set[int] = set()
-    disqualified: Set[int] = set()
-    visited: Set[int] = set()
-    stack: List[dsl.ExprRef] = [r for r in roots if r is not None]
+    seen_arrays: set[int] = set()
+    disqualified: set[int] = set()
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = [r for r in roots if r is not None]
 
     while stack:
         cur = stack.pop()
@@ -115,12 +113,12 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
 
-        roots: List[dsl.ExprRef] = [query.lhs, query.rhs]
+        roots: list[dsl.ExprRef] = [query.lhs, query.rhs]
         if query.guard is not None:
             roots.append(query.guard)
         roots.extend(query.preconditions)
@@ -129,7 +127,7 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
         if not scalarizable:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
-        def _rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+        def _rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
             if dsl.is_app(node) and node.decl().kind() == dsl.Z3OpKind.SELECT and node.num_args() == 2:
                 arr, idx = node.arg(0), node.arg(1)
                 if arr.get_id() in scalarizable:
@@ -143,7 +141,7 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
                         )
             return None
 
-        memo: Dict[int, dsl.ExprRef] = {}
+        memo: dict[int, dsl.ExprRef] = {}
         new_lhs, r1 = rewrite_dag(query.lhs, _rule, memo=memo)
         new_rhs, r2 = rewrite_dag(query.rhs, _rule, memo=memo)
         total_rw = r1 + r2
@@ -153,7 +151,7 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
             new_guard, rg = rewrite_dag(query.guard, _rule, memo=memo)
             total_rw += rg
 
-        new_pres: List[dsl.BoolRef] = []
+        new_pres: list[dsl.BoolRef] = []
         for pre in query.preconditions:
             np, rp = rewrite_dag(pre, _rule, memo=memo)
             new_pres.append(np)
@@ -175,7 +173,7 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
         return out_q, PassStats(self.name, changed, total_rw, dt, f"arrays={len(scalarizable)}")
 
 
-_PURE_REAL_ARITH_KINDS: Set[int] = {
+_PURE_REAL_ARITH_KINDS: set[int] = {
     dsl.Z3OpKind.ADD,
     dsl.Z3OpKind.SUB,
     dsl.Z3OpKind.UMINUS,
@@ -200,10 +198,10 @@ _PURE_REAL_ARITH_KINDS: Set[int] = {
 }
 
 
-def _contains_real_sort(roots: List[dsl.ExprRef], limit: int = 50000) -> bool:
+def _contains_real_sort(roots: list[dsl.ExprRef], limit: int = 50000) -> bool:
     """Return True if any reachable subterm in `roots` has `Real` sort."""
-    visited: Set[int] = set()
-    stack: List[dsl.ExprRef] = [r for r in roots if r is not None]
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = [r for r in roots if r is not None]
     while stack and len(visited) < limit:
         cur = stack.pop()
         cid = cur.get_id()
@@ -222,8 +220,8 @@ def _contains_real_sort(roots: List[dsl.ExprRef], limit: int = 50000) -> bool:
 
 def _is_pure_qfnra_expr(expr: dsl.ExprRef) -> bool:
     """Return True if every node in `expr` belongs strictly to `QF_NRA`."""
-    visited: Set[int] = set()
-    stack: List[dsl.ExprRef] = [expr]
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = [expr]
     while stack:
         cur = stack.pop()
         cid = cur.get_id()
@@ -267,7 +265,7 @@ class TheoryPurifyRealPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -282,8 +280,8 @@ class TheoryPurifyRealPass(Z3QueryPass):
         elif l_sk != dsl.Z3SortKind.REAL:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
-        abs_pairs: List[Tuple[dsl.ExprRef, dsl.ExprRef]] = []
-        foreign_map: Dict[int, dsl.ExprRef] = {}
+        abs_pairs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        foreign_map: dict[int, dsl.ExprRef] = {}
 
         def _abstract_node(node: dsl.ExprRef, prefix: str, sort: dsl.SortRef) -> dsl.ExprRef:
             nid = node.get_id()
@@ -295,7 +293,7 @@ class TheoryPurifyRealPass(Z3QueryPass):
             abs_pairs.append((fv, node))
             return fv
 
-        def _purify_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+        def _purify_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
             if not dsl.is_app(node) or dsl.is_const(node):
                 return None
             sk = node.sort().kind()
@@ -316,7 +314,7 @@ class TheoryPurifyRealPass(Z3QueryPass):
                 return None
             return None
 
-        memo: Dict[int, dsl.ExprRef] = {}
+        memo: dict[int, dsl.ExprRef] = {}
         new_lhs, r1 = rewrite_dag(query.lhs, _purify_rule, memo=memo)
         new_rhs, r2 = rewrite_dag(query.rhs, _purify_rule, memo=memo)
         total_rw = r1 + r2
@@ -326,7 +324,7 @@ class TheoryPurifyRealPass(Z3QueryPass):
             new_guard, rg = rewrite_dag(query.guard, _purify_rule, memo=memo)
             total_rw += rg
 
-        pure_pres: List[dsl.BoolRef] = []
+        pure_pres: list[dsl.BoolRef] = []
         dropped_pres = 0
         for pre in query.preconditions:
             np, _ = rewrite_dag(pre, _purify_rule, memo=memo)
