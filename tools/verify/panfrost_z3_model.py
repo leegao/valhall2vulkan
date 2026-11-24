@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Frozen Panfrost Reference Semantics in Z3 (Psi_pan)
 ===================================================

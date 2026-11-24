@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Shared CFG/SSA graph utilities, Stratum 1 stats, and AbstractSsaPass base."""
 
 from __future__ import annotations

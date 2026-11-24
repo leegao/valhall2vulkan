@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Bottom-Up DP CFG Tile-Rewrite Engine & Standard Tile Library.
 

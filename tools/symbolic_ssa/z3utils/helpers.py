@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Z3 / DSL Expression Helpers for Valhall Symbolic SSA.
 

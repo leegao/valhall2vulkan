@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Concolic Counterexample Auto-Shrinker, FP/ULP Triage Oracle & Frontier Localizer.
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Cross-Side Common-Subexpression Unification & Conditioned Unification Passes.
 

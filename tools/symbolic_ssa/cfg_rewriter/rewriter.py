@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Reusable CFG Rewriting & Phi-Maintenance Engine (`CfgRewriter`).
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Concrete Shader Execution Environment (`ConcreteShaderEnv`).
 

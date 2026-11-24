@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Valhall Pass 1 Lowering DSL Compiler & C++17 Code Generator
 ============================================================

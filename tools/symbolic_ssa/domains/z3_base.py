@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Composable Z3 Symbolic Domain Interface (`Z3SymbolicDomain`).
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Composable Domain Combinators for `SsaDomain` (inspired by `src/dataflow/domains/`).
 

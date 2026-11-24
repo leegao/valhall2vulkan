@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pass 1.3: Pure Acyclic Selection If-Conversion via `cfg_rewriter` Tile Engine.
 

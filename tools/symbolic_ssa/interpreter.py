@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Abstract Denotational SSA Interpreter (`SsaInterpreter`) & Reusable Graph/Dataflow Engines.
 

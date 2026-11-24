@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Maximal Reachability & Disjoint Path Partition Solver for ValhallSsaModule.
 

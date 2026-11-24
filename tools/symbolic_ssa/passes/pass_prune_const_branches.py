@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pass 1.1: Reachability & Constant/Degenerate Branch Pruning.
 

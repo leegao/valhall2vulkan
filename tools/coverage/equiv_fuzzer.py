@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Concolic Equivalence Fuzzer for Direct SPIR-V SSA vs. Lowered Valhall SSA.
 

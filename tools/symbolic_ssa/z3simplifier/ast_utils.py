@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pure Z3 AST utilities: iterative DAG traversal, memoized bottom-up rewriting,
 operator/theory census, and human-readable pretty-printing (`format_z3_ast`).

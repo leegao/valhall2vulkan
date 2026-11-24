@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Backward-compatible re-export shim for `tools.symbolic_ssa.cfg_rewriter`."""
 
 from tools.symbolic_ssa.cfg_rewriter import (

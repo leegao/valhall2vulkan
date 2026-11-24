@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 `tools.symbolic_ssa.z3simplifier` — General Z3 Term & Predicate Simplification Framework.
 

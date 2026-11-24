@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Declarative SPIR-V & Valhall Idiom Catalog for Greedy Corpus Synthesis.
 

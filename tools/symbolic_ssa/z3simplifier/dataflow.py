@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Z3-domain dataflow analysis and extensional-equality propagation engine,
 operating directly on `dsl` terms via Python `match`/`case`.

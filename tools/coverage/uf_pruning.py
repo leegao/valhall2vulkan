@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Unique-Call Uninterpreted Function (UF) Pruning & AST Size Helpers.
 

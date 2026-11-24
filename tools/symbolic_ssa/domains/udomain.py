@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Unified Lattice-Typed Value Domains (`ConcreteUDomain` and `SymbolicZ3UDomain`).
 

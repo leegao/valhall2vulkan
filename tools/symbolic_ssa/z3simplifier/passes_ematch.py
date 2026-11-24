@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Z3 E-Matching Extensional Axiom & Unification Pass (`EmatchingUnifyPass`).
 

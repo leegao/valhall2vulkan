@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pass 1.4: Trivial CFG Chain Contraction.
 

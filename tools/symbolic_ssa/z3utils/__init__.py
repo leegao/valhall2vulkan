@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Drop-in Z3 replacement facade (`tools.symbolic_ssa.z3utils`).
 

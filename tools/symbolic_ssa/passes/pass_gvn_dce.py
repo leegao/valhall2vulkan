@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pass 1.6: Algebraic Normalization, Dominator-Scoped GVN, and DCE.
 

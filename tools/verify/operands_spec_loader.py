@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Loader for specs/lowering/valhall_lowering.json (operands + inline_ops host_functions) -> CppFunctionDef ASTs
 ==============================================================================================================

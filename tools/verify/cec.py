@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Combinational Equivalence Checking (CEC) via Simulation-Guided Cutpoint Sweeping.
 

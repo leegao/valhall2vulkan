@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Array scalarization and theory purification passes for `z3simplifier`.
 

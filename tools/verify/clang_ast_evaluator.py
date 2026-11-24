@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Clang AST JSON Loader & Symbolic Evaluator for Valhall Host Handlers
 ====================================================================

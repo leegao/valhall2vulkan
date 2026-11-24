@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Abstract Base Value Domain (`SsaDomain`) for ValhallSsaModule Interpretation.
 

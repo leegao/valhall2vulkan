@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Simplification-aware SMT miter solver driver (`solve_simplified_miter`).
 

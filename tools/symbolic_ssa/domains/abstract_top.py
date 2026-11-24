@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Lattice-Top abstract domain (`AbstractTopDomain`)."""
 
 from __future__ import annotations

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Pure-Python SPIR-V 1.3 Compute Shader Binary Builder.
 

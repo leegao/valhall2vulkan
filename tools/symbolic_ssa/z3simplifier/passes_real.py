@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Real-arithmetic, UF-bridge, and polynomial canonicalization passes.
 

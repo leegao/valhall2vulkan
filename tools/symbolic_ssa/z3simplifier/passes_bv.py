@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 BitVector and Boolean local peephole passes written in the `dsl.dsl`
 `match`/`case` pattern-matching DSL.

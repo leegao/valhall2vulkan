@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Core data structures for the Z3 term and predicate simplification framework.
 

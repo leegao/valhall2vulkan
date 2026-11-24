@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter`).
 

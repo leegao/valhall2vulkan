@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Bit-Exact Concrete SSA Interpreter (`ConcreteSsaInterpreter`).
 

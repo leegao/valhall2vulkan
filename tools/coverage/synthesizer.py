@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Coverage-Guided Concolic Input Synthesizer for ValhallSsaModule.
 

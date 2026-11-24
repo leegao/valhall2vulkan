@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Shader Environment Package (`tools.symbolic_ssa.domains.shader_env`).
 

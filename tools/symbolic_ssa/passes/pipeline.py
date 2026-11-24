@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Stratum 1 fixed-point canonicalization pipeline orchestrating all passes."""
 
 from __future__ import annotations

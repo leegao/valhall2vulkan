@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """v3 Enrichments for valhall-isa-reference.tex:
 1. Per-entry descriptions & color-coded worked examples for all 128 *_m enums (596 values).
 2. Uncommon instruction field explanations with worked example, SPIR-V op, and GLSL snippet.

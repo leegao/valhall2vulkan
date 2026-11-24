@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Bit-exact Python concrete value domain (`ConcreteBitvecDomain`)."""
 
 from __future__ import annotations

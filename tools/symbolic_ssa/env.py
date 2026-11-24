@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Backwards-compatibility re-export shim for `tools.symbolic_ssa.env`.
 

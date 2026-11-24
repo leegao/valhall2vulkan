@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Abstract pass interfaces and composable pipeline combinators for `z3simplifier`.
 

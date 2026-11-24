@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Direct Z3 Symbolic Evaluator for `SymbolicSsaModule` (Instruction-Level Lowering).
 

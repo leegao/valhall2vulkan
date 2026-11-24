@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Abstract ABI / MBS2 / FAU / VA-region Shader Environment Base (`ShaderEnvBase`)
 and pure IEEE-754 / scalar helper utilities (zero Z3 dependency).
