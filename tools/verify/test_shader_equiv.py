@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 from tools.verify.shader_equiv_verifier import (
     verify_equivalence_bundle,
 )

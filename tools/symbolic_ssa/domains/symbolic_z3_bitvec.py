@@ -9,10 +9,10 @@ from typing import Any, Optional, Tuple
 
 import z3
 
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
-from tools.symbolic_ssa.z3.helpers import (
+from tools.symbolic_ssa.z3utils.helpers import (
     _dsl_bv32,
     _dsl_bv64,
     _dsl_hw_uf,

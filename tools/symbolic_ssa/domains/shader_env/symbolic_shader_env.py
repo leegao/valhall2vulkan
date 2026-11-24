@@ -12,11 +12,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 from tools.symbolic_ssa.domains.shader_env.base import MASK32, MASK64, ShaderEnvBase
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain, make_z3_symbolic_domain
-from tools.symbolic_ssa.z3 import dsl
-from tools.symbolic_ssa.z3.helpers import (
+from tools.symbolic_ssa.z3utils import dsl
+from tools.symbolic_ssa.z3utils.helpers import (
     BV32,
     BV64,
     Z3Val,

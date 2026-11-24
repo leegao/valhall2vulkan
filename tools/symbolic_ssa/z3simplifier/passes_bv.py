@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import SimplificationContext
-from tools.symbolic_ssa.z3.dsl import (
+from tools.symbolic_ssa.z3utils.dsl import (
     BvCmpOp,
     Z3BoolConst,
     Z3BvConst,

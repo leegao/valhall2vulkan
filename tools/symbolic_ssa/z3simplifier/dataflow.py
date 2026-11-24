@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rebuild_app
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -33,7 +33,7 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplificationContext,
     SimplifyQuery,
 )
-from tools.symbolic_ssa.z3.dsl import (
+from tools.symbolic_ssa.z3utils.dsl import (
     Z3BoolConst,
     Z3BvConst,
     Z3Node,

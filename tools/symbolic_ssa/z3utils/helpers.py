@@ -15,9 +15,9 @@ import math
 import struct
 from typing import Any, Dict, Optional, Tuple, Union
 
-from tools.symbolic_ssa.z3._raw_z3 import raw_z3 as _raw_z3
+import z3
 
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 from tools.verify.panfrost_z3_model import (
     BV8,
     BV16,
@@ -36,10 +36,10 @@ MASK64 = 0xFFFFFFFFFFFFFFFF
 
 Z3Val = Union[Any, Tuple[Any, ...]]
 
-REAL_SORT = _raw_z3.RealSort()
-BOOL_SORT = _raw_z3.BoolSort()
-RNE = _raw_z3.RNE()
-RTZ = _raw_z3.RTZ()
+REAL_SORT = z3.RealSort()
+BOOL_SORT = z3.BoolSort()
+RNE = z3.RNE()
+RTZ = z3.RTZ()
 
 _REAL_ZERO = dsl.RealVal(0)
 _REAL_ONE = dsl.RealVal(1)
@@ -48,10 +48,10 @@ _REAL_HALF = dsl.Q(1, 2)
 _REAL_NEG_HALF = dsl.Q(-1, 2)
 _REAL_NEG_ONE = dsl.RealVal(-1)
 
-_DSL_HW_UF_CACHE: Dict[Tuple[str, Tuple[_raw_z3.SortRef, ...]], dsl.Z3FuncDecl] = {}
+_DSL_HW_UF_CACHE: Dict[Tuple[str, Tuple[z3.SortRef, ...]], dsl.Z3FuncDecl] = {}
 
 
-def _dsl_hw_uf(name: str, *sorts: _raw_z3.SortRef) -> dsl.Z3FuncDecl:
+def _dsl_hw_uf(name: str, *sorts: z3.SortRef) -> dsl.Z3FuncDecl:
     """Return a cached lazy `Z3FuncDecl` named `hw_<name>` (matching `panfrost_z3_model._hw_uf`)."""
     key = (name, sorts)
     fn = _DSL_HW_UF_CACHE.get(key)
@@ -87,8 +87,8 @@ def _is_real2bv(x: Any) -> bool:
     if isinstance(x, dsl.Z3OpUFApp) and x.func.fn_name == "hw_real2bv" and len(x.args) == 1:
         return True
     return (
-        isinstance(x, _raw_z3.ExprRef)
-        and _raw_z3.is_app(x)
+        isinstance(x, z3.ExprRef)
+        and z3.is_app(x)
         and x.decl() == _hw_uf("real2bv", REAL_SORT, BV32)
         and len(x.children()) == 1
     )
@@ -101,9 +101,9 @@ def _bv32_to_real(x: Any) -> Any:
     if isinstance(x, dsl.Z3OpIte):
         return dsl.If(x.cond, _bv32_to_real(x.then_expr), _bv32_to_real(x.else_expr))
     if (
-        isinstance(x, _raw_z3.ExprRef)
-        and _raw_z3.is_app(x)
-        and x.decl().kind() == _raw_z3.Z3_OP_ITE
+        isinstance(x, z3.ExprRef)
+        and z3.is_app(x)
+        and x.decl().kind() == z3.Z3_OP_ITE
         and len(x.children()) == 3
     ):
         c, t, e = x.children()
@@ -165,7 +165,7 @@ def _real_cos(rx: Any) -> Any:
 def _as_bv32(v: Z3Val) -> Any:
     if isinstance(v, tuple):
         return _as_bv32(v[0]) if v else _dsl_bv32(0)
-    if isinstance(v, _raw_z3.ExprRef):
+    if isinstance(v, z3.ExprRef):
         v = dsl.lift(v, depth=1)
     if dsl.is_bool(v):
         return dsl.If(v, _dsl_bv32(1), _dsl_bv32(0))
@@ -182,7 +182,7 @@ def _as_bv32(v: Z3Val) -> Any:
 def _as_bv64(v: Z3Val) -> Any:
     if isinstance(v, tuple):
         return _as_bv64(v[0]) if v else _dsl_bv64(0)
-    if isinstance(v, _raw_z3.ExprRef):
+    if isinstance(v, z3.ExprRef):
         v = dsl.lift(v, depth=1)
     if dsl.is_bv(v):
         if v.size() == 64:
@@ -196,7 +196,7 @@ def _as_bv64(v: Z3Val) -> Any:
 def _as_bool(v: Z3Val) -> Any:
     if isinstance(v, tuple):
         return _as_bool(v[0]) if v else dsl.BoolVal(False)
-    if isinstance(v, _raw_z3.ExprRef):
+    if isinstance(v, z3.ExprRef):
         v = dsl.lift(v, depth=1)
     if dsl.is_bool(v):
         return v
@@ -246,10 +246,10 @@ def _z3_if(cond: Any, t_val: Z3Val, f_val: Z3Val) -> Z3Val:
         return f_val
     if isinstance(t_val, tuple) and isinstance(f_val, tuple) and len(t_val) == len(f_val):
         return tuple(_z3_if(cond, a, b) for a, b in zip(t_val, f_val))
-    if isinstance(t_val, (dsl.Z3Expr, _raw_z3.ExprRef)) and isinstance(f_val, (dsl.Z3Expr, _raw_z3.ExprRef)):
-        if isinstance(t_val, _raw_z3.ExprRef):
+    if isinstance(t_val, (dsl.Z3Expr, z3.ExprRef)) and isinstance(f_val, (dsl.Z3Expr, z3.ExprRef)):
+        if isinstance(t_val, z3.ExprRef):
             t_val = dsl.lift(t_val, depth=1)
-        if isinstance(f_val, _raw_z3.ExprRef):
+        if isinstance(f_val, z3.ExprRef):
             f_val = dsl.lift(f_val, depth=1)
         if t_val.eq(f_val):
             return t_val
@@ -270,7 +270,7 @@ def _try_const_u64(e: Any) -> Optional[int]:
     if dsl.is_bv_value(e):
         return dsl.as_long(e)
     if dsl.is_bv(e):
-        s = _raw_z3.simplify(dsl.lower(e))
-        if isinstance(s, _raw_z3.BitVecNumRef):
+        s = z3.simplify(dsl.lower(e))
+        if isinstance(s, z3.BitVecNumRef):
             return s.as_long()
     return None

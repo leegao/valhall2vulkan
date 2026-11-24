@@ -1465,7 +1465,7 @@ from dataclasses import dataclass, field, fields
 from enum import Enum, IntEnum
 from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
-from tools.symbolic_ssa.z3._raw_z3 import raw_z3 as z3
+import z3
 
 
 class Z3OpKind(IntEnum):

@@ -29,7 +29,7 @@ import struct
 import time
 from typing import Dict, List, Optional, Tuple
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (

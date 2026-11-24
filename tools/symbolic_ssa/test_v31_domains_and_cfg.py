@@ -20,7 +20,7 @@ import time
 import unittest
 
 import z3
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 
 from tools.symbolic_ssa.cfg_rewriter import (
     CfgRewriter,

@@ -13,9 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 
 
 @dataclass(frozen=True)

@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
 """
-Drop-in Z3 replacement facade (`tools.symbolic_ssa.z3`).
+Drop-in Z3 replacement facade (`tools.symbolic_ssa.z3utils`).
 
 Exposes the full Z3 Python API while constructing lazy, pattern-matchable
 `dsl.Z3Expr` dataclasses by default and transparently lowering `dsl.Z3Expr`
 (and re-lifting where appropriate) across Z3 C-API boundaries (`simplify`,
 `substitute`, `ForAll`, `Exists`, `Solver`, `Optimize`, `Goal`, `ModelRef`).
 
-Callers can switch from `import z3` to `from tools.symbolic_ssa import z3`
-(or `import tools.symbolic_ssa.z3 as z3`) without rewriting call sites.
+Callers can switch from `import z3` to `from tools.symbolic_ssa import z3utils as z3`
+(or `import tools.symbolic_ssa.z3utils as z3`) without rewriting call sites.
 """
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence, Tuple, Union
+from collections.abc import Iterable, Sequence
+from typing import Any, Tuple, Union
 
-from tools.symbolic_ssa.z3._raw_z3 import raw_z3 as _raw_z3
+import z3
 
-from tools.symbolic_ssa.z3 import dsl
-from tools.symbolic_ssa.z3.dsl import (  # noqa: F401
+from tools.symbolic_ssa.z3utils import dsl
+from tools.symbolic_ssa.z3utils.dsl import (  # noqa: F401
+    FP,
+    UGE,
+    UGT,
+    ULE,
+    ULT,
     And,
     ArithCmpOp,
     Array,
     BitVec,
-    BitVecVal,
     BitVecs,
+    BitVecVal,
     Bool,
-    BoolVal,
     Bools,
+    BoolVal,
     BridgeOp,
     BvCmpOp,
     Concat,
@@ -35,33 +41,28 @@ from tools.symbolic_ssa.z3.dsl import (  # noqa: F401
     Consts,
     Distinct,
     Extract,
-    FP,
     FPVal,
     Function,
     If,
     Implies,
     Int,
     Int2BV,
-    IntVal,
     Ints,
+    IntVal,
     K,
     LShR,
     Not,
     Or,
     Q,
     Real,
-    RealVal,
     Reals,
+    RealVal,
     Select,
     SignExt,
     Store,
     ToInt,
     ToReal,
     UDiv,
-    UGE,
-    UGT,
-    ULE,
-    ULT,
     URem,
     Xor,
     Z3ArithExpr,
@@ -87,9 +88,9 @@ from tools.symbolic_ssa.z3.dsl import (  # noqa: F401
     Z3OpArithCmp,
     Z3OpBridge,
     Z3OpBv2Int,
-    Z3OpBvAShr,
     Z3OpBvAdd,
     Z3OpBvAnd,
+    Z3OpBvAShr,
     Z3OpBvCmp,
     Z3OpBvLShr,
     Z3OpBvMul,
@@ -97,9 +98,9 @@ from tools.symbolic_ssa.z3.dsl import (  # noqa: F401
     Z3OpBvNot,
     Z3OpBvOr,
     Z3OpBvSDiv,
+    Z3OpBvShl,
     Z3OpBvSMod,
     Z3OpBvSRem,
-    Z3OpBvShl,
     Z3OpBvSub,
     Z3OpBvUDiv,
     Z3OpBvURem,
@@ -171,13 +172,13 @@ def _lower_arg(x: Any) -> Any:
     return x
 
 
-def _lower_args(args: Iterable[Any]) -> Tuple[Any, ...]:
+def _lower_args(args: Iterable[Any]) -> tuple[Any, ...]:
     return tuple(_lower_arg(a) for a in args)
 
 
 def simplify(expr: Any, *args: Any, relift: bool = False, **kwargs: Any) -> Any:
     """Run `z3.simplify` on `expr` (lowering `dsl.Z3Expr` first); optionally re-lift to `dsl.Z3Expr`."""
-    res = _raw_z3.simplify(lower(expr), *args, **kwargs)
+    res = z3.simplify(lower(expr), *args, **kwargs)
     if relift and isinstance(expr, Z3Expr):
         return lift(res, depth=2)
     return res
@@ -188,92 +189,92 @@ def substitute(expr: Any, *m: Any) -> Any:
     was_dsl = isinstance(expr, Z3Expr)
     if len(m) == 1 and isinstance(m[0], (list, tuple)) and m[0] and isinstance(m[0][0], tuple):
         pairs = [(lower(a), lower(b)) for a, b in m[0]]
-        res = _raw_z3.substitute(lower(expr), pairs)
+        res = z3.substitute(lower(expr), pairs)
     else:
         pairs = [(lower(a), lower(b)) for a, b in m]
-        res = _raw_z3.substitute(lower(expr), *pairs)
+        res = z3.substitute(lower(expr), *pairs)
     return lift(res, depth=2) if was_dsl else res
 
 
-def ForAll(vs: Any, body: Any, *args: Any, **kwargs: Any) -> _raw_z3.QuantifierRef:
+def ForAll(vs: Any, body: Any, *args: Any, **kwargs: Any) -> z3.QuantifierRef:
     """Drop-in `z3.ForAll` lowering DSL variables, body, and trigger patterns."""
     vs_l = _lower_arg(vs)
     body_l = lower(body)
     if "patterns" in kwargs and kwargs["patterns"] is not None:
         kwargs = dict(kwargs)
         kwargs["patterns"] = [_lower_arg(p) for p in kwargs["patterns"]]
-    return _raw_z3.ForAll(vs_l, body_l, *args, **kwargs)
+    return z3.ForAll(vs_l, body_l, *args, **kwargs)
 
 
-def Exists(vs: Any, body: Any, *args: Any, **kwargs: Any) -> _raw_z3.QuantifierRef:
+def Exists(vs: Any, body: Any, *args: Any, **kwargs: Any) -> z3.QuantifierRef:
     """Drop-in `z3.Exists` lowering DSL variables, body, and trigger patterns."""
     vs_l = _lower_arg(vs)
     body_l = lower(body)
     if "patterns" in kwargs and kwargs["patterns"] is not None:
         kwargs = dict(kwargs)
         kwargs["patterns"] = [_lower_arg(p) for p in kwargs["patterns"]]
-    return _raw_z3.Exists(vs_l, body_l, *args, **kwargs)
+    return z3.Exists(vs_l, body_l, *args, **kwargs)
 
 
 def is_ast(x: Any) -> bool:
-    return isinstance(x, Z3Expr) or _raw_z3.is_ast(x)
+    return isinstance(x, Z3Expr) or z3.is_ast(x)
 
 
 def is_var(x: Any) -> bool:
-    return _raw_z3.is_var(lower(x)) if isinstance(x, (Z3Expr, _raw_z3.AstRef)) else False
+    return z3.is_var(lower(x)) if isinstance(x, (Z3Expr, z3.AstRef)) else False
 
 
 def is_quantifier(x: Any) -> bool:
-    return _raw_z3.is_quantifier(lower(x)) if isinstance(x, (Z3Expr, _raw_z3.AstRef)) else False
+    return z3.is_quantifier(lower(x)) if isinstance(x, (Z3Expr, z3.AstRef)) else False
 
 
 def BV2Int(a: Any, is_signed: bool = False) -> Any:
     if isinstance(a, Z3Expr) and not is_signed:
         return dsl.BV2Int(a)
-    return _raw_z3.BV2Int(lower(a), is_signed=is_signed)
+    return z3.BV2Int(lower(a), is_signed=is_signed)
 
 
-def fpAdd(rm: Any, a: Any, b: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpAdd(rm, lower(a), lower(b))
+def fpAdd(rm: Any, a: Any, b: Any) -> z3.FPRef:
+    return z3.fpAdd(rm, lower(a), lower(b))
 
 
-def fpSub(rm: Any, a: Any, b: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpSub(rm, lower(a), lower(b))
+def fpSub(rm: Any, a: Any, b: Any) -> z3.FPRef:
+    return z3.fpSub(rm, lower(a), lower(b))
 
 
-def fpMul(rm: Any, a: Any, b: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpMul(rm, lower(a), lower(b))
+def fpMul(rm: Any, a: Any, b: Any) -> z3.FPRef:
+    return z3.fpMul(rm, lower(a), lower(b))
 
 
-def fpDiv(rm: Any, a: Any, b: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpDiv(rm, lower(a), lower(b))
+def fpDiv(rm: Any, a: Any, b: Any) -> z3.FPRef:
+    return z3.fpDiv(rm, lower(a), lower(b))
 
 
-def fpFMA(rm: Any, a: Any, b: Any, c: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpFMA(rm, lower(a), lower(b), lower(c))
+def fpFMA(rm: Any, a: Any, b: Any, c: Any) -> z3.FPRef:
+    return z3.fpFMA(rm, lower(a), lower(b), lower(c))
 
 
-def fpNeg(a: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpNeg(lower(a))
+def fpNeg(a: Any) -> z3.FPRef:
+    return z3.fpNeg(lower(a))
 
 
-def fpAbs(a: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpAbs(lower(a))
+def fpAbs(a: Any) -> z3.FPRef:
+    return z3.fpAbs(lower(a))
 
 
-def fpSqrt(rm: Any, a: Any) -> _raw_z3.FPRef:
-    return _raw_z3.fpSqrt(rm, lower(a))
+def fpSqrt(rm: Any, a: Any) -> z3.FPRef:
+    return z3.fpSqrt(rm, lower(a))
 
 
-def fpToIEEEBV(a: Any) -> _raw_z3.BitVecRef:
-    return _raw_z3.fpToIEEEBV(lower(a))
+def fpToIEEEBV(a: Any) -> z3.BitVecRef:
+    return z3.fpToIEEEBV(lower(a))
 
 
-def fpBVToFP(a: Any, s: _raw_z3.FPSortRef) -> _raw_z3.FPRef:
-    return _raw_z3.fpBVToFP(lower(a), s)
+def fpBVToFP(a: Any, s: z3.FPSortRef) -> z3.FPRef:
+    return z3.fpBVToFP(lower(a), s)
 
 
-class ModelRef(_raw_z3.ModelRef):
+class ModelRef(z3.ModelRef):
     """Drop-in `z3.ModelRef` subclass that lowers `dsl.Z3Expr`/`dsl.Z3FuncDecl` automatically."""
 
     def eval(self, t: Any, model_completion: bool = False) -> Any:
@@ -286,11 +287,11 @@ class ModelRef(_raw_z3.ModelRef):
         return super().__getitem__(_lower_arg(idx))
 
 
-def _wrap_model(m: _raw_z3.ModelRef) -> ModelRef:
+def _wrap_model(m: z3.ModelRef) -> ModelRef:
     return ModelRef(m.model, m.ctx)
 
 
-class Solver(_raw_z3.Solver):
+class Solver(z3.Solver):
     """Drop-in `z3.Solver` subclass that lowers `dsl.Z3Expr` arguments automatically."""
 
     def add(self, *args: Any) -> None:
@@ -299,14 +300,14 @@ class Solver(_raw_z3.Solver):
     def assert_and_track(self, p: Any, q: Any) -> None:
         super().assert_and_track(_lower_arg(p), _lower_arg(q))
 
-    def check(self, *assumptions: Any) -> _raw_z3.CheckSatResult:
+    def check(self, *assumptions: Any) -> z3.CheckSatResult:
         return super().check(*_lower_args(assumptions))
 
     def model(self) -> ModelRef:
         return _wrap_model(super().model())
 
 
-class Optimize(_raw_z3.Optimize):
+class Optimize(z3.Optimize):
     """Drop-in `z3.Optimize` subclass that lowers `dsl.Z3Expr` arguments automatically."""
 
     def add(self, *args: Any) -> None:
@@ -315,14 +316,14 @@ class Optimize(_raw_z3.Optimize):
     def add_soft(self, expr: Any, weight: Any = "1", id: Any = None) -> Any:
         return super().add_soft(_lower_arg(expr), weight=weight, id=id)
 
-    def check(self, *assumptions: Any) -> _raw_z3.CheckSatResult:
+    def check(self, *assumptions: Any) -> z3.CheckSatResult:
         return super().check(*_lower_args(assumptions))
 
     def model(self) -> ModelRef:
         return _wrap_model(super().model())
 
 
-class Goal(_raw_z3.Goal):
+class Goal(z3.Goal):
     """Drop-in `z3.Goal` subclass that lowers `dsl.Z3Expr` arguments automatically."""
 
     def add(self, *args: Any) -> None:
@@ -330,13 +331,13 @@ class Goal(_raw_z3.Goal):
 
 
 def SolverFor(logic: str, ctx: Any = None) -> Solver:
-    s = _raw_z3.SolverFor(logic, ctx=ctx)
+    s = z3.SolverFor(logic, ctx=ctx)
     return Solver(solver=s.solver, ctx=s.ctx)
 
 
 def __getattr__(name: str) -> Any:
-    return getattr(_raw_z3, name)
+    return getattr(z3, name)
 
 
 def __dir__() -> Sequence[str]:
-    return sorted(set(globals().keys()) | set(dir(_raw_z3)))
+    return sorted(set(globals().keys()) | set(dir(z3)))

@@ -39,7 +39,7 @@ from __future__ import annotations
 import time
 from typing import List, Optional, Sequence, Tuple
 
-from tools.symbolic_ssa import z3
+from tools.symbolic_ssa import z3utils as z3
 
 from tools.symbolic_ssa.z3simplifier.context import (
     PassStats,

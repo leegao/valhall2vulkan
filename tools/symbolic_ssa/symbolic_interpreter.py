@@ -26,7 +26,7 @@ from tools.symbolic_ssa.env import (
 )
 from tools.symbolic_ssa.env import _dsl_bv32 as bv32
 from tools.symbolic_ssa.interpreter import SsaInterpreter
-from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3utils import dsl
 
 
 @dataclasses.dataclass

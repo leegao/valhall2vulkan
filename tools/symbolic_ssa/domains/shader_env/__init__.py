@@ -3,7 +3,7 @@
 Shader Environment Package (`tools.symbolic_ssa.domains.shader_env`).
 
 Splits concrete and domain-aware symbolic shader environments cleanly away
-from Z3 expression utilities (`tools.symbolic_ssa.z3`).
+from Z3 expression utilities (`tools.symbolic_ssa.z3utils`).
 """
 
 from tools.symbolic_ssa.domains.shader_env.base import (  # noqa: F401

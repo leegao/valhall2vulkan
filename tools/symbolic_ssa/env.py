@@ -2,7 +2,7 @@
 """
 Backwards-compatibility re-export shim for `tools.symbolic_ssa.env`.
 
-Z3/DSL helpers now live in `tools.symbolic_ssa.z3.helpers`, and shader
+Z3/DSL helpers now live in `tools.symbolic_ssa.z3utils.helpers`, and shader
 environments now live in `tools.symbolic_ssa.domains.shader_env`
 (`ShaderEnvBase`, `SymbolicShaderEnv`, `ConcreteShaderEnv`).
 """
@@ -30,7 +30,7 @@ from tools.symbolic_ssa.domains.shader_env import (  # noqa: F401
     _u32_to_f32,
     _vec_len,
 )
-from tools.symbolic_ssa.z3.helpers import (  # noqa: F401
+from tools.symbolic_ssa.z3utils.helpers import (  # noqa: F401
     BOOL_SORT,
     BV8,
     BV16,
