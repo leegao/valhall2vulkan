@@ -80,7 +80,7 @@ from tools.symbolic_ssa.z3simplifier.solver import (
 )
 
 
-def _merged_local_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+def _merged_local_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     """Single-pass fused local peephole rule (BV wrapper + BV algebraic + Bridge + Real algebraic)."""
     r = _bv_wrapper_rule(node)
     if r is not None:
@@ -102,9 +102,9 @@ class MergedLocalPeepholePass(Z3TermPass):
 
     def rewrite_term(
         self,
-        expr: z3.ExprRef,
+        expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[z3.ExprRef, int]:
+    ) -> Tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _merged_local_rule)
 
 

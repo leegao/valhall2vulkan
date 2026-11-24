@@ -36,10 +36,10 @@ class SideObligation:
     """
 
     obligation_id: str
-    fresh_var: z3.ExprRef
-    lhs: z3.ExprRef
-    rhs: z3.ExprRef
-    guard: Optional[z3.BoolRef] = None
+    fresh_var: dsl.ExprRef
+    lhs: dsl.ExprRef
+    rhs: dsl.ExprRef
+    guard: Optional[dsl.BoolRef] = None
     reason: str = ""
     discharged: Optional[bool] = None
     elapsed_ms: float = 0.0
@@ -192,20 +192,20 @@ class SimplificationContext:
     verbose: bool = False
     trace_fn: Optional[Callable[[str], None]] = None
     _fresh_counter: int = 0
-    _symbol_cache: Dict[Tuple[str, Any], z3.ExprRef] = field(default_factory=dict)
+    _symbol_cache: Dict[Tuple[str, Any], dsl.ExprRef] = field(default_factory=dict)
 
-    def fresh_const(self, prefix: str, sort: z3.SortRef) -> z3.ExprRef:
-        """Allocate a deterministic fresh Z3 constant of the requested sort."""
+    def fresh_const(self, prefix: str, sort: dsl.SortRef) -> dsl.ExprRef:
+        """Allocate a deterministic fresh DSL constant of the requested sort."""
         idx = self._fresh_counter
         self._fresh_counter += 1
-        return z3.Const(f"{prefix}_{idx}", sort)
+        return dsl.Const(f"{prefix}_{idx}", sort)
 
-    def intern_const(self, cache_key: Tuple[str, Any], name: str, sort: z3.SortRef) -> z3.ExprRef:
-        """Return a cached Z3 constant for `cache_key`, creating it on first use."""
+    def intern_const(self, cache_key: Tuple[str, Any], name: str, sort: dsl.SortRef) -> dsl.ExprRef:
+        """Return a cached DSL constant for `cache_key`, creating it on first use."""
         existing = self._symbol_cache.get(cache_key)
         if existing is not None:
             return existing
-        sym = z3.Const(name, sort)
+        sym = dsl.Const(name, sort)
         self._symbol_cache[cache_key] = sym
         return sym
 

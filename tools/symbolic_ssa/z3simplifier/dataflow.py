@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
 Z3-domain dataflow analysis and extensional-equality propagation engine,
-operating on lifted `dsl.dsl` terms via Python `match`/`case` and
-lowering back to `dsl.ExprRef` via `.lower()`.
+operating directly on `dsl` terms via Python `match`/`case`.
 
 Responsibilities (cleanly separated from local peephole folding):
   1. `EqualityTable` (Union-Find + Congruence): harvests ground truths and
      extensional equalities (`a == b`) from `preconditions` and `guard`,
      preferring concrete constants then smaller ASTs as canonical reps.
   2. `KnownBits` (Forward BitVec Lattice): propagates `(zeros, ones)` bitmasks
-     via `match lift(node, depth=1): case ...` across `Z3BvConst`, `Z3OpZeroExt`,
+     via `match node: case ...` across `Z3BvConst`, `Z3OpZeroExt`,
      `Z3OpSignExt`, `Z3OpExtract`, `Z3OpConcat`, `Z3OpBvAnd/Or/Xor/Shl/LShr`,
-     and `Z3OpIte`, collapsing fully-determined BitVecs via `Z3BvConst(...).lower()`.
+     and `Z3OpIte`, collapsing fully-determined BitVecs via `Z3BvConst(...)`.
   3. Bounded Path-Sensitive `If` Propagation: refines `EqualityTable` along
      `then`/`else` arms of `Z3OpIte` (bounded to `max_path_depth=2`, `<=512`
      nodes) to collapse redundant guards and `discarded`-guarded fragment outputs.
@@ -23,8 +22,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-
-import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rebuild_app
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -56,8 +53,6 @@ from tools.symbolic_ssa.z3utils.dsl import (
     Z3OpSignExt,
     Z3OpZeroExt,
     Z3RealConst,
-    lift,
-    unwrap,
 )
 
 
@@ -95,7 +90,7 @@ class KnownBits:
 
 def _is_ground_const(e: dsl.ExprRef) -> bool:
     return (
-        isinstance(e, (z3.BitVecNumRef, z3.RatNumRef, z3.IntNumRef))
+        isinstance(e, (dsl.Z3BvConst, dsl.Z3RealConst, dsl.Z3IntConst))
         or dsl.is_true(e)
         or dsl.is_false(e)
     )
@@ -192,7 +187,7 @@ class EqualityTable:
 
     def assume_bool(self, pred: dsl.ExprRef, truth: bool) -> None:
         """Harvest boolean truth and nested `And`/`Or`/`Not`/`Eq`/`Distinct` facts via DSL `match`."""
-        work: list[tuple[dsl.ExprRef, bool]] = [(pred, truth)]
+        work: list[tuple[dsl.ExprRef, bool]] = [(dsl.view(pred), truth)]
         seen: set[tuple[int, bool]] = set()
         while work and len(seen) < 256:
             cur, val = work.pop()
@@ -203,43 +198,42 @@ class EqualityTable:
             if dsl.is_true(cur) or dsl.is_false(cur):
                 continue
             self._bool_vals[cur.get_id()] = val
-            self.union(cur, Z3BoolConst(val).lower())
+            self.union(cur, Z3BoolConst(val))
 
-            match lift(cur, depth=1):
+            match cur:
                 case Z3OpNot(inner):
-                    work.append((unwrap(inner), not val))
+                    work.append((inner, not val))
                 case Z3OpAnd(args) if val is True:
                     for a in args:
-                        work.append((unwrap(a), True))
+                        work.append((a, True))
                 case Z3OpOr(args) if val is False:
                     for a in args:
-                        work.append((unwrap(a), False))
+                        work.append((a, False))
                 case Z3OpEq(a, b) if val is True:
-                    self.union(unwrap(a), unwrap(b))
+                    self.union(a, b)
                 case Z3OpDistinct(a, b) if val is False:
-                    self.union(unwrap(a), unwrap(b))
+                    self.union(a, b)
 
 
 def _transfer_known_bits(node: Z3Node, width: int, kb_map: dict[int, KnownBits]) -> KnownBits:
     """Compute sound `KnownBits` over lifted DSL `Z3Node` using structural `match`/`case`."""
     mask = (1 << width) - 1
 
-    def get_kb(e: object) -> KnownBits:
-        raw = unwrap(e)
-        if isinstance(raw, z3.BitVecNumRef):
-            return KnownBits.const(raw.as_long(), raw.size())
-        return kb_map.get(raw.get_id(), KnownBits.top(raw.size()))
+    def get_kb(e: dsl.ExprRef) -> KnownBits:
+        if isinstance(e, dsl.Z3BvConst):
+            return KnownBits.const(e.as_long(), e.size())
+        return kb_map.get(e.get_id(), KnownBits.top(e.size()))
 
     match node:
         case Z3BvConst(val, w):
             return KnownBits.const(val, w)
         case Z3OpZeroExt(k, src):
-            sr = unwrap(src)
+            sr = src
             sk = get_kb(sr)
             hi_zeros = ((1 << k) - 1) << sr.size()
             return KnownBits(width, (sk.zeros | hi_zeros) & mask, sk.ones & mask)
         case Z3OpSignExt(k, src):
-            sr = unwrap(src)
+            sr = src
             sk = get_kb(sr)
             sw = sr.size()
             sign_bit = 1 << (sw - 1)
@@ -255,7 +249,7 @@ def _transfer_known_bits(node: Z3Node, width: int, kb_map: dict[int, KnownBits])
         case Z3OpConcat(args):
             z_acc, o_acc = 0, 0
             for ch in args:
-                cr = unwrap(ch)
+                cr = ch
                 ck = get_kb(cr)
                 cw = cr.size()
                 z_acc = (z_acc << cw) | ck.zeros
@@ -294,27 +288,27 @@ def _apply_extensional_rules(lifted: Z3Node, raw: dsl.ExprRef, env: EqualityTabl
     if dsl.is_bool(raw):
         bv = env.lookup_bool(raw)
         if bv is not None and not (dsl.is_true(raw) or dsl.is_false(raw)):
-            return Z3BoolConst(bv).lower()
+            return Z3BoolConst(bv)
 
     rep = env.find_rep(raw)
     if not rep.eq(raw):
         return rep
 
     match lifted:
-        case Z3OpEq(a, b) if env.are_equal(unwrap(a), unwrap(b)):
-            return Z3BoolConst(True).lower()
-        case Z3OpDistinct(a, b) if env.are_equal(unwrap(a), unwrap(b)):
-            return Z3BoolConst(False).lower()
+        case Z3OpEq(a, b) if env.are_equal(a, b):
+            return Z3BoolConst(True)
+        case Z3OpDistinct(a, b) if env.are_equal(a, b):
+            return Z3BoolConst(False)
         case Z3OpIte(Z3BoolConst(True), t_arm, _):
-            return unwrap(t_arm)
+            return t_arm
         case Z3OpIte(Z3BoolConst(False), _, f_arm):
-            return unwrap(f_arm)
-        case Z3OpIte(_, t_arm, f_arm) if env.are_equal(unwrap(t_arm), unwrap(f_arm)):
-            return unwrap(t_arm)
-        case Z3OpBvSub(a, b, w) | Z3OpBvXor(a, b, w) if env.are_equal(unwrap(a), unwrap(b)):
-            return Z3BvConst(0, w).lower()
-        case Z3OpRealSub(a, b) if env.are_equal(unwrap(a), unwrap(b)):
-            return Z3RealConst(0).lower()
+            return f_arm
+        case Z3OpIte(_, t_arm, f_arm) if env.are_equal(t_arm, f_arm):
+            return t_arm
+        case Z3OpBvSub(a, b, w) | Z3OpBvXor(a, b, w) if env.are_equal(a, b):
+            return Z3BvConst(0, w)
+        case Z3OpRealSub(a, b) if env.are_equal(a, b):
+            return Z3RealConst(0)
     return None
 
 
@@ -326,6 +320,7 @@ def _rewrite_with_dataflow(
     max_nodes: int = 50000,
 ) -> tuple[dsl.ExprRef, int]:
     """Propagate `eq_table` and `KnownBits` through `root` using DSL-lifted match rules."""
+    root = dsl.view(root)
     rewrites = 0
 
     def _run_dag(expr: dsl.ExprRef, env: EqualityTable) -> dsl.ExprRef:
@@ -343,20 +338,20 @@ def _rewrite_with_dataflow(
             if not expanded:
                 bv = env.lookup_bool(cur) if dsl.is_bool(cur) else None
                 if bv is not None and not (dsl.is_true(cur) or dsl.is_false(cur)):
-                    memo[cid] = Z3BoolConst(bv).lower()
+                    memo[cid] = Z3BoolConst(bv)
                     rewrites += 1
                     continue
                 rep = env.find_rep(cur)
                 if not rep.eq(cur):
                     memo[cid] = rep
-                    if isinstance(rep, z3.BitVecNumRef):
+                    if isinstance(rep, dsl.Z3BvConst):
                         kb_map[rep.get_id()] = KnownBits.const(rep.as_long(), rep.size())
                     rewrites += 1
                     continue
 
                 if not dsl.is_app(cur) or cur.num_args() == 0:
                     memo[cid] = cur
-                    if isinstance(cur, z3.BitVecNumRef):
+                    if isinstance(cur, dsl.Z3BvConst):
                         kb_map[cid] = KnownBits.const(cur.as_long(), cur.size())
                     continue
 
@@ -396,42 +391,41 @@ def _rewrite_with_dataflow(
                 any_changed = any(not dsl.expr_eq(nc, oc) for nc, oc in zip(new_children, orig_children))
                 rebuilt = rebuild_app(cur, new_children) if any_changed else cur
 
-                lifted = lift(rebuilt, depth=1)
-                simplified = _apply_extensional_rules(lifted, rebuilt, env)
+                simplified = _apply_extensional_rules(rebuilt, rebuilt, env)
                 if simplified is not None and not dsl.expr_eq(simplified, rebuilt):
                     rebuilt = simplified
-                    lifted = lift(rebuilt, depth=1)
                     rewrites += 1
 
-                if isinstance(rebuilt, z3.BitVecRef) and not isinstance(rebuilt, z3.BitVecNumRef):
-                    kb = _transfer_known_bits(lifted, rebuilt.size(), kb_map)
+                if isinstance(rebuilt, dsl.Z3BitVecExpr) and not isinstance(rebuilt, dsl.Z3BvConst):
+                    kb = _transfer_known_bits(rebuilt, rebuilt.size(), kb_map)
                     if kb.is_const:
-                        rebuilt = Z3BvConst(kb.ones, kb.width).lower()
+                        rebuilt = Z3BvConst(kb.ones, kb.width)
                         kb_map[rebuilt.get_id()] = kb
                         rewrites += 1
                     else:
                         kb_map[rebuilt.get_id()] = kb
-                elif isinstance(rebuilt, z3.BitVecNumRef):
+                elif isinstance(rebuilt, dsl.Z3BvConst):
                     kb_map[rebuilt.get_id()] = KnownBits.const(rebuilt.as_long(), rebuilt.size())
 
                 memo[cid] = rebuilt
 
-        return memo.get(expr.get_id(), expr)
+        _res = memo.get(expr.get_id(), expr)
+        return _res
 
     def _run_path_sensitive(expr: dsl.ExprRef, env: EqualityTable, depth: int) -> dsl.ExprRef:
         nonlocal rewrites
         base = _run_dag(expr, env)
         if depth <= 0 or count_ast_nodes([base], limit=513) > 512:
             return base
-        match lift(base, depth=1):
+        match base:
             case Z3OpIte(Z3BoolConst(True), t_arm, _):
                 rewrites += 1
-                return _run_path_sensitive(unwrap(t_arm), env, depth - 1)
+                return _run_path_sensitive(t_arm, env, depth - 1)
             case Z3OpIte(Z3BoolConst(False), _, f_arm):
                 rewrites += 1
-                return _run_path_sensitive(unwrap(f_arm), env, depth - 1)
+                return _run_path_sensitive(f_arm, env, depth - 1)
             case Z3OpIte(cond, t_arm, f_arm):
-                cr, tr, fr = unwrap(cond), unwrap(t_arm), unwrap(f_arm)
+                cr, tr, fr = cond, t_arm, f_arm
                 t_env = EqualityTable(env)
                 t_env.assume_bool(cr, True)
                 new_t = _run_path_sensitive(tr, t_env, depth - 1)
@@ -445,7 +439,7 @@ def _rewrite_with_dataflow(
                     return new_t
                 if not new_t.eq(tr) or not new_f.eq(fr):
                     rewrites += 1
-                    return Z3OpIte(cr, new_t, new_f).lower()
+                    return Z3OpIte(cr, new_t, new_f)
         return base
 
     out = _run_path_sensitive(root, eq_table, max_path_depth)

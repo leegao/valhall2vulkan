@@ -6,12 +6,12 @@ Do not hand-edit generated enum tables or node dataclasses; re-run `gen_dsl.py` 
 Lazy-lowering, Z3-API-compatible immutable dataclass AST DSL for Z3 expressions:
   - Pattern-matchable via Python `match`/`case`
   - Full operator overloads matching Z3's `ExprRef`/`BoolRef`/`BitVecRef`/`ArithRef`/`FPRef`/`ArrayRef`:
-  - ExprRef: __bool__
-  - BoolRef: __add__, __and__, __bool__, __invert__, __mul__, __or__, __radd__, __rmul__, __xor__
-  - BitVecRef: __add__, __and__, __bool__, __div__, __invert__, __lshift__, __mod__, __mul__, __neg__, __or__, __pos__, __radd__, __rand__, __rdiv__, __rlshift__, __rmod__, __rmul__, __ror__, __rrshift__, __rshift__, __rsub__, __rtruediv__, __rxor__, __sub__, __truediv__, __xor__
-  - ArithRef: __abs__, __add__, __bool__, __div__, __mod__, __mul__, __neg__, __pos__, __pow__, __radd__, __rdiv__, __rmod__, __rmul__, __rpow__, __rsub__, __rtruediv__, __sub__, __truediv__
-  - FPRef: __add__, __bool__, __div__, __mod__, __mul__, __neg__, __pos__, __radd__, __rdiv__, __rmod__, __rmul__, __rsub__, __rtruediv__, __sub__, __truediv__
-  - ArrayRef: __bool__, __getitem__
+  - ExprRef: __bool__, __firstlineno__, __static_attributes__
+  - BoolRef: __add__, __and__, __bool__, __firstlineno__, __invert__, __mul__, __or__, __radd__, __rmul__, __static_attributes__, __xor__
+  - BitVecRef: __add__, __and__, __bool__, __div__, __firstlineno__, __invert__, __lshift__, __mod__, __mul__, __neg__, __or__, __pos__, __radd__, __rand__, __rdiv__, __rlshift__, __rmod__, __rmul__, __ror__, __rrshift__, __rshift__, __rsub__, __rtruediv__, __rxor__, __static_attributes__, __sub__, __truediv__, __xor__
+  - ArithRef: __abs__, __add__, __bool__, __div__, __firstlineno__, __mod__, __mul__, __neg__, __pos__, __pow__, __radd__, __rdiv__, __rmod__, __rmul__, __rpow__, __rsub__, __rtruediv__, __static_attributes__, __sub__, __truediv__
+  - FPRef: __add__, __bool__, __div__, __firstlineno__, __mod__, __mul__, __neg__, __pos__, __radd__, __rdiv__, __rmod__, __rmul__, __rsub__, __rtruediv__, __static_attributes__, __sub__, __truediv__
+  - ArrayRef: __bool__, __firstlineno__, __getitem__, __static_attributes__
   - Lazy and memoized `.to_z3` property (and `.lower()` method) realizing concrete `z3.ExprRef`s on demand
 """
 
@@ -760,10 +760,7 @@ class Z3Expr:
         return self.to_z3.sexpr()
 
     def get_id(self) -> int:
-        cached = self._z3_cache  # type: ignore[attr-defined]
-        if cached is not None:
-            return cached.get_id()
-        return id(self)
+        return self.to_z3.get_id()
 
     def as_ast(self) -> Any:
         return self.to_z3.as_ast()
@@ -3110,6 +3107,7 @@ class Z3OpFPToFP(Z3FPExpr):
         sort = z3.FPSort(self.ebits_val, self.sbits_val)
         if self.mode == 'sbv': return z3.fpSignedToFP(rm, s, sort)
         if self.mode == 'ubv': return z3.fpUnsignedToFP(rm, s, sort)
+        if self.mode == 'real': return z3.fpRealToFP(rm, s, sort)
         return z3.fpFPToFP(rm, s, sort)
 
     def children(self) -> Tuple[Any, ...]:
@@ -3141,6 +3139,26 @@ class Z3OpFPToBV(Z3BitVecExpr):
         return (self.src,)
     def size(self) -> int:
         return self.width
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class Z3OpFPToReal(Z3ArithExpr):
+    src: Any
+    _z3_cache: Optional[z3.ExprRef] = field(default=None, init=False, repr=False, compare=False)
+    _hash_cache: Optional[int] = field(default=None, init=False, repr=False, compare=False)
+    _struct_fields: ClassVar[Tuple[str, ...]] = ('src',)
+
+    def _build_z3(self) -> z3.ExprRef:
+        return z3.fpToReal(lower(self.src))
+
+    def children(self) -> Tuple[Any, ...]:
+        return (self.src,)
+
+    def is_real(self) -> bool:
+        return True
+
+    def is_int(self) -> bool:
+        return False
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -3324,6 +3342,7 @@ Z3Node = Union[
     Z3OpFPToIEEEBV,
     Z3OpFPToFP,
     Z3OpFPToBV,
+    Z3OpFPToReal,
     Z3OpBridge,
     Z3OpUFApp,
     Z3Other,
@@ -3804,6 +3823,18 @@ def fpToUBV(rm: Any, src: Any, sort: z3.BitVecSortRef) -> Z3OpFPToBV:
     return Z3OpFPToBV(rm, _wrap_raw_if_needed(src), sort.size(), signed=False)
 
 
+def fpRealToFP(rm: Any, src: Any, sort: z3.FPSortRef) -> Z3OpFPToFP:
+    return Z3OpFPToFP(rm, _wrap_raw_if_needed(src), sort.ebits(), sort.sbits(), mode="real")
+
+
+def fpToReal(src: Any) -> Z3OpFPToReal:
+    return Z3OpFPToReal(_wrap_raw_if_needed(src))
+
+
+def fpNaN(sort: z3.FPSortRef) -> Z3FPConst:
+    return Z3FPConst("nan", sort.ebits(), sort.sbits())
+
+
 # --- Uniform Predicates (work on both DSL `Z3Expr` and raw `z3.ExprRef`) ---
 
 def is_expr(x: Any) -> bool:
@@ -4071,7 +4102,7 @@ def view(expr: Any, depth: int = 2) -> Z3Node:
     if kind == Z3OpKind.SIGN_EXT and nargs == 1:
         return _seed_z3(Z3OpSignExt(int(expr.params()[0]), sub(expr.arg(0))), expr)
     if kind == Z3OpKind.CONCAT and nargs >= 2:
-        return _seed_z3(Z3OpConcat(tuple(expr.arg(i) for i in range(nargs))), expr)
+        return _seed_z3(Z3OpConcat(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
 
     if kind == Z3OpKind.ITE and nargs == 3:
         return _seed_z3(Z3OpIte(sub(expr.arg(0)), sub(expr.arg(1)), sub(expr.arg(2))), expr)
@@ -4082,9 +4113,9 @@ def view(expr: Any, depth: int = 2) -> Z3Node:
     if kind == Z3OpKind.NOT and nargs == 1:
         return _seed_z3(Z3OpNot(sub(expr.arg(0))), expr)
     if kind == Z3OpKind.AND:
-        return _seed_z3(Z3OpAnd(tuple(expr.arg(i) for i in range(nargs))), expr)
+        return _seed_z3(Z3OpAnd(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
     if kind == Z3OpKind.OR:
-        return _seed_z3(Z3OpOr(tuple(expr.arg(i) for i in range(nargs))), expr)
+        return _seed_z3(Z3OpOr(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
     if kind == Z3OpKind.XOR and nargs == 2:
         return _seed_z3(Z3OpXor(sub(expr.arg(0)), sub(expr.arg(1))), expr)
     if kind == Z3OpKind.IMPLIES and nargs == 2:
@@ -4126,15 +4157,15 @@ def view(expr: Any, depth: int = 2) -> Z3Node:
         return _seed_z3(Z3OpToInt(sub(expr.arg(0))), expr)
 
     if isinstance(expr, z3.ArithRef) and expr.is_real():
-        if kind == Z3OpKind.ADD: return _seed_z3(Z3OpRealAdd(tuple(expr.arg(i) for i in range(nargs))), expr)
-        if kind == Z3OpKind.MUL: return _seed_z3(Z3OpRealMul(tuple(expr.arg(i) for i in range(nargs))), expr)
+        if kind == Z3OpKind.ADD: return _seed_z3(Z3OpRealAdd(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
+        if kind == Z3OpKind.MUL: return _seed_z3(Z3OpRealMul(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
         if kind == Z3OpKind.SUB and nargs == 2: return _seed_z3(Z3OpRealSub(sub(expr.arg(0)), sub(expr.arg(1))), expr)
         if kind == Z3OpKind.DIV and nargs == 2: return _seed_z3(Z3OpRealDiv(sub(expr.arg(0)), sub(expr.arg(1))), expr)
         if kind == Z3OpKind.UMINUS and nargs == 1: return _seed_z3(Z3OpRealNeg(sub(expr.arg(0))), expr)
 
     if isinstance(expr, z3.ArithRef) and expr.is_int():
-        if kind == Z3OpKind.ADD: return _seed_z3(Z3OpIntAdd(tuple(expr.arg(i) for i in range(nargs))), expr)
-        if kind == Z3OpKind.MUL: return _seed_z3(Z3OpIntMul(tuple(expr.arg(i) for i in range(nargs))), expr)
+        if kind == Z3OpKind.ADD: return _seed_z3(Z3OpIntAdd(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
+        if kind == Z3OpKind.MUL: return _seed_z3(Z3OpIntMul(tuple(sub(expr.arg(i)) for i in range(nargs))), expr)
         if kind == Z3OpKind.SUB and nargs == 2: return _seed_z3(Z3OpIntSub(sub(expr.arg(0)), sub(expr.arg(1))), expr)
         if kind == Z3OpKind.IDIV and nargs == 2: return _seed_z3(Z3OpIntDiv(sub(expr.arg(0)), sub(expr.arg(1))), expr)
         if kind == Z3OpKind.MOD and nargs == 2: return _seed_z3(Z3OpIntMod(sub(expr.arg(0)), sub(expr.arg(1))), expr)

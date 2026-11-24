@@ -15,8 +15,6 @@ global constant/equality propagation and known-bits lattice analysis live in
 
 from __future__ import annotations
 
-import z3
-
 from tools.symbolic_ssa.z3simplifier.ast_utils import rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import SimplificationContext
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3TermPass
@@ -51,8 +49,6 @@ from tools.symbolic_ssa.z3utils.dsl import (
     Z3OpToReal,
     Z3OpZeroExt,
     Z3RealConst,
-    unwrap,
-    view,
 )
 
 
@@ -74,33 +70,33 @@ _BV_WRAP_KINDS = frozenset(
 )
 
 
-def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
+def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     """Declarative `match`/`case` local peephole rules for BV/Bool wrappers and literal conversions."""
+    if not isinstance(node, dsl.Z3Expr):
+        node = dsl.view(node)
     if not dsl.is_app(node) or node.decl().kind() not in _BV_WRAP_KINDS:
         return None
-    match view(node, depth=2):
+    match node:
         # Extract identity, constant folding, and ZeroExt/SignExt/Concat/ITE unwrapping
-        case Z3OpExtract(hi, 0, src) if isinstance(_src := unwrap(src), z3.BitVecRef) and _src.size() == hi + 1:
-            return _src
+        case Z3OpExtract(hi, 0, src) if dsl.is_bv(src) and src.size() == hi + 1:
+            return src
         case Z3OpExtract(hi, lo, Z3BvConst(val, _)):
             w = hi - lo + 1
             return dsl.BitVecVal((val >> lo) & ((1 << w) - 1), w)
         case Z3OpExtract(hi, 0, Z3OpZeroExt(_, inner)):
-            inner_e = unwrap(inner)
             w = hi + 1
-            if isinstance(inner_e, z3.BitVecRef):
-                if inner_e.size() == w:
-                    return inner_e
-                if inner_e.size() > w:
-                    return dsl.Extract(hi, 0, inner_e)
+            if dsl.is_bv(inner):
+                if inner.size() == w:
+                    return inner
+                if inner.size() > w:
+                    return dsl.Extract(hi, 0, inner)
         case Z3OpExtract(hi, 0, Z3OpSignExt(_, inner)):
-            inner_e = unwrap(inner)
-            if isinstance(inner_e, z3.BitVecRef) and inner_e.size() == hi + 1:
-                return inner_e
+            if dsl.is_bv(inner) and inner.size() == hi + 1:
+                return inner
         case Z3OpExtract(hi, 0, Z3OpConcat(args)):
             lsb = args[-1]
             w = hi + 1
-            if isinstance(lsb, z3.BitVecRef):
+            if dsl.is_bv(lsb):
                 if lsb.size() == w:
                     return lsb
                 if lsb.size() > w:
@@ -110,7 +106,7 @@ def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
             mask = (1 << w) - 1
             nt = dsl.BitVecVal((tc >> lo) & mask, w)
             nf = dsl.BitVecVal((fc >> lo) & mask, w)
-            return nt if nt.eq(nf) else dsl.If(unwrap(cond), nt, nf)
+            return nt if nt.eq(nf) else dsl.If(cond, nt, nf)
 
         # Constant-fold ZeroExt, SignExt, Concat
         case Z3OpZeroExt(k, Z3BvConst(val, w)):
@@ -118,7 +114,7 @@ def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
         case Z3OpSignExt(k, Z3BvConst(_, w) as c):
             nw = w + k
             return dsl.BitVecVal(c.as_signed_long() & ((1 << nw) - 1), nw)
-        case Z3OpConcat(args) if all(isinstance(a, z3.BitVecNumRef) for a in args):
+        case Z3OpConcat(args) if all(isinstance(a, dsl.Z3BvConst) for a in args):
             acc, tot_w = 0, 0
             for a in args:
                 aw = a.size()
@@ -151,47 +147,47 @@ def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
 
         # ITE simplification
         case Z3OpIte(Z3BoolConst(True), t_arm, _):
-            return unwrap(t_arm)
+            return t_arm
         case Z3OpIte(Z3BoolConst(False), _, f_arm):
-            return unwrap(f_arm)
-        case Z3OpIte(_, t_arm, f_arm) if dsl.expr_eq(unwrap(t_arm), unwrap(f_arm)):
-            return unwrap(t_arm)
+            return f_arm
+        case Z3OpIte(_, t_arm, f_arm) if dsl.expr_eq(t_arm, f_arm):
+            return t_arm
         case Z3OpIte(cond, Z3BoolConst(True), Z3BoolConst(False)):
-            return unwrap(cond)
+            return cond
         case Z3OpIte(cond, Z3BoolConst(False), Z3BoolConst(True)):
-            return dsl.Not(unwrap(cond))
+            return dsl.Not(cond)
 
         # Eq / Distinct constant folding and `If(c, 1, 0) != 0` unwrapping
         case Z3OpEq(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BoolVal(ca == cb)
         case Z3OpDistinct(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BoolVal(ca != cb)
-        case Z3OpEq(a, b) if dsl.expr_eq(unwrap(a), unwrap(b)):
+        case Z3OpEq(a, b) if dsl.expr_eq(a, b):
             return dsl.BoolVal(True)
-        case Z3OpDistinct(a, b) if dsl.expr_eq(unwrap(a), unwrap(b)):
+        case Z3OpDistinct(a, b) if dsl.expr_eq(a, b):
             return dsl.BoolVal(False)
         case (
             Z3OpEq(Z3BvConst(0, _), Z3OpIte(oc, Z3BvConst(tc, _), Z3BvConst(fc, _)))
             | Z3OpEq(Z3OpIte(oc, Z3BvConst(tc, _), Z3BvConst(fc, _)), Z3BvConst(0, _))
         ):
             t_nz, f_nz = tc != 0, fc != 0
-            if t_nz and not f_nz: return dsl.Not(unwrap(oc))
-            if not t_nz and f_nz: return unwrap(oc)
+            if t_nz and not f_nz: return dsl.Not(oc)
+            if not t_nz and f_nz: return oc
             return dsl.BoolVal(not (t_nz and f_nz))
         case (
             Z3OpDistinct(Z3BvConst(0, _), Z3OpIte(oc, Z3BvConst(tc, _), Z3BvConst(fc, _)))
             | Z3OpDistinct(Z3OpIte(oc, Z3BvConst(tc, _), Z3BvConst(fc, _)), Z3BvConst(0, _))
         ):
             t_nz, f_nz = tc != 0, fc != 0
-            if t_nz and not f_nz: return unwrap(oc)
-            if not t_nz and f_nz: return dsl.Not(unwrap(oc))
+            if t_nz and not f_nz: return oc
+            if not t_nz and f_nz: return dsl.Not(oc)
             return dsl.BoolVal(t_nz and f_nz)
 
         # Boolean Not / And / Or
         case Z3OpNot(Z3BoolConst(v)):
             return dsl.BoolVal(not v)
         case Z3OpNot(Z3OpNot(inner)):
-            return unwrap(inner)
+            return inner
         case Z3OpAnd(args):
             kept = []
             changed = False
@@ -233,71 +229,71 @@ _BV_ALG_KINDS = frozenset(
 )
 
 
-def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
+def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
     """Declarative `match`/`case` algebraic & strength-reduction rules for BitVec arithmetic."""
-    if not isinstance(node, z3.BitVecRef) or not dsl.is_app(node) or node.decl().kind() not in _BV_ALG_KINDS:
+    if not isinstance(node, dsl.Z3Expr):
+        node = dsl.view(node)
+    if not dsl.is_bv(node) or not dsl.is_app(node) or node.decl().kind() not in _BV_ALG_KINDS:
         return None
     w = node.size()
     mask = (1 << w) - 1
 
-    match view(node, depth=2):
+    match node:
         # BVMul: const fold, 0/1 identities, and power-of-two -> Shl
         case Z3OpBvMul(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal((ca * cb) & mask, w)
         case Z3OpBvMul(Z3BvConst(0, _), _) | Z3OpBvMul(_, Z3BvConst(0, _)):
             return dsl.BitVecVal(0, w)
         case Z3OpBvMul(Z3BvConst(1, _), rhs):
-            return unwrap(rhs)
+            return rhs
         case Z3OpBvMul(lhs, Z3BvConst(1, _)):
-            return unwrap(lhs)
+            return lhs
         case Z3OpBvMul(lhs, Z3BvConst(cb, _)) if (sh := _is_power_of_two(cb)) is not None and sh < w:
-            return dsl.Z3OpBvShl(unwrap(lhs), dsl.BitVecVal(sh, w), w)
+            return dsl.Z3OpBvShl(lhs, dsl.BitVecVal(sh, w), w)
         case Z3OpBvMul(Z3BvConst(ca, _), rhs) if (sh := _is_power_of_two(ca)) is not None and sh < w:
-            return dsl.Z3OpBvShl(unwrap(rhs), dsl.BitVecVal(sh, w), w)
+            return dsl.Z3OpBvShl(rhs, dsl.BitVecVal(sh, w), w)
 
         # BVAdd: const fold, 0 identity, and (x + c1) + c2 -> x + (c1 + c2)
         case Z3OpBvAdd(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal((ca + cb) & mask, w)
         case Z3OpBvAdd(Z3BvConst(0, _), rhs):
-            return unwrap(rhs)
+            return rhs
         case Z3OpBvAdd(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
+            return lhs
         case Z3OpBvAdd(Z3OpBvAdd(a0, Z3BvConst(c1, _)), Z3BvConst(c2, _)):
             csum = (c1 + c2) & mask
             if csum == 0:
-                return unwrap(a0)
-            base0 = unwrap(a0)
-            rhs_c = dsl.BitVecVal(csum, w)
-            return base0 + dsl.lower(rhs_c)
+                return a0
+            return dsl.Z3OpBvAdd(a0, dsl.BitVecVal(csum, w), w)
 
         # BVSub
         case Z3OpBvSub(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal((ca - cb) & mask, w)
         case Z3OpBvSub(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
-        case Z3OpBvSub(lhs, rhs) if dsl.expr_eq(unwrap(lhs), unwrap(rhs)):
+            return lhs
+        case Z3OpBvSub(lhs, rhs) if dsl.expr_eq(lhs, rhs):
             return dsl.BitVecVal(0, w)
 
         # Shifts: Shl, LShR, AShR
         case Z3OpBvShl(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal(0 if cb >= w else ((ca << cb) & mask), w)
         case Z3OpBvShl(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
+            return lhs
         case Z3OpBvShl(_, Z3BvConst(cb, _)) if cb >= w:
             return dsl.BitVecVal(0, w)
         case Z3OpBvShl(Z3OpBvShl(x, Z3BvConst(k1, _)), Z3BvConst(k2, _)):
             tot = k1 + k2
-            return dsl.BitVecVal(0, w) if tot >= w else (unwrap(x) << dsl.BitVecVal(tot, w))
+            return dsl.BitVecVal(0, w) if tot >= w else (x << dsl.BitVecVal(tot, w))
 
         case Z3OpBvLShr(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal(0 if cb >= w else (ca >> cb), w)
         case Z3OpBvLShr(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
+            return lhs
         case Z3OpBvLShr(_, Z3BvConst(cb, _)) if cb >= w:
             return dsl.BitVecVal(0, w)
 
         case Z3OpBvAShr(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
+            return lhs
 
         # Bitwise And / Or / Xor
         case Z3OpBvAnd(Z3BvConst(ca, _), Z3BvConst(cb, _)):
@@ -305,30 +301,30 @@ def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
         case Z3OpBvAnd(Z3BvConst(0, _), _) | Z3OpBvAnd(_, Z3BvConst(0, _)):
             return dsl.BitVecVal(0, w)
         case Z3OpBvAnd(Z3BvConst(ca, _), rhs) if ca == mask:
-            return unwrap(rhs)
+            return rhs
         case Z3OpBvAnd(lhs, Z3BvConst(cb, _)) if cb == mask:
-            return unwrap(lhs)
-        case Z3OpBvAnd(lhs, rhs) if dsl.expr_eq(unwrap(lhs), unwrap(rhs)):
-            return unwrap(lhs)
+            return lhs
+        case Z3OpBvAnd(lhs, rhs) if dsl.expr_eq(lhs, rhs):
+            return lhs
 
         case Z3OpBvOr(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal(ca | cb, w)
         case Z3OpBvOr(Z3BvConst(0, _), rhs):
-            return unwrap(rhs)
+            return rhs
         case Z3OpBvOr(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
+            return lhs
         case Z3OpBvOr(Z3BvConst(ca, _), _) | Z3OpBvOr(_, Z3BvConst(ca, _)) if ca == mask:
             return dsl.BitVecVal(mask, w)
-        case Z3OpBvOr(lhs, rhs) if dsl.expr_eq(unwrap(lhs), unwrap(rhs)):
-            return unwrap(lhs)
+        case Z3OpBvOr(lhs, rhs) if dsl.expr_eq(lhs, rhs):
+            return lhs
 
         case Z3OpBvXor(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal(ca ^ cb, w)
         case Z3OpBvXor(Z3BvConst(0, _), rhs):
-            return unwrap(rhs)
+            return rhs
         case Z3OpBvXor(lhs, Z3BvConst(0, _)):
-            return unwrap(lhs)
-        case Z3OpBvXor(lhs, rhs) if dsl.expr_eq(unwrap(lhs), unwrap(rhs)):
+            return lhs
+        case Z3OpBvXor(lhs, rhs) if dsl.expr_eq(lhs, rhs):
             return dsl.BitVecVal(0, w)
 
     return None

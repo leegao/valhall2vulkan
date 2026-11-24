@@ -28,10 +28,13 @@ from tools.symbolic_ssa.z3utils.dsl import (  # noqa: F401
     And,
     ArithCmpOp,
     Array,
+    ArraySort,
     BitVec,
+    BitVecSort,
     BitVecs,
     BitVecVal,
     Bool,
+    BoolSort,
     Bools,
     BoolVal,
     BridgeOp,
@@ -42,11 +45,16 @@ from tools.symbolic_ssa.z3utils.dsl import (  # noqa: F401
     Distinct,
     Extract,
     FPVal,
+    FPSort,
+    Float16,
+    Float32,
+    Float64,
     Function,
     If,
     Implies,
     Int,
     Int2BV,
+    IntSort,
     Ints,
     IntVal,
     K,
@@ -54,7 +62,13 @@ from tools.symbolic_ssa.z3utils.dsl import (  # noqa: F401
     Not,
     Or,
     Q,
+    RNA,
+    RNE,
+    RTN,
+    RTP,
+    RTZ,
     Real,
+    RealSort,
     Reals,
     RealVal,
     Select,
@@ -142,6 +156,40 @@ from tools.symbolic_ssa.z3utils.dsl import (  # noqa: F401
     ZeroExt,
     as_long,
     expr_eq,
+    fpAbs,
+    fpAdd,
+    fpBVToFP,
+    fpDiv,
+    fpEQ,
+    fpFMA,
+    fpFPToFP,
+    fpGEQ,
+    fpGT,
+    fpIsInf,
+    fpIsNaN,
+    fpIsNegative,
+    fpIsNormal,
+    fpIsPositive,
+    fpIsSubnormal,
+    fpIsZero,
+    fpLEQ,
+    fpLT,
+    fpMax,
+    fpMin,
+    fpMul,
+    fpNaN,
+    fpNeg,
+    fpRealToFP,
+    fpRem,
+    fpRoundToIntegral,
+    fpSignedToFP,
+    fpSqrt,
+    fpSub,
+    fpToIEEEBV,
+    fpToReal,
+    fpToSBV,
+    fpToUBV,
+    fpUnsignedToFP,
     is_app,
     is_array,
     is_bool,
@@ -229,49 +277,7 @@ def is_quantifier(x: Any) -> bool:
 
 
 def BV2Int(a: Any, is_signed: bool = False) -> Any:
-    if isinstance(a, Z3Expr) and not is_signed:
-        return dsl.BV2Int(a)
-    return z3.BV2Int(lower(a), is_signed=is_signed)
-
-
-def fpAdd(rm: Any, a: Any, b: Any) -> z3.FPRef:
-    return z3.fpAdd(rm, lower(a), lower(b))
-
-
-def fpSub(rm: Any, a: Any, b: Any) -> z3.FPRef:
-    return z3.fpSub(rm, lower(a), lower(b))
-
-
-def fpMul(rm: Any, a: Any, b: Any) -> z3.FPRef:
-    return z3.fpMul(rm, lower(a), lower(b))
-
-
-def fpDiv(rm: Any, a: Any, b: Any) -> z3.FPRef:
-    return z3.fpDiv(rm, lower(a), lower(b))
-
-
-def fpFMA(rm: Any, a: Any, b: Any, c: Any) -> z3.FPRef:
-    return z3.fpFMA(rm, lower(a), lower(b), lower(c))
-
-
-def fpNeg(a: Any) -> z3.FPRef:
-    return z3.fpNeg(lower(a))
-
-
-def fpAbs(a: Any) -> z3.FPRef:
-    return z3.fpAbs(lower(a))
-
-
-def fpSqrt(rm: Any, a: Any) -> z3.FPRef:
-    return z3.fpSqrt(rm, lower(a))
-
-
-def fpToIEEEBV(a: Any) -> z3.BitVecRef:
-    return z3.fpToIEEEBV(lower(a))
-
-
-def fpBVToFP(a: Any, s: z3.FPSortRef) -> z3.FPRef:
-    return z3.fpBVToFP(lower(a), s)
+    return dsl.BV2Int(a, is_signed=is_signed)
 
 
 class ModelRef(z3.ModelRef):

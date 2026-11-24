@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-import z3
-
 from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.domains.shader_env.base import MASK32, MASK64, ShaderEnvBase
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain, make_z3_symbolic_domain
@@ -116,9 +114,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     found.add(self.base_to_buf[region])
                     if len(found) > 1:
                         return None
-            elif isinstance(cur, dsl.Z3OpBvAdd) or (
-                not isinstance(cur, dsl.Z3Expr) and dsl.is_app(cur) and cur.decl().kind() == z3.Z3_OP_BADD
-            ):
+            elif isinstance(cur, dsl.Z3OpBvAdd):
                 for ch in cur.children():
                     stack.append(ch)
         return next(iter(found)) if len(found) == 1 else None

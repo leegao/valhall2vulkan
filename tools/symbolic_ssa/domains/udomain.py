@@ -33,10 +33,11 @@ import enum
 import math
 import struct
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
+
+import z3
 
 from tools.symbolic_ssa.domains.base import MASK32, MASK64, SsaDomain
-from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
 from tools.symbolic_ssa.domains.concrete_bitvec import ConcreteBitvecDomain
 from tools.symbolic_ssa.domains.symbolic_z3_bitvec import (
     SymbolicZ3BitvecDomain,
@@ -46,13 +47,8 @@ from tools.symbolic_ssa.domains.symbolic_z3_bitvec import (
     _real_sin,
     _real_sqrt,
 )
-
-try:
-    import z3
-    from tools.symbolic_ssa.z3utils import dsl
-except ImportError:
-    z3 = None
-    dsl = None
+from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
+from tools.symbolic_ssa.z3utils import dsl
 
 
 class UValKind(enum.Enum):
@@ -74,7 +70,7 @@ class PtrVal:
     """
     base: str
     offset: Any  # concrete int (64-bit) or z3.BitVecRef(64)
-    align_mask: Optional[int] = None
+    align_mask: int | None = None
     readonly: bool = False
 
 
@@ -99,35 +95,35 @@ class UVal:
     raw_bv: Any = None
 
     @staticmethod
-    def unknown() -> "UVal":
+    def unknown() -> UVal:
         return UVal(UValKind.UNKNOWN, None)
 
     @staticmethod
-    def bool_val(b: Any) -> "UVal":
+    def bool_val(b: Any) -> UVal:
         return UVal(UValKind.BOOL, b)
 
     @staticmethod
-    def bvec64(bv: Any) -> "UVal":
+    def bvec64(bv: Any) -> UVal:
         return UVal(UValKind.BVEC64, bv, raw_bv=bv)
 
     @staticmethod
-    def f16x4(lanes: Tuple[Any, Any, Any, Any], raw_bv: Any = None) -> "UVal":
+    def f16x4(lanes: tuple[Any, Any, Any, Any], raw_bv: Any = None) -> UVal:
         return UVal(UValKind.F16X4, lanes, raw_bv=raw_bv)
 
     @staticmethod
-    def f32x2(lo: Any, hi: Any, raw_bv: Any = None) -> "UVal":
+    def f32x2(lo: Any, hi: Any, raw_bv: Any = None) -> UVal:
         return UVal(UValKind.F32X2, (lo, hi), raw_bv=raw_bv)
 
     @staticmethod
-    def f64(val: Any, raw_bv: Any = None) -> "UVal":
+    def f64(val: Any, raw_bv: Any = None) -> UVal:
         return UVal(UValKind.F64, val, raw_bv=raw_bv)
 
     @staticmethod
-    def ptr(base: str, offset: Any, *, align_mask: Optional[int] = None, readonly: bool = False) -> "UVal":
+    def ptr(base: str, offset: Any, *, align_mask: int | None = None, readonly: bool = False) -> UVal:
         return UVal(UValKind.PTR, PtrVal(base=base, offset=offset, align_mask=align_mask, readonly=readonly))
 
     @staticmethod
-    def sym(tag: str, payload: Any = None) -> "UVal":
+    def sym(tag: str, payload: Any = None) -> UVal:
         return UVal(UValKind.SYM, SymVal(tag=tag, payload=payload))
 
     @property
@@ -202,7 +198,7 @@ class _BaseUDomain(SsaDomain):
 
     def __init__(self, bv_domain: SsaDomain):
         self.bv = bv_domain
-        self._ro_reg_cache: Dict[Tuple[str, Any], UVal] = {}
+        self._ro_reg_cache: dict[tuple[str, Any], UVal] = {}
 
     def _ensure_uval(self, val: Any) -> UVal:
         if isinstance(val, UVal):
@@ -217,7 +213,7 @@ class _BaseUDomain(SsaDomain):
             return UVal.bvec64(self.bv.const_u64(val & MASK64))
         if isinstance(val, float):
             return self.const_f32(val)
-        if z3 is not None and isinstance(val, z3.BoolRef):
+        if dsl.is_bool(val):
             return UVal.bool_val(val)
         return UVal.bvec64(self.bv.as_u64(val))
 
@@ -245,8 +241,8 @@ class _BaseUDomain(SsaDomain):
         base: str,
         offset: Any = 0,
         *,
-        align_mask: Optional[int] = None,
-        readonly: Optional[bool] = None,
+        align_mask: int | None = None,
+        readonly: bool | None = None,
     ) -> UVal:
         ro = _is_readonly_base(base) if readonly is None else bool(readonly)
         off_bv = self.bv.const_u64(offset & MASK64) if isinstance(offset, int) else self.bv.as_u64(offset)
@@ -268,11 +264,11 @@ class _BaseUDomain(SsaDomain):
         """Convert any `UVal` to a 64-bit bitvector in `self.bv` (promoting on mismatch)."""
         raise NotImplementedError
 
-    def to_f32x2(self, val: Any) -> Tuple[Any, Any]:
+    def to_f32x2(self, val: Any) -> tuple[Any, Any]:
         """Convert any `UVal` to `(f32_lo, f32_hi)` in this domain's FP representation."""
         raise NotImplementedError
 
-    def to_f16x4(self, val: Any) -> Tuple[Any, Any, Any, Any]:
+    def to_f16x4(self, val: Any) -> tuple[Any, Any, Any, Any]:
         """Convert any `UVal` to 4 f16 lanes in this domain's FP representation."""
         raise NotImplementedError
 
@@ -303,7 +299,7 @@ class _BaseUDomain(SsaDomain):
             return uv.data
         return self.bv.bv_ne(self._to_bv32(uv), self.bv.const_u32(0))
 
-    def const_int_val(self, val: Any) -> Optional[int]:
+    def const_int_val(self, val: Any) -> int | None:
         uv = self._ensure_uval(val)
         if uv.is_bvec:
             return self.bv.const_int_val(uv.data)
@@ -384,7 +380,7 @@ class _BaseUDomain(SsaDomain):
             return UVal.f32x2(ulo.data[0], uhi.data[0])
         return self._from_bv64(self.bv.pack64(self._to_bv32(ulo), self._to_bv32(uhi)))
 
-    def split64(self, val64: Any) -> Tuple[UVal, UVal]:
+    def split64(self, val64: Any) -> tuple[UVal, UVal]:
         uv = self._ensure_uval(val64)
         if uv.kind == UValKind.F32X2:
             z0 = self._zero_fp()
@@ -620,7 +616,7 @@ class ConcreteUDomain(_BaseUDomain):
             return int(uv.data.offset) & MASK64
         return 0
 
-    def to_f32x2(self, val: Any) -> Tuple[float, float]:
+    def to_f32x2(self, val: Any) -> tuple[float, float]:
         uv = self._ensure_uval(val)
         if uv.kind == UValKind.F32X2:
             return (float(uv.data[0]), float(uv.data[1]))
@@ -629,7 +625,7 @@ class ConcreteUDomain(_BaseUDomain):
         b64 = self.to_bvec64(uv)
         return (_u32_to_f32(b64 & MASK32), _u32_to_f32((b64 >> 32) & MASK32))
 
-    def to_f16x4(self, val: Any) -> Tuple[float, float, float, float]:
+    def to_f16x4(self, val: Any) -> tuple[float, float, float, float]:
         uv = self._ensure_uval(val)
         if uv.kind == UValKind.F16X4:
             return tuple(float(x) for x in uv.data)  # type: ignore[return-value]
@@ -646,7 +642,7 @@ class ConcreteUDomain(_BaseUDomain):
             return 0.0
         return _u64_to_f64(self.to_bvec64(uv))
 
-    def unpack_half2x16(self, u: Any) -> Tuple[UVal, UVal]:
+    def unpack_half2x16(self, u: Any) -> tuple[UVal, UVal]:
         uv = self._ensure_uval(u)
         if uv.kind == UValKind.F16X4:
             return (self.const_f32(uv.data[0]), self.const_f32(uv.data[1]))
@@ -795,23 +791,23 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         super().__init__(SymbolicZ3BitvecDomain(fp_mode="real"))
         self.exact_bitcast = bool(exact_bitcast)
         self._zero_real = dsl.RealVal(0)
-        self._u_f32_to_bv32 = dsl.Function("u_f32_to_bv32", z3.RealSort(), z3.BitVecSort(32))
-        self._u_bv32_to_f32 = dsl.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
-        self._u_f16_to_bv16 = dsl.Function("u_f16_to_bv16", z3.RealSort(), z3.BitVecSort(16))
-        self._u_bv16_to_f16 = dsl.Function("u_bv16_to_f16", z3.BitVecSort(16), z3.RealSort())
-        self._u_f64_to_bv64 = dsl.Function("u_f64_to_bv64", z3.RealSort(), z3.BitVecSort(64))
-        self._u_bv64_to_f64 = dsl.Function("u_bv64_to_f64", z3.BitVecSort(64), z3.RealSort())
-        self._u_s32_to_f32 = dsl.Function("u_s32_to_f32", z3.BitVecSort(32), z3.RealSort())
-        self._u_u32_to_f32 = dsl.Function("u_u32_to_f32", z3.BitVecSort(32), z3.RealSort())
-        self._u_f32_to_s32 = dsl.Function("u_f32_to_s32", z3.RealSort(), z3.BitVecSort(32))
-        self._u_f32_to_u32 = dsl.Function("u_f32_to_u32", z3.RealSort(), z3.BitVecSort(32))
-        self._fp_ufs: Dict[Tuple[str, int], Any] = {}
+        self._u_f32_to_bv32 = dsl.Function("u_f32_to_bv32", dsl.RealSort(), dsl.BitVecSort(32))
+        self._u_bv32_to_f32 = dsl.Function("u_bv32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
+        self._u_f16_to_bv16 = dsl.Function("u_f16_to_bv16", dsl.RealSort(), dsl.BitVecSort(16))
+        self._u_bv16_to_f16 = dsl.Function("u_bv16_to_f16", dsl.BitVecSort(16), dsl.RealSort())
+        self._u_f64_to_bv64 = dsl.Function("u_f64_to_bv64", dsl.RealSort(), dsl.BitVecSort(64))
+        self._u_bv64_to_f64 = dsl.Function("u_bv64_to_f64", dsl.BitVecSort(64), dsl.RealSort())
+        self._u_s32_to_f32 = dsl.Function("u_s32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
+        self._u_u32_to_f32 = dsl.Function("u_u32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
+        self._u_f32_to_s32 = dsl.Function("u_f32_to_s32", dsl.RealSort(), dsl.BitVecSort(32))
+        self._u_f32_to_u32 = dsl.Function("u_f32_to_u32", dsl.RealSort(), dsl.BitVecSort(32))
+        self._fp_ufs: dict[tuple[str, int], Any] = {}
         self.bitcast_materializations: int = 0
 
     def _get_fp_uf(self, op: str, arity: int) -> Any:
         key = (op, arity)
         if key not in self._fp_ufs:
-            sorts = [z3.RealSort()] * (arity + 1)
+            sorts = [dsl.RealSort()] * (arity + 1)
             self._fp_ufs[key] = dsl.Function(f"u_fp_{op}", *sorts)
         return self._fp_ufs[key]
 
@@ -858,7 +854,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         return dsl.Real(f"nonfinite_{val}")
 
     @staticmethod
-    def _try_real_to_float(r: Any) -> Optional[float]:
+    def _try_real_to_float(r: Any) -> float | None:
         if dsl.is_rational_value(r):
             return float(r.numerator_as_long()) / float(r.denominator_as_long())
         return None
@@ -869,11 +865,11 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return dsl.BitVecVal(_f32_to_u32(f), 32)
         if isinstance(r, dsl.Z3OpBridge) and r.op is dsl.BridgeOp.BV32_TO_F32:
             return r.src
-        if isinstance(r, z3.ExprRef) and z3.is_app(r) and r.decl().name() == "u_bv32_to_f32" and r.num_args() == 1:
-            return r.arg(0)
+        if isinstance(r, dsl.Z3OpUFApp) and r.func.fn_name == "u_bv32_to_f32" and len(r.args) == 1:
+            return r.args[0]
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float32())), depth=1)
+            return dsl.fpToIEEEBV(dsl.fpRealToFP(dsl.RNE(), r, dsl.Float32()))
         return self._u_f32_to_bv32(r)
 
     def _bv32_to_real(self, bv32: Any) -> Any:
@@ -882,11 +878,11 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._float_to_real(_u32_to_f32(c))
         if isinstance(bv32, dsl.Z3OpBridge) and bv32.op is dsl.BridgeOp.F32_TO_BV32:
             return bv32.src
-        if isinstance(bv32, z3.ExprRef) and z3.is_app(bv32) and bv32.decl().name() == "u_f32_to_bv32" and bv32.num_args() == 1:
-            return bv32.arg(0)
+        if isinstance(bv32, dsl.Z3OpUFApp) and bv32.func.fn_name == "u_f32_to_bv32" and len(bv32.args) == 1:
+            return bv32.args[0]
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv32), z3.Float32())), depth=1)
+            return dsl.fpToReal(dsl.fpBVToFP(bv32, dsl.Float32()))
         return self._u_bv32_to_f32(bv32)
 
     def _real_to_bv16(self, r: Any) -> Any:
@@ -895,7 +891,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return dsl.BitVecVal(_f16_to_u16(f), 16)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float16())), depth=1)
+            return dsl.fpToIEEEBV(dsl.fpRealToFP(dsl.RNE(), r, dsl.Float16()))
         return self._u_f16_to_bv16(r)
 
     def _bv16_to_real(self, bv16: Any) -> Any:
@@ -904,7 +900,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._float_to_real(_u16_to_f16(c))
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv16), z3.Float16())), depth=1)
+            return dsl.fpToReal(dsl.fpBVToFP(bv16, dsl.Float16()))
         return self._u_bv16_to_f16(bv16)
 
     def _real_to_bv64(self, r: Any) -> Any:
@@ -913,7 +909,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return dsl.BitVecVal(_f64_to_u64(f), 64)
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToIEEEBV(z3.fpRealToFP(z3.RNE(), dsl.lower(r), z3.Float64())), depth=1)
+            return dsl.fpToIEEEBV(dsl.fpRealToFP(dsl.RNE(), r, dsl.Float64()))
         return self._u_f64_to_bv64(r)
 
     def _bv64_to_real(self, bv64: Any) -> Any:
@@ -922,7 +918,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._float_to_real(_u64_to_f64(c))
         self.bitcast_materializations += 1
         if self.exact_bitcast:
-            return dsl.lift(z3.fpToReal(z3.fpBVToFP(dsl.lower(bv64), z3.Float64())), depth=1)
+            return dsl.fpToReal(dsl.fpBVToFP(bv64, dsl.Float64()))
         return self._u_bv64_to_f64(bv64)
 
     def _to_bv32(self, val: Any) -> Any:
@@ -948,16 +944,6 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             lsb = b64.args[-1]
             if dsl.is_bv(lsb) and lsb.size() == 32:
                 return lsb
-        if isinstance(b64, z3.ExprRef) and z3.is_app(b64):
-            k = b64.decl().kind()
-            if k == z3.Z3_OP_ZERO_EXT:
-                inner = b64.arg(0)
-                if isinstance(inner, z3.BitVecRef) and inner.size() == 32:
-                    return inner
-            elif k == z3.Z3_OP_CONCAT:
-                lsb = b64.arg(b64.num_args() - 1)
-                if isinstance(lsb, z3.BitVecRef) and lsb.size() == 32:
-                    return lsb
         return dsl.Extract(31, 0, b64)
 
     def to_bvec64(self, val: Any) -> Any:
@@ -987,7 +973,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self.bv.as_u64(uv.data.offset)
         return dsl.BitVec(f"sym_bv64_{uv.data.tag}", 64)
 
-    def to_f32x2(self, val: Any) -> Tuple[Any, Any]:
+    def to_f32x2(self, val: Any) -> tuple[Any, Any]:
         uv = self._ensure_uval(val)
         if uv.kind == UValKind.F32X2:
             return (uv.data[0], uv.data[1])
@@ -1022,7 +1008,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
                     return SymbolicZ3UDomain._extract_slice_fast(hi - lw, lo - lw, c_hi)
         return dsl.Extract(hi, lo, bv)
 
-    def to_f16x4(self, val: Any) -> Tuple[Any, Any, Any, Any]:
+    def to_f16x4(self, val: Any) -> tuple[Any, Any, Any, Any]:
         uv = self._ensure_uval(val)
         if uv.kind == UValKind.F16X4:
             return uv.data
@@ -1042,7 +1028,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             return self._zero_real
         return self._bv64_to_real(self.to_bvec64(uv))
 
-    def unpack_half2x16(self, u: Any) -> Tuple[UVal, UVal]:
+    def unpack_half2x16(self, u: Any) -> tuple[UVal, UVal]:
         uv = self._ensure_uval(u)
         if uv.kind == UValKind.F16X4:
             return (UVal.f32x2(uv.data[0], self._zero_real), UVal.f32x2(uv.data[1], self._zero_real))
@@ -1187,7 +1173,7 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         if op == "FDiv": return UVal.f64(da / db)
         return UVal.f64(self._get_fp_uf(f"f64_{op}", 2)(da, db))
 
-    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: Optional[str] = None) -> UVal:
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> UVal:
         bv_args = [self._to_bv32(a) for a in args]
         res = self.bv.hw_uf(env, name, *bv_args, out_bits=out_bits, fallback_tag=fallback_tag)
         return self._from_bv64(res) if out_bits == 64 else self._from_bv32(res)

@@ -260,16 +260,12 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         else:
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
 
-    def _extract_img_channel(self, addr: Any) -> tuple[int, z3.BitVecRef]:
+    def _extract_img_channel(self, addr: Any) -> tuple[int, dsl.Z3BitVecExpr]:
         addr_bv = self.domain.lower_z3_bv64(addr)
         if isinstance(addr_bv, dsl.Z3OpBvAdd):
             c0, c1 = addr_bv.lhs, addr_bv.rhs
             if dsl.is_bv_value(c1) and dsl.as_long(c1) in (4, 8, 12):
                 return (dsl.as_long(c1) // 4, c0)
-        elif isinstance(addr_bv, z3.ExprRef) and z3.is_app(addr_bv) and addr_bv.decl().kind() == z3.Z3_OP_BADD and len(addr_bv.children()) == 2:
-            c0, c1 = addr_bv.children()
-            if isinstance(c1, z3.BitVecNumRef) and c1.as_long() in (4, 8, 12):
-                return (c1.as_long() // 4, c0)
         return (0, addr_bv)
 
     def _write_img_channel(self, st: BlockEffectState, mask: Any, ikey: str, xy_addr: Any, ch_idx: int, val: Any, nid: int) -> None:

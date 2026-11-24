@@ -31,6 +31,7 @@ from typing import Dict, List, Optional, Tuple
 
 from tools.symbolic_ssa.z3utils import dsl
 
+from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (
     PassStats,
@@ -55,6 +56,8 @@ _REAL_TO_BV_BRIDGES = {"u_f32_to_bv32", "u_f16_to_bv16", "u_f64_to_bv64", "real2
 
 
 def _bridge_cancel_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+    if not isinstance(node, dsl.Z3Expr):
+        node = dsl.view(node)
     if not dsl.is_app(node):
         return None
     if node.decl().kind() == dsl.Z3OpKind.ITE and node.num_args() == 3:
@@ -62,7 +65,9 @@ def _bridge_cancel_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
         t_br = dsl.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
         f_br = dsl.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
         def _apply_bridge(br_node: dsl.ExprRef, inner: dsl.ExprRef) -> dsl.ExprRef:
-            return br_node.decl()(dsl.lower(inner))
+            if isinstance(br_node, dsl.Z3OpBridge):
+                return dsl.Z3OpBridge(br_node.op, inner)
+            return br_node.decl()(inner)
 
         if t_br and f_br and t_arm.decl().name() == f_arm.decl().name():
             return _apply_bridge(t_arm, dsl.If(c, t_arm.arg(0), f_arm.arg(0)))
@@ -92,9 +97,13 @@ def _bridge_cancel_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
         t_is_br = dsl.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() == "u_f32_to_bv32"
         f_is_br = dsl.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == "u_f32_to_bv32"
         if t_is_br or f_is_br or dsl.is_bv_value(t_arm) or dsl.is_bv_value(f_arm):
-            fn = node.decl()
-            nt = t_arm.arg(0) if t_is_br else fn(dsl.lower(t_arm))
-            nf = f_arm.arg(0) if f_is_br else fn(dsl.lower(f_arm))
+            if isinstance(node, dsl.Z3OpBridge):
+                nt = t_arm.arg(0) if t_is_br else dsl.Z3OpBridge(node.op, t_arm)
+                nf = f_arm.arg(0) if f_is_br else dsl.Z3OpBridge(node.op, f_arm)
+            else:
+                fn = node.decl()
+                nt = t_arm.arg(0) if t_is_br else fn(t_arm)
+                nf = f_arm.arg(0) if f_is_br else fn(f_arm)
             return dsl.If(c, nt, nf)
     if dsl.is_app(arg0) and arg0.num_args() == 1 and arg0.decl().name() == inv_name:
         return arg0.arg(0)
@@ -282,7 +291,7 @@ class PolynomialNormalizePass(Z3QueryPass):
             dt = (time.perf_counter() - t0) * 1000.0
             return query, PassStats(self.name, False, 0, dt, f"skipped_size={sz}>{ctx.max_som_nodes}")
 
-        diff = dsl.simplify(dsl.lower(query.lhs) - dsl.lower(query.rhs), som=True, arith_lhs=True)
+        diff = z3utils.simplify(query.lhs - query.rhs, relift=True, som=True, arith_lhs=True)
         if dsl.is_rational_value(diff) and diff.numerator_as_long() == 0:
             out_q = query.with_terms(
                 lhs=dsl.RealVal(0),
@@ -315,7 +324,7 @@ def _rat_frac(e: dsl.ExprRef) -> Optional[Fraction]:
 
 def _homog_pair(a: dsl.ExprRef, b: dsl.ExprRef) -> Tuple[dsl.ExprRef, dsl.ExprRef]:
     if isinstance(a, dsl.Z3Expr) != isinstance(b, dsl.Z3Expr):
-        return dsl.lower(a), dsl.lower(b)
+        return dsl.view(a), dsl.view(b)
     return a, b
 
 
@@ -336,8 +345,8 @@ def _rmul(a: dsl.ExprRef, b: dsl.ExprRef) -> dsl.ExprRef:
 
 def _frac_to_real(f: Fraction) -> dsl.ExprRef:
     if f.denominator == 1:
-        return dsl.lower(dsl.RealVal(f.numerator))
-    return dsl.lower(dsl.RealVal(f"{f.numerator}/{f.denominator}"))
+        return dsl.RealVal(f.numerator)
+    return dsl.Q(f.numerator, f.denominator)
 
 
 def _is_uminus(e: dsl.ExprRef) -> bool:
@@ -359,15 +368,15 @@ def _real_cmp_rule(node: dsl.ExprRef, kind: int) -> Optional[dsl.ExprRef]:
     fa, fb = _rat_frac(a), _rat_frac(b)
     if fa is not None and fb is not None:
         if kind == dsl.Z3OpKind.LT:
-            return dsl.lower(dsl.BoolVal(fa < fb))
+            return dsl.BoolVal(fa < fb)
         if kind == dsl.Z3OpKind.LE:
-            return dsl.lower(dsl.BoolVal(fa <= fb))
+            return dsl.BoolVal(fa <= fb)
         if kind == dsl.Z3OpKind.GT:
-            return dsl.lower(dsl.BoolVal(fa > fb))
+            return dsl.BoolVal(fa > fb)
         if kind == dsl.Z3OpKind.GE:
-            return dsl.lower(dsl.BoolVal(fa >= fb))
+            return dsl.BoolVal(fa >= fb)
     if dsl.expr_eq(a, b):
-        return dsl.lower(dsl.BoolVal(kind in (dsl.Z3OpKind.LE, dsl.Z3OpKind.GE)))
+        return dsl.BoolVal(kind in (dsl.Z3OpKind.LE, dsl.Z3OpKind.GE))
     if _is_uminus(a) and _is_uminus(b):
         na, nb = a.arg(0), b.arg(0)
         if kind == dsl.Z3OpKind.LT:
@@ -432,7 +441,7 @@ def _real_add_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     if const_sum != 0:
         terms.append(_frac_to_real(const_sum))
     if not terms:
-        return dsl.lower(dsl.RealVal(0))
+        return dsl.RealVal(0)
     acc = terms[0]
     for t in terms[1:]:
         acc = _radd(acc, t)
@@ -451,7 +460,7 @@ def _real_mul_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
         fc = _rat_frac(ch)
         if fc is not None:
             if fc == 0:
-                return dsl.lower(dsl.RealVal(0))
+                return dsl.RealVal(0)
             const_prod *= fc
             const_count += 1
         else:
@@ -593,7 +602,7 @@ def _real_algebraic_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
         if fa is not None and fa == 0:
             return -b
         if dsl.expr_eq(a, b):
-            return dsl.lower(dsl.RealVal(0))
+            return dsl.RealVal(0)
         if _is_uminus(b):
             if _is_uminus(a):
                 return _rsub(b.arg(0), a.arg(0))

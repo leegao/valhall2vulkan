@@ -18,13 +18,6 @@ from typing import Any, Dict, Optional, Tuple, Union
 import z3
 
 from tools.symbolic_ssa.z3utils import dsl
-from tools.verify.panfrost_z3_model import (
-    _hw_uf,
-    bv16_to_fp16,
-    bv32_to_fp32,
-    fp16_to_bv16,
-    fp32_to_bv32,
-)
 
 BV8 = z3.BitVecSort(8)
 BV16 = z3.BitVecSort(16)
@@ -33,6 +26,32 @@ BV64 = z3.BitVecSort(64)
 FP16_SORT = z3.FPSort(5, 11)
 FP32_SORT = z3.FPSort(8, 24)
 FP64_SORT = z3.FPSort(11, 53)
+
+
+def bv32_to_fp32(x: Any) -> dsl.Z3FPExpr:
+    return dsl.fpBVToFP(x, FP32_SORT)
+
+
+def fp32_to_bv32(f: Any) -> dsl.Z3BitVecExpr:
+    return dsl.fpToIEEEBV(f)
+
+
+def bv16_to_fp16(x: Any) -> dsl.Z3FPExpr:
+    return dsl.fpBVToFP(x, FP16_SORT)
+
+
+def fp16_to_bv16(f: Any) -> dsl.Z3BitVecExpr:
+    return dsl.fpToIEEEBV(f)
+
+
+def f16_bv_to_f32_bv(x16: Any) -> dsl.Z3BitVecExpr:
+    return dsl.fpToIEEEBV(dsl.fpFPToFP(dsl.RNE(), dsl.fpBVToFP(x16, FP16_SORT), FP32_SORT))
+
+
+def f32_bv_to_f16_bv(x32: Any, rm: Any = None) -> dsl.Z3BitVecExpr:
+    return dsl.fpToIEEEBV(
+        dsl.fpFPToFP(rm if rm is not None else dsl.RNE(), dsl.fpBVToFP(x32, FP32_SORT), FP16_SORT)
+    )
 
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF
@@ -64,6 +83,9 @@ def _dsl_hw_uf(name: str, *sorts: z3.SortRef) -> dsl.Z3FuncDecl:
     return fn
 
 
+_hw_uf = _dsl_hw_uf
+
+
 def _dsl_bv32(v: int) -> dsl.Z3BvConst:
     return dsl.BitVecVal(v & MASK32, 32)
 
@@ -87,30 +109,15 @@ _LN_2_REAL = _f32_bits_to_real_const(0x3F317218)
 
 
 def _is_real2bv(x: Any) -> bool:
-    if isinstance(x, dsl.Z3OpUFApp) and x.func.fn_name == "hw_real2bv" and len(x.args) == 1:
-        return True
-    return (
-        isinstance(x, z3.ExprRef)
-        and z3.is_app(x)
-        and x.decl() == _hw_uf("real2bv", REAL_SORT, BV32)
-        and len(x.children()) == 1
-    )
+    return isinstance(x, dsl.Z3OpUFApp) and x.func.fn_name == "hw_real2bv" and len(x.args) == 1
 
 
 def _bv32_to_real(x: Any) -> Any:
     """Decode BV32 to exact DSL Real, cancelling `hw_real2bv` wrappers and pushing through ITEs."""
     if _is_real2bv(x):
-        return x.children()[0]
+        return x.args[0]
     if isinstance(x, dsl.Z3OpIte):
         return dsl.If(x.cond, _bv32_to_real(x.then_expr), _bv32_to_real(x.else_expr))
-    if (
-        isinstance(x, z3.ExprRef)
-        and z3.is_app(x)
-        and x.decl().kind() == z3.Z3_OP_ITE
-        and len(x.children()) == 3
-    ):
-        c, t, e = x.children()
-        return dsl.If(c, _bv32_to_real(t), _bv32_to_real(e))
     if dsl.is_bv_value(x):
         rc = _f32_bits_to_real_const(dsl.as_long(x))
         if rc is not None:
@@ -173,7 +180,7 @@ def _as_bv32(v: Z3Val) -> Any:
     if dsl.is_bool(v):
         return dsl.If(v, _dsl_bv32(1), _dsl_bv32(0))
     if dsl.is_fp(v):
-        return dsl.lift(fp32_to_bv32(dsl.lower(v)), depth=1)
+        return dsl.fpToIEEEBV(v)
     assert dsl.is_bv(v), f"Expected BitVec, got {type(v)}"
     if v.size() == 32:
         return v

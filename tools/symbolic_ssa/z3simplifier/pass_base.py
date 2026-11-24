@@ -199,7 +199,7 @@ class PassPipeline:
             stats.total_ms = (time.perf_counter() - t0) * 1000.0
             return SimplifyResult(query=query, exact_query=query, stats=stats)
 
-        cur = query.realize_z3()
+        cur = query
         exact_q = cur
         for p in self.passes:
             if cur.is_trivially_unsat():

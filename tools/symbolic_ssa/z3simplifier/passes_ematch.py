@@ -53,15 +53,15 @@ from tools.symbolic_ssa.z3utils import dsl
 
 def build_bridge_ematch_axioms() -> List[z3.BoolRef]:
     """Build trigger-guarded `ForAll` round-trip axioms for `udomain` f32/bv32 bridges."""
-    u_f2b = z3.Function("u_f32_to_bv32", z3.RealSort(), z3.BitVecSort(32))
-    u_b2f = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
-    x = z3.BitVec("_em_x", 32)
-    r = z3.Real("_em_r")
+    u_f2b = dsl.Function("u_f32_to_bv32", dsl.RealSort(), dsl.BitVecSort(32))
+    u_b2f = dsl.Function("u_bv32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
+    x = dsl.BitVec("_em_x", 32)
+    r = dsl.Real("_em_r")
     t_b = u_f2b(u_b2f(x))
     t_r = u_b2f(u_f2b(r))
     return [
-        z3.ForAll([x], t_b == x, patterns=[t_b]),
-        z3.ForAll([r], t_r == r, patterns=[t_r]),
+        dsl.ForAll([x], t_b == x, patterns=[t_b]),
+        dsl.ForAll([r], t_r == r, patterns=[t_r]),
     ]
 
 
@@ -142,7 +142,7 @@ class EmatchingUnifyPass(Z3QueryPass):
             out_q = query.with_terms(
                 lhs=query.lhs,
                 rhs=query.rhs,
-                predicate=z3.BoolVal(False),
+                predicate=dsl.BoolVal(False),
                 is_overapprox=True,
                 notes=query.notes + (f"ematch_discharged(axioms={len(axioms)})",),
             )
