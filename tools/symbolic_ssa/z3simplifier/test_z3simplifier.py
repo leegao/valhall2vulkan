@@ -470,7 +470,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
 
     def test_v33_1_dropin_z3_facade_no_raw_attr_and_is_true_semantics(self) -> None:
         """Verify tools.symbolic_ssa.z3utils drop-in API, zero raw attr on typed nodes, and syntactic is_true."""
-        from tools.symbolic_ssa import z3utils as z3 as sz3
+        from tools.symbolic_ssa import z3utils as sz3
         from tools.symbolic_ssa.domains.shader_env import ConcreteShaderEnv, SymbolicShaderEnv
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
         from tools.symbolic_ssa.domains.base import LaneVal
@@ -497,7 +497,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         s = sz3.Solver()
         s.add(x + y == sz3.BitVecVal(10, 32))
         s.add(x == sz3.BitVecVal(3, 32))
-        self.assertEqual(s.check(), sz3.sat)
+        self.assertEqual(s.check(), z3.sat)
         m = s.model()
         self.assertEqual(m.eval(y, model_completion=True).as_long(), 7)
 
@@ -552,7 +552,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
 
     def test_v33_3_format_z3_ast_dsl_constants_and_udomain_exact_fp_cmp(self) -> None:
         """Regression test for v33.3: format_z3_ast on DSL BV/Real/Int consts and udomain_exact fp_cmp."""
-        from tools.symbolic_ssa import z3utils as z3 as sz3
+        from tools.symbolic_ssa import z3utils as sz3
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
         from tools.symbolic_ssa.z3simplifier.ast_utils import format_z3_ast
 
@@ -650,7 +650,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
 
     def test_v33_4_theory_purify_real_bool_queries_and_dsl_bridge_hoist(self) -> None:
         """Bool-over-Real queries (e.g. discarded) purify into QF_NRA; pure-BV Bool queries stay untouched."""
-        from tools.symbolic_ssa import z3utils as z3 as sz3
+        from tools.symbolic_ssa import z3utils as sz3
 
         u_bv32_to_f32 = z3.Function("u_bv32_to_f32", z3.BitVecSort(32), z3.RealSort())
         hw_tex = z3.Function("hw_tex_0", z3.BitVecSort(32), z3.BitVecSort(32), z3.BitVecSort(32))
@@ -681,7 +681,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         self.assertFalse(sim_bv.query.is_overapprox)
 
         # BridgeCancelPass hoists u_f32_to_bv32 across If even with DSL Z3BvConst false arm.
-        u_f32_to_bv32_dsl = sz3.Function("u_f32_to_bv32", sz3.RealSort(), sz3.BitVecSort(32))
+        u_f32_to_bv32_dsl = sz3.Function("u_f32_to_bv32", z3.RealSort(), z3.BitVecSort(32))
         c_dsl = sz3.Bool("c_dsl")
         r_dsl = sz3.Real("r_dsl")
         ite_dsl = sz3.If(c_dsl, u_f32_to_bv32_dsl(r_dsl), sz3.BitVecVal(0, 32))
@@ -726,7 +726,7 @@ class TestZ3SimplifierPasses(unittest.TestCase):
 
     def test_v33_5_mixed_dsl_raw_rebuild_and_solver_large_pred(self) -> None:
         """Regression tests for v33.5: rebuild_app mixed args, BVAdd const fold, and >256-node Z3OpAnd."""
-        from tools.symbolic_ssa import z3utils as z3 as sz3
+        from tools.symbolic_ssa import z3utils as sz3
         from tools.symbolic_ssa.z3simplifier.ast_utils import rebuild_app
         from tools.symbolic_ssa.z3simplifier.passes_bv import _bv_algebraic_rule
 

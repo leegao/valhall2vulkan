@@ -37,10 +37,10 @@ Cross-Side Common-Subexpression Unification & Conditioned Unification Passes.
 from __future__ import annotations
 
 import time
-from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
+from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes
 from tools.symbolic_ssa.z3simplifier.context import (
     PassStats,
@@ -49,40 +49,40 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplifyQuery,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
+from tools.symbolic_ssa.z3utils import dsl
 
-
-_COMMUTATIVE_KINDS: FrozenSet[int] = frozenset(
+_COMMUTATIVE_KINDS: frozenset[int] = frozenset(
     {
-        z3.Z3_OP_ADD,
-        z3.Z3_OP_MUL,
-        z3.Z3_OP_AND,
-        z3.Z3_OP_OR,
-        z3.Z3_OP_EQ,
-        z3.Z3_OP_BADD,
-        z3.Z3_OP_BMUL,
-        z3.Z3_OP_BAND,
-        z3.Z3_OP_BOR,
-        z3.Z3_OP_BXOR,
+        dsl.Z3_OP_ADD,
+        dsl.Z3_OP_MUL,
+        dsl.Z3_OP_AND,
+        dsl.Z3_OP_OR,
+        dsl.Z3_OP_EQ,
+        dsl.Z3_OP_BADD,
+        dsl.Z3_OP_BMUL,
+        dsl.Z3_OP_BAND,
+        dsl.Z3_OP_BOR,
+        dsl.Z3_OP_BXOR,
     }
 )
 
 
 def _collect_subexprs_with_depth(
-    root: z3.ExprRef,
+    root: dsl.ExprRef,
     limit: int = 50000,
-) -> Tuple[Dict[int, z3.ExprRef], Dict[int, int]]:
+) -> tuple[dict[int, dsl.ExprRef], dict[int, int]]:
     """Iteratively collect all reachable subexpressions and their AST depths."""
-    nodes: Dict[int, z3.ExprRef] = {}
-    depths: Dict[int, int] = {}
-    visited: Set[int] = set()
-    stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
+    nodes: dict[int, dsl.ExprRef] = {}
+    depths: dict[int, int] = {}
+    visited: set[int] = set()
+    stack: list[tuple[dsl.ExprRef, bool]] = [(root, False)]
 
     while stack and len(visited) < limit:
         cur, expanded = stack.pop()
         cid = cur.get_id()
         if expanded:
             if cid not in depths:
-                if z3.is_app(cur) and cur.num_args() > 0:
+                if dsl.is_app(cur) and cur.num_args() > 0:
                     depths[cid] = 1 + max(depths.get(cur.arg(i).get_id(), 0) for i in range(cur.num_args()))
                 else:
                     depths[cid] = 0
@@ -92,7 +92,7 @@ def _collect_subexprs_with_depth(
             continue
         visited.add(cid)
         stack.append((cur, True))
-        if z3.is_app(cur):
+        if dsl.is_app(cur):
             for i in range(cur.num_args() - 1, -1, -1):
                 ch = cur.arg(i)
                 if ch.get_id() not in visited:
@@ -101,23 +101,23 @@ def _collect_subexprs_with_depth(
 
 
 def _collect_all_leaf_signatures(
-    root: z3.ExprRef,
+    root: dsl.ExprRef,
     limit: int = 50000,
-) -> Dict[int, FrozenSet[int]]:
+) -> dict[int, frozenset[int]]:
     """Compute free-variable leaf signatures for all reachable subexpressions in one O(N) DAG pass."""
-    sigs: Dict[int, FrozenSet[int]] = {}
-    visited: Set[int] = set()
-    stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
+    sigs: dict[int, frozenset[int]] = {}
+    visited: set[int] = set()
+    stack: list[tuple[dsl.ExprRef, bool]] = [(root, False)]
 
     while stack and len(visited) < limit:
         cur, expanded = stack.pop()
         cid = cur.get_id()
         if expanded:
             if cid not in sigs:
-                if z3.is_const(cur):
-                    sigs[cid] = frozenset((cid,)) if cur.decl().kind() == z3.Z3_OP_UNINTERPRETED else frozenset()
-                elif z3.is_app(cur) and cur.num_args() > 0:
-                    acc: Set[int] = set()
+                if dsl.is_const(cur):
+                    sigs[cid] = frozenset((cid,)) if cur.decl().kind() == dsl.Z3_OP_UNINTERPRETED else frozenset()
+                elif dsl.is_app(cur) and cur.num_args() > 0:
+                    acc: set[int] = set()
                     for i in range(cur.num_args()):
                         ch_sig = sigs.get(cur.arg(i).get_id())
                         if ch_sig:
@@ -130,7 +130,7 @@ def _collect_all_leaf_signatures(
             continue
         visited.add(cid)
         stack.append((cur, True))
-        if z3.is_app(cur) and not z3.is_const(cur):
+        if dsl.is_app(cur) and not dsl.is_const(cur):
             for i in range(cur.num_args() - 1, -1, -1):
                 ch = cur.arg(i)
                 if ch.get_id() not in visited:
@@ -139,24 +139,24 @@ def _collect_all_leaf_signatures(
 
 
 def _collect_leaf_signature(
-    root: z3.ExprRef,
+    root: dsl.ExprRef,
     limit: int = 2000,
-) -> FrozenSet[int]:
+) -> frozenset[int]:
     """Collect the frozenset of free symbolic constant IDs referenced by `root`."""
-    leaves: Set[int] = set()
-    visited: Set[int] = set()
-    stack: List[z3.ExprRef] = [root]
+    leaves: set[int] = set()
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = [root]
     while stack and len(visited) < limit:
         cur = stack.pop()
         cid = cur.get_id()
         if cid in visited:
             continue
         visited.add(cid)
-        if z3.is_const(cur):
-            if cur.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+        if dsl.is_const(cur):
+            if cur.decl().kind() == dsl.Z3_OP_UNINTERPRETED:
                 leaves.add(cid)
             continue
-        if z3.is_app(cur):
+        if dsl.is_app(cur):
             for i in range(cur.num_args()):
                 ch = cur.arg(i)
                 if ch.get_id() not in visited:
@@ -164,14 +164,14 @@ def _collect_leaf_signature(
     return frozenset(leaves)
 
 
-def _is_liftable_subexpr(node: z3.ExprRef, depth: int, min_depth: int) -> bool:
+def _is_liftable_subexpr(node: dsl.ExprRef, depth: int, min_depth: int) -> bool:
     """Return True if `node` is a non-trivial scalar subexpression worth lifting."""
     if depth < min_depth:
         return False
-    if not z3.is_app(node) or node.num_args() == 0:
+    if not dsl.is_app(node) or node.num_args() == 0:
         return False
     sk = node.sort().kind()
-    return sk in (z3.Z3_BV_SORT, z3.Z3_REAL_SORT, z3.Z3_INT_SORT, z3.Z3_BOOL_SORT)
+    return sk in (dsl.Z3_BV_SORT, dsl.Z3_REAL_SORT, dsl.Z3_INT_SORT, dsl.Z3_BOOL_SORT)
 
 
 class ExactCseUnificationPass(Z3QueryPass):
@@ -190,7 +190,7 @@ class ExactCseUnificationPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -212,9 +212,9 @@ class ExactCseUnificationPass(Z3QueryPass):
 
         candidates.sort(key=lambda x: (-x[0], x[1]))
 
-        covered: Set[int] = set()
-        repl_map: Dict[int, z3.ExprRef] = {}
-        abs_pairs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
+        covered: set[int] = set()
+        repl_map: dict[int, dsl.ExprRef] = {}
+        abs_pairs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
 
         for _, nid, expr in candidates:
             if len(repl_map) >= ctx.max_unify_candidates:
@@ -231,10 +231,10 @@ class ExactCseUnificationPass(Z3QueryPass):
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         sub_pairs = [(expr, fv) for fv, expr in abs_pairs]
-        new_lhs = z3.substitute(query.lhs, *sub_pairs)
-        new_rhs = z3.substitute(query.rhs, *sub_pairs)
-        new_guard = z3.substitute(query.guard, *sub_pairs) if query.guard is not None else None
-        new_pres = tuple(z3.substitute(p, *sub_pairs) for p in query.preconditions)
+        new_lhs = dsl.substitute(query.lhs, *sub_pairs)
+        new_rhs = dsl.substitute(query.rhs, *sub_pairs)
+        new_guard = dsl.substitute(query.guard, *sub_pairs) if query.guard is not None else None
+        new_pres = tuple(dsl.substitute(p, *sub_pairs) for p in query.preconditions)
 
         out_q = query.with_terms(
             lhs=new_lhs,
@@ -249,18 +249,18 @@ class ExactCseUnificationPass(Z3QueryPass):
         return out_q, PassStats(self.name, True, len(abs_pairs), dt, f"lifted={len(abs_pairs)}")
 
 
-def _contains_ite(roots: List[z3.ExprRef], limit: int = 64) -> bool:
+def _contains_ite(roots: list[dsl.ExprRef], limit: int = 64) -> bool:
     """Return True if any reachable node in `roots` is an `If` (`Z3_OP_ITE`)."""
-    visited: Set[int] = set()
-    stack: List[z3.ExprRef] = list(roots)
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = list(roots)
     while stack and len(visited) < limit:
         cur = stack.pop()
         cid = cur.get_id()
         if cid in visited:
             continue
         visited.add(cid)
-        if z3.is_app(cur):
-            if cur.decl().kind() == z3.Z3_OP_ITE:
+        if dsl.is_app(cur):
+            if cur.decl().kind() == dsl.Z3_OP_ITE:
                 return True
             for i in range(cur.num_args()):
                 ch = cur.arg(i)
@@ -273,7 +273,7 @@ class _IncrementalWlpSolver:
     """
     Reusable incremental Z3 solver for local WLP obligations in a single pass run.
 
-    Avoids re-asserting shared preconditions and guards into a fresh `z3.Solver`
+    Avoids re-asserting shared preconditions and guards into a fresh `z3utils.Solver`
     for every candidate pair, and skips asserting oversized guards (>256 nodes)
     where `Z3_solver_assert` itself can take >1 s ignoring solver timeouts
     (dropping a guard when proving `guard => (lhs == rhs)` is 100% sound).
@@ -281,8 +281,8 @@ class _IncrementalWlpSolver:
 
     def __init__(
         self,
-        guard: Optional[z3.BoolRef],
-        preconditions: Tuple[z3.BoolRef, ...],
+        guard: dsl.BoolRef | None,
+        preconditions: tuple[dsl.BoolRef, ...],
         timeout_ms: int,
         max_guard_nodes: int = 256,
     ):
@@ -295,46 +295,46 @@ class _IncrementalWlpSolver:
             if (guard is not None and count_ast_nodes([guard], limit=max_guard_nodes + 1) <= max_guard_nodes)
             else None
         )
-        self._uncond_solver: Optional[z3.Solver] = None
-        self._guarded_solver: Optional[z3.Solver] = None
+        self._uncond_solver: z3utils.Solver | None = None
+        self._guarded_solver: z3utils.Solver | None = None
 
-    def _get_uncond_solver(self) -> z3.Solver:
+    def _get_uncond_solver(self) -> z3utils.Solver:
         if self._uncond_solver is None:
-            s = z3.Solver()
+            s = z3utils.Solver()
             s.set("timeout", self.timeout_ms)
             s.set("rlimit", 200_000)
             for pre in self.small_pres:
-                s.add(z3.lower(pre))
+                s.add(dsl.lower(pre))
             self._uncond_solver = s
         return self._uncond_solver
 
-    def _get_guarded_solver(self) -> Optional[z3.Solver]:
+    def _get_guarded_solver(self) -> z3utils.Solver | None:
         if self.usable_guard is None:
             return None
         if self._guarded_solver is None:
-            s = z3.Solver()
+            s = z3utils.Solver()
             s.set("timeout", self.timeout_ms)
             s.set("rlimit", 200_000)
             for pre in self.small_pres:
-                s.add(z3.lower(pre))
-            s.add(z3.lower(self.usable_guard))
+                s.add(dsl.lower(pre))
+            s.add(dsl.lower(self.usable_guard))
             self._guarded_solver = s
         return self._guarded_solver
 
-    def check_eq(self, lhs: z3.ExprRef, rhs: z3.ExprRef, extra_guard: Optional[z3.BoolRef] = None) -> Tuple[bool, float]:
+    def check_eq(self, lhs: dsl.ExprRef, rhs: dsl.ExprRef, extra_guard: dsl.BoolRef | None = None) -> tuple[bool, float]:
         t0 = time.perf_counter()
         if lhs.eq(rhs):
             return True, (time.perf_counter() - t0) * 1000.0
         if lhs.sort() != rhs.sort():
             return False, (time.perf_counter() - t0) * 1000.0
 
-        if lhs.sort().kind() == z3.Z3_REAL_SORT and rhs.sort().kind() == z3.Z3_REAL_SORT:
+        if lhs.sort().kind() == dsl.Z3_REAL_SORT and rhs.sort().kind() == dsl.Z3_REAL_SORT:
             if count_ast_nodes([lhs, rhs], limit=49) <= 48 and not _contains_ite([lhs, rhs]):
-                diff = z3.simplify(lhs - rhs, som=True, arith_lhs=True)
-                if z3.is_rational_value(diff) and diff.numerator_as_long() == 0:
+                diff = dsl.simplify(lhs - rhs, som=True, arith_lhs=True)
+                if dsl.is_rational_value(diff) and diff.numerator_as_long() == 0:
                     return True, (time.perf_counter() - t0) * 1000.0
 
-        neq = z3.lower(lhs != rhs)
+        neq = dsl.lower(lhs != rhs)
         # Fast unconditional check first (avoids asserting guard when equality holds unconditionally)
         s0 = self._get_uncond_solver()
         s0.push()
@@ -349,7 +349,7 @@ class _IncrementalWlpSolver:
             sg = self._get_guarded_solver() if self.usable_guard is not None else s0
             sg.push()
             if extra_guard is not None and count_ast_nodes([extra_guard], limit=257) <= 256:
-                sg.add(z3.lower(extra_guard))
+                sg.add(dsl.lower(extra_guard))
             sg.add(neq)
             rc = sg.check()
             sg.pop()
@@ -360,15 +360,15 @@ class _IncrementalWlpSolver:
 
 
 def _discharge_wlp_local(
-    lhs: z3.ExprRef,
-    rhs: z3.ExprRef,
-    guard: Optional[z3.BoolRef],
-    preconditions: Tuple[z3.BoolRef, ...],
+    lhs: dsl.ExprRef,
+    rhs: dsl.ExprRef,
+    guard: dsl.BoolRef | None,
+    preconditions: tuple[dsl.BoolRef, ...],
     timeout_ms: int,
     *,
-    wlp_solver: Optional[_IncrementalWlpSolver] = None,
-    extra_guard: Optional[z3.BoolRef] = None,
-) -> Tuple[bool, float]:
+    wlp_solver: _IncrementalWlpSolver | None = None,
+    extra_guard: dsl.BoolRef | None = None,
+) -> tuple[bool, float]:
     """
     Attempt to prove `(preconditions & guard) => (lhs == rhs)` locally.
 
@@ -381,9 +381,9 @@ def _discharge_wlp_local(
     return _IncrementalWlpSolver(eff_guard, preconditions, timeout_ms).check_eq(lhs, rhs)
 
 
-def _same_operator_head(lhs: z3.ExprRef, rhs: z3.ExprRef) -> bool:
+def _same_operator_head(lhs: dsl.ExprRef, rhs: dsl.ExprRef) -> bool:
     """Return True if `lhs` and `rhs` are non-nullary applications of the same operator."""
-    if not (z3.is_app(lhs) and z3.is_app(rhs)):
+    if not (dsl.is_app(lhs) and dsl.is_app(rhs)):
         return False
     if lhs.num_args() == 0 or lhs.num_args() != rhs.num_args():
         return False
@@ -391,14 +391,14 @@ def _same_operator_head(lhs: z3.ExprRef, rhs: z3.ExprRef) -> bool:
     lk, rk = ld.kind(), rd.kind()
     if lk != rk:
         return False
-    if lk == z3.Z3_OP_UNINTERPRETED:
+    if lk == dsl.Z3_OP_UNINTERPRETED:
         return ld.name() == rd.name()
     if ld.params() != rd.params():
         return False
     return True
 
 
-def _pair_similarity_score(a: z3.ExprRef, b: z3.ExprRef) -> int:
+def _pair_similarity_score(a: dsl.ExprRef, b: dsl.ExprRef) -> int:
     """Fast O(1) structural similarity score for aligning commutative children."""
     if a.eq(b):
         return 4
@@ -410,10 +410,10 @@ def _pair_similarity_score(a: z3.ExprRef, b: z3.ExprRef) -> int:
 
 
 def _align_children(
-    l_args: List[z3.ExprRef],
-    r_args: List[z3.ExprRef],
+    l_args: list[dsl.ExprRef],
+    r_args: list[dsl.ExprRef],
     commutative: bool,
-) -> List[Tuple[z3.ExprRef, z3.ExprRef]]:
+) -> list[tuple[dsl.ExprRef, dsl.ExprRef]]:
     """Align argument lists of two same-operator nodes, handling commutativity."""
     n = len(l_args)
     if not commutative or n <= 1:
@@ -425,9 +425,9 @@ def _align_children(
             return [(l_args[0], r_args[1]), (l_args[1], r_args[0])]
         return [(l_args[0], r_args[0]), (l_args[1], r_args[1])]
 
-    used_r: Set[int] = set()
-    aligned: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-    unmatched_l: List[z3.ExprRef] = []
+    used_r: set[int] = set()
+    aligned: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+    unmatched_l: list[dsl.ExprRef] = []
     for la in l_args:
         found = -1
         for j, ra in enumerate(r_args):
@@ -455,41 +455,41 @@ def _align_children(
     return aligned
 
 
-def _are_negated_bools(a: z3.ExprRef, b: z3.ExprRef) -> bool:
+def _are_negated_bools(a: dsl.ExprRef, b: dsl.ExprRef) -> bool:
     """Return True if `a` and `b` are syntactic boolean negations (including Real cmp complements)."""
-    if z3.is_app(b) and b.decl().kind() == z3.Z3_OP_NOT and b.num_args() == 1 and a.eq(b.arg(0)):
+    if dsl.is_app(b) and b.decl().kind() == dsl.Z3_OP_NOT and b.num_args() == 1 and a.eq(b.arg(0)):
         return True
-    if z3.is_app(a) and a.decl().kind() == z3.Z3_OP_NOT and a.num_args() == 1 and b.eq(a.arg(0)):
+    if dsl.is_app(a) and a.decl().kind() == dsl.Z3_OP_NOT and a.num_args() == 1 and b.eq(a.arg(0)):
         return True
-    if z3.is_app(a) and z3.is_app(b) and a.num_args() == 2 and b.num_args() == 2:
+    if dsl.is_app(a) and dsl.is_app(b) and a.num_args() == 2 and b.num_args() == 2:
         ak, bk = a.decl().kind(), b.decl().kind()
         a0, a1 = a.arg(0), a.arg(1)
         b0, b1 = b.arg(0), b.arg(1)
         # (x < y) <-> !(x >= y) <-> !(y <= x); (x <= y) <-> !(x > y) <-> !(y < x)
         if a0.eq(b0) and a1.eq(b1):
             if (ak, bk) in (
-                (z3.Z3_OP_LT, z3.Z3_OP_GE),
-                (z3.Z3_OP_GE, z3.Z3_OP_LT),
-                (z3.Z3_OP_LE, z3.Z3_OP_GT),
-                (z3.Z3_OP_GT, z3.Z3_OP_LE),
+                (dsl.Z3_OP_LT, dsl.Z3_OP_GE),
+                (dsl.Z3_OP_GE, dsl.Z3_OP_LT),
+                (dsl.Z3_OP_LE, dsl.Z3_OP_GT),
+                (dsl.Z3_OP_GT, dsl.Z3_OP_LE),
             ):
                 return True
         if a0.eq(b1) and a1.eq(b0):
             if (ak, bk) in (
-                (z3.Z3_OP_LT, z3.Z3_OP_LE),
-                (z3.Z3_OP_LE, z3.Z3_OP_LT),
-                (z3.Z3_OP_GT, z3.Z3_OP_GE),
-                (z3.Z3_OP_GE, z3.Z3_OP_GT),
+                (dsl.Z3_OP_LT, dsl.Z3_OP_LE),
+                (dsl.Z3_OP_LE, dsl.Z3_OP_LT),
+                (dsl.Z3_OP_GT, dsl.Z3_OP_GE),
+                (dsl.Z3_OP_GE, dsl.Z3_OP_GT),
             ):
                 return True
     return False
 
 
 def _anti_unify_pair(
-    lhs: z3.ExprRef,
-    rhs: z3.ExprRef,
+    lhs: dsl.ExprRef,
+    rhs: dsl.ExprRef,
     max_holes: int = 32,
-) -> Tuple[int, List[Tuple[z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef]]], bool]:
+) -> tuple[int, list[tuple[dsl.ExprRef, dsl.ExprRef, dsl.BoolRef | None]], bool]:
     """
     Compute top-down DAG-memoized structural anti-unification of `(lhs, rhs)`.
 
@@ -502,12 +502,12 @@ def _anti_unify_pair(
       - `overflowed`: True if more than `max_holes` unique holes were found.
     """
     matched_ops = 0
-    hole_index: Dict[Tuple[int, int], int] = {}
-    holes: List[Tuple[z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef]]] = []
-    visited: Set[Tuple[int, int, int]] = set()
+    hole_index: dict[tuple[int, int], int] = {}
+    holes: list[tuple[dsl.ExprRef, dsl.ExprRef, dsl.BoolRef | None]] = []
+    visited: set[tuple[int, int, int]] = set()
     overflowed = False
 
-    def _record_hole(a: z3.ExprRef, b: z3.ExprRef, pcond: Optional[z3.BoolRef]) -> None:
+    def _record_hole(a: dsl.ExprRef, b: dsl.ExprRef, pcond: dsl.BoolRef | None) -> None:
         nonlocal overflowed
         key = (a.get_id(), b.get_id())
         idx = hole_index.get(key)
@@ -522,10 +522,10 @@ def _anti_unify_pair(
         hole_index[key] = len(holes)
         holes.append((a, b, pcond))
 
-    def _combine_cond(base: Optional[z3.BoolRef], extra: z3.BoolRef) -> z3.BoolRef:
-        return extra if base is None else z3.And(base, extra)
+    def _combine_cond(base: dsl.BoolRef | None, extra: dsl.BoolRef) -> dsl.BoolRef:
+        return extra if base is None else dsl.And(base, extra)
 
-    stack: List[Tuple[z3.ExprRef, z3.ExprRef, Optional[z3.BoolRef]]] = [(lhs, rhs, None)]
+    stack: list[tuple[dsl.ExprRef, dsl.ExprRef, dsl.BoolRef | None]] = [(lhs, rhs, None)]
     while stack and not overflowed:
         a, b, pcond = stack.pop()
         if a.eq(b):
@@ -542,14 +542,14 @@ def _anti_unify_pair(
 
         matched_ops += 1
         kind = a.decl().kind()
-        if kind == z3.Z3_OP_ITE and a.num_args() == 3:
+        if kind == dsl.Z3_OP_ITE and a.num_args() == 3:
             ca, ta, fa = a.arg(0), a.arg(1), a.arg(2)
             cb, tb, fb = b.arg(0), b.arg(1), b.arg(2)
             if ca.eq(cb):
-                stack.append((fa, fb, _combine_cond(pcond, z3.Not(ca))))
+                stack.append((fa, fb, _combine_cond(pcond, dsl.Not(ca))))
                 stack.append((ta, tb, _combine_cond(pcond, ca)))
             elif _are_negated_bools(ca, cb):
-                stack.append((fa, tb, _combine_cond(pcond, z3.Not(ca))))
+                stack.append((fa, tb, _combine_cond(pcond, dsl.Not(ca))))
                 stack.append((ta, fb, _combine_cond(pcond, ca)))
             else:
                 stack.append((fa, fb, pcond))
@@ -567,11 +567,11 @@ def _anti_unify_pair(
 
 
 def _expand_abstractions(
-    expr: z3.ExprRef,
-    abs_subs: List[Tuple[z3.ExprRef, z3.ExprRef]],
-    abs_ids: Set[int],
+    expr: dsl.ExprRef,
+    abs_subs: list[tuple[dsl.ExprRef, dsl.ExprRef]],
+    abs_ids: set[int],
     max_nodes: int = 256,
-) -> z3.ExprRef:
+) -> dsl.ExprRef:
     """Expand abstracted symbols (`purify_*`, `cse_*`, `cu_*`) in `expr` up to a node budget."""
     if not abs_subs:
         return expr
@@ -579,18 +579,18 @@ def _expand_abstractions(
     relevant = [(fv, orig) for fv, orig in abs_subs if fv.get_id() in leaves]
     if not relevant:
         return expr
-    expanded = z3.substitute(expr, *relevant)
+    expanded = dsl.substitute(expr, *relevant)
     if count_ast_nodes([expanded], limit=max_nodes + 1) > max_nodes:
         return expr
     return expanded
 
 
-def _combine_guard(base: Optional[z3.BoolRef], extra: Optional[z3.BoolRef]) -> Optional[z3.BoolRef]:
+def _combine_guard(base: dsl.BoolRef | None, extra: dsl.BoolRef | None) -> dsl.BoolRef | None:
     if base is None:
         return extra
     if extra is None:
         return base
-    return z3.And(base, extra)
+    return dsl.And(base, extra)
 
 
 class ConditionedUnificationPass(Z3QueryPass):
@@ -626,13 +626,13 @@ class ConditionedUnificationPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, int, int]:
+    ) -> tuple[SimplifyQuery, int, int]:
         l_nodes, l_depths = _collect_subexprs_with_depth(query.lhs, limit=ctx.max_dag_nodes)
         r_nodes, r_depths = _collect_subexprs_with_depth(query.rhs, limit=ctx.max_dag_nodes)
         l_sigs = _collect_all_leaf_signatures(query.lhs, limit=ctx.max_dag_nodes)
         r_sigs = _collect_all_leaf_signatures(query.rhs, limit=ctx.max_dag_nodes)
 
-        r_buckets: Dict[Tuple[int, FrozenSet[int]], List[Tuple[int, z3.ExprRef]]] = {}
+        r_buckets: dict[tuple[int, frozenset[int]], list[tuple[int, dsl.ExprRef]]] = {}
         for rid, rexpr in r_nodes.items():
             if rid == query.rhs.get_id() or rid in l_nodes:
                 continue
@@ -652,7 +652,7 @@ class ConditionedUnificationPass(Z3QueryPass):
         for b in r_buckets.values():
             b.sort(key=lambda x: -x[0])
 
-        l_cands: List[Tuple[int, int, z3.ExprRef]] = []
+        l_cands: list[tuple[int, int, dsl.ExprRef]] = []
         for lid, lexpr in l_nodes.items():
             if lid == query.lhs.get_id() or lid in r_nodes:
                 continue
@@ -664,12 +664,12 @@ class ConditionedUnificationPass(Z3QueryPass):
             l_cands.append((ld, lid, lexpr))
         l_cands.sort(key=lambda x: (-x[0], x[1]))
 
-        obligations: List[SideObligation] = list(query.side_obligations)
-        l_subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-        r_subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-        abs_pairs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-        covered_l: Set[int] = set()
-        covered_r: Set[int] = set()
+        obligations: list[SideObligation] = list(query.side_obligations)
+        l_subs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        r_subs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        abs_pairs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        covered_l: set[int] = set()
+        covered_r: set[int] = set()
         attempted = 0
         discharged_cnt = 0
 
@@ -726,8 +726,8 @@ class ConditionedUnificationPass(Z3QueryPass):
         if discharged_cnt == 0:
             return query, attempted, 0
 
-        new_lhs = z3.substitute(query.lhs, *l_subs)
-        new_rhs = z3.substitute(query.rhs, *r_subs)
+        new_lhs = dsl.substitute(query.lhs, *l_subs)
+        new_rhs = dsl.substitute(query.rhs, *r_subs)
         out_q = query.with_terms(
             lhs=new_lhs,
             rhs=new_rhs,
@@ -742,7 +742,7 @@ class ConditionedUnificationPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, int, int, int]:
+    ) -> tuple[SimplifyQuery, int, int, int]:
         """
         Structurally anti-unify `(query.lhs, query.rhs)` and attempt WLP discharge
         on every extracted mismatch hole `(a_i, b_i)`.
@@ -761,11 +761,11 @@ class ConditionedUnificationPass(Z3QueryPass):
         abs_subs = list(query.abstraction_map)
         abs_ids = {fv.get_id() for fv, _ in abs_subs}
 
-        obligations: List[SideObligation] = list(query.side_obligations)
-        residuals: List[SideObligation] = []
-        l_subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-        r_subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
-        abs_pairs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
+        obligations: list[SideObligation] = list(query.side_obligations)
+        residuals: list[SideObligation] = []
+        l_subs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        r_subs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
+        abs_pairs: list[tuple[dsl.ExprRef, dsl.ExprRef]] = []
         discharged_cnt = 0
         wlp_solver = _IncrementalWlpSolver(query.guard, query.preconditions, ctx.wlp_timeout_ms)
 
@@ -864,14 +864,14 @@ class ConditionedUnificationPass(Z3QueryPass):
                 )
 
         all_discharged = len(residuals) == 0 and discharged_cnt == len(holes)
-        new_lhs = z3.substitute(query.lhs, *l_subs) if l_subs else query.lhs
-        new_rhs = z3.substitute(query.rhs, *r_subs) if r_subs else query.rhs
+        new_lhs = dsl.substitute(query.lhs, *l_subs) if l_subs else query.lhs
+        new_rhs = dsl.substitute(query.rhs, *r_subs) if r_subs else query.rhs
 
         if all_discharged:
             out_q = query.with_terms(
                 lhs=new_lhs,
                 rhs=new_rhs,
-                predicate=z3.BoolVal(False),
+                predicate=dsl.BoolVal(False),
                 side_obligations=tuple(obligations),
                 residual_obligations=(),
                 is_overapprox=True if abs_pairs else query.is_overapprox,
@@ -898,7 +898,7 @@ class ConditionedUnificationPass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")

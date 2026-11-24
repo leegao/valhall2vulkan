@@ -25,6 +25,8 @@ from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
 import z3
 
+from z3.z3consts import *
+
 
 class Z3OpKind(IntEnum):
     """Auto-generated from `dir(z3)` `Z3_OP_*` constants."""
@@ -3947,9 +3949,19 @@ def simplify(x: Any, *args: Any, **kwargs: Any) -> z3.ExprRef:
 
 
 def substitute(x: Any, *m: Any) -> z3.ExprRef:
-    """Realize `x` and substitution pairs to Z3 and invoke `z3.substitute`."""
+    """Realize `x` and substitution pairs to Z3 and invoke `z3.substitute`.
+
+    Accepts either a sequence of pairs (`substitute(x, (a, b), (c, d))` or
+    `substitute(x, [(a, b), (c, d)])`) or a single pair (`substitute(x, (a, b))`).
+    """
     if len(m) == 1 and isinstance(m[0], (list, tuple)):
-        pairs = [(lower(a), lower(b)) for a, b in m[0]]
+        inner = m[0]
+        # A non-empty sequence whose first element is itself a pair is a list of
+        # pairs; otherwise `m[0]` is a single `(expr, expr)` pair.
+        if len(inner) == 0 or isinstance(inner[0], (list, tuple)):
+            pairs = [(lower(a), lower(b)) for a, b in inner]
+        else:
+            pairs = [(lower(a), lower(b)) for a, b in m]
     else:
         pairs = [(lower(a), lower(b)) for a, b in m]
     return z3.substitute(lower(x), *pairs)

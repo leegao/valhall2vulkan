@@ -66,6 +66,19 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
     )
 
 
+def _atomic_events_eq(
+    a: list[tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]],
+    b: list[tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]],
+) -> bool:
+    """Structural equality for atomic-event lists whose entries may hold DSL nodes."""
+    if len(a) != len(b):
+        return False
+    return all(
+        len(ea) == len(eb) and all(dsl.expr_eq(x, y) for x, y in zip(ea, eb))
+        for ea, eb in zip(a, b)
+    )
+
+
 def _merge_states(
     cond_states: list[tuple[z3.BoolRef, BlockEffectState]],
     env: SymbolicShaderEnv,
@@ -136,7 +149,7 @@ def _merge_states(
         for akey in set(base_st.atomic_events) | set(st.atomic_events):
             b_evs = base_st.atomic_events.get(akey, [])
             s_evs = st.atomic_events.get(akey, [])
-            if b_evs == s_evs:
+            if _atomic_events_eq(b_evs, s_evs):
                 continue
             merged_evs = [(_z3_and(_z3_not(cond), m), op, off, arg, cmp_v) for (m, op, off, arg, cmp_v) in b_evs]
             merged_evs.extend((_z3_and(cond, m), op, off, arg, cmp_v) for (m, op, off, arg, cmp_v) in s_evs)

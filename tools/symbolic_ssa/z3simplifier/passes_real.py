@@ -14,7 +14,7 @@ Addresses:
         Sound for UNSAT because `r1 == r2 => f(r1) == f(r2)` for any function `f`.
       * `PolynomialNormalizePass`: when both sides are Z3 `Real` expressions
         whose DAG size is within `ctx.max_som_nodes`, computes
-        `z3.simplify(lhs - rhs, som=True, arith_lhs=True)`. Any algebraically
+        `dsl.simplify(lhs - rhs, som=True, arith_lhs=True)`. Any algebraically
         equivalent FMA / associativity / distributivity lowering collapses to
         `0 == 0` (trivial `UNSAT`) in < 1 ms without invoking the SMT solver.
       * `RealAlgebraicPass`: applies terminating Real arithmetic, reciprocal,
@@ -29,7 +29,7 @@ import struct
 import time
 from typing import Dict, List, Optional, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+from tools.symbolic_ssa.z3utils import dsl
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rewrite_dag
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -54,26 +54,26 @@ _BRIDGE_INVERSES: Dict[str, str] = {
 _REAL_TO_BV_BRIDGES = {"u_f32_to_bv32", "u_f16_to_bv16", "u_f64_to_bv64", "real2bv32"}
 
 
-def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
-    if not z3.is_app(node):
+def _bridge_cancel_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+    if not dsl.is_app(node):
         return None
-    if node.decl().kind() == z3.Z3_OP_ITE and node.num_args() == 3:
+    if node.decl().kind() == dsl.Z3_OP_ITE and node.num_args() == 3:
         c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
-        t_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
-        f_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
-        def _apply_bridge(br_node: z3.ExprRef, inner: z3.ExprRef) -> z3.ExprRef:
-            return br_node.decl()(z3.lower(inner))
+        t_br = dsl.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() in _REAL_TO_BV_BRIDGES
+        f_br = dsl.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() in _REAL_TO_BV_BRIDGES
+        def _apply_bridge(br_node: dsl.ExprRef, inner: dsl.ExprRef) -> dsl.ExprRef:
+            return br_node.decl()(dsl.lower(inner))
 
         if t_br and f_br and t_arm.decl().name() == f_arm.decl().name():
-            return _apply_bridge(t_arm, z3.If(c, t_arm.arg(0), f_arm.arg(0)))
-        if t_br and t_arm.decl().name() == "u_f32_to_bv32" and z3.is_bv_value(f_arm):
+            return _apply_bridge(t_arm, dsl.If(c, t_arm.arg(0), f_arm.arg(0)))
+        if t_br and t_arm.decl().name() == "u_f32_to_bv32" and dsl.is_bv_value(f_arm):
             fv = struct.unpack("<f", struct.pack("<I", f_arm.as_long() & 0xFFFFFFFF))[0]
             if math.isfinite(fv):
-                return _apply_bridge(t_arm, z3.If(c, t_arm.arg(0), z3.RealVal(repr(float(fv)))))
-        if f_br and f_arm.decl().name() == "u_f32_to_bv32" and z3.is_bv_value(t_arm):
+                return _apply_bridge(t_arm, dsl.If(c, t_arm.arg(0), dsl.RealVal(repr(float(fv)))))
+        if f_br and f_arm.decl().name() == "u_f32_to_bv32" and dsl.is_bv_value(t_arm):
             tv = struct.unpack("<f", struct.pack("<I", t_arm.as_long() & 0xFFFFFFFF))[0]
             if math.isfinite(tv):
-                return _apply_bridge(f_arm, z3.If(c, z3.RealVal(repr(float(tv))), f_arm.arg(0)))
+                return _apply_bridge(f_arm, dsl.If(c, dsl.RealVal(repr(float(tv))), f_arm.arg(0)))
         return None
     if node.num_args() != 1:
         return None
@@ -84,31 +84,31 @@ def _bridge_cancel_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     arg0 = node.arg(0)
     if (
         outer_name == "u_bv32_to_f32"
-        and z3.is_app(arg0)
-        and arg0.decl().kind() == z3.Z3_OP_ITE
+        and dsl.is_app(arg0)
+        and arg0.decl().kind() == dsl.Z3_OP_ITE
         and arg0.num_args() == 3
     ):
         c, t_arm, f_arm = arg0.arg(0), arg0.arg(1), arg0.arg(2)
-        t_is_br = z3.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() == "u_f32_to_bv32"
-        f_is_br = z3.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == "u_f32_to_bv32"
-        if t_is_br or f_is_br or z3.is_bv_value(t_arm) or z3.is_bv_value(f_arm):
+        t_is_br = dsl.is_app(t_arm) and t_arm.num_args() == 1 and t_arm.decl().name() == "u_f32_to_bv32"
+        f_is_br = dsl.is_app(f_arm) and f_arm.num_args() == 1 and f_arm.decl().name() == "u_f32_to_bv32"
+        if t_is_br or f_is_br or dsl.is_bv_value(t_arm) or dsl.is_bv_value(f_arm):
             fn = node.decl()
-            nt = t_arm.arg(0) if t_is_br else fn(z3.lower(t_arm))
-            nf = f_arm.arg(0) if f_is_br else fn(z3.lower(f_arm))
-            return z3.If(c, nt, nf)
-    if z3.is_app(arg0) and arg0.num_args() == 1 and arg0.decl().name() == inv_name:
+            nt = t_arm.arg(0) if t_is_br else fn(dsl.lower(t_arm))
+            nf = f_arm.arg(0) if f_is_br else fn(dsl.lower(f_arm))
+            return dsl.If(c, nt, nf)
+    if dsl.is_app(arg0) and arg0.num_args() == 1 and arg0.decl().name() == inv_name:
         return arg0.arg(0)
-    if outer_name in ("u_bv32_to_f32", "bv32_to_real") and z3.is_bv_value(arg0):
+    if outer_name in ("u_bv32_to_f32", "bv32_to_real") and dsl.is_bv_value(arg0):
         fval = struct.unpack("<f", struct.pack("<I", arg0.as_long() & 0xFFFFFFFF))[0]
         if math.isfinite(fval):
-            return z3.RealVal(repr(float(fval)))
-    if outer_name in ("u_f32_to_bv32", "real2bv32") and z3.is_rational_value(arg0):
+            return dsl.RealVal(repr(float(fval)))
+    if outer_name in ("u_f32_to_bv32", "real2bv32") and dsl.is_rational_value(arg0):
         fval = float(arg0.numerator_as_long()) / float(arg0.denominator_as_long())
         try:
             u32 = struct.unpack("<I", struct.pack("<f", fval))[0]
         except OverflowError:
             u32 = 0xFF800000 if fval < 0 else 0x7F800000
-        return z3.BitVecVal(u32, 32)
+        return dsl.BitVecVal(u32, 32)
     return None
 
 
@@ -127,21 +127,21 @@ class PreconditionConstSubPass(Z3QueryPass):
     is_equivalence_preserving = True
 
     @staticmethod
-    def _is_const_literal(e: z3.ExprRef) -> bool:
+    def _is_const_literal(e: dsl.ExprRef) -> bool:
         return (
-            z3.is_bv_value(e)
-            or z3.is_rational_value(e)
-            or z3.is_int_value(e)
-            or z3.is_true(e)
-            or z3.is_false(e)
+            dsl.is_bv_value(e)
+            or dsl.is_rational_value(e)
+            or dsl.is_int_value(e)
+            or dsl.is_true(e)
+            or dsl.is_false(e)
         )
 
     @staticmethod
-    def _is_substitutable_lhs(e: z3.ExprRef) -> bool:
-        if z3.is_const(e) and e.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+    def _is_substitutable_lhs(e: dsl.ExprRef) -> bool:
+        if dsl.is_const(e) and e.decl().kind() == dsl.Z3_OP_UNINTERPRETED:
             return True
-        if z3.is_app(e) and e.decl().kind() == z3.Z3_OP_SELECT and e.num_args() == 2:
-            return z3.is_bv_value(e.arg(1)) or z3.is_int_value(e.arg(1))
+        if dsl.is_app(e) and e.decl().kind() == dsl.Z3_OP_SELECT and e.num_args() == 2:
+            return dsl.is_bv_value(e.arg(1)) or dsl.is_int_value(e.arg(1))
         return False
 
     def run(
@@ -153,22 +153,22 @@ class PreconditionConstSubPass(Z3QueryPass):
         if query.is_trivially_unsat() or not query.preconditions:
             return query, PassStats(self.name, False, 0, 0.0)
 
-        subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
+        subs: List[Tuple[dsl.ExprRef, dsl.ExprRef]] = []
         seen_ids = set()
-        work: List[z3.ExprRef] = list(query.preconditions)
+        work: List[dsl.ExprRef] = list(query.preconditions)
         if query.guard is not None:
             work.append(query.guard)
-        atoms: List[z3.ExprRef] = []
+        atoms: List[dsl.ExprRef] = []
         while work:
             cur = work.pop()
-            if z3.is_app(cur) and cur.decl().kind() == z3.Z3_OP_AND:
+            if dsl.is_app(cur) and cur.decl().kind() == dsl.Z3_OP_AND:
                 for i in range(cur.num_args()):
                     work.append(cur.arg(i))
             else:
                 atoms.append(cur)
 
         for atom in atoms:
-            if not (z3.is_app(atom) and atom.decl().kind() == z3.Z3_OP_EQ and atom.num_args() == 2):
+            if not (dsl.is_app(atom) and atom.decl().kind() == dsl.Z3_OP_EQ and atom.num_args() == 2):
                 continue
             a, b = atom.arg(0), atom.arg(1)
             if self._is_substitutable_lhs(a) and self._is_const_literal(b):
@@ -183,9 +183,9 @@ class PreconditionConstSubPass(Z3QueryPass):
         if not subs:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
-        new_lhs = z3.substitute(query.lhs, *subs)
-        new_rhs = z3.substitute(query.rhs, *subs)
-        changed = not z3.expr_eq(new_lhs, query.lhs) or not z3.expr_eq(new_rhs, query.rhs)
+        new_lhs = dsl.substitute(query.lhs, *subs)
+        new_rhs = dsl.substitute(query.rhs, *subs)
+        changed = not dsl.expr_eq(new_lhs, query.lhs) or not dsl.expr_eq(new_rhs, query.rhs)
         out_q = query.with_terms(lhs=new_lhs, rhs=new_rhs) if changed else query
         dt = (time.perf_counter() - t0) * 1000.0
         return out_q, PassStats(self.name, changed, len(subs) if changed else 0, dt, f"subs={len(subs)}")
@@ -199,9 +199,9 @@ class BridgeCancelPass(Z3TermPass):
 
     def rewrite_term(
         self,
-        expr: z3.ExprRef,
+        expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[z3.ExprRef, int]:
+    ) -> Tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _bridge_cancel_rule)
 
 
@@ -230,8 +230,8 @@ class InjectiveBridgeUnwrapPass(Z3QueryPass):
 
         lhs, rhs = query.lhs, query.rhs
         if (
-            z3.is_app(lhs)
-            and z3.is_app(rhs)
+            dsl.is_app(lhs)
+            and dsl.is_app(rhs)
             and lhs.num_args() == 1
             and rhs.num_args() == 1
             and lhs.decl().name() == rhs.decl().name()
@@ -274,7 +274,7 @@ class PolynomialNormalizePass(Z3QueryPass):
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
 
-        if query.lhs.sort().kind() != z3.Z3_REAL_SORT or query.rhs.sort().kind() != z3.Z3_REAL_SORT:
+        if query.lhs.sort().kind() != dsl.Z3_REAL_SORT or query.rhs.sort().kind() != dsl.Z3_REAL_SORT:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         sz = count_ast_nodes([query.lhs, query.rhs], limit=ctx.max_som_nodes + 1)
@@ -282,12 +282,12 @@ class PolynomialNormalizePass(Z3QueryPass):
             dt = (time.perf_counter() - t0) * 1000.0
             return query, PassStats(self.name, False, 0, dt, f"skipped_size={sz}>{ctx.max_som_nodes}")
 
-        diff = z3.simplify(z3.lower(query.lhs) - z3.lower(query.rhs), som=True, arith_lhs=True)
-        if z3.is_rational_value(diff) and diff.numerator_as_long() == 0:
+        diff = dsl.simplify(dsl.lower(query.lhs) - dsl.lower(query.rhs), som=True, arith_lhs=True)
+        if dsl.is_rational_value(diff) and diff.numerator_as_long() == 0:
             out_q = query.with_terms(
-                lhs=z3.RealVal(0),
-                rhs=z3.RealVal(0),
-                predicate=z3.BoolVal(False),
+                lhs=dsl.RealVal(0),
+                rhs=dsl.RealVal(0),
+                predicate=dsl.BoolVal(False),
                 notes=query.notes + ("polynomial_diff_zero",),
             )
             dt = (time.perf_counter() - t0) * 1000.0
@@ -297,7 +297,7 @@ class PolynomialNormalizePass(Z3QueryPass):
         if diff_sz < sz:
             out_q = query.with_terms(
                 lhs=diff,
-                rhs=z3.RealVal(0),
+                rhs=dsl.RealVal(0),
                 notes=query.notes + (f"polynomial_reduced:{sz}->{diff_sz}",),
             )
             dt = (time.perf_counter() - t0) * 1000.0
@@ -307,90 +307,90 @@ class PolynomialNormalizePass(Z3QueryPass):
         return query, PassStats(self.name, False, 0, dt)
 
 
-def _rat_frac(e: z3.ExprRef) -> Optional[Fraction]:
-    if z3.is_rational_value(e):
+def _rat_frac(e: dsl.ExprRef) -> Optional[Fraction]:
+    if dsl.is_rational_value(e):
         return Fraction(int(e.numerator_as_long()), int(e.denominator_as_long()))
     return None
 
 
-def _homog_pair(a: z3.ExprRef, b: z3.ExprRef) -> Tuple[z3.ExprRef, z3.ExprRef]:
-    if isinstance(a, z3.Z3Expr) != isinstance(b, z3.Z3Expr):
-        return z3.lower(a), z3.lower(b)
+def _homog_pair(a: dsl.ExprRef, b: dsl.ExprRef) -> Tuple[dsl.ExprRef, dsl.ExprRef]:
+    if isinstance(a, dsl.Z3Expr) != isinstance(b, dsl.Z3Expr):
+        return dsl.lower(a), dsl.lower(b)
     return a, b
 
 
-def _radd(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+def _radd(a: dsl.ExprRef, b: dsl.ExprRef) -> dsl.ExprRef:
     a, b = _homog_pair(a, b)
     return a + b
 
 
-def _rsub(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+def _rsub(a: dsl.ExprRef, b: dsl.ExprRef) -> dsl.ExprRef:
     a, b = _homog_pair(a, b)
     return a - b
 
 
-def _rmul(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+def _rmul(a: dsl.ExprRef, b: dsl.ExprRef) -> dsl.ExprRef:
     a, b = _homog_pair(a, b)
     return a * b
 
 
-def _frac_to_real(f: Fraction) -> z3.ExprRef:
+def _frac_to_real(f: Fraction) -> dsl.ExprRef:
     if f.denominator == 1:
-        return z3.lower(z3.RealVal(f.numerator))
-    return z3.lower(z3.RealVal(f"{f.numerator}/{f.denominator}"))
+        return dsl.lower(dsl.RealVal(f.numerator))
+    return dsl.lower(dsl.RealVal(f"{f.numerator}/{f.denominator}"))
 
 
-def _is_uminus(e: z3.ExprRef) -> bool:
-    return z3.is_app(e) and e.decl().kind() == z3.Z3_OP_UMINUS and e.num_args() == 1
+def _is_uminus(e: dsl.ExprRef) -> bool:
+    return dsl.is_app(e) and e.decl().kind() == dsl.Z3_OP_UMINUS and e.num_args() == 1
 
 
-def _strip_uminus(e: z3.ExprRef) -> Tuple[z3.ExprRef, bool]:
+def _strip_uminus(e: dsl.ExprRef) -> Tuple[dsl.ExprRef, bool]:
     if _is_uminus(e):
         return e.arg(0), True
     return e, False
 
 
-def _real_cmp_rule(node: z3.ExprRef, kind: int) -> Optional[z3.ExprRef]:
+def _real_cmp_rule(node: dsl.ExprRef, kind: int) -> Optional[dsl.ExprRef]:
     if node.num_args() != 2:
         return None
     a, b = node.arg(0), node.arg(1)
-    if a.sort().kind() != z3.Z3_REAL_SORT or b.sort().kind() != z3.Z3_REAL_SORT:
+    if a.sort().kind() != dsl.Z3_REAL_SORT or b.sort().kind() != dsl.Z3_REAL_SORT:
         return None
     fa, fb = _rat_frac(a), _rat_frac(b)
     if fa is not None and fb is not None:
-        if kind == z3.Z3_OP_LT:
-            return z3.lower(z3.BoolVal(fa < fb))
-        if kind == z3.Z3_OP_LE:
-            return z3.lower(z3.BoolVal(fa <= fb))
-        if kind == z3.Z3_OP_GT:
-            return z3.lower(z3.BoolVal(fa > fb))
-        if kind == z3.Z3_OP_GE:
-            return z3.lower(z3.BoolVal(fa >= fb))
-    if z3.expr_eq(a, b):
-        return z3.lower(z3.BoolVal(kind in (z3.Z3_OP_LE, z3.Z3_OP_GE)))
+        if kind == dsl.Z3_OP_LT:
+            return dsl.lower(dsl.BoolVal(fa < fb))
+        if kind == dsl.Z3_OP_LE:
+            return dsl.lower(dsl.BoolVal(fa <= fb))
+        if kind == dsl.Z3_OP_GT:
+            return dsl.lower(dsl.BoolVal(fa > fb))
+        if kind == dsl.Z3_OP_GE:
+            return dsl.lower(dsl.BoolVal(fa >= fb))
+    if dsl.expr_eq(a, b):
+        return dsl.lower(dsl.BoolVal(kind in (dsl.Z3_OP_LE, dsl.Z3_OP_GE)))
     if _is_uminus(a) and _is_uminus(b):
         na, nb = a.arg(0), b.arg(0)
-        if kind == z3.Z3_OP_LT:
+        if kind == dsl.Z3_OP_LT:
             return nb < na
-        if kind == z3.Z3_OP_LE:
+        if kind == dsl.Z3_OP_LE:
             return nb <= na
-        if kind == z3.Z3_OP_GT:
+        if kind == dsl.Z3_OP_GT:
             return na < nb
-        if kind == z3.Z3_OP_GE:
+        if kind == dsl.Z3_OP_GE:
             return na <= nb
     # Canonicalize `>` to `<` and `>=` to `<=` so flipped clamps match structurally.
-    if kind == z3.Z3_OP_GT:
+    if kind == dsl.Z3_OP_GT:
         return b < a
-    if kind == z3.Z3_OP_GE:
+    if kind == dsl.Z3_OP_GE:
         return b <= a
     return None
 
 
-def _real_add_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+def _real_add_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     nargs = node.num_args()
     const_sum = Fraction(0)
     const_count = 0
-    non_const: List[z3.ExprRef] = []
+    non_const: List[dsl.ExprRef] = []
     for i in range(nargs):
         ch = node.arg(i)
         fc = _rat_frac(ch)
@@ -432,26 +432,26 @@ def _real_add_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     if const_sum != 0:
         terms.append(_frac_to_real(const_sum))
     if not terms:
-        return z3.lower(z3.RealVal(0))
+        return dsl.lower(dsl.RealVal(0))
     acc = terms[0]
     for t in terms[1:]:
         acc = _radd(acc, t)
     return acc
 
 
-def _real_mul_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+def _real_mul_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     nargs = node.num_args()
     const_prod = Fraction(1)
     const_count = 0
     neg_count = 0
-    raw_non_const: List[z3.ExprRef] = []
-    stripped_non_const: List[z3.ExprRef] = []
+    raw_non_const: List[dsl.ExprRef] = []
+    stripped_non_const: List[dsl.ExprRef] = []
     for i in range(nargs):
         ch = node.arg(i)
         fc = _rat_frac(ch)
         if fc is not None:
             if fc == 0:
-                return z3.lower(z3.RealVal(0))
+                return dsl.lower(dsl.RealVal(0))
             const_prod *= fc
             const_count += 1
         else:
@@ -486,7 +486,7 @@ def _real_mul_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         odd_neg = not odd_neg
         const_prod = Fraction(1)
 
-    factors: List[z3.ExprRef] = []
+    factors: List[dsl.ExprRef] = []
     if const_prod != Fraction(1):
         factors.append(_frac_to_real(const_prod))
     factors.extend(non_const)
@@ -497,7 +497,7 @@ def _real_mul_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     return -acc if odd_neg else acc
 
 
-def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+def _real_div_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     a, b = node.arg(0), node.arg(1)
     fa, fb = _rat_frac(a), _rat_frac(b)
     if fb is not None and fb != 0:
@@ -510,7 +510,7 @@ def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         return _rmul(a, _frac_to_real(Fraction(1) / fb))
     # Double reciprocal: `1 / (1 / x) -> x`, `(-1) / (1 / x) -> -x`, `a / (1 / x) -> a * x`.
     # Matches IEEE-754 finite reciprocal semantics (Valhall lowers `sqrt(x)` as `FRCP(FRSQ(x))`).
-    if z3.is_app(b) and b.decl().kind() == z3.Z3_OP_DIV and b.num_args() == 2:
+    if dsl.is_app(b) and b.decl().kind() == dsl.Z3_OP_DIV and b.num_args() == 2:
         b_num = _rat_frac(b.arg(0))
         if b_num is not None and b_num != 0:
             b_den = b.arg(1)
@@ -529,23 +529,23 @@ def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     return None
 
 
-def _real_uminus_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
+def _real_uminus_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
     a = node.arg(0)
     fa = _rat_frac(a)
     if fa is not None:
         return _frac_to_real(-fa)
     if _is_uminus(a):
         return a.arg(0)
-    if z3.is_app(a):
+    if dsl.is_app(a):
         ak = a.decl().kind()
-        if ak == z3.Z3_OP_SUB and a.num_args() == 2:
+        if ak == dsl.Z3_OP_SUB and a.num_args() == 2:
             return _rsub(a.arg(1), a.arg(0))
-        if ak == z3.Z3_OP_ADD and a.num_args() >= 2:
+        if ak == dsl.Z3_OP_ADD and a.num_args() >= 2:
             acc = -a.arg(0)
             for i in range(1, a.num_args()):
                 acc = _radd(acc, -a.arg(i))
             return acc
-        if ak == z3.Z3_OP_MUL and a.num_args() >= 2:
+        if ak == dsl.Z3_OP_MUL and a.num_args() >= 2:
             c0 = _rat_frac(a.arg(0))
             if c0 is not None:
                 acc = _frac_to_real(-c0)
@@ -555,35 +555,35 @@ def _real_uminus_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     return None
 
 
-def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
-    if not z3.is_app(node):
+def _real_algebraic_rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
+    if not dsl.is_app(node):
         return None
     kind = node.decl().kind()
     nargs = node.num_args()
     sk = node.sort().kind()
 
-    if sk == z3.Z3_BOOL_SORT and kind in (z3.Z3_OP_LT, z3.Z3_OP_LE, z3.Z3_OP_GT, z3.Z3_OP_GE):
+    if sk == dsl.Z3_BOOL_SORT and kind in (dsl.Z3_OP_LT, dsl.Z3_OP_LE, dsl.Z3_OP_GT, dsl.Z3_OP_GE):
         return _real_cmp_rule(node, kind)
 
-    if sk != z3.Z3_REAL_SORT:
+    if sk != dsl.Z3_REAL_SORT:
         return None
 
-    if kind == z3.Z3_OP_ITE and nargs == 3:
+    if kind == dsl.Z3_OP_ITE and nargs == 3:
         c, t_arm, f_arm = node.arg(0), node.arg(1), node.arg(2)
-        if z3.is_true(c):
+        if dsl.is_true(c):
             return t_arm
-        if z3.is_false(c):
+        if dsl.is_false(c):
             return f_arm
-        if z3.expr_eq(t_arm, f_arm):
+        if dsl.expr_eq(t_arm, f_arm):
             return t_arm
-        if z3.is_app(c) and c.decl().kind() == z3.Z3_OP_NOT and c.num_args() == 1:
-            return z3.If(c.arg(0), f_arm, t_arm)
+        if dsl.is_app(c) and c.decl().kind() == dsl.Z3_OP_NOT and c.num_args() == 1:
+            return dsl.If(c.arg(0), f_arm, t_arm)
         return None
 
-    if kind == z3.Z3_OP_ADD and nargs >= 2:
+    if kind == dsl.Z3_OP_ADD and nargs >= 2:
         return _real_add_rule(node)
 
-    if kind == z3.Z3_OP_SUB and nargs == 2:
+    if kind == dsl.Z3_OP_SUB and nargs == 2:
         a, b = node.arg(0), node.arg(1)
         fa, fb = _rat_frac(a), _rat_frac(b)
         if fa is not None and fb is not None:
@@ -592,8 +592,8 @@ def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return a
         if fa is not None and fa == 0:
             return -b
-        if z3.expr_eq(a, b):
-            return z3.lower(z3.RealVal(0))
+        if dsl.expr_eq(a, b):
+            return dsl.lower(dsl.RealVal(0))
         if _is_uminus(b):
             if _is_uminus(a):
                 return _rsub(b.arg(0), a.arg(0))
@@ -602,13 +602,13 @@ def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return _radd(a, _frac_to_real(-fb))
         return None
 
-    if kind == z3.Z3_OP_MUL and nargs >= 2:
+    if kind == dsl.Z3_OP_MUL and nargs >= 2:
         return _real_mul_rule(node)
 
-    if kind == z3.Z3_OP_DIV and nargs == 2:
+    if kind == dsl.Z3_OP_DIV and nargs == 2:
         return _real_div_rule(node)
 
-    if kind == z3.Z3_OP_UMINUS and nargs == 1:
+    if kind == dsl.Z3_OP_UMINUS and nargs == 1:
         return _real_uminus_rule(node)
 
     return None
@@ -630,7 +630,7 @@ class RealAlgebraicPass(Z3TermPass):
 
     def rewrite_term(
         self,
-        expr: z3.ExprRef,
+        expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[z3.ExprRef, int]:
+    ) -> Tuple[dsl.ExprRef, int]:
         return rewrite_dag(expr, _real_algebraic_rule)

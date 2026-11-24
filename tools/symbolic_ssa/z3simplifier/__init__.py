@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import (
     AstCensus,
@@ -56,6 +56,11 @@ from tools.symbolic_ssa.z3simplifier.passes_bv import (
     _bv_algebraic_rule,
     _bv_wrapper_rule,
 )
+from tools.symbolic_ssa.z3simplifier.passes_ematch import (
+    EmatchingUnifyPass,
+    build_bridge_ematch_axioms,
+    build_extensionality_witness_axiom,
+)
 from tools.symbolic_ssa.z3simplifier.passes_real import (
     BridgeCancelPass,
     InjectiveBridgeUnwrapPass,
@@ -64,11 +69,6 @@ from tools.symbolic_ssa.z3simplifier.passes_real import (
     RealAlgebraicPass,
     _bridge_cancel_rule,
     _real_algebraic_rule,
-)
-from tools.symbolic_ssa.z3simplifier.passes_ematch import (
-    EmatchingUnifyPass,
-    build_bridge_ematch_axioms,
-    build_extensionality_witness_axiom,
 )
 from tools.symbolic_ssa.z3simplifier.passes_unify import (
     ConditionedUnificationPass,
@@ -217,8 +217,8 @@ __all__ = [
     "TheoryPurifyRealPass",
     "Z3QueryPass",
     "Z3TermPass",
-    "build_default_pipeline",
     "build_bridge_ematch_axioms",
+    "build_default_pipeline",
     "build_exact_pipeline",
     "build_extensionality_witness_axiom",
     "census_ast",

@@ -433,10 +433,10 @@ def verify_equivalence_bundle(
         d_evs = d_st.atomic_events.get(akey, [])
         v_evs = v_st.atomic_events.get(akey, [])
         if len(d_evs) != len(v_evs):
-            d_cnt = bv32(0)
+            d_cnt = dsl.BitVecVal(0, 32)
             for de in d_evs:
                 d_cnt = d_cnt + dsl.If(de[0], bv32(1), bv32(0))
-            v_cnt = bv32(0)
+            v_cnt = dsl.BitVecVal(0, 32)
             for ve in v_evs:
                 v_cnt = v_cnt + dsl.If(ve[0], bv32(1), bv32(0))
             checks.append((f"atomic:{akey}.dyn_count", d_cnt, v_cnt, None, f"atomic:{akey}"))

@@ -19,8 +19,9 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
+from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes
 from tools.symbolic_ssa.z3simplifier.context import (
     RewriteStats,
@@ -29,6 +30,7 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplifyResult,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import PassPipeline
+from tools.symbolic_ssa.z3utils import dsl
 
 
 @dataclass
@@ -53,10 +55,10 @@ def _make_solver(timeout_ms: int, rlimit: int, pure_theory: Optional[str]) -> Tu
         try:
             s = z3.Then("simplify", "qfnra").solver()
         except Exception:
-            s = z3.Solver()
+            s = z3utils.Solver()
             use_nlsat = False
     else:
-        s = z3.Solver()
+        s = z3utils.Solver()
     s.set("timeout", max(1, int(timeout_ms)))
     if rlimit > 0:
         s.set("rlimit", int(rlimit))
@@ -77,16 +79,16 @@ def _check_query_with_z3(
         return "UNSAT", None, 0.0, "", False
 
     pred = q.to_refutation_predicate()
-    simp_pred = z3.simplify(pred) if count_ast_nodes([pred], limit=257) <= 256 else z3.lower(pred)
-    if z3.is_false(simp_pred):
+    simp_pred = dsl.simplify(pred) if count_ast_nodes([pred], limit=257) <= 256 else dsl.lower(pred)
+    if dsl.is_false(simp_pred):
         if smt2_out is not None:
             smt2_out.append(f"; --- {check_name}: predicate simplified to false (UNSAT) ---\n")
         return "UNSAT", None, 0.0, "", False
 
     s, used_nlsat = _make_solver(timeout_ms, rlimit, q.pure_theory)
     for pre in q.preconditions:
-        s.add(z3.lower(pre))
-    s.add(z3.lower(simp_pred))
+        s.add(dsl.lower(pre))
+    s.add(dsl.lower(simp_pred))
 
     if smt2_out is not None:
         smt2_out.append(

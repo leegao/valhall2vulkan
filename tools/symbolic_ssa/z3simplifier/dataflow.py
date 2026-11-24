@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Z3-domain dataflow analysis and extensional-equality propagation engine,
-operating on lifted `z3.dsl` terms via Python `match`/`case` and
-lowering back to `z3.ExprRef` via `.lower()`.
+operating on lifted `dsl.dsl` terms via Python `match`/`case` and
+lowering back to `dsl.ExprRef` via `.lower()`.
 
 Responsibilities (cleanly separated from local peephole folding):
   1. `EqualityTable` (Union-Find + Congruence): harvests ground truths and
@@ -23,9 +23,8 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes, rebuild_app
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -33,6 +32,8 @@ from tools.symbolic_ssa.z3simplifier.context import (
     SimplificationContext,
     SimplifyQuery,
 )
+from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
+from tools.symbolic_ssa.z3utils import dsl
 from tools.symbolic_ssa.z3utils.dsl import (
     Z3BoolConst,
     Z3BvConst,
@@ -58,7 +59,6 @@ from tools.symbolic_ssa.z3utils.dsl import (
     lift,
     unwrap,
 )
-from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,46 +78,46 @@ class KnownBits:
         return ((self.zeros | self.ones) & self.mask) == self.mask
 
     @classmethod
-    def top(cls, width: int) -> "KnownBits":
+    def top(cls, width: int) -> KnownBits:
         return cls(width, 0, 0)
 
     @classmethod
-    def const(cls, val: int, width: int) -> "KnownBits":
+    def const(cls, val: int, width: int) -> KnownBits:
         m = (1 << width) - 1
         v = val & m
         return cls(width, (~v) & m, v)
 
-    def join(self, other: "KnownBits") -> "KnownBits":
+    def join(self, other: KnownBits) -> KnownBits:
         if self.width != other.width:
             return KnownBits.top(self.width)
         return KnownBits(self.width, self.zeros & other.zeros, self.ones & other.ones)
 
 
-def _is_ground_const(e: z3.ExprRef) -> bool:
+def _is_ground_const(e: dsl.ExprRef) -> bool:
     return (
         isinstance(e, (z3.BitVecNumRef, z3.RatNumRef, z3.IntNumRef))
-        or z3.is_true(e)
-        or z3.is_false(e)
+        or dsl.is_true(e)
+        or dsl.is_false(e)
     )
 
 
-def _rep_rank(e: z3.ExprRef) -> Tuple[int, int, int]:
+def _rep_rank(e: dsl.ExprRef) -> tuple[int, int, int]:
     if _is_ground_const(e):
         return (0, 0, e.get_id())
-    if z3.is_const(e):
+    if dsl.is_const(e):
         return (1, 0, e.get_id())
-    nargs = e.num_args() if z3.is_app(e) else 0
+    nargs = e.num_args() if dsl.is_app(e) else 0
     return (2, nargs, e.get_id())
 
 
 class EqualityTable:
     """Scoped Union-Find table of extensional equalities (`a == b`) and boolean truth facts."""
 
-    def __init__(self, parent: Optional["EqualityTable"] = None) -> None:
+    def __init__(self, parent: EqualityTable | None = None) -> None:
         if parent is not None:
-            self._uf: Dict[int, int] = dict(parent._uf)
-            self._exprs: Dict[int, z3.ExprRef] = dict(parent._exprs)
-            self._bool_vals: Dict[int, bool] = dict(parent._bool_vals)
+            self._uf: dict[int, int] = dict(parent._uf)
+            self._exprs: dict[int, dsl.ExprRef] = dict(parent._exprs)
+            self._bool_vals: dict[int, bool] = dict(parent._bool_vals)
         else:
             self._uf = {}
             self._exprs = {}
@@ -134,37 +134,37 @@ class EqualityTable:
             cur = nxt
         return root
 
-    def find_rep(self, expr: z3.ExprRef) -> z3.ExprRef:
+    def find_rep(self, expr: dsl.ExprRef) -> dsl.ExprRef:
         eid = expr.get_id()
         if eid not in self._uf:
             return expr
         return self._exprs[self._find_id(eid)]
 
-    def are_equal(self, a: z3.ExprRef, b: z3.ExprRef) -> bool:
-        if z3.expr_eq(a, b):
+    def are_equal(self, a: dsl.ExprRef, b: dsl.ExprRef) -> bool:
+        if dsl.expr_eq(a, b):
             return True
         aid, bid = a.get_id(), b.get_id()
         if aid not in self._uf or bid not in self._uf:
             return False
         return self._find_id(aid) == self._find_id(bid)
 
-    def lookup_bool(self, expr: z3.ExprRef) -> Optional[bool]:
-        if z3.is_true(expr):
+    def lookup_bool(self, expr: dsl.ExprRef) -> bool | None:
+        if dsl.is_true(expr):
             return True
-        if z3.is_false(expr):
+        if dsl.is_false(expr):
             return False
         eid = expr.get_id()
         if eid in self._bool_vals:
             return self._bool_vals[eid]
         rep = self.find_rep(expr)
-        if z3.is_true(rep):
+        if dsl.is_true(rep):
             return True
-        if z3.is_false(rep):
+        if dsl.is_false(rep):
             return False
         return self._bool_vals.get(rep.get_id())
 
-    def union(self, a: z3.ExprRef, b: z3.ExprRef) -> None:
-        if z3.expr_eq(a, b):
+    def union(self, a: dsl.ExprRef, b: dsl.ExprRef) -> None:
+        if dsl.expr_eq(a, b):
             return
         aid, bid = a.get_id(), b.get_id()
         if aid not in self._uf:
@@ -185,22 +185,22 @@ class EqualityTable:
         bb = self._bool_vals.get(rb)
         if ba is None and bb is not None:
             self._bool_vals[ra] = bb
-        elif z3.is_true(ea):
+        elif dsl.is_true(ea):
             self._bool_vals[ra] = True
-        elif z3.is_false(ea):
+        elif dsl.is_false(ea):
             self._bool_vals[ra] = False
 
-    def assume_bool(self, pred: z3.ExprRef, truth: bool) -> None:
+    def assume_bool(self, pred: dsl.ExprRef, truth: bool) -> None:
         """Harvest boolean truth and nested `And`/`Or`/`Not`/`Eq`/`Distinct` facts via DSL `match`."""
-        work: List[Tuple[z3.ExprRef, bool]] = [(pred, truth)]
-        seen: Set[Tuple[int, bool]] = set()
+        work: list[tuple[dsl.ExprRef, bool]] = [(pred, truth)]
+        seen: set[tuple[int, bool]] = set()
         while work and len(seen) < 256:
             cur, val = work.pop()
             key = (cur.get_id(), val)
             if key in seen:
                 continue
             seen.add(key)
-            if z3.is_true(cur) or z3.is_false(cur):
+            if dsl.is_true(cur) or dsl.is_false(cur):
                 continue
             self._bool_vals[cur.get_id()] = val
             self.union(cur, Z3BoolConst(val).lower())
@@ -220,7 +220,7 @@ class EqualityTable:
                     self.union(unwrap(a), unwrap(b))
 
 
-def _transfer_known_bits(node: Z3Node, width: int, kb_map: Dict[int, KnownBits]) -> KnownBits:
+def _transfer_known_bits(node: Z3Node, width: int, kb_map: dict[int, KnownBits]) -> KnownBits:
     """Compute sound `KnownBits` over lifted DSL `Z3Node` using structural `match`/`case`."""
     mask = (1 << width) - 1
 
@@ -289,11 +289,11 @@ def _transfer_known_bits(node: Z3Node, width: int, kb_map: Dict[int, KnownBits])
     return KnownBits.top(width)
 
 
-def _apply_extensional_rules(lifted: Z3Node, raw: z3.ExprRef, env: EqualityTable) -> Optional[z3.ExprRef]:
+def _apply_extensional_rules(lifted: Z3Node, raw: dsl.ExprRef, env: EqualityTable) -> dsl.ExprRef | None:
     """Apply extensional equality & boolean truth identities via DSL `match`/`case` and `.lower()`."""
-    if z3.is_bool(raw):
+    if dsl.is_bool(raw):
         bv = env.lookup_bool(raw)
-        if bv is not None and not (z3.is_true(raw) or z3.is_false(raw)):
+        if bv is not None and not (dsl.is_true(raw) or dsl.is_false(raw)):
             return Z3BoolConst(bv).lower()
 
     rep = env.find_rep(raw)
@@ -319,20 +319,20 @@ def _apply_extensional_rules(lifted: Z3Node, raw: z3.ExprRef, env: EqualityTable
 
 
 def _rewrite_with_dataflow(
-    root: z3.ExprRef,
+    root: dsl.ExprRef,
     eq_table: EqualityTable,
     *,
     max_path_depth: int = 2,
     max_nodes: int = 50000,
-) -> Tuple[z3.ExprRef, int]:
+) -> tuple[dsl.ExprRef, int]:
     """Propagate `eq_table` and `KnownBits` through `root` using DSL-lifted match rules."""
     rewrites = 0
 
-    def _run_dag(expr: z3.ExprRef, env: EqualityTable) -> z3.ExprRef:
+    def _run_dag(expr: dsl.ExprRef, env: EqualityTable) -> dsl.ExprRef:
         nonlocal rewrites
-        memo: Dict[int, z3.ExprRef] = {}
-        kb_map: Dict[int, KnownBits] = {}
-        stack: List[Tuple[z3.ExprRef, bool]] = [(expr, False)]
+        memo: dict[int, dsl.ExprRef] = {}
+        kb_map: dict[int, KnownBits] = {}
+        stack: list[tuple[dsl.ExprRef, bool]] = [(expr, False)]
 
         while stack and len(memo) < max_nodes:
             cur, expanded = stack.pop()
@@ -341,8 +341,8 @@ def _rewrite_with_dataflow(
                 continue
 
             if not expanded:
-                bv = env.lookup_bool(cur) if z3.is_bool(cur) else None
-                if bv is not None and not (z3.is_true(cur) or z3.is_false(cur)):
+                bv = env.lookup_bool(cur) if dsl.is_bool(cur) else None
+                if bv is not None and not (dsl.is_true(cur) or dsl.is_false(cur)):
                     memo[cid] = Z3BoolConst(bv).lower()
                     rewrites += 1
                     continue
@@ -354,13 +354,13 @@ def _rewrite_with_dataflow(
                     rewrites += 1
                     continue
 
-                if not z3.is_app(cur) or cur.num_args() == 0:
+                if not dsl.is_app(cur) or cur.num_args() == 0:
                     memo[cid] = cur
                     if isinstance(cur, z3.BitVecNumRef):
                         kb_map[cid] = KnownBits.const(cur.as_long(), cur.size())
                     continue
 
-                if cur.decl().kind() == z3.Z3_OP_ITE and cur.num_args() == 3:
+                if cur.decl().kind() == dsl.Z3_OP_ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True:
                         stack.append((cur, True))
@@ -379,7 +379,7 @@ def _rewrite_with_dataflow(
                     if ch.get_id() not in memo:
                         stack.append((ch, False))
             else:
-                if cur.decl().kind() == z3.Z3_OP_ITE and cur.num_args() == 3:
+                if cur.decl().kind() == dsl.Z3_OP_ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True and cur.arg(1).get_id() in memo:
                         memo[cid] = memo[cur.arg(1).get_id()]
@@ -418,7 +418,7 @@ def _rewrite_with_dataflow(
 
         return memo.get(expr.get_id(), expr)
 
-    def _run_path_sensitive(expr: z3.ExprRef, env: EqualityTable, depth: int) -> z3.ExprRef:
+    def _run_path_sensitive(expr: dsl.ExprRef, env: EqualityTable, depth: int) -> dsl.ExprRef:
         nonlocal rewrites
         base = _run_dag(expr, env)
         if depth <= 0 or count_ast_nodes([base], limit=513) > 512:
@@ -440,7 +440,7 @@ def _rewrite_with_dataflow(
                 f_env.assume_bool(cr, False)
                 new_f = _run_path_sensitive(fr, f_env, depth - 1)
 
-                if z3.expr_eq(new_t, new_f):
+                if dsl.expr_eq(new_t, new_f):
                     rewrites += 1
                     return new_t
                 if not new_t.eq(tr) or not new_f.eq(fr):
@@ -469,7 +469,7 @@ class DataflowPropagatePass(Z3QueryPass):
         self,
         query: SimplifyQuery,
         ctx: SimplificationContext,
-    ) -> Tuple[SimplifyQuery, PassStats]:
+    ) -> tuple[SimplifyQuery, PassStats]:
         t0 = time.perf_counter()
         if query.is_trivially_unsat():
             return query, PassStats(self.name, False, 0, 0.0, "trivial_unsat")
@@ -487,7 +487,7 @@ class DataflowPropagatePass(Z3QueryPass):
             query.rhs, env, max_path_depth=self.max_path_depth, max_nodes=ctx.max_dag_nodes
         )
 
-        if not z3.expr_eq(new_lhs, new_rhs) and env.are_equal(new_lhs, new_rhs):
+        if not dsl.expr_eq(new_lhs, new_rhs) and env.are_equal(new_lhs, new_rhs):
             rep = env.find_rep(new_lhs)
             new_lhs, new_rhs = rep, rep
             r_l += 1

@@ -10,10 +10,10 @@ sharing in O(|V|) time.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
 from tools.symbolic_ssa.z3utils import dsl
 
@@ -35,7 +35,7 @@ class AstCensus:
     int_bv_ops: int = 0
 
 
-_BRIDGE_NAMES: Set[str] = {
+_BRIDGE_NAMES: set[str] = {
     "u_f32_to_bv32",
     "u_bv32_to_f32",
     "u_f16_to_bv16",
@@ -47,10 +47,10 @@ _BRIDGE_NAMES: Set[str] = {
 }
 
 
-def count_ast_nodes(roots: Sequence[z3.ExprRef], limit: int = 100000) -> int:
+def count_ast_nodes(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> int:
     """Count unique Z3 AST nodes reachable from `roots` (capped at `limit`)."""
-    visited: Set[int] = set()
-    stack: List[z3.ExprRef] = [r for r in roots if r is not None]
+    visited: set[int] = set()
+    stack: list[dsl.ExprRef] = [r for r in roots if r is not None]
     while stack and len(visited) < limit:
         cur = stack.pop()
         cid = cur.get_id()
@@ -63,19 +63,19 @@ def count_ast_nodes(roots: Sequence[z3.ExprRef], limit: int = 100000) -> int:
     return len(visited)
 
 
-def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
+def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
     """Compute an operator and theory census over a Z3 DAG."""
-    visited: Set[int] = set()
-    depths: Dict[int, int] = {}
-    post_order: List[z3.ExprRef] = []
-    stack: List[Tuple[z3.ExprRef, bool]] = [(dsl.lower(r), False) for r in roots if r is not None]
+    visited: set[int] = set()
+    depths: dict[int, int] = {}
+    post_order: list[dsl.ExprRef] = []
+    stack: list[tuple[dsl.ExprRef, bool]] = [(dsl.lower(r), False) for r in roots if r is not None]
 
     while stack and len(visited) < limit:
         cur, expanded = stack.pop()
         cid = cur.get_id()
         if expanded:
             if cid not in depths:
-                if z3.is_app(cur) and cur.num_args() > 0:
+                if dsl.is_app(cur) and cur.num_args() > 0:
                     depths[cid] = 1 + max(depths.get(cur.arg(i).get_id(), 0) for i in range(cur.num_args()))
                 else:
                     depths[cid] = 0
@@ -85,7 +85,7 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
             continue
         visited.add(cid)
         stack.append((cur, True))
-        if z3.is_app(cur):
+        if dsl.is_app(cur):
             for i in range(cur.num_args() - 1, -1, -1):
                 ch = cur.arg(i)
                 if ch.get_id() not in visited:
@@ -102,38 +102,38 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
     int_bv = 0
 
     for node in post_order:
-        if not z3.is_app(node):
+        if not dsl.is_app(node):
             continue
         decl = node.decl()
         kind = decl.kind()
         name = decl.name()
         sort_kind = node.sort().kind()
 
-        if sort_kind == z3.Z3_FLOATING_POINT_SORT:
+        if sort_kind == dsl.Z3_FLOATING_POINT_SORT:
             fp_ops += 1
-        elif kind == z3.Z3_OP_MUL and sort_kind == z3.Z3_REAL_SORT:
-            non_const = sum(1 for i in range(node.num_args()) if not z3.is_rational_value(node.arg(i)))
+        elif kind == dsl.Z3_OP_MUL and sort_kind == dsl.Z3_REAL_SORT:
+            non_const = sum(1 for i in range(node.num_args()) if not dsl.is_rational_value(node.arg(i)))
             if non_const >= 2:
                 nlin_real += 1
-        elif kind == z3.Z3_OP_DIV and sort_kind == z3.Z3_REAL_SORT:
-            if not z3.is_rational_value(node.arg(1)):
+        elif kind == dsl.Z3_OP_DIV and sort_kind == dsl.Z3_REAL_SORT:
+            if not dsl.is_rational_value(node.arg(1)):
                 nlin_real += 1
         elif kind in (
-            z3.Z3_OP_BMUL,
-            z3.Z3_OP_BSDIV,
-            z3.Z3_OP_BUDIV,
-            z3.Z3_OP_BSREM,
-            z3.Z3_OP_BUREM,
-            z3.Z3_OP_BSHL,
-            z3.Z3_OP_BLSHR,
-            z3.Z3_OP_BASHR,
+            dsl.Z3_OP_BMUL,
+            dsl.Z3_OP_BSDIV,
+            dsl.Z3_OP_BUDIV,
+            dsl.Z3_OP_BSREM,
+            dsl.Z3_OP_BUREM,
+            dsl.Z3_OP_BSHL,
+            dsl.Z3_OP_BLSHR,
+            dsl.Z3_OP_BASHR,
         ):
             bv_mul_shift += 1
-        elif kind == z3.Z3_OP_SELECT:
+        elif kind == dsl.Z3_OP_SELECT:
             arr_sel += 1
-        elif kind == z3.Z3_OP_STORE:
+        elif kind == dsl.Z3_OP_STORE:
             arr_st += 1
-        elif kind == z3.Z3_OP_ITE:
+        elif kind == dsl.Z3_OP_ITE:
             ites += 1
             if (
                 node.num_args() == 3
@@ -145,7 +145,7 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
                 bool_wrappers += 1
         if name in _BRIDGE_NAMES:
             bridges += 1
-        if kind in (z3.Z3_OP_BV2INT, z3.Z3_OP_INT2BV, z3.Z3_OP_TO_INT, z3.Z3_OP_TO_REAL):
+        if kind in (dsl.Z3_OP_BV2INT, dsl.Z3_OP_INT2BV, dsl.Z3_OP_TO_INT, dsl.Z3_OP_TO_REAL):
             int_bv += 1
 
     max_d = max(depths.values()) if depths else 0
@@ -165,10 +165,10 @@ def census_ast(roots: Sequence[z3.ExprRef], limit: int = 100000) -> AstCensus:
 
 
 def rewrite_dag(
-    root: z3.ExprRef,
-    rule_fn: Callable[[z3.ExprRef], Optional[z3.ExprRef]],
-    memo: Optional[Dict[int, z3.ExprRef]] = None,
-) -> Tuple[z3.ExprRef, int]:
+    root: dsl.ExprRef,
+    rule_fn: Callable[[dsl.ExprRef], dsl.ExprRef | None],
+    memo: dict[int, dsl.ExprRef] | None = None,
+) -> tuple[dsl.ExprRef, int]:
     """
     Iterative, memoized bottom-up DAG rewriter.
 
@@ -177,10 +177,10 @@ def rewrite_dag(
     If `rule_fn` returns a non-None `ExprRef` different from `rebuilt`,
     increments the rewrite counter and memoizes the result.
     """
-    cache: Dict[int, z3.ExprRef] = memo if memo is not None else {}
+    cache: dict[int, dsl.ExprRef] = memo if memo is not None else {}
     rewrites = 0
     root_id = root.get_id()
-    stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
+    stack: list[tuple[dsl.ExprRef, bool]] = [(root, False)]
 
     while stack:
         cur, expanded = stack.pop()
@@ -188,9 +188,9 @@ def rewrite_dag(
         if cid in cache:
             continue
         if not expanded:
-            if not z3.is_app(cur) or cur.num_args() == 0:
+            if not dsl.is_app(cur) or cur.num_args() == 0:
                 repl = rule_fn(cur)
-                if repl is not None and not z3.expr_eq(repl, cur):
+                if repl is not None and not dsl.expr_eq(repl, cur):
                     rewrites += 1
                     cache[cid] = repl
                 else:
@@ -203,29 +203,29 @@ def rewrite_dag(
                     stack.append((ch, False))
         else:
             nargs = cur.num_args()
-            new_args: List[z3.ExprRef] = []
+            new_args: list[dsl.ExprRef] = []
             args_changed = False
             for i in range(nargs):
                 orig_a = cur.arg(i)
                 new_a = cache.get(orig_a.get_id(), orig_a)
-                if not z3.expr_eq(new_a, orig_a):
+                if not dsl.expr_eq(new_a, orig_a):
                     args_changed = True
                 new_args.append(new_a)
             rebuilt = rebuild_app(cur, new_args) if args_changed else cur
             repl = rule_fn(rebuilt)
-            if repl is not None and not z3.expr_eq(repl, rebuilt):
+            if repl is not None and not dsl.expr_eq(repl, rebuilt):
                 rewrites += 1
                 res_node = repl
             else:
                 res_node = rebuilt
             if not isinstance(cur, dsl.Z3Expr) and isinstance(res_node, dsl.Z3Expr):
-                res_node = z3.lower(res_node)
+                res_node = dsl.lower(res_node)
             cache[cid] = res_node
 
     return cache.get(root_id, cache.get(root.get_id(), root)), rewrites
 
 
-def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
+def rebuild_app(node: dsl.ExprRef, new_args: Sequence[dsl.ExprRef]) -> dsl.ExprRef:
     """
     Safely rebuild a Z3 application node with rewritten children.
 
@@ -234,71 +234,71 @@ def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
     `Select`, `Store`, etc.) cleanly without Z3 FFI parameter-mismatch errors.
     """
     if not isinstance(node, dsl.Z3Expr) or any(not isinstance(a, dsl.Z3Expr) for a in new_args):
-        new_args = [z3.lower(a) for a in new_args]
+        new_args = [dsl.lower(a) for a in new_args]
     decl = node.decl()
     kind = decl.kind()
 
-    if kind == z3.Z3_OP_EXTRACT:
+    if kind == dsl.Z3_OP_EXTRACT:
         hi = node.params()[0]
         lo = node.params()[1]
-        return z3.Extract(hi, lo, new_args[0])
-    if kind == z3.Z3_OP_ZERO_EXT:
-        return z3.ZeroExt(node.params()[0], new_args[0])
-    if kind == z3.Z3_OP_SIGN_EXT:
-        return z3.SignExt(node.params()[0], new_args[0])
-    if kind == z3.Z3_OP_CONCAT:
-        return z3.Concat(*new_args)
-    if kind == z3.Z3_OP_ITE:
-        return z3.If(new_args[0], new_args[1], new_args[2])
-    if kind == z3.Z3_OP_AND:
-        return z3.And(*new_args)
-    if kind == z3.Z3_OP_OR:
-        return z3.Or(*new_args)
-    if kind == z3.Z3_OP_NOT:
-        return z3.Not(new_args[0])
-    if kind == z3.Z3_OP_EQ:
+        return dsl.Extract(hi, lo, new_args[0])
+    if kind == dsl.Z3_OP_ZERO_EXT:
+        return dsl.ZeroExt(node.params()[0], new_args[0])
+    if kind == dsl.Z3_OP_SIGN_EXT:
+        return dsl.SignExt(node.params()[0], new_args[0])
+    if kind == dsl.Z3_OP_CONCAT:
+        return dsl.Concat(*new_args)
+    if kind == dsl.Z3_OP_ITE:
+        return dsl.If(new_args[0], new_args[1], new_args[2])
+    if kind == dsl.Z3_OP_AND:
+        return dsl.And(*new_args)
+    if kind == dsl.Z3_OP_OR:
+        return dsl.Or(*new_args)
+    if kind == dsl.Z3_OP_NOT:
+        return dsl.Not(new_args[0])
+    if kind == dsl.Z3_OP_EQ:
         return new_args[0] == new_args[1]
-    if kind == z3.Z3_OP_DISTINCT and len(new_args) == 2:
+    if kind == dsl.Z3_OP_DISTINCT and len(new_args) == 2:
         return new_args[0] != new_args[1]
-    if kind == z3.Z3_OP_SELECT:
-        return z3.Select(new_args[0], new_args[1])
-    if kind == z3.Z3_OP_STORE:
-        return z3.Store(new_args[0], new_args[1], new_args[2])
-    if kind == z3.Z3_OP_ADD:
+    if kind == dsl.Z3_OP_SELECT:
+        return dsl.Select(new_args[0], new_args[1])
+    if kind == dsl.Z3_OP_STORE:
+        return dsl.Store(new_args[0], new_args[1], new_args[2])
+    if kind == dsl.Z3_OP_ADD:
         acc = new_args[0]
         for a in new_args[1:]:
             acc = acc + a
         return acc
-    if kind == z3.Z3_OP_SUB and len(new_args) == 2:
+    if kind == dsl.Z3_OP_SUB and len(new_args) == 2:
         return new_args[0] - new_args[1]
-    if kind == z3.Z3_OP_UMINUS and len(new_args) == 1:
+    if kind == dsl.Z3_OP_UMINUS and len(new_args) == 1:
         return -new_args[0]
-    if kind == z3.Z3_OP_MUL:
+    if kind == dsl.Z3_OP_MUL:
         acc = new_args[0]
         for a in new_args[1:]:
             acc = acc * a
         return acc
-    if kind == z3.Z3_OP_DIV and len(new_args) == 2:
+    if kind == dsl.Z3_OP_DIV and len(new_args) == 2:
         return new_args[0] / new_args[1]
-    if kind == z3.Z3_OP_BADD and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BADD and len(new_args) == 2:
         return new_args[0] + new_args[1]
-    if kind == z3.Z3_OP_BSUB and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BSUB and len(new_args) == 2:
         return new_args[0] - new_args[1]
-    if kind == z3.Z3_OP_BMUL and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BMUL and len(new_args) == 2:
         return new_args[0] * new_args[1]
-    if kind == z3.Z3_OP_BAND and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BAND and len(new_args) == 2:
         return new_args[0] & new_args[1]
-    if kind == z3.Z3_OP_BOR and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BOR and len(new_args) == 2:
         return new_args[0] | new_args[1]
-    if kind == z3.Z3_OP_BXOR and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BXOR and len(new_args) == 2:
         return new_args[0] ^ new_args[1]
-    if kind == z3.Z3_OP_BSHL and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BSHL and len(new_args) == 2:
         return new_args[0] << new_args[1]
-    if kind == z3.Z3_OP_BLSHR and len(new_args) == 2:
-        return z3.LShR(new_args[0], new_args[1])
-    if kind == z3.Z3_OP_BASHR and len(new_args) == 2:
+    if kind == dsl.Z3_OP_BLSHR and len(new_args) == 2:
+        return dsl.LShR(new_args[0], new_args[1])
+    if kind == dsl.Z3_OP_BASHR and len(new_args) == 2:
         return new_args[0] >> new_args[1]
-    return decl(*(z3.lower(a) for a in new_args))
+    return decl(*(dsl.lower(a) for a in new_args))
 
 
 def format_z3_ast(
@@ -319,10 +319,10 @@ def format_z3_ast(
         return "<None>"
 
     # Pass 1: count parent references to identify shared subexpressions.
-    ref_count: Dict[int, int] = {}
-    order: List[z3.ExprRef] = []
-    visited: Set[int] = set()
-    stack: List[Tuple[z3.ExprRef, bool]] = [(expr, False)]
+    ref_count: dict[int, int] = {}
+    order: list[dsl.ExprRef] = []
+    visited: set[int] = set()
+    stack: list[tuple[dsl.ExprRef, bool]] = [(expr, False)]
     while stack:
         cur, expanded = stack.pop()
         cid = cur.get_id()
@@ -334,50 +334,50 @@ def format_z3_ast(
             continue
         visited.add(cid)
         stack.append((cur, True))
-        if z3.is_app(cur):
+        if dsl.is_app(cur):
             for i in range(cur.num_args() - 1, -1, -1):
                 stack.append((cur.arg(i), False))
 
-    let_names: Dict[int, str] = {}
-    let_defs: List[Tuple[str, z3.ExprRef]] = []
+    let_names: dict[int, str] = {}
+    let_defs: list[tuple[str, dsl.ExprRef]] = []
     if let_bind_shared:
         for node in order:
             nid = node.get_id()
             if nid == expr.get_id():
                 continue
-            if ref_count.get(nid, 0) >= 2 and z3.is_app(node) and node.num_args() > 0:
+            if ref_count.get(nid, 0) >= 2 and dsl.is_app(node) and node.num_args() > 0:
                 lname = f"%t{len(let_defs)}"
                 let_names[nid] = lname
                 let_defs.append((lname, node))
 
-    def _op_label(n: z3.ExprRef) -> str:
-        if z3.is_bv_value(n):
+    def _op_label(n: dsl.ExprRef) -> str:
+        if dsl.is_bv_value(n):
             return f"bv{n.size()}(0x{n.as_long():x})"
-        if z3.is_rational_value(n):
+        if dsl.is_rational_value(n):
             return n.as_decimal(6).rstrip("?")
-        if z3.is_int_value(n):
+        if dsl.is_int_value(n):
             return str(n.as_long())
-        if z3.is_true(n):
+        if dsl.is_true(n):
             return "true"
-        if z3.is_false(n):
+        if dsl.is_false(n):
             return "false"
         d = n.decl()
         k = d.kind()
-        if k == z3.Z3_OP_EXTRACT:
+        if k == dsl.Z3_OP_EXTRACT:
             return f"Extract[{n.params()[0]}:{n.params()[1]}]"
-        if k == z3.Z3_OP_ZERO_EXT:
+        if k == dsl.Z3_OP_ZERO_EXT:
             return f"ZeroExt[{n.params()[0]}]"
-        if k == z3.Z3_OP_SIGN_EXT:
+        if k == dsl.Z3_OP_SIGN_EXT:
             return f"SignExt[{n.params()[0]}]"
         return d.name()
 
-    lines: List[str] = []
+    lines: list[str] = []
 
-    def _fmt(n: z3.ExprRef, depth: int, indent: str, allow_let_ref: bool = True) -> str:
+    def _fmt(n: dsl.ExprRef, depth: int, indent: str, allow_let_ref: bool = True) -> str:
         nid = n.get_id()
         if allow_let_ref and nid in let_names:
             return let_names[nid]
-        if not z3.is_app(n) or n.num_args() == 0:
+        if not dsl.is_app(n) or n.num_args() == 0:
             return _op_label(n)
         if depth >= max_depth:
             return f"({_op_label(n)} ...)"

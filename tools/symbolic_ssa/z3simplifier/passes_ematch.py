@@ -39,14 +39,16 @@ from __future__ import annotations
 import time
 from typing import List, Optional, Sequence, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
+from tools.symbolic_ssa import z3utils
 from tools.symbolic_ssa.z3simplifier.context import (
     PassStats,
     SimplificationContext,
     SimplifyQuery,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
+from tools.symbolic_ssa.z3utils import dsl
 
 
 def build_bridge_ematch_axioms() -> List[z3.BoolRef]:
@@ -76,7 +78,7 @@ def build_extensionality_witness_axiom(
     """
     ext_w = z3.Function(witness_name, sort, sort, sort)
     w = ext_w(fn_f, fn_g)
-    return z3.Implies(apply_fn(z3.lower(fn_f), z3.lower(w)) == apply_fn(z3.lower(fn_g), z3.lower(w)), z3.lower(fn_f) == z3.lower(fn_g))
+    return z3.Implies(apply_fn(dsl.lower(fn_f), dsl.lower(w)) == apply_fn(dsl.lower(fn_g), dsl.lower(w)), dsl.lower(fn_f) == dsl.lower(fn_g))
 
 
 class EmatchingUnifyPass(Z3QueryPass):
@@ -121,7 +123,7 @@ class EmatchingUnifyPass(Z3QueryPass):
         if not axioms:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
-        s = z3.Solver()
+        s = z3utils.Solver()
         s.set("timeout", self.timeout_ms)
         if self.rlimit > 0:
             s.set("rlimit", self.rlimit)

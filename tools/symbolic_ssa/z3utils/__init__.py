@@ -333,11 +333,3 @@ class Goal(z3.Goal):
 def SolverFor(logic: str, ctx: Any = None) -> Solver:
     s = z3.SolverFor(logic, ctx=ctx)
     return Solver(solver=s.solver, ctx=s.ctx)
-
-
-def __getattr__(name: str) -> Any:
-    return getattr(z3, name)
-
-
-def __dir__() -> Sequence[str]:
-    return sorted(set(globals().keys()) | set(dir(z3)))

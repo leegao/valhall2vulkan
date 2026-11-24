@@ -19,17 +19,20 @@ import z3
 
 from tools.symbolic_ssa.z3utils import dsl
 from tools.verify.panfrost_z3_model import (
-    BV8,
-    BV16,
-    BV32,
-    BV64,
-    FP32_SORT,
     _hw_uf,
     bv16_to_fp16,
     bv32_to_fp32,
     fp16_to_bv16,
     fp32_to_bv32,
 )
+
+BV8 = z3.BitVecSort(8)
+BV16 = z3.BitVecSort(16)
+BV32 = z3.BitVecSort(32)
+BV64 = z3.BitVecSort(64)
+FP16_SORT = z3.FPSort(5, 11)
+FP32_SORT = z3.FPSort(8, 24)
+FP64_SORT = z3.FPSort(11, 53)
 
 MASK32 = 0xFFFFFFFF
 MASK64 = 0xFFFFFFFFFFFFFFFF

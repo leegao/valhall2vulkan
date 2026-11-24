@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from tools.symbolic_ssa import z3utils as z3
+import z3
 
 from tools.symbolic_ssa.z3utils import dsl
 
@@ -120,7 +120,7 @@ class SimplifyQuery:
             return True
         if self.guard is not None and dsl.is_false(self.guard):
             return True
-        if z3.expr_eq(self.lhs, self.rhs):
+        if dsl.expr_eq(self.lhs, self.rhs):
             return True
         return False
 
@@ -128,7 +128,7 @@ class SimplifyQuery:
         """Materialize the boolean refutation formula `guard & (lhs != rhs)` as a concrete `z3.BoolRef`."""
         if self.predicate is not None:
             return dsl.lower(self.predicate)
-        if z3.expr_eq(self.lhs, self.rhs):
+        if dsl.expr_eq(self.lhs, self.rhs):
             return z3.BoolVal(False)
         lhs_z = dsl.lower(self.lhs)
         rhs_z = dsl.lower(self.rhs)
