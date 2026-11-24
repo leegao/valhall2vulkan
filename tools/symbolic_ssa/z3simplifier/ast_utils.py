@@ -190,7 +190,7 @@ def rewrite_dag(
         if not expanded:
             if not z3.is_app(cur) or cur.num_args() == 0:
                 repl = rule_fn(cur)
-                if repl is not None and not repl.eq(cur):
+                if repl is not None and not z3.expr_eq(repl, cur):
                     rewrites += 1
                     cache[cid] = repl
                 else:
@@ -233,7 +233,7 @@ def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
     (`Extract`, `ZeroExt`, `SignExt`, `Concat`, `If`, `And`, `Or`, `Not`,
     `Select`, `Store`, etc.) cleanly without Z3 FFI parameter-mismatch errors.
     """
-    if not isinstance(node, dsl.Z3Expr):
+    if not isinstance(node, dsl.Z3Expr) or any(not isinstance(a, dsl.Z3Expr) for a in new_args):
         new_args = [z3.lower(a) for a in new_args]
     decl = node.decl()
     kind = decl.kind()
@@ -298,7 +298,7 @@ def rebuild_app(node: z3.ExprRef, new_args: Sequence[z3.ExprRef]) -> z3.ExprRef:
         return z3.LShR(new_args[0], new_args[1])
     if kind == z3.Z3_OP_BASHR and len(new_args) == 2:
         return new_args[0] >> new_args[1]
-    return decl(*new_args)
+    return decl(*(z3.lower(a) for a in new_args))
 
 
 def format_z3_ast(

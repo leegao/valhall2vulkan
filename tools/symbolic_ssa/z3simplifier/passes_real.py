@@ -185,7 +185,7 @@ class PreconditionConstSubPass(Z3QueryPass):
 
         new_lhs = z3.substitute(query.lhs, *subs)
         new_rhs = z3.substitute(query.rhs, *subs)
-        changed = not new_lhs.eq(query.lhs) or not new_rhs.eq(query.rhs)
+        changed = not z3.expr_eq(new_lhs, query.lhs) or not z3.expr_eq(new_rhs, query.rhs)
         out_q = query.with_terms(lhs=new_lhs, rhs=new_rhs) if changed else query
         dt = (time.perf_counter() - t0) * 1000.0
         return out_q, PassStats(self.name, changed, len(subs) if changed else 0, dt, f"subs={len(subs)}")
@@ -313,6 +313,27 @@ def _rat_frac(e: z3.ExprRef) -> Optional[Fraction]:
     return None
 
 
+def _homog_pair(a: z3.ExprRef, b: z3.ExprRef) -> Tuple[z3.ExprRef, z3.ExprRef]:
+    if isinstance(a, z3.Z3Expr) != isinstance(b, z3.Z3Expr):
+        return z3.lower(a), z3.lower(b)
+    return a, b
+
+
+def _radd(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+    a, b = _homog_pair(a, b)
+    return a + b
+
+
+def _rsub(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+    a, b = _homog_pair(a, b)
+    return a - b
+
+
+def _rmul(a: z3.ExprRef, b: z3.ExprRef) -> z3.ExprRef:
+    a, b = _homog_pair(a, b)
+    return a * b
+
+
 def _frac_to_real(f: Fraction) -> z3.ExprRef:
     if f.denominator == 1:
         return z3.lower(z3.RealVal(f.numerator))
@@ -345,7 +366,7 @@ def _real_cmp_rule(node: z3.ExprRef, kind: int) -> Optional[z3.ExprRef]:
             return z3.lower(z3.BoolVal(fa > fb))
         if kind == z3.Z3_OP_GE:
             return z3.lower(z3.BoolVal(fa >= fb))
-    if a.eq(b):
+    if z3.expr_eq(a, b):
         return z3.lower(z3.BoolVal(kind in (z3.Z3_OP_LE, z3.Z3_OP_GE)))
     if _is_uminus(a) and _is_uminus(b):
         na, nb = a.arg(0), b.arg(0)
@@ -414,7 +435,7 @@ def _real_add_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
         return z3.lower(z3.RealVal(0))
     acc = terms[0]
     for t in terms[1:]:
-        acc = acc + t
+        acc = _radd(acc, t)
     return acc
 
 
@@ -472,7 +493,7 @@ def _real_mul_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
 
     acc = factors[0]
     for f in factors[1:]:
-        acc = acc * f
+        acc = _rmul(acc, f)
     return -acc if odd_neg else acc
 
 
@@ -486,7 +507,7 @@ def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return a
         if fb == Fraction(-1):
             return -a
-        return a * _frac_to_real(Fraction(1) / fb)
+        return _rmul(a, _frac_to_real(Fraction(1) / fb))
     # Double reciprocal: `1 / (1 / x) -> x`, `(-1) / (1 / x) -> -x`, `a / (1 / x) -> a * x`.
     # Matches IEEE-754 finite reciprocal semantics (Valhall lowers `sqrt(x)` as `FRCP(FRSQ(x))`).
     if z3.is_app(b) and b.decl().kind() == z3.Z3_OP_DIV and b.num_args() == 2:
@@ -499,12 +520,12 @@ def _real_div_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
                     return b_den
                 if scale == Fraction(-1):
                     return -b_den
-                return _frac_to_real(scale) * b_den
+                return _rmul(_frac_to_real(scale), b_den)
             if b_num == Fraction(1):
-                return a * b_den
+                return _rmul(a, b_den)
             if b_num == Fraction(-1):
-                return -(a * b_den)
-            return (a * _frac_to_real(Fraction(1) / b_num)) * b_den
+                return -_rmul(a, b_den)
+            return _rmul(_rmul(a, _frac_to_real(Fraction(1) / b_num)), b_den)
     return None
 
 
@@ -518,18 +539,18 @@ def _real_uminus_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
     if z3.is_app(a):
         ak = a.decl().kind()
         if ak == z3.Z3_OP_SUB and a.num_args() == 2:
-            return a.arg(1) - a.arg(0)
+            return _rsub(a.arg(1), a.arg(0))
         if ak == z3.Z3_OP_ADD and a.num_args() >= 2:
             acc = -a.arg(0)
             for i in range(1, a.num_args()):
-                acc = acc + (-a.arg(i))
+                acc = _radd(acc, -a.arg(i))
             return acc
         if ak == z3.Z3_OP_MUL and a.num_args() >= 2:
             c0 = _rat_frac(a.arg(0))
             if c0 is not None:
                 acc = _frac_to_real(-c0)
                 for i in range(1, a.num_args()):
-                    acc = acc * a.arg(i)
+                    acc = _rmul(acc, a.arg(i))
                 return acc
     return None
 
@@ -553,7 +574,7 @@ def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return t_arm
         if z3.is_false(c):
             return f_arm
-        if t_arm.eq(f_arm):
+        if z3.expr_eq(t_arm, f_arm):
             return t_arm
         if z3.is_app(c) and c.decl().kind() == z3.Z3_OP_NOT and c.num_args() == 1:
             return z3.If(c.arg(0), f_arm, t_arm)
@@ -571,14 +592,14 @@ def _real_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return a
         if fa is not None and fa == 0:
             return -b
-        if a.eq(b):
+        if z3.expr_eq(a, b):
             return z3.lower(z3.RealVal(0))
         if _is_uminus(b):
             if _is_uminus(a):
-                return b.arg(0) - a.arg(0)
-            return a + b.arg(0)
+                return _rsub(b.arg(0), a.arg(0))
+            return _radd(a, b.arg(0))
         if fb is not None and fb < 0:
-            return a + _frac_to_real(-fb)
+            return _radd(a, _frac_to_real(-fb))
         return None
 
     if kind == z3.Z3_OP_MUL and nargs >= 2:

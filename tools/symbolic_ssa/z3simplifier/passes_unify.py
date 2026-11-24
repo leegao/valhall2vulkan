@@ -100,6 +100,44 @@ def _collect_subexprs_with_depth(
     return nodes, depths
 
 
+def _collect_all_leaf_signatures(
+    root: z3.ExprRef,
+    limit: int = 50000,
+) -> Dict[int, FrozenSet[int]]:
+    """Compute free-variable leaf signatures for all reachable subexpressions in one O(N) DAG pass."""
+    sigs: Dict[int, FrozenSet[int]] = {}
+    visited: Set[int] = set()
+    stack: List[Tuple[z3.ExprRef, bool]] = [(root, False)]
+
+    while stack and len(visited) < limit:
+        cur, expanded = stack.pop()
+        cid = cur.get_id()
+        if expanded:
+            if cid not in sigs:
+                if z3.is_const(cur):
+                    sigs[cid] = frozenset((cid,)) if cur.decl().kind() == z3.Z3_OP_UNINTERPRETED else frozenset()
+                elif z3.is_app(cur) and cur.num_args() > 0:
+                    acc: Set[int] = set()
+                    for i in range(cur.num_args()):
+                        ch_sig = sigs.get(cur.arg(i).get_id())
+                        if ch_sig:
+                            acc.update(ch_sig)
+                    sigs[cid] = frozenset(acc)
+                else:
+                    sigs[cid] = frozenset()
+            continue
+        if cid in visited:
+            continue
+        visited.add(cid)
+        stack.append((cur, True))
+        if z3.is_app(cur) and not z3.is_const(cur):
+            for i in range(cur.num_args() - 1, -1, -1):
+                ch = cur.arg(i)
+                if ch.get_id() not in visited:
+                    stack.append((ch, False))
+    return sigs
+
+
 def _collect_leaf_signature(
     root: z3.ExprRef,
     limit: int = 2000,
@@ -211,46 +249,136 @@ class ExactCseUnificationPass(Z3QueryPass):
         return out_q, PassStats(self.name, True, len(abs_pairs), dt, f"lifted={len(abs_pairs)}")
 
 
+def _contains_ite(roots: List[z3.ExprRef], limit: int = 64) -> bool:
+    """Return True if any reachable node in `roots` is an `If` (`Z3_OP_ITE`)."""
+    visited: Set[int] = set()
+    stack: List[z3.ExprRef] = list(roots)
+    while stack and len(visited) < limit:
+        cur = stack.pop()
+        cid = cur.get_id()
+        if cid in visited:
+            continue
+        visited.add(cid)
+        if z3.is_app(cur):
+            if cur.decl().kind() == z3.Z3_OP_ITE:
+                return True
+            for i in range(cur.num_args()):
+                ch = cur.arg(i)
+                if ch.get_id() not in visited:
+                    stack.append(ch)
+    return False
+
+
+class _IncrementalWlpSolver:
+    """
+    Reusable incremental Z3 solver for local WLP obligations in a single pass run.
+
+    Avoids re-asserting shared preconditions and guards into a fresh `z3.Solver`
+    for every candidate pair, and skips asserting oversized guards (>256 nodes)
+    where `Z3_solver_assert` itself can take >1 s ignoring solver timeouts
+    (dropping a guard when proving `guard => (lhs == rhs)` is 100% sound).
+    """
+
+    def __init__(
+        self,
+        guard: Optional[z3.BoolRef],
+        preconditions: Tuple[z3.BoolRef, ...],
+        timeout_ms: int,
+        max_guard_nodes: int = 256,
+    ):
+        self.timeout_ms = max(10, int(timeout_ms))
+        self.small_pres = tuple(
+            p for p in preconditions if count_ast_nodes([p], limit=max_guard_nodes + 1) <= max_guard_nodes
+        )
+        self.usable_guard = (
+            guard
+            if (guard is not None and count_ast_nodes([guard], limit=max_guard_nodes + 1) <= max_guard_nodes)
+            else None
+        )
+        self._uncond_solver: Optional[z3.Solver] = None
+        self._guarded_solver: Optional[z3.Solver] = None
+
+    def _get_uncond_solver(self) -> z3.Solver:
+        if self._uncond_solver is None:
+            s = z3.Solver()
+            s.set("timeout", self.timeout_ms)
+            s.set("rlimit", 200_000)
+            for pre in self.small_pres:
+                s.add(z3.lower(pre))
+            self._uncond_solver = s
+        return self._uncond_solver
+
+    def _get_guarded_solver(self) -> Optional[z3.Solver]:
+        if self.usable_guard is None:
+            return None
+        if self._guarded_solver is None:
+            s = z3.Solver()
+            s.set("timeout", self.timeout_ms)
+            s.set("rlimit", 200_000)
+            for pre in self.small_pres:
+                s.add(z3.lower(pre))
+            s.add(z3.lower(self.usable_guard))
+            self._guarded_solver = s
+        return self._guarded_solver
+
+    def check_eq(self, lhs: z3.ExprRef, rhs: z3.ExprRef, extra_guard: Optional[z3.BoolRef] = None) -> Tuple[bool, float]:
+        t0 = time.perf_counter()
+        if lhs.eq(rhs):
+            return True, (time.perf_counter() - t0) * 1000.0
+        if lhs.sort() != rhs.sort():
+            return False, (time.perf_counter() - t0) * 1000.0
+
+        if lhs.sort().kind() == z3.Z3_REAL_SORT and rhs.sort().kind() == z3.Z3_REAL_SORT:
+            if count_ast_nodes([lhs, rhs], limit=49) <= 48 and not _contains_ite([lhs, rhs]):
+                diff = z3.simplify(lhs - rhs, som=True, arith_lhs=True)
+                if z3.is_rational_value(diff) and diff.numerator_as_long() == 0:
+                    return True, (time.perf_counter() - t0) * 1000.0
+
+        neq = z3.lower(lhs != rhs)
+        # Fast unconditional check first (avoids asserting guard when equality holds unconditionally)
+        s0 = self._get_uncond_solver()
+        s0.push()
+        s0.add(neq)
+        rc = s0.check()
+        s0.pop()
+        if rc == z3.unsat:
+            return True, (time.perf_counter() - t0) * 1000.0
+
+        # Guarded check (if usable_guard or extra_guard is present)
+        if self.usable_guard is not None or extra_guard is not None:
+            sg = self._get_guarded_solver() if self.usable_guard is not None else s0
+            sg.push()
+            if extra_guard is not None and count_ast_nodes([extra_guard], limit=257) <= 256:
+                sg.add(z3.lower(extra_guard))
+            sg.add(neq)
+            rc = sg.check()
+            sg.pop()
+            if rc == z3.unsat:
+                return True, (time.perf_counter() - t0) * 1000.0
+
+        return False, (time.perf_counter() - t0) * 1000.0
+
+
 def _discharge_wlp_local(
     lhs: z3.ExprRef,
     rhs: z3.ExprRef,
     guard: Optional[z3.BoolRef],
     preconditions: Tuple[z3.BoolRef, ...],
     timeout_ms: int,
+    *,
+    wlp_solver: Optional[_IncrementalWlpSolver] = None,
+    extra_guard: Optional[z3.BoolRef] = None,
 ) -> Tuple[bool, float]:
     """
     Attempt to prove `(preconditions & guard) => (lhs == rhs)` locally.
 
     Returns `(is_valid, elapsed_ms)`. Uses a fast polynomial check for Reals
-    before falling back to a bounded Z3 solver check.
+    before falling back to a bounded incremental Z3 solver check.
     """
-    t0 = time.perf_counter()
-    if lhs.eq(rhs):
-        return True, (time.perf_counter() - t0) * 1000.0
-    if lhs.sort() != rhs.sort():
-        return False, (time.perf_counter() - t0) * 1000.0
-
-    if lhs.sort().kind() == z3.Z3_REAL_SORT and rhs.sort().kind() == z3.Z3_REAL_SORT:
-        if count_ast_nodes([lhs, rhs], limit=129) <= 128:
-            diff = z3.simplify(lhs - rhs, som=True, arith_lhs=True)
-            if z3.is_rational_value(diff) and diff.numerator_as_long() == 0:
-                return True, (time.perf_counter() - t0) * 1000.0
-
-    simp_neq = z3.simplify(lhs != rhs)
-    if z3.is_false(simp_neq):
-        return True, (time.perf_counter() - t0) * 1000.0
-
-    s = z3.Solver()
-    s.set("timeout", max(10, int(timeout_ms)))
-    s.set("rlimit", 200_000)
-    for pre in preconditions:
-        s.add(pre)
-    if guard is not None:
-        s.add(guard)
-    s.add(simp_neq)
-    rc = s.check()
-    dt = (time.perf_counter() - t0) * 1000.0
-    return (rc == z3.unsat), dt
+    if wlp_solver is not None:
+        return wlp_solver.check_eq(lhs, rhs, extra_guard=extra_guard)
+    eff_guard = _combine_guard(guard, extra_guard) if extra_guard is not None else guard
+    return _IncrementalWlpSolver(eff_guard, preconditions, timeout_ms).check_eq(lhs, rhs)
 
 
 def _same_operator_head(lhs: z3.ExprRef, rhs: z3.ExprRef) -> bool:
@@ -501,6 +629,8 @@ class ConditionedUnificationPass(Z3QueryPass):
     ) -> Tuple[SimplifyQuery, int, int]:
         l_nodes, l_depths = _collect_subexprs_with_depth(query.lhs, limit=ctx.max_dag_nodes)
         r_nodes, r_depths = _collect_subexprs_with_depth(query.rhs, limit=ctx.max_dag_nodes)
+        l_sigs = _collect_all_leaf_signatures(query.lhs, limit=ctx.max_dag_nodes)
+        r_sigs = _collect_all_leaf_signatures(query.rhs, limit=ctx.max_dag_nodes)
 
         r_buckets: Dict[Tuple[int, FrozenSet[int]], List[Tuple[int, z3.ExprRef]]] = {}
         for rid, rexpr in r_nodes.items():
@@ -511,7 +641,7 @@ class ConditionedUnificationPass(Z3QueryPass):
                 continue
             if not _is_liftable_subexpr(rexpr, rd, self.min_depth):
                 continue
-            fp = _collect_leaf_signature(rexpr)
+            fp = r_sigs.get(rid, frozenset())
             if not fp:
                 continue
             r_buckets.setdefault((rexpr.sort().kind(), fp), []).append((rd, rexpr))
@@ -543,12 +673,13 @@ class ConditionedUnificationPass(Z3QueryPass):
         attempted = 0
         discharged_cnt = 0
 
+        wlp_solver = _IncrementalWlpSolver(query.guard, query.preconditions, ctx.wlp_timeout_ms)
         for ld, lid, lexpr in l_cands:
             if attempted >= self.max_candidates:
                 break
             if lid in covered_l:
                 continue
-            fp = _collect_leaf_signature(lexpr)
+            fp = l_sigs.get(lid, frozenset())
             if not fp:
                 continue
             bucket = r_buckets.get((lexpr.sort().kind(), fp))
@@ -564,7 +695,8 @@ class ConditionedUnificationPass(Z3QueryPass):
                     continue
                 attempted += 1
                 ok, dt_wlp = _discharge_wlp_local(
-                    lexpr, rexpr, query.guard, query.preconditions, ctx.wlp_timeout_ms
+                    lexpr, rexpr, query.guard, query.preconditions, ctx.wlp_timeout_ms,
+                    wlp_solver=wlp_solver,
                 )
                 if ok:
                     fv = ctx.fresh_const("cu", lexpr.sort())
@@ -635,6 +767,7 @@ class ConditionedUnificationPass(Z3QueryPass):
         r_subs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
         abs_pairs: List[Tuple[z3.ExprRef, z3.ExprRef]] = []
         discharged_cnt = 0
+        wlp_solver = _IncrementalWlpSolver(query.guard, query.preconditions, ctx.wlp_timeout_ms)
 
         for idx, (a_i, b_i, pcond) in enumerate(holes):
             if a_i.sort() != b_i.sort():
@@ -655,7 +788,8 @@ class ConditionedUnificationPass(Z3QueryPass):
 
             # Try global discharge first so `a_i -> cu_k` is sound anywhere in the AST.
             ok_global, dt_wlp = _discharge_wlp_local(
-                a_i, b_i, query.guard, query.preconditions, ctx.wlp_timeout_ms
+                a_i, b_i, query.guard, query.preconditions, ctx.wlp_timeout_ms,
+                wlp_solver=wlp_solver,
             )
             via_expand = False
             if not ok_global and abs_subs:
@@ -663,7 +797,8 @@ class ConditionedUnificationPass(Z3QueryPass):
                 exp_b = _expand_abstractions(b_i, abs_subs, abs_ids)
                 if not exp_a.eq(a_i) or not exp_b.eq(b_i):
                     ok_exp, dt_exp = _discharge_wlp_local(
-                        exp_a, exp_b, query.guard, query.preconditions, ctx.wlp_timeout_ms
+                        exp_a, exp_b, query.guard, query.preconditions, ctx.wlp_timeout_ms,
+                        wlp_solver=wlp_solver,
                     )
                     dt_wlp += dt_exp
                     if ok_exp:
@@ -674,7 +809,8 @@ class ConditionedUnificationPass(Z3QueryPass):
             eff_guard = _combine_guard(query.guard, pcond)
             if not ok_global and pcond is not None:
                 ok_path, dt_p = _discharge_wlp_local(
-                    a_i, b_i, eff_guard, query.preconditions, ctx.wlp_timeout_ms
+                    a_i, b_i, query.guard, query.preconditions, ctx.wlp_timeout_ms,
+                    wlp_solver=wlp_solver, extra_guard=pcond,
                 )
                 dt_wlp += dt_p
                 if not ok_path and abs_subs:
@@ -682,7 +818,8 @@ class ConditionedUnificationPass(Z3QueryPass):
                     exp_b = _expand_abstractions(b_i, abs_subs, abs_ids)
                     if not exp_a.eq(a_i) or not exp_b.eq(b_i):
                         ok_ep, dt_ep = _discharge_wlp_local(
-                            exp_a, exp_b, eff_guard, query.preconditions, ctx.wlp_timeout_ms
+                            exp_a, exp_b, query.guard, query.preconditions, ctx.wlp_timeout_ms,
+                            wlp_solver=wlp_solver, extra_guard=pcond,
                         )
                         dt_wlp += dt_ep
                         if ok_ep:

@@ -39,11 +39,13 @@ from tools.symbolic_ssa import (
     _z3_or,
 )
 from tools.symbolic_ssa.z3 import dsl
+from tools.symbolic_ssa.z3simplifier import _merged_local_rule
 from tools.symbolic_ssa.z3simplifier import (
     PassPipeline,
     SimplificationContext,
     SimplifyQuery,
     build_default_pipeline,
+    rewrite_dag,
     census_ast,
     format_z3_ast,
     solve_simplified_miter,
@@ -114,6 +116,8 @@ def _solve_miter_eq(
     verbose: bool = False,
     pipeline: PassPipeline | None = None,
     enable_conditioned_unify: bool = False,
+    pre_simplified: Any | None = None,
+    sim_out: list[Any] | None = None,
 ) -> tuple[str, tuple[str, str, str] | None]:
     """Check whether `(preconditions & guard) => (lhs == rhs)` holds for all inputs."""
     if _is_real2bv(lhs) or _is_real2bv(rhs):
@@ -135,6 +139,9 @@ def _solve_miter_eq(
         verbose=verbose,
         trace_fn=(lambda msg: print(msg, file=sys.stderr)) if verbose else None,
     )
+    sim_res = pre_simplified if pre_simplified is not None else pipe.run(q, ctx)
+    if sim_out is not None:
+        sim_out.append(sim_res)
     res = solve_simplified_miter(
         q,
         pipe,
@@ -143,6 +150,7 @@ def _solve_miter_eq(
         ctx=ctx,
         smt2_out=smt2_out,
         check_name=check_name,
+        pre_simplified=sim_res,
     )
 
     if res.status == "UNSAT":
@@ -451,6 +459,59 @@ def verify_equivalence_bundle(
         res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return res
 
+    # Shader-level shared-DAG local peephole pre-pass: when a shader has multiple
+    # output channels (up to 65), all channels share the same preconditions, guards,
+    # and upstream matrix/UBO/texture DAGs. Rewriting them once with a single shared
+    # memo table eliminates O(num_channels) redundant local_exact_fp walks.
+    if len(checks) > 1:
+        def _presimp_batch(exprs: list[z3.ExprRef]) -> list[z3.ExprRef]:
+            cur = exprs
+            for _ in range(4):
+                memo: dict[int, z3.ExprRef] = {}
+                nxt: list[z3.ExprRef] = []
+                total_rw = 0
+                for e in cur:
+                    ne, rw = rewrite_dag(e, _merged_local_rule, memo=memo)
+                    nxt.append(ne)
+                    total_rw += rw
+                cur = nxt
+                if total_rw == 0:
+                    break
+            return cur
+
+        flat_exprs: list[z3.ExprRef] = list(preconditions)
+        n_pres = len(preconditions)
+        guard_indices: list[int] = []
+        lhs_indices: list[int] = []
+        rhs_indices: list[int] = []
+        guard_seen: dict[int, int] = {}
+        for _name, _lhs, _rhs, _guard, _pc_key in checks:
+            lhs_indices.append(len(flat_exprs))
+            flat_exprs.append(_lhs)
+            rhs_indices.append(len(flat_exprs))
+            flat_exprs.append(_rhs)
+            if _guard is None:
+                guard_indices.append(-1)
+            else:
+                gid = _guard.get_id()
+                if gid not in guard_seen:
+                    guard_seen[gid] = len(flat_exprs)
+                    flat_exprs.append(_guard)
+                guard_indices.append(guard_seen[gid])
+
+        simp_flat = _presimp_batch(flat_exprs)
+        preconditions = simp_flat[:n_pres]
+        checks = [
+            (
+                checks[i][0],
+                simp_flat[lhs_indices[i]],
+                simp_flat[rhs_indices[i]],
+                simp_flat[guard_indices[i]] if guard_indices[i] >= 0 else None,
+                checks[i][4],
+            )
+            for i in range(len(checks))
+        ]
+
     pipeline = build_default_pipeline(enable_conditioned_unify=enable_conditioned_unify)
     if dump_ast:
         _dump_check_asts(checks, preconditions, pipeline, dump_ast_stream or sys.stdout)
@@ -482,9 +543,10 @@ def verify_equivalence_bundle(
     use_two_phase = len(checks) > 4 and timeout_ms > 150
     fast_ms = min(100, max(30, timeout_ms // 4)) if use_two_phase else timeout_ms
 
-    surviving_unknowns: list[tuple[str, z3.ExprRef, z3.ExprRef, z3.BoolRef | None, str]] = []
+    surviving_unknowns: list[tuple[str, z3.ExprRef, z3.ExprRef, z3.BoolRef | None, str, Any]] = []
     for name, lhs, rhs, guard, pc_key in checks:
         res.checked_outputs.append(name)
+        sim_cap: list[Any] = []
         st_rc, cex = _solve_miter_eq(
             lhs,
             rhs,
@@ -496,6 +558,7 @@ def verify_equivalence_bundle(
             check_name=name,
             verbose=verbose,
             pipeline=pipeline,
+            sim_out=sim_cap if use_two_phase else None,
         )
         if st_rc == "SAT" and cex is not None:
             res.mismatches.append(
@@ -510,12 +573,12 @@ def verify_equivalence_bundle(
             if use_two_phase:
                 break
         elif st_rc == "UNKNOWN":
-            surviving_unknowns.append((name, lhs, rhs, guard, pc_key))
+            surviving_unknowns.append((name, lhs, rhs, guard, pc_key, sim_cap[0] if sim_cap else None))
 
     any_unknown = False
     if not res.mismatches and surviving_unknowns:
         if use_two_phase:
-            for name, lhs, rhs, guard, pc_key in surviving_unknowns:
+            for name, lhs, rhs, guard, pc_key, cached_sim in surviving_unknowns:
                 st_rc, cex = _solve_miter_eq(
                     lhs,
                     rhs,
@@ -527,6 +590,7 @@ def verify_equivalence_bundle(
                     check_name=name,
                     verbose=verbose,
                     pipeline=pipeline,
+                    pre_simplified=cached_sim,
                 )
                 if st_rc == "SAT" and cex is not None:
                     res.mismatches.append(

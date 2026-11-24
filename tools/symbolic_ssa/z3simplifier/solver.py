@@ -21,10 +21,12 @@ from typing import List, Optional, Tuple
 
 from tools.symbolic_ssa import z3
 
+from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes
 from tools.symbolic_ssa.z3simplifier.context import (
     RewriteStats,
     SimplificationContext,
     SimplifyQuery,
+    SimplifyResult,
 )
 from tools.symbolic_ssa.z3simplifier.pass_base import PassPipeline
 
@@ -75,7 +77,7 @@ def _check_query_with_z3(
         return "UNSAT", None, 0.0, "", False
 
     pred = q.to_refutation_predicate()
-    simp_pred = z3.simplify(pred)
+    simp_pred = z3.simplify(pred) if count_ast_nodes([pred], limit=257) <= 256 else z3.lower(pred)
     if z3.is_false(simp_pred):
         if smt2_out is not None:
             smt2_out.append(f"; --- {check_name}: predicate simplified to false (UNSAT) ---\n")
@@ -83,8 +85,8 @@ def _check_query_with_z3(
 
     s, used_nlsat = _make_solver(timeout_ms, rlimit, q.pure_theory)
     for pre in q.preconditions:
-        s.add(pre)
-    s.add(simp_pred)
+        s.add(z3.lower(pre))
+    s.add(z3.lower(simp_pred))
 
     if smt2_out is not None:
         smt2_out.append(
@@ -111,17 +113,18 @@ def solve_simplified_miter(
     ctx: Optional[SimplificationContext] = None,
     smt2_out: Optional[List[str]] = None,
     check_name: str = "",
+    pre_simplified: Optional[SimplifyResult] = None,
 ) -> MiterSolveResult:
     """
-    Simplify `query` through `pipeline` and discharge via Z3 with sound
-    over-approximation refinement.
+    Simplify `query` through `pipeline` (or reuse `pre_simplified`) and
+    discharge via Z3 with sound over-approximation refinement.
     """
     eff_ctx = ctx if ctx is not None else SimplificationContext()
     if rlimit is None:
-        eff_rlimit = 0 if timeout_ms >= 5000 else max(2_000_000, int(timeout_ms) * 20_000)
+        eff_rlimit = max(2_000_000, int(timeout_ms) * 20_000)
     else:
         eff_rlimit = int(rlimit)
-    sim = pipeline.run(query, eff_ctx)
+    sim = pre_simplified if pre_simplified is not None else pipeline.run(query, eff_ctx)
     q = sim.query
     exact_q = sim.exact_query
 
@@ -165,10 +168,12 @@ def solve_simplified_miter(
     # introduced fresh variables) must be confirmed on `exact_query` before
     # claiming SAT.
     if q.is_overapprox and status == "SAT":
+        rem_ms = max(50, int(timeout_ms - dt))
+        rem_rlimit = max(500_000, int(rem_ms) * 20_000) if rlimit is None else eff_rlimit
         st_ex, m_ex, dt_ex, reason_ex, nlsat_ex = _check_query_with_z3(
             exact_q,
-            timeout_ms=timeout_ms,
-            rlimit=eff_rlimit,
+            timeout_ms=rem_ms,
+            rlimit=rem_rlimit,
             smt2_out=smt2_out,
             check_name=f"{check_name}[exact_confirm]",
         )

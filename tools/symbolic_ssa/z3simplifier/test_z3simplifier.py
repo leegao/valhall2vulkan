@@ -723,5 +723,39 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         out9, _ = p.rewrite_term(x <= x, ctx)
         self.assertTrue(z3.is_true(out9))
 
+
+    def test_v33_5_mixed_dsl_raw_rebuild_and_solver_large_pred(self) -> None:
+        """Regression tests for v33.5: rebuild_app mixed args, BVAdd const fold, and >256-node Z3OpAnd."""
+        from tools.symbolic_ssa import z3 as sz3
+        from tools.symbolic_ssa.z3simplifier.ast_utils import rebuild_app
+        from tools.symbolic_ssa.z3simplifier.passes_bv import _bv_algebraic_rule
+
+        # 1. rebuild_app when parent is DSL Z3OpDistinct and one child was rewritten to raw z3.RatNumRef
+        dsl_node = sz3.Distinct(sz3.Real("a"), sz3.If(sz3.Bool("c"), sz3.RealVal(1), sz3.RealVal(2)))
+        rebuilt = rebuild_app(dsl_node, [z3.RealVal(0), dsl_node.arg(1)])
+        self.assertIsNotNone(rebuilt)
+
+        # 2. BvAlgebraicPass on (x + c1) + c2 when base is raw BitVecRef
+        raw_x = z3.BitVec("raw_x", 32)
+        folded, rw_bv = BvAlgebraicPass().rewrite_term(
+            (raw_x + z3.BitVecVal(4, 32)) + z3.BitVecVal(8, 32),
+            SimplificationContext(),
+        )
+        self.assertGreaterEqual(rw_bv, 1)
+        self.assertTrue(z3.is_false(z3.simplify(sz3.lower(folded) != (raw_x + z3.BitVecVal(12, 32)))))
+
+        # 3. solve_simplified_miter when predicate > 256 nodes and guard is a DSL Z3OpAnd
+        xs = [sz3.Real(f"x_{i}") for i in range(140)]
+        big_lhs = xs[0]
+        for v in xs[1:]:
+            big_lhs = big_lhs + v
+        q_big = SimplifyQuery(
+            lhs=big_lhs + sz3.RealVal(0),
+            rhs=sz3.RealVal(0) + big_lhs,
+            guard=sz3.And(xs[0] > sz3.RealVal(0), xs[1] > sz3.RealVal(0)),
+        )
+        res = solve_simplified_miter(q_big, PassPipeline([]), timeout_ms=500)
+        self.assertEqual(res.status, "UNSAT")
+
 if __name__ == "__main__":
     unittest.main()

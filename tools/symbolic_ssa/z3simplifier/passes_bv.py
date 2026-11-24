@@ -265,7 +265,11 @@ def _bv_algebraic_rule(node: z3.ExprRef) -> Optional[z3.ExprRef]:
             return unwrap(lhs)
         case Z3OpBvAdd(Z3OpBvAdd(a0, Z3BvConst(c1, _)), Z3BvConst(c2, _)):
             csum = (c1 + c2) & mask
-            return unwrap(a0) if csum == 0 else (unwrap(a0) + z3.BitVecVal(csum, w))
+            if csum == 0:
+                return unwrap(a0)
+            base0 = unwrap(a0)
+            rhs_c = z3.BitVecVal(csum, w)
+            return (base0 + rhs_c) if isinstance(base0, z3.Z3Expr) else (base0 + z3.lower(rhs_c))
 
         # BVSub
         case Z3OpBvSub(Z3BvConst(ca, _), Z3BvConst(cb, _)):
