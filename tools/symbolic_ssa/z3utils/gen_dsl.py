@@ -1412,17 +1412,101 @@ NODE_SPECS: tuple[NodeSpec, ...] = (
 )
 
 
-def _emit_node_class(spec: NodeSpec) -> str:
+def _solve_term_types(specs: tuple[NodeSpec, ...]) -> dict[tuple[str, str], str]:
+    """Worklist fixpoint solver computing precise allowable input type variables for each node field."""
+    from collections import deque
+
+    all_sorts = frozenset({"BOOL", "BV", "REAL", "INT", "FP", "ARRAY"})
+    field_sorts: dict[tuple[str, str], frozenset[str]] = {}
+    is_tuple_field: dict[tuple[str, str], bool] = {}
+
+    for spec in specs:
+        for f in spec.fields:
+            if spec.cls_name in ("Z3FPConst", "Z3OpUFApp", "Z3Other"):
+                continue
+            if f.type_ann in ("Any", "tuple[Any, ...]"):
+                key = (spec.cls_name, f.name)
+                field_sorts[key] = frozenset()
+                is_tuple_field[key] = f.type_ann == "tuple[Any, ...]"
+
+    def _allowed_for(cls_name: str, fname: str) -> frozenset[str]:
+        if cls_name == "Z3Other":
+            return all_sorts
+        if cls_name in ("Z3OpNot", "Z3OpAnd", "Z3OpOr", "Z3OpXor", "Z3OpImplies"):
+            return frozenset({"BOOL"})
+        if cls_name == "Z3OpIte":
+            return frozenset({"BOOL"}) if fname == "cond" else all_sorts
+        if cls_name.startswith("Z3OpBv") or cls_name == "Z3OpBV2Int":
+            return frozenset({"BV"})
+        if cls_name == "Z3OpInt2BV":
+            return frozenset({"INT"})
+        if cls_name.startswith(("Z3OpReal", "Z3OpInt")) or cls_name in ("Z3OpToReal", "Z3OpToInt", "Z3OpArithCmp"):
+            return frozenset({"REAL", "INT"})
+        if cls_name.startswith("Z3OpFP"):
+            if fname == "rm":
+                return all_sorts
+            if cls_name == "Z3OpFPToFP" and fname == "src":
+                return frozenset({"FP", "BV", "REAL", "INT"})
+            return frozenset({"FP"})
+        if cls_name in ("Z3OpSelect", "Z3OpStore") and fname == "arr":
+            return frozenset({"ARRAY"})
+        return all_sorts
+
+    worklist: deque[NodeSpec] = deque(specs)
+    in_queue: set[str] = {s.cls_name for s in specs}
+
+    while worklist:
+        spec = worklist.popleft()
+        in_queue.discard(spec.cls_name)
+        for f in spec.fields:
+            key = (spec.cls_name, f.name)
+            if key not in field_sorts:
+                continue
+            target = _allowed_for(spec.cls_name, f.name)
+            if field_sorts[key] != target:
+                field_sorts[key] = target
+                # Re-enqueue dependents if any (monotone lattice on finite sort set)
+                if spec.cls_name not in in_queue:
+                    worklist.append(spec)
+                    in_queue.add(spec.cls_name)
+
+    def _sorts_to_type_var(sorts: frozenset[str], is_tup: bool) -> str:
+        if sorts == frozenset({"BOOL"}):
+            t = "BoolRef"
+        elif sorts == frozenset({"BV"}):
+            t = "BitVecRef"
+        elif sorts <= frozenset({"REAL", "INT"}):
+            t = "ArithRef"
+        elif sorts == frozenset({"FP"}):
+            t = "FPRef"
+        elif sorts == frozenset({"ARRAY"}):
+            t = "ArrayRef"
+        elif sorts == frozenset({"FP", "BV", "REAL", "INT"}):
+            t = "FPRef | BitVecRef | ArithRef"
+        else:
+            t = "ExprRef"
+        return f"tuple[{t}, ...]" if is_tup else t
+
+    return {
+        key: _sorts_to_type_var(sorts, is_tuple_field[key])
+        for key, sorts in field_sorts.items()
+    }
+
+
+def _emit_node_class(spec: NodeSpec, term_types: dict[tuple[str, str], str] | None = None) -> str:
     """Render a single frozen slotted dataclass from its `NodeSpec`."""
     lines: list[str] = [
         "@dataclass(frozen=True, slots=True, eq=False)",
         f"class {spec.cls_name}({spec.base_cls}):",
     ]
     for f in spec.fields:
+        ann = term_types.get((spec.cls_name, f.name), f.type_ann) if term_types is not None else f.type_ann
+        if f.default == "None" and not ann.endswith("| None"):
+            ann = f"{ann} | None"
         if f.default is not None:
-            lines.append(f"    {f.name}: {f.type_ann} = {f.default}")
+            lines.append(f"    {f.name}: {ann} = {f.default}")
         else:
-            lines.append(f"    {f.name}: {f.type_ann}")
+            lines.append(f"    {f.name}: {ann}")
     struct_fnames = tuple(f.name for f in spec.fields)
     lines.append(
         "    _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)"
@@ -1460,7 +1544,8 @@ def generate_dsl_source() -> str:
     dunder_doc = "\n".join(
         f"  - {cls_name}: {', '.join(dunders)}" for cls_name, dunders in dunder_summary
     )
-    node_classes_code = "\n\n\n".join(_emit_node_class(spec) for spec in NODE_SPECS)
+    term_types = _solve_term_types(NODE_SPECS)
+    node_classes_code = "\n\n\n".join(_emit_node_class(spec, term_types) for spec in NODE_SPECS)
     union_members = "\n    | ".join(spec.cls_name for spec in NODE_SPECS)
 
     return f'''"""
@@ -1751,27 +1836,27 @@ def _wrap_raw_if_needed(x: Any) -> Any:
     return x
 
 
-def _coerce_bv(other: Any, width: int) -> Z3Expr:
+def _coerce_bv(other: Any, width: int) -> BitVecRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3BvConst(other & ((1 << width) - 1), width)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to BitVec({{width}})")
 
 
-def _coerce_bool(other: Any) -> Z3Expr:
+def _coerce_bool(other: Any) -> BoolRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, bool):
         return Z3BoolConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Bool")
 
 
-def _coerce_real(other: Any) -> Z3Expr:
+def _coerce_real(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         if is_int(other):
             return Z3OpToReal(other)
@@ -1790,17 +1875,17 @@ def _coerce_real(other: Any) -> Z3Expr:
         return Z3RealConst(frac.numerator, frac.denominator)
     if isinstance(other, z3.ExprRef):
         w = lift(other, depth=1)
-        return Z3OpToReal(w) if is_int(w) else w
+        return Z3OpToReal(w) if is_int(w) else w  # type: ignore
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Real")
 
 
-def _coerce_int(other: Any) -> Z3Expr:
+def _coerce_int(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3IntConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {{type(other).__name__}} to Int")
 
 
@@ -1994,7 +2079,7 @@ class Z3BoolExpr(Z3Expr):
     def sort(self) -> z3.SortRef:
         return z3.BoolSort()
 
-    def __invert__(self) -> Z3BoolExpr:
+    def __invert__(self) -> BoolRef:
         return Not(self)
 
     def __and__(self, other: Any) -> Z3BoolExpr:
@@ -2680,6 +2765,7 @@ BoolRef = Z3BoolExpr | Z3PolyExpr
 BitVecRef = Z3BitVecExpr | Z3PolyExpr
 ArithRef = Z3ArithExpr | Z3PolyExpr
 FPRef = Z3FPExpr | Z3PolyExpr
+ArrayRef = Z3ArrayExpr | Z3PolyExpr
 SortRef = z3.SortRef
 
 
@@ -2927,7 +3013,7 @@ def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3PolyExpr:
     return Z3OpIte(c, t, f)
 
 
-def Not(a: Any) -> Z3BoolExpr:
+def Not(a: Any) -> BoolRef:
     aa = _coerce_bool(a)
     if isinstance(aa, Z3BoolConst):
         return Z3BoolConst(not aa.val)

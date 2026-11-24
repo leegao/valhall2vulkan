@@ -610,27 +610,27 @@ def _wrap_raw_if_needed(x: Any) -> Any:
     return x
 
 
-def _coerce_bv(other: Any, width: int) -> Z3Expr:
+def _coerce_bv(other: Any, width: int) -> BitVecRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3BvConst(other & ((1 << width) - 1), width)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {type(other).__name__} to BitVec({width})")
 
 
-def _coerce_bool(other: Any) -> Z3Expr:
+def _coerce_bool(other: Any) -> BoolRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, bool):
         return Z3BoolConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {type(other).__name__} to Bool")
 
 
-def _coerce_real(other: Any) -> Z3Expr:
+def _coerce_real(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         if is_int(other):
             return Z3OpToReal(other)
@@ -649,17 +649,17 @@ def _coerce_real(other: Any) -> Z3Expr:
         return Z3RealConst(frac.numerator, frac.denominator)
     if isinstance(other, z3.ExprRef):
         w = lift(other, depth=1)
-        return Z3OpToReal(w) if is_int(w) else w
+        return Z3OpToReal(w) if is_int(w) else w  # type: ignore
     raise TypeError(f"Cannot coerce {type(other).__name__} to Real")
 
 
-def _coerce_int(other: Any) -> Z3Expr:
+def _coerce_int(other: Any) -> ArithRef:
     if isinstance(other, Z3Expr):
         return other
     if isinstance(other, int) and not isinstance(other, bool):
         return Z3IntConst(other)
     if isinstance(other, z3.ExprRef):
-        return lift(other, depth=1)
+        return lift(other, depth=1)  # type: ignore
     raise TypeError(f"Cannot coerce {type(other).__name__} to Int")
 
 
@@ -853,7 +853,7 @@ class Z3BoolExpr(Z3Expr):
     def sort(self) -> z3.SortRef:
         return z3.BoolSort()
 
-    def __invert__(self) -> Z3BoolExpr:
+    def __invert__(self) -> BoolRef:
         return Not(self)
 
     def __and__(self, other: Any) -> Z3BoolExpr:
@@ -1667,7 +1667,7 @@ class Z3FPConst(Z3FPExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3ConstArray(Z3ArrayExpr):
     dom_sort: z3.SortRef
-    val: Any
+    val: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('dom_sort', 'val')
@@ -1833,7 +1833,7 @@ class Z3GenericVar(Z3PolyExpr):
 class Z3OpExtract(Z3BitVecExpr):
     hi: int
     lo: int
-    src: Any
+    src: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('hi', 'lo', 'src')
@@ -1861,7 +1861,7 @@ class Z3OpExtract(Z3BitVecExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpZeroExt(Z3BitVecExpr):
     k: int
-    src: Any
+    src: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('k', 'src')
@@ -1885,7 +1885,7 @@ class Z3OpZeroExt(Z3BitVecExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpSignExt(Z3BitVecExpr):
     k: int
-    src: Any
+    src: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('k', 'src')
@@ -1908,7 +1908,7 @@ class Z3OpSignExt(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpConcat(Z3BitVecExpr):
-    args: tuple[Any, ...]
+    args: tuple[ExprRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -1928,9 +1928,9 @@ class Z3OpConcat(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIte(Z3PolyExpr):
-    cond: Any
-    then_expr: Any
-    else_expr: Any
+    cond: BoolRef
+    then_expr: ExprRef
+    else_expr: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('cond', 'then_expr', 'else_expr')
@@ -1971,8 +1971,8 @@ class Z3OpIte(Z3PolyExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpEq(Z3BoolExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ExprRef
+    rhs: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -1989,8 +1989,8 @@ class Z3OpEq(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpDistinct(Z3BoolExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ExprRef
+    rhs: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2007,7 +2007,7 @@ class Z3OpDistinct(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpNot(Z3BoolExpr):
-    src: Any
+    src: BoolRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -2024,7 +2024,7 @@ class Z3OpNot(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpAnd(Z3BoolExpr):
-    args: tuple[Any, ...]
+    args: tuple[BoolRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2043,7 +2043,7 @@ class Z3OpAnd(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpOr(Z3BoolExpr):
-    args: tuple[Any, ...]
+    args: tuple[BoolRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2062,8 +2062,8 @@ class Z3OpOr(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpXor(Z3BoolExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BoolRef
+    rhs: BoolRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2080,8 +2080,8 @@ class Z3OpXor(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpImplies(Z3BoolExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BoolRef
+    rhs: BoolRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2098,8 +2098,8 @@ class Z3OpImplies(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvMul(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2119,8 +2119,8 @@ class Z3OpBvMul(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvAdd(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2140,8 +2140,8 @@ class Z3OpBvAdd(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvSub(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2161,8 +2161,8 @@ class Z3OpBvSub(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvSDiv(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2182,8 +2182,8 @@ class Z3OpBvSDiv(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvUDiv(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2203,8 +2203,8 @@ class Z3OpBvUDiv(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvSRem(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2224,8 +2224,8 @@ class Z3OpBvSRem(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvURem(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2245,8 +2245,8 @@ class Z3OpBvURem(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvSMod(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2268,8 +2268,8 @@ class Z3OpBvSMod(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvShl(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2289,8 +2289,8 @@ class Z3OpBvShl(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvLShr(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2310,8 +2310,8 @@ class Z3OpBvLShr(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvAShr(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2331,8 +2331,8 @@ class Z3OpBvAShr(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvAnd(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2352,8 +2352,8 @@ class Z3OpBvAnd(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvOr(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2373,8 +2373,8 @@ class Z3OpBvOr(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvXor(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2394,7 +2394,7 @@ class Z3OpBvXor(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvNot(Z3BitVecExpr):
-    src: Any
+    src: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2414,7 +2414,7 @@ class Z3OpBvNot(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvNeg(Z3BitVecExpr):
-    src: Any
+    src: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2434,8 +2434,8 @@ class Z3OpBvNeg(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvRotateLeft(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2455,8 +2455,8 @@ class Z3OpBvRotateLeft(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvRotateRight(Z3BitVecExpr):
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2477,8 +2477,8 @@ class Z3OpBvRotateRight(Z3BitVecExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBvCmp(Z3BoolExpr):
     op: BvCmpOp
-    lhs: Any
-    rhs: Any
+    lhs: BitVecRef
+    rhs: BitVecRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
@@ -2503,7 +2503,7 @@ class Z3OpBvCmp(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBv2Int(Z3ArithExpr):
-    src: Any
+    src: BitVecRef
     is_signed: bool = False
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2527,7 +2527,7 @@ class Z3OpBv2Int(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpInt2Bv(Z3BitVecExpr):
-    src: Any
+    src: ArithRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2547,7 +2547,7 @@ class Z3OpInt2Bv(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpToReal(Z3ArithExpr):
-    src: Any
+    src: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -2570,7 +2570,7 @@ class Z3OpToReal(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpToInt(Z3ArithExpr):
-    src: Any
+    src: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -2593,7 +2593,7 @@ class Z3OpToInt(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpRealAdd(Z3ArithExpr):
-    args: tuple[Any, ...]
+    args: tuple[ArithRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2618,7 +2618,7 @@ class Z3OpRealAdd(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpRealMul(Z3ArithExpr):
-    args: tuple[Any, ...]
+    args: tuple[ArithRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2643,8 +2643,8 @@ class Z3OpRealMul(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpRealSub(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2667,8 +2667,8 @@ class Z3OpRealSub(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpRealDiv(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2691,7 +2691,7 @@ class Z3OpRealDiv(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpRealNeg(Z3ArithExpr):
-    src: Any
+    src: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -2714,7 +2714,7 @@ class Z3OpRealNeg(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntAdd(Z3ArithExpr):
-    args: tuple[Any, ...]
+    args: tuple[ArithRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2735,8 +2735,8 @@ class Z3OpIntAdd(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntSub(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2755,7 +2755,7 @@ class Z3OpIntSub(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntMul(Z3ArithExpr):
-    args: tuple[Any, ...]
+    args: tuple[ArithRef, ...]
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('args',)
@@ -2776,8 +2776,8 @@ class Z3OpIntMul(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntDiv(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2796,8 +2796,8 @@ class Z3OpIntDiv(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntMod(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('lhs', 'rhs')
@@ -2816,7 +2816,7 @@ class Z3OpIntMod(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpIntNeg(Z3ArithExpr):
-    src: Any
+    src: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -2835,8 +2835,8 @@ class Z3OpIntNeg(Z3ArithExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpArithPow(Z3ArithExpr):
-    lhs: Any
-    rhs: Any
+    lhs: ExprRef
+    rhs: ExprRef
     real_result: bool = True
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -2857,8 +2857,8 @@ class Z3OpArithPow(Z3ArithExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpArithCmp(Z3BoolExpr):
     op: ArithCmpOp
-    lhs: Any
-    rhs: Any
+    lhs: ArithRef
+    rhs: ArithRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
@@ -2879,8 +2879,8 @@ class Z3OpArithCmp(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpSelect(Z3PolyExpr):
-    arr: Any
-    idx: Any
+    arr: ArrayRef
+    idx: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('arr', 'idx')
@@ -2906,9 +2906,9 @@ class Z3OpSelect(Z3PolyExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpStore(Z3ArrayExpr):
-    arr: Any
-    idx: Any
-    val: Any
+    arr: ArrayRef
+    idx: ExprRef
+    val: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('arr', 'idx', 'val')
@@ -2932,8 +2932,8 @@ class Z3OpStore(Z3ArrayExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPUnary(Z3FPExpr):
     op: FpUnaryOp
-    src: Any
-    rm: Any = None
+    src: FPRef
+    rm: ExprRef | None = None
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src', 'rm')
@@ -2959,9 +2959,9 @@ class Z3OpFPUnary(Z3FPExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPBinary(Z3FPExpr):
     op: FpBinaryOp
-    lhs: Any
-    rhs: Any
-    rm: Any = None
+    lhs: FPRef
+    rhs: FPRef
+    rm: ExprRef | None = None
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs', 'rm')
@@ -2989,10 +2989,10 @@ class Z3OpFPBinary(Z3FPExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPFMA(Z3FPExpr):
-    rm: Any
-    a: Any
-    b: Any
-    c: Any
+    rm: ExprRef
+    a: FPRef
+    b: FPRef
+    c: FPRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('rm', 'a', 'b', 'c')
@@ -3013,8 +3013,8 @@ class Z3OpFPFMA(Z3FPExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPCmp(Z3BoolExpr):
     op: FpCmpOp
-    lhs: Any
-    rhs: Any
+    lhs: FPRef
+    rhs: FPRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'lhs', 'rhs')
@@ -3034,7 +3034,7 @@ class Z3OpFPCmp(Z3BoolExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPPred(Z3BoolExpr):
     op: FpPredOp
-    src: Any
+    src: FPRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src')
@@ -3055,7 +3055,7 @@ class Z3OpFPPred(Z3BoolExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPBVToFP(Z3FPExpr):
-    src: Any
+    src: FPRef
     ebits_val: int
     sbits_val: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
@@ -3077,7 +3077,7 @@ class Z3OpFPBVToFP(Z3FPExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPToIEEEBV(Z3BitVecExpr):
-    src: Any
+    src: FPRef
     width: int
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
@@ -3094,8 +3094,8 @@ class Z3OpFPToIEEEBV(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPToFP(Z3FPExpr):
-    rm: Any
-    src: Any
+    rm: ExprRef
+    src: FPRef | BitVecRef | ArithRef
     ebits_val: int
     sbits_val: int
     mode: str = "fp"
@@ -3123,8 +3123,8 @@ class Z3OpFPToFP(Z3FPExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPToBV(Z3BitVecExpr):
-    rm: Any
-    src: Any
+    rm: ExprRef
+    src: FPRef
     width: int
     signed: bool = True
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
@@ -3144,7 +3144,7 @@ class Z3OpFPToBV(Z3BitVecExpr):
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpFPToReal(Z3ArithExpr):
-    src: Any
+    src: FPRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('src',)
@@ -3165,7 +3165,7 @@ class Z3OpFPToReal(Z3ArithExpr):
 @dataclass(frozen=True, slots=True, eq=False)
 class Z3OpBridge(Z3PolyExpr):
     op: BridgeOp
-    src: Any
+    src: ExprRef
     _z3_cache: z3.ExprRef | None = field(default=None, init=False, repr=False, compare=False)
     _hash_cache: int | None = field(default=None, init=False, repr=False, compare=False)
     _struct_fields: ClassVar[tuple[str, ...]] = ('op', 'src')
@@ -3358,6 +3358,7 @@ BoolRef = Z3BoolExpr | Z3PolyExpr
 BitVecRef = Z3BitVecExpr | Z3PolyExpr
 ArithRef = Z3ArithExpr | Z3PolyExpr
 FPRef = Z3FPExpr | Z3PolyExpr
+ArrayRef = Z3ArrayExpr | Z3PolyExpr
 SortRef = z3.SortRef
 
 
@@ -3605,7 +3606,7 @@ def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3PolyExpr:
     return Z3OpIte(c, t, f)
 
 
-def Not(a: Any) -> Z3BoolExpr:
+def Not(a: Any) -> BoolRef:
     aa = _coerce_bool(a)
     if isinstance(aa, Z3BoolConst):
         return Z3BoolConst(not aa.val)
