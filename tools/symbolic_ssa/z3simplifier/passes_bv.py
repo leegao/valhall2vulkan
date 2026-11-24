@@ -74,14 +74,14 @@ _BV_WRAP_KINDS = frozenset(
 )
 
 
-def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
+def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
     """Declarative `match`/`case` local peephole rules for BV/Bool wrappers and literal conversions."""
     if not dsl.is_app(node) or node.decl().kind() not in _BV_WRAP_KINDS:
         return None
     match view(node, depth=2):
         # Extract identity, constant folding, and ZeroExt/SignExt/Concat/ITE unwrapping
-        case Z3OpExtract(hi, 0, src) if isinstance(unwrap(src), z3.BitVecRef) and unwrap(src).size() == hi + 1:
-            return unwrap(src)
+        case Z3OpExtract(hi, 0, src) if isinstance(_src := unwrap(src), z3.BitVecRef) and _src.size() == hi + 1:
+            return _src
         case Z3OpExtract(hi, lo, Z3BvConst(val, _)):
             w = hi - lo + 1
             return dsl.BitVecVal((val >> lo) & ((1 << w) - 1), w)
@@ -233,7 +233,7 @@ _BV_ALG_KINDS = frozenset(
 )
 
 
-def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
+def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | z3.ExprRef | None:
     """Declarative `match`/`case` algebraic & strength-reduction rules for BitVec arithmetic."""
     if not isinstance(node, z3.BitVecRef) or not dsl.is_app(node) or node.decl().kind() not in _BV_ALG_KINDS:
         return None
@@ -268,7 +268,7 @@ def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
                 return unwrap(a0)
             base0 = unwrap(a0)
             rhs_c = dsl.BitVecVal(csum, w)
-            return (base0 + rhs_c) if isinstance(base0, dsl.Z3Expr) else (base0 + dsl.lower(rhs_c))
+            return base0 + dsl.lower(rhs_c)
 
         # BVSub
         case Z3OpBvSub(Z3BvConst(ca, _), Z3BvConst(cb, _)):

@@ -24,7 +24,7 @@ import abc
 import time
 from typing import List, Optional, Sequence, Tuple
 
-import z3
+from tools.symbolic_ssa.z3utils import dsl
 
 from tools.symbolic_ssa.z3simplifier.ast_utils import count_ast_nodes
 from tools.symbolic_ssa.z3simplifier.context import (
@@ -45,9 +45,9 @@ class Z3TermPass(abc.ABC):
     @abc.abstractmethod
     def rewrite_term(
         self,
-        expr: z3.ExprRef,
+        expr: dsl.ExprRef,
         ctx: SimplificationContext,
-    ) -> Tuple[z3.ExprRef, int]:
+    ) -> Tuple[dsl.ExprRef, int]:
         """
         Rewrite `expr` and return `(new_expr, rewrite_count)`.
 
@@ -97,7 +97,7 @@ class TermPassAdapter(Z3QueryPass):
             new_guard, rg = self.term_pass.rewrite_term(query.guard, ctx)
             total_rw += rg
 
-        new_pres: List[z3.BoolRef] = []
+        new_pres: List[dsl.BoolRef] = []
         pres_changed = False
         for pre in query.preconditions:
             np, rp = self.term_pass.rewrite_term(pre, ctx)

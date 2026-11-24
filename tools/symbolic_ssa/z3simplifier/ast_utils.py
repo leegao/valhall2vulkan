@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import z3
 
@@ -68,7 +69,7 @@ def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
     visited: set[int] = set()
     depths: dict[int, int] = {}
     post_order: list[dsl.ExprRef] = []
-    stack: list[tuple[dsl.ExprRef, bool]] = [(dsl.lower(r), False) for r in roots if r is not None]
+    stack: list[tuple[dsl.ExprRef, bool]] = [(r, False) for r in roots if r is not None]
 
     while stack and len(visited) < limit:
         cur, expanded = stack.pop()
@@ -137,10 +138,10 @@ def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
             ites += 1
             if (
                 node.num_args() == 3
-                and isinstance(node.arg(1), z3.BitVecNumRef)
-                and isinstance(node.arg(2), z3.BitVecNumRef)
-                and node.arg(1).as_long() == 1
-                and node.arg(2).as_long() == 0
+                and dsl.is_bv_value(node.arg(1))
+                and dsl.is_bv_value(node.arg(2))
+                and dsl.as_long(node.arg(1)) == 1
+                and dsl.as_long(node.arg(2)) == 0
             ):
                 bool_wrappers += 1
         if name in _BRIDGE_NAMES:
@@ -166,8 +167,8 @@ def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
 
 def rewrite_dag(
     root: dsl.ExprRef,
-    rule_fn: Callable[[dsl.ExprRef], dsl.ExprRef | None],
-    memo: dict[int, dsl.ExprRef] | None = None,
+    rule_fn: Callable[[dsl.ExprRef], Any],
+    memo: dict[int, Any] | None = None,
 ) -> tuple[dsl.ExprRef, int]:
     """
     Iterative, memoized bottom-up DAG rewriter.
@@ -177,7 +178,7 @@ def rewrite_dag(
     If `rule_fn` returns a non-None `ExprRef` different from `rebuilt`,
     increments the rewrite counter and memoizes the result.
     """
-    cache: dict[int, dsl.ExprRef] = memo if memo is not None else {}
+    cache: dict[int, Any] = memo if memo is not None else {}
     rewrites = 0
     root_id = root.get_id()
     stack: list[tuple[dsl.ExprRef, bool]] = [(root, False)]
@@ -203,7 +204,7 @@ def rewrite_dag(
                     stack.append((ch, False))
         else:
             nargs = cur.num_args()
-            new_args: list[dsl.ExprRef] = []
+            new_args: list[Any] = []
             args_changed = False
             for i in range(nargs):
                 orig_a = cur.arg(i)
@@ -215,7 +216,7 @@ def rewrite_dag(
             repl = rule_fn(rebuilt)
             if repl is not None and not dsl.expr_eq(repl, rebuilt):
                 rewrites += 1
-                res_node = repl
+                res_node: Any = repl
             else:
                 res_node = rebuilt
             if not isinstance(cur, dsl.Z3Expr) and isinstance(res_node, dsl.Z3Expr):
@@ -225,7 +226,7 @@ def rewrite_dag(
     return cache.get(root_id, cache.get(root.get_id(), root)), rewrites
 
 
-def rebuild_app(node: dsl.ExprRef, new_args: Sequence[dsl.ExprRef]) -> dsl.ExprRef:
+def rebuild_app(node: dsl.ExprRef, new_args: Sequence[Any]) -> dsl.ExprRef:
     """
     Safely rebuild a Z3 application node with rewritten children.
 
@@ -233,72 +234,73 @@ def rebuild_app(node: dsl.ExprRef, new_args: Sequence[dsl.ExprRef]) -> dsl.ExprR
     (`Extract`, `ZeroExt`, `SignExt`, `Concat`, `If`, `And`, `Or`, `Not`,
     `Select`, `Store`, etc.) cleanly without Z3 FFI parameter-mismatch errors.
     """
-    if not isinstance(node, dsl.Z3Expr) or any(not isinstance(a, dsl.Z3Expr) for a in new_args):
-        new_args = [dsl.lower(a) for a in new_args]
+    if not isinstance(node, dsl.Z3Expr):
+        node = dsl.view(node)
+    args: list[Any] = [a if isinstance(a, dsl.Z3Expr) else dsl.view(a) for a in new_args]
     decl = node.decl()
     kind = decl.kind()
 
     if kind == dsl.Z3OpKind.EXTRACT:
-        hi = node.params()[0]
-        lo = node.params()[1]
-        return dsl.Extract(hi, lo, new_args[0])
+        hi = decl.params()[0]
+        lo = decl.params()[1]
+        return dsl.Extract(hi, lo, args[0])
     if kind == dsl.Z3OpKind.ZERO_EXT:
-        return dsl.ZeroExt(node.params()[0], new_args[0])
+        return dsl.ZeroExt(decl.params()[0], args[0])
     if kind == dsl.Z3OpKind.SIGN_EXT:
-        return dsl.SignExt(node.params()[0], new_args[0])
+        return dsl.SignExt(decl.params()[0], args[0])
     if kind == dsl.Z3OpKind.CONCAT:
-        return dsl.Concat(*new_args)
+        return dsl.Concat(*args)
     if kind == dsl.Z3OpKind.ITE:
-        return dsl.If(new_args[0], new_args[1], new_args[2])
+        return dsl.If(args[0], args[1], args[2])
     if kind == dsl.Z3OpKind.AND:
-        return dsl.And(*new_args)
+        return dsl.And(*args)
     if kind == dsl.Z3OpKind.OR:
-        return dsl.Or(*new_args)
+        return dsl.Or(*args)
     if kind == dsl.Z3OpKind.NOT:
-        return dsl.Not(new_args[0])
+        return dsl.Not(args[0])
     if kind == dsl.Z3OpKind.EQ:
-        return new_args[0] == new_args[1]
-    if kind == dsl.Z3OpKind.DISTINCT and len(new_args) == 2:
-        return new_args[0] != new_args[1]
+        return args[0] == args[1]
+    if kind == dsl.Z3OpKind.DISTINCT and len(args) == 2:
+        return args[0] != args[1]
     if kind == dsl.Z3OpKind.SELECT:
-        return dsl.Select(new_args[0], new_args[1])
+        return dsl.Select(args[0], args[1])
     if kind == dsl.Z3OpKind.STORE:
-        return dsl.Store(new_args[0], new_args[1], new_args[2])
+        return dsl.Store(args[0], args[1], args[2])
     if kind == dsl.Z3OpKind.ADD:
-        acc = new_args[0]
-        for a in new_args[1:]:
+        acc = args[0]
+        for a in args[1:]:
             acc = acc + a
         return acc
-    if kind == dsl.Z3OpKind.SUB and len(new_args) == 2:
-        return new_args[0] - new_args[1]
-    if kind == dsl.Z3OpKind.UMINUS and len(new_args) == 1:
-        return -new_args[0]
+    if kind == dsl.Z3OpKind.SUB and len(args) == 2:
+        return args[0] - args[1]
+    if kind == dsl.Z3OpKind.UMINUS and len(args) == 1:
+        return -args[0]
     if kind == dsl.Z3OpKind.MUL:
-        acc = new_args[0]
-        for a in new_args[1:]:
+        acc = args[0]
+        for a in args[1:]:
             acc = acc * a
         return acc
-    if kind == dsl.Z3OpKind.DIV and len(new_args) == 2:
-        return new_args[0] / new_args[1]
-    if kind == dsl.Z3OpKind.BADD and len(new_args) == 2:
-        return new_args[0] + new_args[1]
-    if kind == dsl.Z3OpKind.BSUB and len(new_args) == 2:
-        return new_args[0] - new_args[1]
-    if kind == dsl.Z3OpKind.BMUL and len(new_args) == 2:
-        return new_args[0] * new_args[1]
-    if kind == dsl.Z3OpKind.BAND and len(new_args) == 2:
-        return new_args[0] & new_args[1]
-    if kind == dsl.Z3OpKind.BOR and len(new_args) == 2:
-        return new_args[0] | new_args[1]
-    if kind == dsl.Z3OpKind.BXOR and len(new_args) == 2:
-        return new_args[0] ^ new_args[1]
-    if kind == dsl.Z3OpKind.BSHL and len(new_args) == 2:
-        return new_args[0] << new_args[1]
-    if kind == dsl.Z3OpKind.BLSHR and len(new_args) == 2:
-        return dsl.LShR(new_args[0], new_args[1])
-    if kind == dsl.Z3OpKind.BASHR and len(new_args) == 2:
-        return new_args[0] >> new_args[1]
-    return decl(*(dsl.lower(a) for a in new_args))
+    if kind == dsl.Z3OpKind.DIV and len(args) == 2:
+        return args[0] / args[1]
+    if kind == dsl.Z3OpKind.BADD and len(args) == 2:
+        return args[0] + args[1]
+    if kind == dsl.Z3OpKind.BSUB and len(args) == 2:
+        return args[0] - args[1]
+    if kind == dsl.Z3OpKind.BMUL and len(args) == 2:
+        return args[0] * args[1]
+    if kind == dsl.Z3OpKind.BAND and len(args) == 2:
+        return args[0] & args[1]
+    if kind == dsl.Z3OpKind.BOR and len(args) == 2:
+        return args[0] | args[1]
+    if kind == dsl.Z3OpKind.BXOR and len(args) == 2:
+        return args[0] ^ args[1]
+    if kind == dsl.Z3OpKind.BSHL and len(args) == 2:
+        return args[0] << args[1]
+    if kind == dsl.Z3OpKind.BLSHR and len(args) == 2:
+        return dsl.LShR(args[0], args[1])
+    if kind == dsl.Z3OpKind.BASHR and len(args) == 2:
+        return args[0] >> args[1]
+    return decl.rebuild(args)
 
 
 def format_z3_ast(
@@ -351,11 +353,11 @@ def format_z3_ast(
                 let_defs.append((lname, node))
 
     def _op_label(n: dsl.ExprRef) -> str:
-        if dsl.is_bv_value(n):
+        if isinstance(n, dsl.Z3BvConst):
             return f"bv{n.size()}(0x{n.as_long():x})"
-        if dsl.is_rational_value(n):
+        if isinstance(n, dsl.Z3RealConst):
             return n.as_decimal(6).rstrip("?")
-        if dsl.is_int_value(n):
+        if isinstance(n, dsl.Z3IntConst):
             return str(n.as_long())
         if dsl.is_true(n):
             return "true"
@@ -364,11 +366,11 @@ def format_z3_ast(
         d = n.decl()
         k = d.kind()
         if k == dsl.Z3OpKind.EXTRACT:
-            return f"Extract[{n.params()[0]}:{n.params()[1]}]"
+            return f"Extract[{d.params()[0]}:{d.params()[1]}]"
         if k == dsl.Z3OpKind.ZERO_EXT:
-            return f"ZeroExt[{n.params()[0]}]"
+            return f"ZeroExt[{d.params()[0]}]"
         if k == dsl.Z3OpKind.SIGN_EXT:
-            return f"SignExt[{n.params()[0]}]"
+            return f"SignExt[{d.params()[0]}]"
         return d.name()
 
     lines: list[str] = []

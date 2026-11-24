@@ -67,24 +67,24 @@ class SimplifyQuery:
     conjunction implies `lhs == rhs`.
     """
 
-    lhs: z3.ExprRef
-    rhs: z3.ExprRef
-    guard: Optional[z3.BoolRef] = None
-    preconditions: Tuple[z3.BoolRef, ...] = ()
-    predicate: Optional[z3.BoolRef] = None
+    lhs: dsl.ExprRef
+    rhs: dsl.ExprRef
+    guard: Optional[dsl.BoolRef] = None
+    preconditions: Tuple[dsl.BoolRef, ...] = ()
+    predicate: Optional[dsl.ExprRef] = None
     side_obligations: Tuple[SideObligation, ...] = ()
     residual_obligations: Tuple[SideObligation, ...] = ()
     is_overapprox: bool = False
     pure_theory: Optional[str] = None
-    abstraction_map: Tuple[Tuple[z3.ExprRef, z3.ExprRef], ...] = ()
+    abstraction_map: Tuple[Tuple[dsl.ExprRef, dsl.ExprRef], ...] = ()
     notes: Tuple[str, ...] = ()
 
     def with_terms(
         self,
-        lhs: z3.ExprRef,
-        rhs: z3.ExprRef,
-        guard: Optional[z3.BoolRef] = None,
-        preconditions: Optional[Tuple[z3.BoolRef, ...]] = None,
+        lhs: dsl.ExprRef,
+        rhs: dsl.ExprRef,
+        guard: Optional[dsl.BoolRef] = None,
+        preconditions: Optional[Tuple[dsl.BoolRef, ...]] = None,
         **kwargs: Any,
     ) -> "SimplifyQuery":
         """Return a shallow updated copy preserving metadata."""
@@ -124,7 +124,7 @@ class SimplifyQuery:
             return True
         return False
 
-    def to_refutation_predicate(self) -> z3.BoolRef:
+    def to_refutation_predicate(self) -> z3.ExprRef:
         """Materialize the boolean refutation formula `guard & (lhs != rhs)` as a concrete `z3.BoolRef`."""
         if self.predicate is not None:
             return dsl.lower(self.predicate)

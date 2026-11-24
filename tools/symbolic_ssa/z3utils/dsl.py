@@ -750,8 +750,8 @@ class Z3Expr:
     def arg(self, i: int) -> Any:
         return self.children()[i]
 
-    def decl(self) -> z3.FuncDeclRef:
-        return self.to_z3.decl()
+    def decl(self) -> Z3FuncDecl:
+        return Z3FuncDecl.from_raw(self.to_z3.decl())
 
     def op_kind(self) -> Z3OpKind:
         return Z3OpKind(self.to_z3.decl().kind())
@@ -1487,8 +1487,23 @@ class Z3FuncDecl:
     def range(self) -> z3.SortRef:
         return self.rng_sort
 
-    def kind(self) -> int:
-        return int(Z3OpKind.UNINTERPRETED)
+    @classmethod
+    def from_raw(cls, raw: z3.FuncDeclRef) -> "Z3FuncDecl":
+        """Wrap an existing concrete `z3.FuncDeclRef` (e.g. from `Z3Expr.decl()`)."""
+        obj = cls(raw.name(), tuple(raw.domain(i) for i in range(raw.arity())), raw.range())
+        object.__setattr__(obj, "_z3_cache", raw)
+        return obj
+
+    def kind(self) -> Z3OpKind:
+        return Z3OpKind(self.to_z3.kind())
+
+    def params(self) -> Tuple[int, ...]:
+        raw = self.to_z3.params()
+        return tuple(raw) if raw is not None else ()
+
+    def rebuild(self, args: Sequence[Any]) -> "Z3Expr":
+        """Reconstruct a DSL node from this decl and rewritten args."""
+        return view(self.to_z3(*[lower(a) for a in args]))
 
     def eq(self, other: Any) -> bool:
         if isinstance(other, Z3FuncDecl):
@@ -3313,6 +3328,14 @@ Z3Node = Union[
     Z3OpUFApp,
     Z3Other,
 ]
+
+
+# Type aliases for annotations (dsl domain). A DSL expression is a typed `Z3Expr`
+# node (or `Z3BoolExpr` for booleans); concrete `z3.ExprRef` values are annotated
+# as `z3.ExprRef` explicitly.
+ExprRef = Z3Expr
+BoolRef = Z3BoolExpr
+SortRef = z3.SortRef
 
 
 # --- Z3-API-Compatible Constructors & Operators ---

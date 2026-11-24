@@ -393,12 +393,12 @@ def _rewrite_with_dataflow(
                 nargs = cur.num_args()
                 orig_children = [cur.arg(i) for i in range(nargs)]
                 new_children = [memo.get(ch.get_id(), ch) for ch in orig_children]
-                any_changed = any(not nc.eq(oc) for nc, oc in zip(new_children, orig_children))
+                any_changed = any(not dsl.expr_eq(nc, oc) for nc, oc in zip(new_children, orig_children))
                 rebuilt = rebuild_app(cur, new_children) if any_changed else cur
 
                 lifted = lift(rebuilt, depth=1)
                 simplified = _apply_extensional_rules(lifted, rebuilt, env)
-                if simplified is not None and not simplified.eq(rebuilt):
+                if simplified is not None and not dsl.expr_eq(simplified, rebuilt):
                     rebuilt = simplified
                     lifted = lift(rebuilt, depth=1)
                     rewrites += 1
