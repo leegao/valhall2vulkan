@@ -1,13 +1,10 @@
-#!/usr/bin/env python3
 """Z3 symbolic bitvector value domain (`SymbolicZ3BitvecDomain`)."""
 
 from __future__ import annotations
 
 import math
 import struct
-from typing import Any
-
-import z3
+from typing import Any, TypeGuard
 
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain
 from tools.symbolic_ssa.z3utils import dsl
@@ -36,8 +33,8 @@ from tools.symbolic_ssa.z3utils.helpers import (
 )
 
 
-def _dsl_clz_bv32(x: Any) -> dsl.Z3BitVecExpr:
-    res: Any = _dsl_bv32(32)
+def _dsl_clz_bv32(x: Any) -> dsl.BitVecRef:
+    res: dsl.BitVecRef = _dsl_bv32(32)
     one1 = dsl.BitVecVal(1, 1)
     for idx in range(32):
         bit = dsl.Extract(idx, idx, x)
@@ -45,18 +42,18 @@ def _dsl_clz_bv32(x: Any) -> dsl.Z3BitVecExpr:
     return res
 
 
-def _dsl_popcount_bv32(x: Any) -> dsl.Z3BitVecExpr:
-    acc: Any = _dsl_bv32(0)
+def _dsl_popcount_bv32(x: Any) -> dsl.BitVecRef:
+    acc: dsl.BitVecRef = _dsl_bv32(0)
     for i in range(32):
         acc = acc + dsl.ZeroExt(31, dsl.Extract(i, i, x))
     return acc
 
 
-def _dsl_bitrev_bv32(x: Any) -> dsl.Z3BitVecExpr:
+def _dsl_bitrev_bv32(x: Any) -> dsl.BitVecRef:
     return dsl.Concat(*[dsl.Extract(i, i, x) for i in range(32)])
 
 
-def _dsl_fp_total_le_bv(bits: int, a: Any, b: Any) -> dsl.Z3BoolExpr:
+def _dsl_fp_total_le_bv(bits: int, a: Any, b: Any) -> dsl.BoolRef:
     mask = dsl.BitVecVal((1 << (bits - 1)) - 1, bits)
     zero = dsl.BitVecVal(0, bits)
     ka = dsl.If(a < zero, a ^ mask, a)
@@ -64,7 +61,7 @@ def _dsl_fp_total_le_bv(bits: int, a: Any, b: Any) -> dsl.Z3BoolExpr:
     return ka <= kb
 
 
-def _dsl_fp_to_int_sat(f: Any, bits: int, signed: bool, rm: Any) -> dsl.Z3BitVecExpr:
+def _dsl_fp_to_int_sat(f: Any, bits: int, signed: bool, rm: Any) -> dsl.BitVecRef:
     zero_bv = dsl.BitVecVal(0, bits)
     if signed:
         min_i = -(1 << (bits - 1))
@@ -91,10 +88,10 @@ def _dsl_fp_to_int_sat(f: Any, bits: int, signed: bool, rm: Any) -> dsl.Z3BitVec
     )
 
 
-def _f32_bits_to_real_const(u32: int) -> dsl.Z3ArithExpr | None:
+def _f32_bits_to_real_const(u32: int) -> dsl.ArithRef | None:
     try:
         f = struct.unpack("<f", struct.pack("<I", u32 & MASK32))[0]
-    except Exception:
+    except struct.error:
         return None
     if math.isnan(f) or math.isinf(f):
         return None
@@ -110,11 +107,11 @@ _LOG2_E_REAL = _f32_bits_to_real_const(0x3FB8AA3B)
 _LN_2_REAL = _f32_bits_to_real_const(0x3F317218)
 
 
-def _is_real2bv(x: Any) -> bool:
+def _is_real2bv(x: Any) -> TypeGuard[dsl.Z3OpUFApp]:
     return isinstance(x, dsl.Z3OpUFApp) and x.func.fn_name == "hw_real2bv" and len(x.args) == 1
 
 
-def _bv32_to_real(x: dsl.Z3BitVecExpr) -> dsl.Z3ArithExpr:
+def _bv32_to_real(x: dsl.BitVecRef) -> dsl.ArithRef:
     if _is_real2bv(x):
         return x.args[0]
     if dsl.is_bv_value(x):
@@ -124,44 +121,44 @@ def _bv32_to_real(x: dsl.Z3BitVecExpr) -> dsl.Z3ArithExpr:
     return _dsl_hw_uf("bv2real", BV32, REAL_SORT)(x)
 
 
-def _real_to_bv32(rx: dsl.Z3ArithExpr) -> dsl.Z3BitVecExpr:
+def _real_to_bv32(rx: dsl.ArithRef) -> dsl.BitVecRef:
     if isinstance(rx, dsl.Z3OpUFApp) and rx.func.fn_name == "hw_bv2real" and len(rx.args) == 1:
         return rx.args[0]
     return _dsl_hw_uf("real2bv", REAL_SORT, BV32)(rx)
 
 
-def _real_sqrt(rx: dsl.Z3ArithExpr) -> dsl.Z3ArithExpr:
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
+def _real_sqrt(rx: dsl.ArithRef) -> dsl.ArithRef:
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == 0:
         return _REAL_ZERO
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == rx.denominator_as_long():
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == dsl.denominator_as_long(rx):
         return _REAL_ONE
     return _dsl_hw_uf("real_sqrt", REAL_SORT, REAL_SORT)(rx)
 
 
-def _real_exp2(rx: dsl.Z3ArithExpr) -> dsl.Z3ArithExpr:
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
+def _real_exp2(rx: dsl.ArithRef) -> dsl.ArithRef:
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == 0:
         return _REAL_ONE
     if isinstance(rx, dsl.Z3OpUFApp) and rx.func.fn_name == "hw_real_log2" and len(rx.args) == 1:
         return rx.args[0]
     return _dsl_hw_uf("real_exp2", REAL_SORT, REAL_SORT)(rx)
 
 
-def _real_log2(rx: dsl.Z3ArithExpr) -> dsl.Z3ArithExpr:
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == rx.denominator_as_long():
+def _real_log2(rx: dsl.ArithRef) -> dsl.ArithRef:
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == dsl.denominator_as_long(rx):
         return _REAL_ZERO
     if isinstance(rx, dsl.Z3OpUFApp) and rx.func.fn_name == "hw_real_exp2" and len(rx.args) == 1:
         return rx.args[0]
     return _dsl_hw_uf("real_log2", REAL_SORT, REAL_SORT)(rx)
 
 
-def _real_sin(rx: dsl.Z3ArithExpr) -> dsl.Z3ArithExpr:
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
+def _real_sin(rx: dsl.ArithRef) -> dsl.ArithRef:
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == 0:
         return _REAL_ZERO
     return _dsl_hw_uf("real_sin", REAL_SORT, REAL_SORT)(rx)
 
 
-def _real_cos(rx: dsl.Z3ArithExpr) -> dsl.Z3ArithExpr:
-    if dsl.is_rational_value(rx) and rx.numerator_as_long() == 0:
+def _real_cos(rx: dsl.ArithRef) -> dsl.ArithRef:
+    if dsl.is_rational_value(rx) and dsl.numerator_as_long(rx) == 0:
         return _REAL_ONE
     return _dsl_hw_uf("real_cos", REAL_SORT, REAL_SORT)(rx)
 
@@ -179,75 +176,75 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         if dsl.is_bv_value(val):
             return dsl.as_long(val)
         if dsl.is_bv(val):
-            simp = z3.simplify(dsl.lower(val))
-            if isinstance(simp, z3.BitVecNumRef):
-                return simp.as_long()
+            simp = dsl.simplify(val)
+            if dsl.is_bv_value(simp):
+                return dsl.as_long(simp)
         return None
-    def as_u32(self, val: Any) -> dsl.Z3BitVecExpr: return _as_bv32(val)
-    def as_u64(self, val: Any) -> dsl.Z3BitVecExpr: return _as_bv64(val)
-    def as_f32(self, val: Any) -> dsl.Z3FPExpr: return bv32_to_fp32(_as_bv32(val))
+    def as_u32(self, val: Any) -> dsl.BitVecRef: return _as_bv32(val)
+    def as_u64(self, val: Any) -> dsl.BitVecRef: return _as_bv64(val)
+    def as_f32(self, val: Any) -> dsl.FPRef: return bv32_to_fp32(_as_bv32(val))
     def as_bool(self, val: Any) -> dsl.BoolRef: return _as_bool(val)
 
-    def bv_add(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef:
+    def bv_add(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef:
         if bits == 64 and dsl.is_bv_value(a) and dsl.is_bv_value(b):
             return _dsl_bv64((dsl.as_long(a) + dsl.as_long(b)) & MASK64)
         return a + b
-    def bv_sub(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef:
+    def bv_sub(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef:
         if bits == 64 and dsl.is_bv_value(a) and dsl.is_bv_value(b):
             return _dsl_bv64((dsl.as_long(a) - dsl.as_long(b)) & MASK64)
         return a - b
-    def bv_mul(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef:
+    def bv_mul(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef:
         if bits == 64 and dsl.is_bv_value(a) and dsl.is_bv_value(b):
             return _dsl_bv64((dsl.as_long(a) * dsl.as_long(b)) & MASK64)
         return a * b
-    def bv_and(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef: return a & b
-    def bv_or(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef: return a | b
-    def bv_xor(self, a: Any, b: Any, bits: int = 32) -> z3.BitVecRef: return a ^ b
-    def bv_not(self, a: Any, bits: int = 32) -> z3.BitVecRef: return ~a
-    def bv_neg(self, a: Any, bits: int = 32) -> z3.BitVecRef: return -a
-    def bv_shl(self, a: Any, sh: Any, bits: int = 32) -> z3.BitVecRef: return a << sh
-    def bv_lshr(self, a: Any, sh: Any, bits: int = 32) -> Any: return dsl.LShR(a, sh)
-    def bv_ashr(self, a: Any, sh: Any, bits: int = 32) -> z3.BitVecRef: return a >> sh
-    def bv_rotl(self, a: Any, sh: Any) -> Any: return dsl.RotateLeft(a, sh)
-    def bv_rotr(self, a: Any, sh: Any) -> Any: return dsl.RotateRight(a, sh)
-    def bv_udiv(self, a: Any, b: Any) -> Any: return dsl.UDiv(a, b)
-    def bv_sdiv(self, a: Any, b: Any) -> z3.BitVecRef: return a / b
-    def bv_urem(self, a: Any, b: Any) -> Any: return dsl.URem(a, b)
-    def bv_srem(self, a: Any, b: Any) -> Any: return dsl.SRem(a, b)
-    def bv_eq(self, a: Any, b: Any) -> z3.BoolRef: return a == b
-    def bv_ne(self, a: Any, b: Any) -> z3.BoolRef: return a != b
-    def bv_ult(self, a: Any, b: Any) -> Any: return dsl.ULT(a, b)
-    def bv_ule(self, a: Any, b: Any) -> Any: return dsl.ULE(a, b)
-    def bv_ugt(self, a: Any, b: Any) -> Any: return dsl.UGT(a, b)
-    def bv_uge(self, a: Any, b: Any) -> Any: return dsl.UGE(a, b)
-    def bv_slt(self, a: Any, b: Any) -> z3.BoolRef: return a < b
-    def bv_sle(self, a: Any, b: Any) -> z3.BoolRef: return a <= b
-    def bv_sgt(self, a: Any, b: Any) -> z3.BoolRef: return a > b
-    def bv_sge(self, a: Any, b: Any) -> z3.BoolRef: return a >= b
-    def bv_extract(self, hi: int, lo: int, x: Any) -> Any: return dsl.Extract(hi, lo, x)
-    def bv_zext(self, ext_bits: int, x: Any, src_bits: int) -> Any: return dsl.ZeroExt(ext_bits, x)
-    def bv_sext(self, ext_bits: int, x: Any, src_bits: int) -> Any: return dsl.SignExt(ext_bits, x)
-    def bv_concat(self, hi: Any, lo: Any) -> Any: return dsl.Concat(hi, lo)
-    def bv_clz(self, x: Any) -> Any: return _dsl_clz_bv32(x)
-    def bv_popcount(self, x: Any) -> Any: return _dsl_popcount_bv32(x)
-    def bv_bitrev(self, x: Any) -> Any: return _dsl_bitrev_bv32(x)
+    def bv_and(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef: return a & b
+    def bv_or(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef: return a | b
+    def bv_xor(self, a: Any, b: Any, bits: int = 32) -> dsl.BitVecRef: return a ^ b
+    def bv_not(self, a: Any, bits: int = 32) -> dsl.BitVecRef: return ~a
+    def bv_neg(self, a: Any, bits: int = 32) -> dsl.BitVecRef: return -a
+    def bv_shl(self, a: Any, sh: Any, bits: int = 32) -> dsl.BitVecRef: return a << sh
+    def bv_lshr(self, a: Any, sh: Any, bits: int = 32) -> dsl.BitVecRef: return dsl.LShR(a, sh)
+    def bv_ashr(self, a: Any, sh: Any, bits: int = 32) -> dsl.BitVecRef: return a >> sh
+    def bv_rotl(self, a: Any, sh: Any) -> dsl.BitVecRef: return dsl.RotateLeft(a, sh)
+    def bv_rotr(self, a: Any, sh: Any) -> dsl.BitVecRef: return dsl.RotateRight(a, sh)
+    def bv_udiv(self, a: Any, b: Any) -> dsl.BitVecRef: return dsl.UDiv(a, b)
+    def bv_sdiv(self, a: Any, b: Any) -> dsl.BitVecRef: return a / b
+    def bv_urem(self, a: Any, b: Any) -> dsl.BitVecRef: return dsl.URem(a, b)
+    def bv_srem(self, a: Any, b: Any) -> dsl.BitVecRef: return dsl.SRem(a, b)
+    def bv_eq(self, a: Any, b: Any) -> dsl.BoolRef: return a == b
+    def bv_ne(self, a: Any, b: Any) -> dsl.BoolRef: return a != b
+    def bv_ult(self, a: Any, b: Any) -> dsl.BoolRef: return dsl.ULT(a, b)
+    def bv_ule(self, a: Any, b: Any) -> dsl.BoolRef: return dsl.ULE(a, b)
+    def bv_ugt(self, a: Any, b: Any) -> dsl.BoolRef: return dsl.UGT(a, b)
+    def bv_uge(self, a: Any, b: Any) -> dsl.BoolRef: return dsl.UGE(a, b)
+    def bv_slt(self, a: Any, b: Any) -> dsl.BoolRef: return a < b
+    def bv_sle(self, a: Any, b: Any) -> dsl.BoolRef: return a <= b
+    def bv_sgt(self, a: Any, b: Any) -> dsl.BoolRef: return a > b
+    def bv_sge(self, a: Any, b: Any) -> dsl.BoolRef: return a >= b
+    def bv_extract(self, hi: int, lo: int, x: Any) -> dsl.BitVecRef: return dsl.Extract(hi, lo, x)
+    def bv_zext(self, ext_bits: int, x: Any, src_bits: int) -> dsl.BitVecRef: return dsl.ZeroExt(ext_bits, x)
+    def bv_sext(self, ext_bits: int, x: Any, src_bits: int) -> dsl.BitVecRef: return dsl.SignExt(ext_bits, x)
+    def bv_concat(self, hi: Any, lo: Any) -> dsl.BitVecRef: return dsl.Concat(hi, lo)
+    def bv_clz(self, x: Any) -> dsl.BitVecRef: return _dsl_clz_bv32(x)
+    def bv_popcount(self, x: Any) -> dsl.BitVecRef: return _dsl_popcount_bv32(x)
+    def bv_bitrev(self, x: Any) -> dsl.BitVecRef: return _dsl_bitrev_bv32(x)
 
-    def logical_and(self, a: Any, b: Any) -> z3.BoolRef: return _z3_and(self.as_bool(a), self.as_bool(b))
-    def logical_or(self, a: Any, b: Any) -> z3.BoolRef: return _z3_or(self.as_bool(a), self.as_bool(b))
-    def logical_not(self, a: Any) -> z3.BoolRef: return _z3_not(self.as_bool(a))
+    def logical_and(self, a: Any, b: Any) -> dsl.BoolRef: return _z3_and(self.as_bool(a), self.as_bool(b))
+    def logical_or(self, a: Any, b: Any) -> dsl.BoolRef: return _z3_or(self.as_bool(a), self.as_bool(b))
+    def logical_not(self, a: Any) -> dsl.BoolRef: return _z3_not(self.as_bool(a))
     def select(self, cond: Any, t_val: Any, f_val: Any) -> Z3Val: return _z3_if(self.as_bool(cond), t_val, f_val)
 
-    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> z3.BitVecRef:
+    def hw_uf(self, env: Any, name: str, *args: Any, out_bits: int = 32, fallback_tag: str | None = None) -> dsl.BitVecRef:
         bargs = [self.as_u32(a) for a in args]
         out_sort = BV64 if out_bits == 64 else BV32
         sorts = [BV32] * len(bargs) + [out_sort]
         return _dsl_hw_uf(name, *sorts)(*bargs)
 
-    def unpack_half2x16(self, u: Any) -> tuple[dsl.Z3BitVecExpr, dsl.Z3BitVecExpr]:
+    def unpack_half2x16(self, u: Any) -> tuple[dsl.BitVecRef, dsl.BitVecRef]:
         bu = self.as_u32(u)
         return (f16_bv_to_f32_bv(dsl.Extract(15, 0, bu)), f16_bv_to_f32_bv(dsl.Extract(31, 16, bu)))
 
-    def pack_half2x16(self, v2: Any) -> dsl.Z3BitVecExpr:
+    def pack_half2x16(self, v2: Any) -> dsl.BitVecRef:
         if isinstance(v2, tuple) and len(v2) >= 2:
             f0 = f32_bv_to_f16_bv(self.as_u32(v2[0]))
             f1 = f32_bv_to_f16_bv(self.as_u32(v2[1]))
@@ -255,7 +252,7 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         s = f32_bv_to_f16_bv(self.as_u32(v2))
         return dsl.Concat(s, s)
 
-    def fp_unary(self, op: str, x: Any) -> z3.BitVecRef:
+    def fp_unary(self, op: str, x: Any) -> dsl.BitVecRef:
         bx = self.as_u32(x)
         if self.fp_mode == "real":
             rx = _bv32_to_real(bx)
@@ -286,7 +283,7 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         if op == "Sqrt": return fp32_to_bv32(dsl.fpSqrt(dsl.RNE(), f))
         return _dsl_hw_uf(f"fp_{op}", BV32, BV32)(bx)
 
-    def fp_binary(self, op: str, a: Any, b: Any) -> z3.BitVecRef:
+    def fp_binary(self, op: str, a: Any, b: Any) -> dsl.BitVecRef:
         ba, bb = self.as_u32(a), self.as_u32(b)
         if self.fp_mode == "real":
             ra, rb = _bv32_to_real(ba), _bv32_to_real(bb)
@@ -298,7 +295,7 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
             if op in ("FMax", "NMax"): return _real_to_bv32(dsl.If(ra >= rb, ra, rb))
             if op == "Pow":
                 if dsl.is_rational_value(rb):
-                    num, den = rb.numerator_as_long(), rb.denominator_as_long()
+                    num, den = dsl.numerator_as_long(rb), dsl.denominator_as_long(rb)
                     if num == 0: return _real_to_bv32(_REAL_ONE)
                     if num == den: return _real_to_bv32(ra)
                     if num == 2 * den: return _real_to_bv32(ra * ra)
@@ -318,12 +315,12 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         if op in ("FMax", "NMax"): return fp32_to_bv32(dsl.fpMax(fa, fb))
         return _dsl_hw_uf(f"fp_{op}", BV32, BV32, BV32)(ba, bb)
 
-    def fp_clamp(self, x: Any, lo: Any, hi: Any) -> z3.BitVecRef:
+    def fp_clamp(self, x: Any, lo: Any, hi: Any) -> dsl.BitVecRef:
         if self.fp_mode == "uf":
             return _dsl_hw_uf("fp_FClamp", BV32, BV32, BV32, BV32)(self.as_u32(x), self.as_u32(lo), self.as_u32(hi))
         return super().fp_clamp(x, lo, hi)
 
-    def fp_fma(self, a: Any, b: Any, c: Any) -> z3.BitVecRef:
+    def fp_fma(self, a: Any, b: Any, c: Any) -> dsl.BitVecRef:
         ba, bb, bc = self.as_u32(a), self.as_u32(b), self.as_u32(c)
         if self.fp_mode == "real":
             return _real_to_bv32(_bv32_to_real(ba) * _bv32_to_real(bb) + _bv32_to_real(bc))
@@ -376,7 +373,7 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         if op == "FCmpTotal": return _dsl_fp_total_le_bv(32, ba, bb)
         return _dsl_hw_uf(f"fpcmp_{op}", BV32, BV32, dsl.BoolSort())(ba, bb)
 
-    def convert(self, op: str, x: Any) -> dsl.Z3BitVecExpr:
+    def convert(self, op: str, x: Any) -> dsl.BitVecRef:
         if op == "ConvertFToS":
             bx = self.as_u32(x)
             if self.fp_mode == "real":
@@ -391,7 +388,7 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
             bx = self.as_u32(x)
             if self.fp_mode == "real":
                 if dsl.is_bv_value(bx):
-                    return _real_to_bv32(dsl.RealVal(bx.as_signed_long()))
+                    return _real_to_bv32(dsl.RealVal(dsl.as_signed_long(bx)))
                 return _real_to_bv32(_dsl_hw_uf("real_SToF", BV32, REAL_SORT)(bx))
             return fp32_to_bv32(dsl.fpSignedToFP(dsl.RNE(), bx, FP32_SORT)) if self.fp_mode == "exact" else _dsl_hw_uf("fp_SToF", BV32, BV32)(bx)
         if op == "ConvertUToF":
@@ -406,37 +403,37 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
         if op == "UConvert64To32": return dsl.Extract(31, 0, self.as_u64(x))
         return _dsl_bv32(0)
 
-    def unknown_sideband_u64(self, env: Any, imm_u32: int) -> z3.BitVecRef:
+    def unknown_sideband_u64(self, env: Any, imm_u32: int) -> dsl.BitVecRef:
         return self.hw_uf(env, f"sideband_u64_{imm_u32}", _dsl_bv32(imm_u32), out_bits=64)
 
-    def sideband_u32(self, env: Any, imm_u32: int, imm_u32_2: int) -> z3.BitVecRef:
+    def sideband_u32(self, env: Any, imm_u32: int, imm_u32_2: int) -> dsl.BitVecRef:
         return self.hw_uf(env, f"sideband_u32_{imm_u32}", _dsl_bv32(imm_u32_2))
 
-    def subgroup_ballot(self, env: Any, x: Any) -> dsl.Z3BitVecExpr:
+    def subgroup_ballot(self, env: Any, x: Any) -> dsl.BitVecRef:
         return _dsl_hw_uf("SubgroupBallot", BV32, dsl.BitVecSort(5), BV32)(self.as_u32(x), env.lane_id)
 
-    def subgroup_shuffle(self, env: Any, x: Any, lane: Any) -> dsl.Z3BitVecExpr:
+    def subgroup_shuffle(self, env: Any, x: Any, lane: Any) -> dsl.BitVecRef:
         return _dsl_hw_uf("SubgroupShuffle", BV32, BV32, dsl.BitVecSort(5), BV32)(
             self.as_u32(x), self.as_u32(lane), env.lane_id
         )
 
     # Z3SymbolicDomain boundary contract (identity / pass-through for raw Z3 bitvecs)
-    def lift_z3_bv32(self, raw: Any) -> z3.BitVecRef:
+    def lift_z3_bv32(self, raw: Any) -> dsl.BitVecRef:
         return _as_bv32(raw)
 
-    def lift_z3_bv64(self, raw: Any) -> z3.BitVecRef:
+    def lift_z3_bv64(self, raw: Any) -> dsl.BitVecRef:
         return _as_bv64(raw)
 
-    def lift_z3_bool(self, raw: Any) -> z3.BoolRef:
+    def lift_z3_bool(self, raw: Any) -> dsl.BoolRef:
         return _as_bool(raw)
 
-    def lower_z3_bv32(self, val: Any) -> z3.BitVecRef:
+    def lower_z3_bv32(self, val: Any) -> dsl.BitVecRef:
         return _as_bv32(val)
 
-    def lower_z3_bv64(self, val: Any) -> z3.BitVecRef:
+    def lower_z3_bv64(self, val: Any) -> dsl.BitVecRef:
         return _as_bv64(val)
 
-    def lower_z3_bool(self, val: Any) -> z3.BoolRef:
+    def lower_z3_bool(self, val: Any) -> dsl.BoolRef:
         return _as_bool(val)
 
     def lower_z3_val(self, val: Any) -> Any:
@@ -445,5 +442,5 @@ class SymbolicZ3BitvecDomain(Z3SymbolicDomain):
     def merge_z3(self, cond: Any, t_val: Any, f_val: Any) -> Any:
         return _z3_if(_as_bool(cond), t_val, f_val)
 
-    def to_z3_real_f32(self, val: Any) -> z3.ArithRef:
+    def to_z3_real_f32(self, val: Any) -> dsl.ArithRef:
         return _bv32_to_real(_as_bv32(val))

@@ -2336,7 +2336,7 @@ class Z3PolyExpr(Z3Expr):
     def __getitem__(self, idx: Any) -> "Z3Expr":
         return Select(self, idx)
 
-    def __add__(self, other: Any) -> "Z3Expr":
+    def __add__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2351,7 +2351,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpFPBinary(FpBinaryOp.ADD, self, _wrap_raw_if_needed(other))
         raise TypeError(f"Unsupported + on sort {{sk}}")
 
-    def __radd__(self, other: Any) -> "Z3Expr":
+    def __radd__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2364,7 +2364,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntAdd((_coerce_int(other), self))
         raise TypeError(f"Unsupported + on sort {{sk}}")
 
-    def __sub__(self, other: Any) -> "Z3Expr":
+    def __sub__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2379,7 +2379,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpFPBinary(FpBinaryOp.SUB, self, _wrap_raw_if_needed(other))
         raise TypeError(f"Unsupported - on sort {{sk}}")
 
-    def __rsub__(self, other: Any) -> "Z3Expr":
+    def __rsub__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2392,7 +2392,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntSub(_coerce_int(other), self)
         raise TypeError(f"Unsupported - on sort {{sk}}")
 
-    def __mul__(self, other: Any) -> "Z3Expr":
+    def __mul__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2407,7 +2407,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpFPBinary(FpBinaryOp.MUL, self, _wrap_raw_if_needed(other))
         raise TypeError(f"Unsupported * on sort {{sk}}")
 
-    def __rmul__(self, other: Any) -> "Z3Expr":
+    def __rmul__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2420,7 +2420,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntMul((_coerce_int(other), self))
         raise TypeError(f"Unsupported * on sort {{sk}}")
 
-    def __truediv__(self, other: Any) -> "Z3Expr":
+    def __truediv__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2433,7 +2433,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpFPBinary(FpBinaryOp.DIV, self, _wrap_raw_if_needed(other))
         raise TypeError(f"Unsupported / on sort {{sk}}")
 
-    def __rtruediv__(self, other: Any) -> "Z3Expr":
+    def __rtruediv__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2444,7 +2444,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntDiv(_coerce_int(other), self)
         raise TypeError(f"Unsupported / on sort {{sk}}")
 
-    def __mod__(self, other: Any) -> "Z3Expr":
+    def __mod__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2453,7 +2453,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntMod(self, _coerce_int(other))
         raise TypeError(f"Unsupported % on sort {{sk}}")
 
-    def __rmod__(self, other: Any) -> "Z3Expr":
+    def __rmod__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             w = self.size()
@@ -2462,42 +2462,42 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpIntMod(_coerce_int(other), self)
         raise TypeError(f"Unsupported % on sort {{sk}}")
 
-    def __and__(self, other: Any) -> "Z3Expr":
+    def __and__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return And(self, _coerce_bool(other))
         w = self.size()
         return Z3OpBvAnd(self, _coerce_bv(other, w), w)
 
-    def __rand__(self, other: Any) -> "Z3Expr":
+    def __rand__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return And(_coerce_bool(other), self)
         w = self.size()
         return Z3OpBvAnd(_coerce_bv(other, w), self, w)
 
-    def __or__(self, other: Any) -> "Z3Expr":
+    def __or__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return Or(self, _coerce_bool(other))
         w = self.size()
         return Z3OpBvOr(self, _coerce_bv(other, w), w)
 
-    def __ror__(self, other: Any) -> "Z3Expr":
+    def __ror__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return Or(_coerce_bool(other), self)
         w = self.size()
         return Z3OpBvOr(_coerce_bv(other, w), self, w)
 
-    def __xor__(self, other: Any) -> "Z3Expr":
+    def __xor__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return Xor(self, _coerce_bool(other))
         w = self.size()
         return Z3OpBvXor(self, _coerce_bv(other, w), w)
 
-    def __rxor__(self, other: Any) -> "Z3Expr":
+    def __rxor__(self, other: Any) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BOOL:
             return Xor(_coerce_bool(other), self)
@@ -2520,12 +2520,12 @@ class Z3PolyExpr(Z3Expr):
         w = self.size()
         return Z3OpBvAShr(_coerce_bv(other, w), self, w)
 
-    def __invert__(self) -> "Z3Expr":
+    def __invert__(self) -> Any:
         if self.sort_kind() == Z3SortKind.BOOL:
             return Not(self)
         return Z3OpBvNot(self, self.size())
 
-    def __neg__(self) -> "Z3Expr":
+    def __neg__(self) -> Any:
         sk = self.sort_kind()
         if sk == Z3SortKind.BV:
             return Z3OpBvNeg(self, self.size())
@@ -2537,7 +2537,7 @@ class Z3PolyExpr(Z3Expr):
             return Z3OpFPUnary(FpUnaryOp.NEG, self)
         raise TypeError(f"Unsupported unary - on sort {{sk}}")
 
-    def __pos__(self) -> "Z3Expr":
+    def __pos__(self) -> Any:
         return self
 
     def __lt__(self, other: Any) -> "Z3BoolExpr":
@@ -2651,7 +2651,7 @@ class Z3FuncDecl:
             return self.to_z3.eq(other)
         return False
 
-    def __call__(self, *args: Any) -> Z3Expr:
+    def __call__(self, *args: Any) -> "Z3PolyExpr":
         wrapped = tuple(_wrap_raw_if_needed(a) for a in args)
         if len(wrapped) == 1:
             bop = _BRIDGE_BY_NAME.get(self.fn_name)
@@ -2671,10 +2671,13 @@ Z3Node = Union[
 
 
 # Type aliases for annotations (dsl domain). A DSL expression is a typed `Z3Expr`
-# node (or `Z3BoolExpr` for booleans); concrete `z3.ExprRef` values are annotated
-# as `z3.ExprRef` explicitly.
+# node (or `Z3BoolExpr` / `Z3PolyExpr` for booleans, etc.); concrete `z3.ExprRef`
+# values are annotated as `z3.ExprRef` explicitly.
 ExprRef = Z3Expr
-BoolRef = Z3BoolExpr
+BoolRef = Union[Z3BoolExpr, Z3PolyExpr]
+BitVecRef = Union[Z3BitVecExpr, Z3PolyExpr]
+ArithRef = Union[Z3ArithExpr, Z3PolyExpr]
+FPRef = Union[Z3FPExpr, Z3PolyExpr]
 SortRef = z3.SortRef
 
 
@@ -2907,7 +2910,7 @@ def ToInt(a: Any) -> Z3OpToInt:
     return Z3OpToInt(_coerce_real(a))
 
 
-def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3Expr:
+def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3PolyExpr:
     c = _coerce_bool(cond)
     t = _wrap_raw_if_needed(then_expr)
     f = _wrap_raw_if_needed(else_expr)
@@ -2916,9 +2919,9 @@ def If(cond: Any, then_expr: Any, else_expr: Any) -> Z3Expr:
     elif isinstance(f, Z3Expr) and not isinstance(t, Z3Expr):
         t = _coerce_like(f, t)
     if isinstance(c, Z3BoolConst):
-        return t if c.val else f
+        return t if c.val else f  # type: ignore[return-value]
     if isinstance(t, Z3Expr) and t.eq(f):
-        return t
+        return t  # type: ignore[return-value]
     return Z3OpIte(c, t, f)
 
 
@@ -3314,6 +3317,30 @@ def as_long(x: Any) -> int:
     if isinstance(x, Z3Other):
         return x.raw.as_long()
     return x.as_long()
+
+
+def as_signed_long(x: Any) -> int:
+    if isinstance(x, Z3BvConst):
+        return x.as_signed_long()
+    if isinstance(x, Z3Other):
+        return x.raw.as_signed_long()
+    return x.as_signed_long()
+
+
+def numerator_as_long(x: Any) -> int:
+    if isinstance(x, Z3RealConst):
+        return x.numerator_as_long()
+    if isinstance(x, Z3Other):
+        return x.raw.numerator_as_long()
+    return x.numerator_as_long()
+
+
+def denominator_as_long(x: Any) -> int:
+    if isinstance(x, Z3RealConst):
+        return x.denominator_as_long()
+    if isinstance(x, Z3Other):
+        return x.raw.denominator_as_long()
+    return x.denominator_as_long()
 
 
 def simplify(x: Any, *args: Any, **kwargs: Any) -> z3.ExprRef:
