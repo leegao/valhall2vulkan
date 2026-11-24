@@ -1,6 +1,28 @@
 """Unified Valhall SSA value-domain package."""
 
 from tools.symbolic_ssa.domains.abstract_top import AbstractTopDomain
+from tools.symbolic_ssa.domains.backfill import (
+    D_BOOL,
+    D_BV32,
+    D_BV64,
+    D_F16X4,
+    D_F32,
+    D_F32X2,
+    D_F64,
+    D_SYM,
+    D_TOP,
+    D_UNUSED,
+    DemandAnnotations,
+    DemandBackfillAnalysis,
+    DemandKind,
+    DemandTag,
+    annotate_ssa_demands,
+    demand_join,
+    demand_leq,
+    demand_ptr,
+    merge_miter_demands,
+    needs_bridge,
+)
 from tools.symbolic_ssa.domains.base import LaneVal, SsaDomain, ValueDomain
 from tools.symbolic_ssa.domains.combinators import (
     MULTISET_BOTTOM,
@@ -47,6 +69,16 @@ ConcreteDomain = ConcreteBitvecDomain
 SymbolicDomain = SymbolicZ3BitvecDomain
 
 __all__ = [
+    "D_BOOL",
+    "D_BV32",
+    "D_BV64",
+    "D_F16X4",
+    "D_F32",
+    "D_F32X2",
+    "D_F64",
+    "D_SYM",
+    "D_TOP",
+    "D_UNUSED",
     "MULTISET_BOTTOM",
     "MULTISET_TOP",
     "UNION_BOTTOM",
@@ -56,6 +88,10 @@ __all__ = [
     "ConcreteDomain",
     "ConcreteShaderEnv",
     "ConcreteUDomain",
+    "DemandAnnotations",
+    "DemandBackfillAnalysis",
+    "DemandKind",
+    "DemandTag",
     "LaneVal",
     "MultiSetDomain",
     "MultiSetVal",
@@ -75,5 +111,11 @@ __all__ = [
     "UnionVal",
     "ValueDomain",
     "Z3SymbolicDomain",
+    "annotate_ssa_demands",
+    "demand_join",
+    "demand_leq",
+    "demand_ptr",
     "make_z3_symbolic_domain",
+    "merge_miter_demands",
+    "needs_bridge",
 ]

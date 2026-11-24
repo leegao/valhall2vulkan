@@ -71,17 +71,22 @@ class Z3SymbolicDomain(SsaDomain[V], Generic[V], abc.ABC):
 def make_z3_symbolic_domain(
     domain: str | Z3SymbolicDomain | None = None,
     fp_mode: str = "exact",
+    *,
+    strict_fp_edges: bool = False,
 ) -> Z3SymbolicDomain:
-    """Factory resolving a symbolic domain spec (`'bitvec'`, `'udomain'`, or instance)."""
+    """Factory resolving a symbolic domain spec (`'bitvec'`, `'udomain'`, `'udomain_backfill'`, `'udomain_exact'`, or instance)."""
     if isinstance(domain, Z3SymbolicDomain):
         return domain
     if domain is None or domain in ("udomain", "default", ""):
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
-        return SymbolicZ3UDomain(exact_bitcast=False)
+        return SymbolicZ3UDomain(exact_bitcast=False, strict_fp_edges=strict_fp_edges)
+    if domain == "udomain_backfill":
+        from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
+        return SymbolicZ3UDomain(exact_bitcast=False, backfill=True, strict_fp_edges=strict_fp_edges)
     if domain == "bitvec":
         from tools.symbolic_ssa.domains.symbolic_z3_bitvec import SymbolicZ3BitvecDomain
         return SymbolicZ3BitvecDomain(fp_mode=fp_mode)
     if domain == "udomain_exact":
         from tools.symbolic_ssa.domains.udomain import SymbolicZ3UDomain
-        return SymbolicZ3UDomain(exact_bitcast=True)
+        return SymbolicZ3UDomain(exact_bitcast=True, strict_fp_edges=strict_fp_edges)
     raise ValueError(f"Unknown symbolic SSA domain mode: {domain!r}")

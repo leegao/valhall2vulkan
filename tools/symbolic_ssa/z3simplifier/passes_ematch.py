@@ -3,14 +3,18 @@ Z3 E-Matching Extensional Axiom & Unification Pass (`EmatchingUnifyPass`).
 
 Leverages Z3's built-in E-matching engine (`smt.ematching=True`, `smt.mbqi=False`)
 to discharge or unify queries under quantified extensional identities and
-domain-bridge round-trip axioms:
+domain-bridge axioms:
 
-  1. Bridge Round-Trip Axioms (with explicit `:pattern` triggers so E-matching
-     terminates without matching loops):
+  1. Bridge Round-Trip & IEEE-754 Sign-Bit Axioms (with explicit `:pattern`
+     triggers so E-matching terminates without matching loops):
        ForAll([x], u_f32_to_bv32(u_bv32_to_f32(x)) == x,
               patterns=[u_f32_to_bv32(u_bv32_to_f32(x))])
        ForAll([r], u_bv32_to_f32(u_f32_to_bv32(r)) == r,
               patterns=[u_bv32_to_f32(u_f32_to_bv32(r))])
+       ForAll([r], (u_f32_to_bv32(r) ^ 0x80000000) == u_f32_to_bv32(-r),
+              patterns=[u_f32_to_bv32(r) ^ 0x80000000])
+       ForAll([r], (u_f32_to_bv32(r) & 0x7FFFFFFF) == u_f32_to_bv32(If(r < 0, -r, r)),
+              patterns=[u_f32_to_bv32(r) & 0x7FFFFFFF])
 
   2. Higher-Order Function Extensionality via Skolem Witness:
        Given an abstract sort `S`, `apply: S x S -> S`, and Skolem witness
@@ -27,10 +31,11 @@ domain-bridge round-trip axioms:
      intermediate pass before lowering abstracted UFs back to concrete conversions.
 
 Soundness:
-  - When `extra_axioms` are empty and only exact bridge bijections (matching
-    `udomain` semantics) are asserted, proving `UNSAT` is sound under `udomain`.
+  - When `extra_axioms` are empty and only exact bridge bijections / finite
+    sign-bit identities (matching `udomain` Real semantics) are asserted,
+    proving `UNSAT` is sound under `udomain`.
   - Marked `is_equivalence_preserving = False` whenever `extra_axioms` or
-    bridge bijections are active so any `SAT` still respects `exact_query`.
+    bridge axioms are active so any `SAT` still respects `exact_query`.
 """
 
 from __future__ import annotations
@@ -50,18 +55,36 @@ from tools.symbolic_ssa.z3simplifier.pass_base import Z3QueryPass
 from tools.symbolic_ssa.z3utils import dsl
 
 
-def build_bridge_ematch_axioms() -> list[z3.BoolRef]:
-    """Build trigger-guarded `ForAll` round-trip axioms for `udomain` f32/bv32 bridges."""
+def build_bridge_ematch_axioms(*, include_sign_bit_axioms: bool = True) -> list[z3.BoolRef]:
+    """
+    Build trigger-guarded `ForAll` round-trip and IEEE-754 sign-bit axioms
+    for `udomain` f32/bv32 bridges.
+    """
     u_f2b = dsl.Function("u_f32_to_bv32", dsl.RealSort(), dsl.BitVecSort(32))
     u_b2f = dsl.Function("u_bv32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
     x = dsl.BitVec("_em_x", 32)
     r = dsl.Real("_em_r")
     t_b = u_f2b(u_b2f(x))
     t_r = u_b2f(u_f2b(r))
-    return [
+    axioms: list[z3.BoolRef] = [
         dsl.ForAll([x], t_b == x, patterns=[t_b]),
         dsl.ForAll([r], t_r == r, patterns=[t_r]),
     ]
+    if include_sign_bit_axioms:
+        sign_mask = dsl.BitVecVal(0x80000000, 32)
+        abs_mask = dsl.BitVecVal(0x7FFFFFFF, 32)
+        t_neg = u_f2b(r) ^ sign_mask
+        t_neg_comm = sign_mask ^ u_f2b(r)
+        t_abs = u_f2b(r) & abs_mask
+        t_abs_comm = abs_mask & u_f2b(r)
+        abs_r = dsl.If(r < dsl.RealVal(0), -r, r)
+        axioms.extend([
+            dsl.ForAll([r], t_neg == u_f2b(-r), patterns=[t_neg]),
+            dsl.ForAll([r], t_neg_comm == u_f2b(-r), patterns=[t_neg_comm]),
+            dsl.ForAll([r], t_abs == u_f2b(abs_r), patterns=[t_abs]),
+            dsl.ForAll([r], t_abs_comm == u_f2b(abs_r), patterns=[t_abs_comm]),
+        ])
+    return axioms
 
 
 def build_extensionality_witness_axiom(
@@ -77,13 +100,16 @@ def build_extensionality_witness_axiom(
     """
     ext_w = z3.Function(witness_name, sort, sort, sort)
     w = ext_w(fn_f, fn_g)
-    return z3.Implies(apply_fn(dsl.lower(fn_f), dsl.lower(w)) == apply_fn(dsl.lower(fn_g), dsl.lower(w)), dsl.lower(fn_f) == dsl.lower(fn_g))
+    return z3.Implies(
+        apply_fn(dsl.lower(fn_f), dsl.lower(w)) == apply_fn(dsl.lower(fn_g), dsl.lower(w)),
+        dsl.lower(fn_f) == dsl.lower(fn_g),
+    )
 
 
 class EmatchingUnifyPass(Z3QueryPass):
     """
     Intermediate Z3 E-matching pass that discharges `(preconditions & guard) => (lhs == rhs)`
-    under quantified bridge round-trip and extensionality axioms.
+    under quantified bridge round-trip, sign-bit, and extensionality axioms.
 
     If Z3's E-matching solver proves `UNSAT` within `timeout_ms`, collapses the
     query to `predicate = BoolVal(False)` (`UNSAT`). Otherwise leaves the query

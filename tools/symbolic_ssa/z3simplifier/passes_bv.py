@@ -51,6 +51,19 @@ from tools.symbolic_ssa.z3utils.dsl import (
 )
 
 
+def _unwrap_f32_to_bv32(expr: dsl.ExprRef) -> tuple[dsl.ExprRef, dsl.ExprRef] | None:
+    """If `expr` is `u_f32_to_bv32(r)`, return `(expr, r)`."""
+    if dsl.is_app(expr) and expr.num_args() == 1 and expr.decl().name() == "u_f32_to_bv32":
+        return expr, expr.arg(0)
+    return None
+
+
+def _rebuild_f32_to_bv32(bridge_node: dsl.ExprRef, inner: dsl.ExprRef) -> dsl.ExprRef:
+    if isinstance(bridge_node, dsl.Z3OpBridge):
+        return dsl.Z3OpBridge(bridge_node.op, inner)
+    return bridge_node.decl()(inner)
+
+
 def _is_power_of_two(n: int) -> int | None:
     if n > 0 and (n & (n - 1)) == 0:
         return n.bit_length() - 1
@@ -305,6 +318,12 @@ def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
             return lhs
         case Z3OpBvAnd(lhs, rhs) if dsl.expr_eq(lhs, rhs):
             return lhs
+        case Z3OpBvAnd(lhs, Z3BvConst(0x7FFFFFFF, 32)) if (ub := _unwrap_f32_to_bv32(lhs)) is not None:
+            br, r = ub
+            return _rebuild_f32_to_bv32(br, dsl.If(r < dsl.RealVal(0), -r, r))
+        case Z3OpBvAnd(Z3BvConst(0x7FFFFFFF, 32), rhs) if (ub := _unwrap_f32_to_bv32(rhs)) is not None:
+            br, r = ub
+            return _rebuild_f32_to_bv32(br, dsl.If(r < dsl.RealVal(0), -r, r))
 
         case Z3OpBvOr(Z3BvConst(ca, _), Z3BvConst(cb, _)):
             return dsl.BitVecVal(ca | cb, w)
@@ -325,6 +344,12 @@ def _bv_algebraic_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
             return lhs
         case Z3OpBvXor(lhs, rhs) if dsl.expr_eq(lhs, rhs):
             return dsl.BitVecVal(0, w)
+        case Z3OpBvXor(lhs, Z3BvConst(0x80000000, 32)) if (ub := _unwrap_f32_to_bv32(lhs)) is not None:
+            br, r = ub
+            return _rebuild_f32_to_bv32(br, -r)
+        case Z3OpBvXor(Z3BvConst(0x80000000, 32), rhs) if (ub := _unwrap_f32_to_bv32(rhs)) is not None:
+            br, r = ub
+            return _rebuild_f32_to_bv32(br, -r)
 
     return None
 

@@ -784,12 +784,24 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
       - `PTR` tracks `(base, z3.BitVec64 offset, align_mask, readonly)`.
     """
 
-    def __init__(self, *, exact_bitcast: bool = False):
+    def __init__(
+        self,
+        *,
+        exact_bitcast: bool = False,
+        backfill: bool = False,
+        strict_fp_edges: bool = False,
+    ):
         if z3 is None:
             raise RuntimeError("z3-solver is required for SymbolicZ3UDomain")
         super().__init__(SymbolicZ3BitvecDomain(fp_mode="real"))
         self.exact_bitcast = bool(exact_bitcast)
+        self.backfill = bool(backfill)
+        self.strict_fp_edges = bool(strict_fp_edges)
         self._zero_real = dsl.RealVal(0)
+        self._u_fp_is_nan = dsl.Function("u_fp_IsNan", dsl.RealSort(), dsl.BoolSort())
+        self._u_fp_is_inf = dsl.Function("u_fp_IsInf", dsl.RealSort(), dsl.BoolSort())
+        self._u_fp_nan_val = dsl.Function("u_fp_NaN", dsl.RealSort(), dsl.RealSort())
+        self._u_fp_div0 = dsl.Function("u_fp_Div0", dsl.RealSort(), dsl.RealSort())
         self._u_f32_to_bv32 = dsl.Function("u_f32_to_bv32", dsl.RealSort(), dsl.BitVecSort(32))
         self._u_bv32_to_f32 = dsl.Function("u_bv32_to_f32", dsl.BitVecSort(32), dsl.RealSort())
         self._u_f16_to_bv16 = dsl.Function("u_f16_to_bv16", dsl.RealSort(), dsl.BitVecSort(16))
@@ -1051,16 +1063,25 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         if op == "Cos":
             return UVal.f32x2(_real_cos(rx), self._zero_real)
         if op == "Sqrt":
-            return UVal.f32x2(_real_sqrt(rx), self._zero_real)
+            res = _real_sqrt(rx)
+            if self.strict_fp_edges:
+                res = dsl.If(rx < self._zero_real, self._u_fp_nan_val(rx), res)
+            return UVal.f32x2(res, self._zero_real)
         if op == "InverseSqrt":
-            return UVal.f32x2(dsl.RealVal(1) / _real_sqrt(rx), self._zero_real)
+            res = dsl.RealVal(1) / _real_sqrt(rx)
+            if self.strict_fp_edges:
+                res = dsl.If(rx <= self._zero_real, self._u_fp_nan_val(rx), res)
+            return UVal.f32x2(res, self._zero_real)
         if op == "Exp2":
             return UVal.f32x2(_real_exp2(rx), self._zero_real)
         if op == "Exp":
             # Match Valhall lowering Exp(x) = Exp2(x * log2(e)), where log2(e) as f32 is 0x3FB8AA3B
             return UVal.f32x2(_real_exp2(rx * self._float_to_real(_u32_to_f32(0x3FB8AA3B))), self._zero_real)
         if op == "Log2":
-            return UVal.f32x2(_real_log2(rx), self._zero_real)
+            res = _real_log2(rx)
+            if self.strict_fp_edges:
+                res = dsl.If(rx <= self._zero_real, self._u_fp_nan_val(rx), res)
+            return UVal.f32x2(res, self._zero_real)
         if op == "Log":
             return UVal.f32x2(_real_log2(rx) * self._float_to_real(_u32_to_f32(0x3F317218)), self._zero_real)
         if op in ("Floor", "Fract", "Trunc", "Ceil"):
@@ -1086,9 +1107,26 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         if op == "FAdd": return UVal.f32x2(ra + rb, self._zero_real)
         if op == "FSub": return UVal.f32x2(ra - rb, self._zero_real)
         if op == "FMul": return UVal.f32x2(ra * rb, self._zero_real)
-        if op == "FDiv": return UVal.f32x2(ra / rb, self._zero_real)
-        if op in ("FMin", "NMin"): return UVal.f32x2(dsl.If(ra <= rb, ra, rb), self._zero_real)
-        if op in ("FMax", "NMax"): return UVal.f32x2(dsl.If(ra >= rb, ra, rb), self._zero_real)
+        if op == "FDiv":
+            if self.strict_fp_edges:
+                return UVal.f32x2(dsl.If(rb == self._zero_real, self._u_fp_div0(ra), ra / rb), self._zero_real)
+            return UVal.f32x2(ra / rb, self._zero_real)
+        if op in ("FMin", "NMin"):
+            base_min = dsl.If(ra <= rb, ra, rb)
+            if self.strict_fp_edges:
+                na, nb = self._u_fp_is_nan(ra), self._u_fp_is_nan(rb)
+                if op == "NMin":
+                    return UVal.f32x2(dsl.If(na, rb, dsl.If(nb, ra, base_min)), self._zero_real)
+                return UVal.f32x2(dsl.If(dsl.Or(na, nb), self._u_fp_nan_val(ra), base_min), self._zero_real)
+            return UVal.f32x2(base_min, self._zero_real)
+        if op in ("FMax", "NMax"):
+            base_max = dsl.If(ra >= rb, ra, rb)
+            if self.strict_fp_edges:
+                na, nb = self._u_fp_is_nan(ra), self._u_fp_is_nan(rb)
+                if op == "NMax":
+                    return UVal.f32x2(dsl.If(na, rb, dsl.If(nb, ra, base_max)), self._zero_real)
+                return UVal.f32x2(dsl.If(dsl.Or(na, nb), self._u_fp_nan_val(ra), base_max), self._zero_real)
+            return UVal.f32x2(base_max, self._zero_real)
         if op == "Pow":
             fb = self._try_real_to_float(rb)
             if fb is not None:
@@ -1107,15 +1145,45 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
         ra, rb, rc = self.to_f32x2(a)[0], self.to_f32x2(b)[0], self.to_f32x2(c)[0]
         return UVal.f32x2(ra * rb + rc, self._zero_real)
 
+    def fp_is_nan(self, x: Any) -> UVal:
+        rx = self.to_f32x2(x)[0]
+        fx = self._try_real_to_float(rx)
+        if fx is not None:
+            return self.const_bool(math.isnan(fx))
+        if self.exact_bitcast:
+            return self._from_bool(dsl.fpIsNaN(dsl.fpBVToFP(self._to_bv32(x), dsl.Float32())))
+        if self.strict_fp_edges:
+            return self._from_bool(self._u_fp_is_nan(rx))
+        return self.const_bool(False)
+
+    def fp_is_inf(self, x: Any) -> UVal:
+        rx = self.to_f32x2(x)[0]
+        fx = self._try_real_to_float(rx)
+        if fx is not None:
+            return self.const_bool(math.isinf(fx))
+        if self.exact_bitcast:
+            return self._from_bool(dsl.fpIsInf(dsl.fpBVToFP(self._to_bv32(x), dsl.Float32())))
+        if self.strict_fp_edges:
+            return self._from_bool(self._u_fp_is_inf(rx))
+        return self.const_bool(False)
+
     def fp_cmp(self, op: str, a: Any, b: Any) -> UVal:
         ra, rb = self.to_f32x2(a)[0], self.to_f32x2(b)[0]
-        if op in ("FCmpOrdEq", "FCmpUnordEq"): return self._from_bool(ra == rb)
-        if op in ("FCmpOrdNe", "FCmpUnordNe"): return self._from_bool(ra != rb)
-        if op in ("FCmpOrdLt", "FCmpUnordLt"): return self._from_bool(ra < rb)
-        if op in ("FCmpOrdLe", "FCmpUnordLe"): return self._from_bool(ra <= rb)
-        if op in ("FCmpOrdGt", "FCmpUnordGt"): return self._from_bool(ra > rb)
-        if op in ("FCmpOrdGe", "FCmpUnordGe"): return self._from_bool(ra >= rb)
-        return self.const_bool(False)
+        raw_cmp: Any = None
+        if op in ("FCmpOrdEq", "FCmpUnordEq"): raw_cmp = ra == rb
+        elif op in ("FCmpOrdNe", "FCmpUnordNe"): raw_cmp = ra != rb
+        elif op in ("FCmpOrdLt", "FCmpUnordLt"): raw_cmp = ra < rb
+        elif op in ("FCmpOrdLe", "FCmpUnordLe"): raw_cmp = ra <= rb
+        elif op in ("FCmpOrdGt", "FCmpUnordGt"): raw_cmp = ra > rb
+        elif op in ("FCmpOrdGe", "FCmpUnordGe"): raw_cmp = ra >= rb
+        if raw_cmp is None:
+            return self.const_bool(False)
+        if self.strict_fp_edges:
+            has_nan = dsl.Or(self._u_fp_is_nan(ra), self._u_fp_is_nan(rb))
+            if op.startswith("FCmpOrd"):
+                return self._from_bool(dsl.And(dsl.Not(has_nan), raw_cmp))
+            return self._from_bool(dsl.Or(has_nan, raw_cmp))
+        return self._from_bool(raw_cmp)
 
     def convert(self, op: str, x: Any) -> UVal:
         if op == "ConvertSToF":
@@ -1139,12 +1207,33 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
             rx = self.to_f32x2(x)[0]
             fx = self._try_real_to_float(rx)
             if fx is not None and math.isfinite(fx):
-                iv = int(math.trunc(fx))
+                iv = math.trunc(fx)
+                if op == "ConvertFToS":
+                    iv = max(-0x80000000, min(0x7FFFFFFF, iv))
+                else:
+                    iv = max(0, min(0xFFFFFFFF, iv))
                 return self._from_bv32(dsl.BitVecVal(iv & 0xFFFFFFFF, 32))
             if not self.exact_bitcast:
                 fn = self._u_f32_to_s32 if op == "ConvertFToS" else self._u_f32_to_u32
                 return self._from_bv32(fn(rx))
-            return self._from_bv32(dsl.Int2BV(dsl.ToInt(rx), 32))
+            # Z3's ToInt(rx) is mathematical floor; convert to truncation toward zero
+            # with signed/unsigned 32-bit saturation clamping.
+            fl = dsl.ToInt(rx)
+            trunc_i = dsl.If(rx >= self._zero_real, fl, dsl.If(rx == dsl.ToReal(fl), fl, fl + dsl.IntVal(1)))
+            trunc_bv = dsl.Int2BV(trunc_i, 32)
+            if op == "ConvertFToS":
+                clamped = dsl.If(
+                    rx <= dsl.RealVal(-0x80000000),
+                    dsl.BitVecVal(0x80000000, 32),
+                    dsl.If(rx >= dsl.RealVal(0x7FFFFFFF), dsl.BitVecVal(0x7FFFFFFF, 32), trunc_bv),
+                )
+                return self._from_bv32(clamped)
+            clamped_u = dsl.If(
+                rx <= self._zero_real,
+                dsl.BitVecVal(0, 32),
+                dsl.If(rx >= dsl.RealVal(0xFFFFFFFF), dsl.BitVecVal(0xFFFFFFFF, 32), trunc_bv),
+            )
+            return self._from_bv32(clamped_u)
         if op == "UConvert32To64":
             return self._from_bv64(dsl.ZeroExt(32, self._to_bv32(x)))
         if op == "SConvert32To64":
@@ -1219,6 +1308,19 @@ class SymbolicZ3UDomain(_BaseUDomain, Z3SymbolicDomain):
 
     def merge_z3(self, cond: Any, t_val: Any, f_val: Any) -> UVal:
         return self.select(self.lift_z3_bool(cond), t_val, f_val)
+
+    def lift_z3_real_f32(self, raw_real: Any) -> UVal:
+        """Lift a pure Z3 Real directly into `F32X2` with zero uninterpreted bridges."""
+        return UVal.f32x2(raw_real, self._zero_real)
+
+    def quad_deriv(self, env: Any, op: str, x: Any, demoted: Any = None) -> UVal:
+        """Model 2x2 quad-aware screen-space derivatives (`DPdx`, `DPdy`, `Fwidth`)."""
+        rx = self.to_f32x2(x)[0]
+        lane_id = getattr(env, "lane_id", dsl.BitVecVal(0, 5)) if env is not None else dsl.BitVecVal(0, 5)
+        fn_key = (f"quad_{op}", 2)
+        if fn_key not in self._fp_ufs:
+            self._fp_ufs[fn_key] = dsl.Function(f"u_quad_{op}", dsl.RealSort(), dsl.BitVecSort(5), dsl.RealSort())
+        return UVal.f32x2(self._fp_ufs[fn_key](rx, lane_id), self._zero_real)
 
     def to_z3_real_f32(self, val: Any) -> Any:
         return self.to_f32x2(val)[0]

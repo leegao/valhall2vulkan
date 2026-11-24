@@ -37,10 +37,12 @@ INT64_BINARY_OPS = frozenset({
     "IAdd64", "ISub64", "IMul64", "BitAnd64", "BitOr64", "BitXor64",
     "Shl64", "ShrU64", "ShrS64",
 })
+QUAD_DERIV_OPS = frozenset({"DPdx", "DPdy", "Fwidth"})
+INT_DIV_OPS = frozenset({"UDiv", "SDiv", "UMod", "SRem", "SMod"})
 FP_UNARY_OPS = frozenset({
     "FAbs", "FNeg", "Floor", "Ceil", "Trunc", "RoundEven", "Sqrt", "InverseSqrt",
     "Sin", "Cos", "Exp", "Exp2", "Log", "Log2", "Atan", "Asin", "Acos",
-    "Sinh", "Cosh", "Tanh", "DPdx", "DPdy", "Fwidth", "FrexpExp", "FrexpSignificand",
+    "Sinh", "Cosh", "Tanh", "FrexpExp", "FrexpSignificand",
 })
 FP_BINARY_OPS = frozenset({
     "FAdd", "FSub", "FMul", "FDiv", "FMin", "FMax", "NMin", "NMax", "Pow", "Ldexp", "Atan2",
@@ -53,7 +55,7 @@ TEX_SAMPLE_OPS = frozenset({
     "TexSample", "TexSampleLod", "TexSampleDref", "TexGather", "TexFetch", "ImageQueryLod",
 })
 ATOMIC_OPS = frozenset({"AtomicRmw", "AtomicExchange", "AtomicCmpXchg"})
-CONTROL_PASSTHROUGH_OPS = frozenset({"ControlBarrier", "Branch", "BranchCond", "Return"})
+CONTROL_PASSTHROUGH_OPS = frozenset({"Branch", "BranchCond", "Return"})
 
 
 class SsaInterpreter(Generic[V]):
@@ -357,14 +359,43 @@ class SsaInterpreter(Generic[V]):
         qkey = (aux_str or "img").replace(":", "_")
         return self.domain.hw_uf(self._env, f"imgq_{qkey}_c{imm_u32}", lod, fallback_tag=f"imgq_{qkey}_{imm_u32}")
 
-    def tex_sample(self, op: str, args: list[Any], imm_u32: int, aux_str: str) -> Any:
+    def tex_sample(self, op: str, args: list[Any], imm_u32: int, aux_str: str, imm_u32_2: int = 0) -> Any:
         if self._env is None:
             return (tuple(self.default_value() for _ in range(4)), args[-1] if args else self.default_value())
-        uv = args[0] if args else (self.const_u32(0), self.const_u32(0))
-        u0 = self.domain.as_u32(uv[0]) if isinstance(uv, tuple) else self.domain.as_u32(uv)
-        u1 = self.domain.as_u32(uv[1]) if isinstance(uv, tuple) and len(uv) > 1 else self.const_u32(0)
+        data_args = args[:-1] if len(args) > 1 else list(args)
+        uf_args: list[Any] = []
+        if data_args:
+            uv = data_args[0]
+            if isinstance(uv, tuple):
+                uf_args.append(self.domain.as_u32(uv[0]) if len(uv) > 0 else self.const_u32(0))
+                uf_args.append(self.domain.as_u32(uv[1]) if len(uv) > 1 else self.const_u32(0))
+                for extra_uv in uv[2:]:
+                    uf_args.append(self.domain.as_u32(extra_uv))
+            else:
+                uf_args.append(self.domain.as_u32(uv))
+                uf_args.append(self.const_u32(0))
+            for extra in data_args[1:]:
+                if isinstance(extra, tuple):
+                    for lane in extra:
+                        uf_args.append(self.domain.as_u32(lane))
+                else:
+                    uf_args.append(self.domain.as_u32(extra))
+        else:
+            uf_args.extend([self.const_u32(0), self.const_u32(0)])
+        if op == "TexGather" and imm_u32_2 != 0 and len(data_args) <= 1:
+            uf_args.append(self.const_u32(imm_u32_2))
         tkey = aux_str or f"tex_{imm_u32}"
-        lanes = tuple(self.domain.hw_uf(self._env, f"tex_{tkey}_c{c}", u0, u1, fallback_tag=f"tex_{tkey}_c{c}") for c in range(4))
+        op_tag = op.lower()
+        arity = len(uf_args)
+        lanes = tuple(
+            self.domain.hw_uf(
+                self._env,
+                f"tex_{op_tag}_{tkey}_a{arity}_c{c}",
+                *uf_args,
+                fallback_tag=f"tex_{op_tag}_{tkey}_c{c}",
+            )
+            for c in range(4)
+        )
         return (lanes, args[-1] if args else self.const_u32(0))
 
     def subgroup_ballot(self, x: Any) -> Any:
@@ -390,6 +421,19 @@ class SsaInterpreter(Generic[V]):
     def _write_builtin_output(self, state: Any, mask: Any, bi: int, payload: Any, nid: int) -> None: pass
     def _write_vert_varying(self, state: Any, mask: Any, loc: int, vec4: tuple[Any, ...], nid: int) -> None: pass
     def _record_atomic(self, state: Any, mask: Any, bkey: str | None, off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None: pass
+    def _havoc_atomic_old_val(self, state: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, op_tag: str, nid: int) -> Any:
+        return self._read_buf(state, bkey, const_off, off, addr)
+    def _on_control_barrier(self, state: Any, mask: Any, nid: int) -> None: pass
+    def _record_div_guard(self, state: Any, reach: Any, op: str, denom: Any) -> None: pass
+
+    def quad_deriv(self, op: str, x: Any, state: Any) -> Any:
+        return self.fp_unary(op, x)
+
+    def control_barrier(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
+        tok = args[-1] if args else self.const_u32(0)
+        if state is not None:
+            self._on_control_barrier(state, self._active_mask(state, reach), int(node["id"]))
+        return tok
 
     def _normalize_bkey(self, bkey: str | None) -> str | None:
         if bkey == "wls_shared" and self._env is not None and self._env.unique_workgroup_key is not None:
@@ -482,7 +526,11 @@ class SsaInterpreter(Generic[V]):
             texel = args[1] if len(args) > 1 else (self.const_u32(0),) * 4
             cx = self.domain.as_u32(coord[0]) if isinstance(coord, tuple) and len(coord) > 0 else self.domain.as_u32(coord)
             cy = self.domain.as_u32(coord[1]) if isinstance(coord, tuple) and len(coord) > 1 else self.const_u32(0)
-            xy = self.pack64(cx, cy)
+            if isinstance(coord, tuple) and len(coord) > 2:
+                cz = self.domain.as_u32(coord[2])
+                xy = self.domain.hw_uf(self._env, "img_coord3d", cx, cy, cz, out_bits=64, fallback_tag="img_coord3d")
+            else:
+                xy = self.pack64(cx, cy)
             ikey = node.get("aux_str", "") or f"img_{int(node.get('imm_u32', 0))}"
             self._write_img_texel(state, self._active_mask(state, reach), ikey, xy, self._as_vec4(texel), int(node["id"]))
         return tok
@@ -499,7 +547,7 @@ class SsaInterpreter(Generic[V]):
         op_tag = aux_str.lower() if aux_str else op.lower()
         bkey, const_off, off = self._resolve_buf_addr(addr, "")
         bkey = self._normalize_bkey(bkey)
-        old_val = self._read_buf(state, bkey, const_off, off, addr)
+        old_val = self._havoc_atomic_old_val(state, bkey, const_off, off, addr, op_tag, int(node["id"]))
         new_val = self.domain.atomic_compute(self._env, op, op_tag, old_val, arg, cmp_val)
         self._record_atomic(state, self._active_mask(state, reach), bkey, off, addr, op_tag, arg, cmp_val, new_val, int(node["id"]))
         return (old_val, tok)
@@ -555,6 +603,8 @@ class SsaInterpreter(Generic[V]):
         if op in INT32_UNARY_OPS:
             return self._elemwise(lambda x: self.int32_unary(op, x), args[0])
         if op in INT32_BINARY_OPS:
+            if op in INT_DIV_OPS and state is not None:
+                self._record_div_guard(state, reach, op, args[1])
             return self._elemwise(lambda a, b: self.int32_binary(op, a, b), args[0], args[1])
         if op in ("BitFieldUExtract", "BitFieldSExtract", "BfeU", "BfeS"):
             signed = op in ("BitFieldSExtract", "BfeS")
@@ -579,6 +629,8 @@ class SsaInterpreter(Generic[V]):
         if op == "Select":
             return self._elemwise(lambda c, t, f: self.select(c, t, f), args[0], args[1], args[2])
 
+        if op in QUAD_DERIV_OPS:
+            return self._elemwise(lambda x: self.quad_deriv(op, x, state), args[0])
         if op in FP_UNARY_OPS:
             return self._elemwise(lambda x: self.fp_unary(op, x), args[0])
         if op in FP_BINARY_OPS:
@@ -618,7 +670,7 @@ class SsaInterpreter(Generic[V]):
         if op == "ImageQuerySize":
             return self.image_query_size(args[0] if args else self.const_u32(0), imm_u32, aux_str)
         if op in TEX_SAMPLE_OPS:
-            return self.tex_sample(op, args, imm_u32, aux_str)
+            return self.tex_sample(op, args, imm_u32, aux_str, imm_u32_2)
 
         if op == "PsbLoad":
             return self.psb_load(node, args, state)
@@ -643,6 +695,8 @@ class SsaInterpreter(Generic[V]):
                 args[0] if args else self.const_u32(0),
                 args[1] if len(args) > 1 else self.const_u32(0),
             )
+        if op == "ControlBarrier":
+            return self.control_barrier(node, args, state, reach)
         if op in CONTROL_PASSTHROUGH_OPS:
             return args[-1] if args else self.default_value()
         return self.default_value()

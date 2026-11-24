@@ -5,6 +5,15 @@ Initialized with the requested `Z3SymbolicDomain` (e.g., `SymbolicZ3UDomain`,
 `SymbolicZ3BitvecDomain`, or any custom domain) so symbolic inputs, FAU loads,
 and buffer/image arrays stay aligned with the interpreter's analysis domain
 instead of constructing ad-hoc raw Z3 expressions.
+
+Supports:
+  - Demand-driven backfill (`shared_demands` / `shared_output_demands`) for
+    bridge-free `Real` / `Bool` / `BitVec` inputs and per-offset read-only
+    UBO/push-constant slots.
+  - Configurable memory granularity (`memory_model="word" | "byte"`) and
+    optional cross-binding SSBO aliasing (`allow_ssbo_aliasing=True`).
+  - Deterministic symmetric havoc helpers for `ControlBarrier` epochs and
+    atomic RMW pre-values (`get_barrier_buf_mem`, `get_atomic_old_val`).
 """
 
 from __future__ import annotations
@@ -12,10 +21,12 @@ from __future__ import annotations
 from typing import Any
 
 from tools.symbolic_ssa import z3utils
+from tools.symbolic_ssa.domains.backfill import DemandKind, DemandTag
 from tools.symbolic_ssa.domains.shader_env.base import MASK32, MASK64, ShaderEnvBase
 from tools.symbolic_ssa.domains.z3_base import Z3SymbolicDomain, make_z3_symbolic_domain
 from tools.symbolic_ssa.z3utils import dsl
 from tools.symbolic_ssa.z3utils.helpers import (
+    BV8,
     BV32,
     BV64,
     Z3Val,
@@ -24,24 +35,66 @@ from tools.symbolic_ssa.z3utils.helpers import (
 )
 
 
+def is_readonly_bkey(bkey: str) -> bool:
+    """Return True if a buffer key denotes an immutable uniform/push-constant region."""
+    b = bkey.lower()
+    return b.startswith(("ubo:", "push_const", "uniform:", "ro:"))
+
+
+def is_shared_mutable_bkey(bkey: str) -> bool:
+    """Return True if a buffer key can be concurrently modified by other invocations."""
+    b = bkey.lower()
+    return b == "wls_shared" or b.startswith(("workgroup:", "ssbo:"))
+
+
 class SymbolicShaderEnv(ShaderEnvBase):
-    """Shared symbolic input & disjoint buffer address environment initialized with a `Z3SymbolicDomain`."""
+    """Shared symbolic input & buffer address environment initialized with a `Z3SymbolicDomain`."""
 
     def __init__(
         self,
         bundle: dict[str, Any],
         domain: str | Z3SymbolicDomain | None = None,
         fp_mode: str = "exact",
+        *,
+        memory_model: str = "word",
+        allow_ssbo_aliasing: bool = False,
+        shared_demands: dict[str, DemandTag] | None = None,
+        shared_output_demands: dict[str, DemandTag] | None = None,
+        strict_fp_edges: bool = False,
     ):
+        if memory_model not in ("word", "byte"):
+            raise ValueError(f"Unsupported memory_model: {memory_model!r} (expected 'word' or 'byte')")
         self._init_abi_layout(bundle)
-        self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(domain, fp_mode=fp_mode)
+        self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(
+            domain, fp_mode=fp_mode, strict_fp_edges=strict_fp_edges
+        )
+        self.memory_model: str = memory_model
+        self.allow_ssbo_aliasing: bool = bool(allow_ssbo_aliasing)
+        self.shared_demands: dict[str, DemandTag] = dict(shared_demands) if shared_demands else {}
+        self.shared_output_demands: dict[str, DemandTag] = (
+            dict(shared_output_demands) if shared_output_demands else {}
+        )
         self.inputs: dict[str, Any] = {}
         self.init_buf_mem: dict[str, Any] = {}
         self.init_img_mem: dict[str, tuple[Any, ...]] = {}
+        self._barrier_buf_mems: dict[tuple[str, int], Any] = {}
+        self._atomic_old_ufs: dict[tuple[str, int, int], Any] = {}
+        self._ssbo_sym_bases: dict[str, Any] = {}
+        self.ssbo_shared_mem: Any | None = None
         self.fallback_mem: Any = dsl.Array("mem_fallback", BV64, BV32)
         self.fau_sym: Any = dsl.Array("fau_sym", BV32, BV32)
         self.lane_id: Any = dsl.BitVec("lane_id", 5)
         self.inputs["lane_id"] = self.lane_id
+
+    def set_shared_demands(
+        self,
+        input_demands: dict[str, DemandTag],
+        output_demands: dict[str, DemandTag] | None = None,
+    ) -> None:
+        """Install joint two-shader demand maps computed by `merge_miter_demands`."""
+        self.shared_demands = dict(input_demands)
+        if output_demands is not None:
+            self.shared_output_demands = dict(output_demands)
 
     def read_untyped_slot(self, domain: Z3SymbolicDomain | None, raw_bv32: Any) -> Any:
         """Lift an untyped 32-bit shader input/memory word into `domain` (or `self.domain`)."""
@@ -49,6 +102,50 @@ class SymbolicShaderEnv(ShaderEnvBase):
         if hasattr(dom, "lift_z3_bv32"):
             return dom.lift_z3_bv32(raw_bv32)
         return raw_bv32
+
+    def _demand_for(self, key: str) -> DemandTag | None:
+        return self.shared_demands.get(key)
+
+    def _make_demanded_scalar(self, sym_name: str, demand_key: str) -> Any:
+        """Materialize a scalar input with the precise Z3 sort requested by `shared_demands`."""
+        tag = self._demand_for(demand_key)
+        if tag is not None and tag.kind is DemandKind.F32 and hasattr(self.domain, "lift_z3_real_f32"):
+            rv = dsl.Real(f"{sym_name}_f32")
+            self.inputs[f"{sym_name}_f32"] = rv
+            return self.domain.lift_z3_real_f32(rv)
+        if tag is not None and tag.kind is DemandKind.BOOL:
+            bv = dsl.Bool(f"{sym_name}_b")
+            self.inputs[f"{sym_name}_b"] = bv
+            return self.domain.lift_z3_bool(bv)
+        v = dsl.BitVec(sym_name, 32)
+        self.inputs[sym_name] = v
+        return v
+
+    def get_ro_buf_slot_value(self, bkey: str, const_off: int) -> Any | None:
+        """
+        Under demand-driven backfill, return a bridge-free scalar `Real`/`Bool`
+        symbol for a read-only `(bkey, const_off)` slot when demanded precisely.
+        Returns `None` when the slot is mutable, multi-typed (`TOP_BITS`), or
+        not in backfill mode.
+        """
+        if not self.shared_demands or not is_readonly_bkey(bkey):
+            return None
+        slot_key = f"buf_slot:{bkey}:{const_off}"
+        tag = self._demand_for(slot_key)
+        if tag is None:
+            return None
+        safe = bkey.replace(":", "_")
+        if tag.kind is DemandKind.F32 and hasattr(self.domain, "lift_z3_real_f32"):
+            sym = f"ro_{safe}_0x{const_off:x}_f32"
+            rv = dsl.Real(sym)
+            self.inputs[sym] = rv
+            return self.domain.lift_z3_real_f32(rv)
+        if tag.kind is DemandKind.BOOL:
+            sym = f"ro_{safe}_0x{const_off:x}_b"
+            bv = dsl.Bool(sym)
+            self.inputs[sym] = bv
+            return self.domain.lift_z3_bool(bv)
+        return None
 
     def is_shared_sym_bkey(self, bkey: str) -> bool:
         return bkey in getattr(self, "shared_sym_bkeys", set())
@@ -66,8 +163,81 @@ class SymbolicShaderEnv(ShaderEnvBase):
             key = self.unique_workgroup_key
         if key not in self.init_buf_mem:
             safe = key.replace(":", "_")
-            self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, BV32)
+            val_sort = BV8 if self.memory_model == "byte" else BV32
+            self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, val_sort)
         return self.init_buf_mem[key]
+
+    def get_ssbo_shared_mem(self) -> Any:
+        """Shared flat 64-bit address space used when `allow_ssbo_aliasing=True`."""
+        if self.ssbo_shared_mem is None:
+            val_sort = BV8 if self.memory_model == "byte" else BV32
+            self.ssbo_shared_mem = dsl.Array("mem_ssbo_shared", BV64, val_sort)
+        return self.ssbo_shared_mem
+
+    def get_ssbo_sym_base(self, bkey: str) -> Any:
+        """Symbolic 64-bit base address for an SSBO binding when `allow_ssbo_aliasing=True`."""
+        if bkey not in self._ssbo_sym_bases:
+            safe = bkey.replace(":", "_")
+            sym = dsl.BitVec(f"sym_base_{safe}", 64)
+            self._ssbo_sym_bases[bkey] = sym
+            self.inputs[f"sym_base_{safe}"] = sym
+        return self._ssbo_sym_bases[bkey]
+
+    def read_buf_u32(self, mem: Any, off: Any) -> Any:
+        """Read a 32-bit word from `mem` at byte offset `off` according to `memory_model`."""
+        off_d = off if isinstance(off, dsl.Z3Expr) else dsl.view(off)
+        if self.memory_model == "byte":
+            w = off_d.size() if hasattr(off_d, "size") else 32
+            b0 = dsl.Select(mem, off_d)
+            b1 = dsl.Select(mem, off_d + dsl.BitVecVal(1, w))
+            b2 = dsl.Select(mem, off_d + dsl.BitVecVal(2, w))
+            b3 = dsl.Select(mem, off_d + dsl.BitVecVal(3, w))
+            return dsl.Concat(b3, b2, b1, b0)
+        return dsl.Select(mem, off_d)
+
+    def write_buf_u32(self, mem: Any, off: Any, val32: Any) -> Any:
+        """Write a 32-bit word `val32` to `mem` at byte offset `off` according to `memory_model`."""
+        off_d = off if isinstance(off, dsl.Z3Expr) else dsl.view(off)
+        val_d = val32 if isinstance(val32, dsl.Z3Expr) else dsl.view(val32)
+        if self.memory_model == "byte":
+            w = off_d.size() if hasattr(off_d, "size") else 32
+            m1 = dsl.Store(mem, off_d, dsl.Extract(7, 0, val_d))
+            m2 = dsl.Store(m1, off_d + dsl.BitVecVal(1, w), dsl.Extract(15, 8, val_d))
+            m3 = dsl.Store(m2, off_d + dsl.BitVecVal(2, w), dsl.Extract(23, 16, val_d))
+            return dsl.Store(m3, off_d + dsl.BitVecVal(3, w), dsl.Extract(31, 24, val_d))
+        return dsl.Store(mem, off_d, val_d)
+
+    def get_barrier_buf_mem(self, key: str, epoch: int) -> Any:
+        """
+        Return the deterministic fresh post-barrier memory array for `(key, epoch)`.
+        Shared symmetrically across Direct and Valhall interpreters so equivalent
+        shaders see the same havoced post-barrier state while preventing false
+        local-store forwarding across `ControlBarrier`.
+        """
+        if key == "wls_shared" and self.unique_workgroup_key is not None:
+            key = self.unique_workgroup_key
+        ckey = (key, int(epoch))
+        if ckey not in self._barrier_buf_mems:
+            safe = key.replace(":", "_")
+            val_sort = BV8 if self.memory_model == "byte" else BV32
+            idx_sort = BV64 if (self.allow_ssbo_aliasing and key == "ssbo_shared") else BV32
+            self._barrier_buf_mems[ckey] = dsl.Array(f"mem_{safe}_bar{epoch}", idx_sort, val_sort)
+        return self._barrier_buf_mems[ckey]
+
+    def get_atomic_old_val(self, key: str, seq_idx: int, off: Any) -> Any:
+        """
+        Return a deterministic fresh havoced pre-atomic value representing arbitrary
+        interleaving from other invocations at atomic sequence index `seq_idx`.
+        """
+        if key == "wls_shared" and self.unique_workgroup_key is not None:
+            key = self.unique_workgroup_key
+        off_bits = off.size() if hasattr(off, "size") else 32
+        ckey = (key, int(seq_idx), int(off_bits))
+        if ckey not in self._atomic_old_ufs:
+            safe = key.replace(":", "_")
+            idx_sort = BV64 if off_bits == 64 else BV32
+            self._atomic_old_ufs[ckey] = dsl.Function(f"atomic_old_{safe}_{seq_idx}", idx_sort, BV32)
+        return self._atomic_old_ufs[ckey](off)
 
     def build_preconditions(self) -> list[Any]:
         """Build semantic execution-environment preconditions (e.g. Compute LocalSize bounds)."""
@@ -114,8 +284,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     if len(found) > 1:
                         return None
             elif isinstance(cur, dsl.Z3OpBvAdd):
-                for ch in cur.children():
-                    stack.append(ch)
+                stack.extend(cur.children())
         return next(iter(found)) if len(found) == 1 else None
 
     def resolve_addr(
@@ -158,10 +327,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
     def get_builtin(self, builtin_id: int, val_type: str) -> Z3Val:
         name = f"bi_{builtin_id}"
         if val_type == "V4F32":
-            lanes = tuple(dsl.BitVec(f"{name}_{c}", 32) for c in range(4))
-            for c, lv in enumerate(lanes):
-                self.inputs[f"{name}_{c}"] = lv
-            return lanes
+            return tuple(self._make_demanded_scalar(f"{name}_{c}", f"{name}_{c}") for c in range(4))
         if val_type == "V3U32":
             lanes = tuple(dsl.BitVec(f"{name}_{c}", 32) for c in range(3))
             for c, lv in enumerate(lanes):
@@ -171,15 +337,13 @@ class SymbolicShaderEnv(ShaderEnvBase):
             v = dsl.Bool(name)
             self.inputs[name] = v
             return v
-        v = dsl.BitVec(name, 32)
-        self.inputs[name] = v
-        return v
+        return self._make_demanded_scalar(name, name)
 
     def get_input_vec4(self, kind: str, location: int) -> tuple[Any, ...]:
-        lanes = tuple(dsl.BitVec(f"{kind}_loc{location}_{c}", 32) for c in range(4))
-        for c, lv in enumerate(lanes):
-            self.inputs[f"{kind}_loc{location}_{c}"] = lv
-        return lanes
+        return tuple(
+            self._make_demanded_scalar(f"{kind}_loc{location}_{c}", f"{kind}_loc{location}_{c}")
+            for c in range(4)
+        )
 
     def load_fau_word(self, word_idx: int) -> Any:
         if word_idx in self.fcst_by_word:
@@ -196,7 +360,12 @@ class SymbolicShaderEnv(ShaderEnvBase):
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
                 if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
-                    return dsl.Select(self.get_buf_mem(pf["key"]), _dsl_bv32(int(pf["byte_offset"])))
+                    bkey = str(pf["key"])
+                    boff = int(pf["byte_offset"])
+                    ro_val = self.get_ro_buf_slot_value(bkey, boff)
+                    if ro_val is not None:
+                        return ro_val
+                    return self.read_buf_u32(self.get_buf_mem(bkey), _dsl_bv32(boff))
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if pf.get("is_derived", False):
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
@@ -208,5 +377,8 @@ class SymbolicShaderEnv(ShaderEnvBase):
             return _dsl_bv32((base >> 32) & MASK32)
         if word_idx in self.rloc_by_word:
             bkey, uoff = self.rloc_by_word[word_idx]
-            return dsl.Select(self.get_buf_mem(bkey), _dsl_bv32(uoff))
+            ro_val = self.get_ro_buf_slot_value(bkey, uoff)
+            if ro_val is not None:
+                return ro_val
+            return self.read_buf_u32(self.get_buf_mem(bkey), _dsl_bv32(uoff))
         return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))

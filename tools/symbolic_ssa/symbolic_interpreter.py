@@ -1,10 +1,11 @@
 """
 Whole-CFG Symbolic Z3 Interpreter (`SymbolicSsaInterpreter`).
 
-Subclasses `SsaInterpreter` with `SymbolicZ3BitvecDomain(fp_mode=...)`, implementing
-only the Z3 `BlockEffectState` storage backend and RPO bounded-unroll CFG
-evaluation. All opcode, memory, kill, atomic, and output semantics are inherited
-from `SsaInterpreter` and `SsaDomain`.
+Subclasses `SsaInterpreter` with a `Z3SymbolicDomain` (`SymbolicZ3UDomain` or
+`SymbolicZ3BitvecDomain`), implementing the Z3 `BlockEffectState` storage
+backend, demand-driven backfill emission (`U^bf`), and RPO bounded-unroll CFG
+evaluation with truncation tracking, barrier/atomic concurrency havoc,
+word/byte/aliasing memory models, and integer divisor definedness guards.
 """
 
 from __future__ import annotations
@@ -15,8 +16,17 @@ from typing import Any
 import z3
 
 from tools.symbolic_ssa.domains import Z3SymbolicDomain, make_z3_symbolic_domain
-from tools.symbolic_ssa.env import (
+from tools.symbolic_ssa.domains.backfill import (
+    DemandAnnotations,
+    DemandBackfillAnalysis,
+    DemandKind,
+)
+from tools.symbolic_ssa.domains.shader_env.base import _u32_to_f32
+from tools.symbolic_ssa.domains.shader_env.symbolic_shader_env import (
     SymbolicShaderEnv,
+    is_shared_mutable_bkey,
+)
+from tools.symbolic_ssa.env import (
     Z3Val,
     _z3_and,
     _z3_if,
@@ -27,6 +37,14 @@ from tools.symbolic_ssa.env import _dsl_bv32 as bv32
 from tools.symbolic_ssa.interpreter import SsaInterpreter
 from tools.symbolic_ssa.z3utils import dsl
 
+SymStoreEntry = tuple[z3.BoolRef, z3.BitVecRef, z3.BitVecRef]
+
+
+def _default_lane_like(other: Any) -> Any:
+    if hasattr(other, "sort") and other.sort().kind() == dsl.Z3SortKind.REAL:
+        return dsl.RealVal(0)
+    return bv32(0)
+
 
 @dataclasses.dataclass
 class BlockEffectState:
@@ -35,16 +53,18 @@ class BlockEffectState:
     discarded: z3.BoolRef
     terminated: z3.BoolRef
     demoted: z3.BoolRef
-    frag_colors: dict[int, tuple[z3.BitVecRef, ...]]
+    frag_colors: dict[int, tuple[Any, ...]]
     builtin_outputs: dict[int, Z3Val]
-    vert_varyings: dict[int, tuple[z3.BitVecRef, ...]]
+    vert_varyings: dict[int, tuple[Any, ...]]
     const_stores: dict[tuple[str, int], tuple[z3.BoolRef, z3.BitVecRef]]
-    sym_buf_stores: dict[str, tuple[z3.BoolRef, z3.BitVecRef, z3.BitVecRef]]
+    sym_buf_stores: dict[str, list[SymStoreEntry]]
     buf_mems: dict[str, z3.ArrayRef]
     image_mems: dict[str, tuple[z3.ArrayRef, ...]]
     fallback_mem: z3.ArrayRef
     atomic_events: dict[str, list[tuple[z3.BoolRef, str, z3.BitVecRef, z3.BitVecRef, z3.BitVecRef]]]
     output_pcs: dict[str, set[int]]
+    barrier_snapshots: list[tuple[int, z3.BoolRef, dict[str, z3.ArrayRef]]] = dataclasses.field(default_factory=list)
+    ssbo_shared_mem: Any | None = None
 
 
 def _clone_state(st: BlockEffectState) -> BlockEffectState:
@@ -56,12 +76,14 @@ def _clone_state(st: BlockEffectState) -> BlockEffectState:
         builtin_outputs=dict(st.builtin_outputs),
         vert_varyings=dict(st.vert_varyings),
         const_stores=dict(st.const_stores),
-        sym_buf_stores=dict(st.sym_buf_stores),
+        sym_buf_stores={k: list(v) for k, v in st.sym_buf_stores.items()},
         buf_mems=dict(st.buf_mems),
         image_mems=dict(st.image_mems),
         fallback_mem=st.fallback_mem,
         atomic_events={k: list(v) for k, v in st.atomic_events.items()},
         output_pcs={k: set(v) for k, v in st.output_pcs.items()},
+        barrier_snapshots=[(ep, m, dict(sn)) for ep, m, sn in st.barrier_snapshots],
+        ssbo_shared_mem=st.ssbo_shared_mem,
     )
 
 
@@ -92,9 +114,14 @@ def _merge_states(
         base_st.demoted = _z3_if(cond, st.demoted, base_st.demoted)
 
         for rt in set(base_st.frag_colors) | set(st.frag_colors):
-            a = st.frag_colors.get(rt, (bv32(0),) * 4)
-            b = base_st.frag_colors.get(rt, (bv32(0),) * 4)
-            base_st.frag_colors[rt] = tuple(_z3_if(cond, ai, bi) for ai, bi in zip(a, b))
+            a = st.frag_colors.get(rt)
+            b = base_st.frag_colors.get(rt)
+            if a is None and b is not None:
+                a = tuple(_default_lane_like(bi) for bi in b)
+            elif b is None and a is not None:
+                b = tuple(_default_lane_like(ai) for ai in a)
+            if a is not None and b is not None:
+                base_st.frag_colors[rt] = tuple(_z3_if(cond, ai, bi) for ai, bi in zip(a, b))
 
         for bi in set(base_st.builtin_outputs) | set(st.builtin_outputs):
             if bi in st.builtin_outputs and bi in base_st.builtin_outputs:
@@ -103,36 +130,57 @@ def _merge_states(
                 base_st.builtin_outputs[bi] = st.builtin_outputs[bi]
 
         for loc in set(base_st.vert_varyings) | set(st.vert_varyings):
-            a = st.vert_varyings.get(loc, (bv32(0),) * 4)
-            b = base_st.vert_varyings.get(loc, (bv32(0),) * 4)
-            base_st.vert_varyings[loc] = tuple(_z3_if(cond, ai, bi) for ai, bi in zip(a, b))
+            a = st.vert_varyings.get(loc)
+            b = base_st.vert_varyings.get(loc)
+            if a is None and b is not None:
+                a = tuple(_default_lane_like(bi) for bi in b)
+            elif b is None and a is not None:
+                b = tuple(_default_lane_like(ai) for ai in a)
+            if a is not None and b is not None:
+                base_st.vert_varyings[loc] = tuple(_z3_if(cond, ai, bi) for ai, bi in zip(a, b))
 
         for key in set(base_st.const_stores) | set(st.const_stores):
             bkey, off = key
-            def_v = dsl.Select(env.get_buf_mem(bkey), bv32(off))
+            def_v = env.read_buf_u32(env.get_buf_mem(bkey), bv32(off))
             aw, av = st.const_stores.get(key, (dsl.BoolVal(False), def_v))
             bw, bv_ = base_st.const_stores.get(key, (dsl.BoolVal(False), def_v))
             base_st.const_stores[key] = (_z3_if(cond, aw, bw), _z3_if(cond, av, bv_))
 
         for skey in set(base_st.sym_buf_stores) | set(st.sym_buf_stores):
-            if skey in st.sym_buf_stores and skey in base_st.sym_buf_stores:
-                aw, av, ao = st.sym_buf_stores[skey]
-                bw, bv_, bo = base_st.sym_buf_stores[skey]
-                base_st.sym_buf_stores[skey] = (_z3_if(cond, aw, bw), _z3_if(cond, av, bv_), _z3_if(cond, ao, bo))
-            elif skey in st.sym_buf_stores:
-                aw, av, ao = st.sym_buf_stores[skey]
+            a_log = st.sym_buf_stores.get(skey, [])
+            b_log = base_st.sym_buf_stores.get(skey, [])
+            if len(a_log) == 1 and len(b_log) == 1 and dsl.expr_eq(a_log[0][2], b_log[0][2]):
+                aw, av, ao = a_log[0]
+                bw, bv_, _bo = b_log[0]
+                base_st.sym_buf_stores[skey] = [(_z3_if(cond, aw, bw), _z3_if(cond, av, bv_), ao)]
+            elif len(a_log) == 1 and not b_log:
+                aw, av, ao = a_log[0]
                 def_v = env.get_sym_buf_slot(skey, ao)
-                base_st.sym_buf_stores[skey] = (_z3_and(cond, aw), _z3_if(cond, av, def_v), ao)
-            else:
-                bw, bv_, bo = base_st.sym_buf_stores[skey]
+                base_st.sym_buf_stores[skey] = [(_z3_and(cond, aw), _z3_if(cond, av, def_v), ao)]
+            elif len(b_log) == 1 and not a_log:
+                bw, bv_, bo = b_log[0]
                 def_v = env.get_sym_buf_slot(skey, bo)
-                base_st.sym_buf_stores[skey] = (_z3_and(_z3_not(cond), bw), _z3_if(cond, def_v, bv_), bo)
+                base_st.sym_buf_stores[skey] = [(_z3_and(_z3_not(cond), bw), _z3_if(cond, def_v, bv_), bo)]
+            else:
+                merged_log: list[SymStoreEntry] = [
+                    (_z3_and(_z3_not(cond), bw), bv_, bo) for (bw, bv_, bo) in b_log
+                ]
+                merged_log.extend((_z3_and(cond, aw), av, ao) for (aw, av, ao) in a_log)
+                base_st.sym_buf_stores[skey] = merged_log
 
         for bkey in set(base_st.buf_mems) | set(st.buf_mems):
             a_m = st.buf_mems.get(bkey, env.get_buf_mem(bkey))
             b_m = base_st.buf_mems.get(bkey, env.get_buf_mem(bkey))
             if not a_m.eq(b_m):
                 base_st.buf_mems[bkey] = dsl.If(cond, a_m, b_m)
+
+        if st.ssbo_shared_mem is not None or base_st.ssbo_shared_mem is not None:
+            a_sm = st.ssbo_shared_mem if st.ssbo_shared_mem is not None else env.get_ssbo_shared_mem()
+            b_sm = base_st.ssbo_shared_mem if base_st.ssbo_shared_mem is not None else env.get_ssbo_shared_mem()
+            if not a_sm.eq(b_sm):
+                base_st.ssbo_shared_mem = dsl.If(cond, a_sm, b_sm)
+            else:
+                base_st.ssbo_shared_mem = a_sm
 
         for ikey in set(base_st.image_mems) | set(st.image_mems):
             a_im = st.image_mems.get(ikey, env.get_img_mem(ikey))
@@ -154,6 +202,10 @@ def _merge_states(
             merged_evs.extend((_z3_and(cond, m), op, off, arg, cmp_v) for (m, op, off, arg, cmp_v) in s_evs)
             base_st.atomic_events[akey] = merged_evs
 
+        if st.barrier_snapshots:
+            for ep, bm, sn in st.barrier_snapshots:
+                base_st.barrier_snapshots.append((ep, _z3_and(cond, bm), dict(sn)))
+
         for k, pcs in st.output_pcs.items():
             base_st.output_pcs.setdefault(k, set()).update(pcs)
     return base_st
@@ -171,13 +223,19 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         max_unroll: int = 1,
         cutpoints: dict[int, Any] | None = None,
         domain: str | Z3SymbolicDomain | None = "udomain",
+        *,
+        demand_annotations: DemandAnnotations | None = None,
+        strict_fp_edges: bool = False,
+        guard_div_by_zero: bool = True,
     ):
         self.ssa = ssa_json
         self.env = env
         self._env = env
         self.is_valhall = is_valhall_side
         self.fp_mode = fp_mode
-        self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(domain, fp_mode=fp_mode)
+        self.domain: Z3SymbolicDomain = make_z3_symbolic_domain(
+            domain, fp_mode=fp_mode, strict_fp_edges=strict_fp_edges
+        )
         self.max_unroll = max(1, int(max_unroll))
         self.cutpoints: dict[int, Any] = cutpoints if cutpoints is not None else {}
         self.blocks: list[dict[str, Any]] = ssa_json.get("blocks", [])
@@ -187,6 +245,22 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         self.iter_branch_decisions: list[tuple[int, int, int, z3.BoolRef, z3.BoolRef]] = []
         self.has_loops: bool = False
         self.max_unroll_depth: int = 0
+        self.loop_truncated: z3.BoolRef = dsl.BoolVal(False)
+        self.no_exit_reached: bool = False
+        self._barrier_epoch: int = 0
+        self.unaligned_accesses: list[str] = []
+        self.guard_div_by_zero: bool = bool(guard_div_by_zero)
+        self.div_nonzero_guards: list[z3.BoolRef] = []
+        self.elided_dead_nodes: int = 0
+
+        if demand_annotations is not None:
+            self.demand_annotations: DemandAnnotations | None = demand_annotations
+        elif getattr(self.domain, "backfill", False):
+            self.demand_annotations = DemandBackfillAnalysis(
+                ssa_json, env, is_valhall=is_valhall_side
+            ).analyze()
+        else:
+            self.demand_annotations = None
 
     def lower_bool_value(self, nid: int) -> z3.BoolRef:
         """Return the raw Z3 Bool expression for SSA node `nid`."""
@@ -204,11 +278,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         bkey_hint = sym_tag[4:].split("[", 1)[0]
         if not self.env.is_shared_sym_bkey(bkey_hint):
             return None
-        if sym_tag in st.sym_buf_stores:
-            w_cond, w_val, w_off = st.sym_buf_stores[sym_tag]
-            raw = _z3_if(_z3_and(w_cond, off_bv == w_off), w_val, self.env.get_sym_buf_slot(sym_tag, off_bv))
-        else:
-            raw = self.env.get_sym_buf_slot(sym_tag, off_bv)
+        raw = self.env.get_sym_buf_slot(sym_tag, off_bv)
+        for w_cond, w_val, w_off in st.sym_buf_stores.get(sym_tag, ()):
+            raw = _z3_if(_z3_and(w_cond, off_bv == w_off), w_val, raw)
         return self.domain.lift_z3_bv32(raw)
 
     def _write_sym_slot(self, st: BlockEffectState, mask: Any, sym_tag: str, off: Any, val: Any, nid: int) -> bool:
@@ -218,30 +290,88 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         bkey_hint = sym_tag[4:].split("[", 1)[0]
         if not self.env.is_shared_sym_bkey(bkey_hint):
             return False
-        prev_w, prev_v, prev_o = st.sym_buf_stores.get(
-            sym_tag, (dsl.BoolVal(False), self.env.get_sym_buf_slot(sym_tag, off_bv), off_bv)
-        )
-        st.sym_buf_stores[sym_tag] = (
-            _z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v), _z3_if(m_b, off_bv, prev_o)
-        )
+        log = st.sym_buf_stores.setdefault(sym_tag, [])
+        if log and dsl.expr_eq(log[-1][2], off_bv):
+            prev_w, prev_v, prev_o = log[-1]
+            log[-1] = (_z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v), prev_o)
+        else:
+            log.append((m_b, val_bv, off_bv))
         st.output_pcs.setdefault(sym_tag, set()).add(nid)
         return True
+
+    def _update_const_stores_for_dyn_write(
+        self,
+        st: BlockEffectState,
+        bkey: str,
+        m_b: z3.BoolRef,
+        off_bv: z3.BitVecRef,
+        val_bv: z3.BitVecRef,
+    ) -> None:
+        """
+        Keep `st.const_stores[(bkey, k)]` sound after a dynamic-offset write or
+        atomic RMW to `bkey`, preventing stale pre-dynamic values on subsequent
+        constant-offset reads.
+        """
+        cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
+        for ck in list(st.const_stores.keys()):
+            cbk, k = ck
+            if cbk != bkey:
+                continue
+            prev_w, prev_v = st.const_stores[ck]
+            if self.env.memory_model == "byte":
+                # In byte-addressed mode, a 4-byte store at `off_bv` overlaps `[k, k+3]`
+                # whenever `off_bv` is within `[k-3, k+3]`; read directly from updated byte array.
+                new_v = self.env.read_buf_u32(cur_mem, bv32(k))
+                st.const_stores[ck] = (_z3_or(prev_w, m_b), _z3_if(m_b, new_v, prev_v))
+            else:
+                hit = _z3_and(m_b, off_bv == bv32(k))
+                st.const_stores[ck] = (_z3_or(prev_w, hit), _z3_if(hit, val_bv, prev_v))
 
     def _read_buf(self, st: BlockEffectState, bkey: str | None, const_off: int | None, off: Any, addr: Any) -> Any:
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
         if bkey is None:
             raw = dsl.Select(st.fallback_mem, addr_bv)
+            return self.domain.lift_z3_bv32(raw)
+
+        if const_off is not None and (const_off % 4) != 0:
+            tag = f"{bkey}+0x{const_off:x}"
+            if tag not in self.unaligned_accesses:
+                self.unaligned_accesses.append(tag)
+
+        # Backfill per-offset read-only slot fast path (zero bridges).
+        if const_off is not None and (bkey, const_off) not in st.const_stores and bkey not in st.buf_mems:
+            ro_val = self.env.get_ro_buf_slot_value(bkey, const_off)
+            if ro_val is not None:
+                return ro_val
+
+        # Aliasing SSBO flat memory model.
+        if self.env.allow_ssbo_aliasing and bkey.startswith("ssbo:"):
+            cur_sm = st.ssbo_shared_mem if st.ssbo_shared_mem is not None else self.env.get_ssbo_shared_mem()
+            flat_addr = self.env.get_ssbo_sym_base(bkey) + dsl.ZeroExt(32, off_bv)
+            raw = self.env.read_buf_u32(cur_sm, flat_addr)
+            return self.domain.lift_z3_bv32(raw)
+
+        cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
+        mem_v = self.env.read_buf_u32(cur_mem, off_bv)
+        if const_off is not None and (bkey, const_off) in st.const_stores:
+            w_cond, w_val = st.const_stores[(bkey, const_off)]
+            raw = _z3_if(w_cond, w_val, mem_v)
         else:
-            mem_v = dsl.Select(st.buf_mems.get(bkey, self.env.get_buf_mem(bkey)), off_bv)
-            if const_off is not None and (bkey, const_off) in st.const_stores:
-                w_cond, w_val = st.const_stores[(bkey, const_off)]
-                raw = _z3_if(w_cond, w_val, mem_v)
-            else:
-                raw = mem_v
+            raw = mem_v
         return self.domain.lift_z3_bv32(raw)
 
-    def _write_buf(self, st: BlockEffectState, mask: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, val: Any, nid: int) -> None:
+    def _write_buf(
+        self,
+        st: BlockEffectState,
+        mask: Any,
+        bkey: str | None,
+        const_off: int | None,
+        off: Any,
+        addr: Any,
+        val: Any,
+        nid: int,
+    ) -> None:
         m_b = self.domain.lower_z3_bool(mask)
         off_bv = self.domain.lower_z3_bv32(off)
         addr_bv = self.domain.lower_z3_bv64(addr)
@@ -250,13 +380,40 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             st.fallback_mem = dsl.If(m_b, dsl.Store(st.fallback_mem, addr_bv, val_bv), st.fallback_mem)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
             return
+
+        if const_off is not None and (const_off % 4) != 0:
+            tag = f"{bkey}+0x{const_off:x}"
+            if tag not in self.unaligned_accesses:
+                self.unaligned_accesses.append(tag)
+
+        if self.env.allow_ssbo_aliasing and bkey.startswith("ssbo:"):
+            cur_sm = st.ssbo_shared_mem if st.ssbo_shared_mem is not None else self.env.get_ssbo_shared_mem()
+            flat_addr = self.env.get_ssbo_sym_base(bkey) + dsl.ZeroExt(32, off_bv)
+            upd_sm = self.env.write_buf_u32(cur_sm, flat_addr, val_bv)
+            st.ssbo_shared_mem = upd_sm if dsl.is_true(m_b) else dsl.If(m_b, upd_sm, cur_sm)
+            st.output_pcs.setdefault("ssbo_shared", set()).add(nid)
+            return
+
         cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-        st.buf_mems[bkey] = dsl.Store(cur_mem, off_bv, val_bv) if dsl.is_true(m_b) else dsl.If(m_b, dsl.Store(cur_mem, off_bv, val_bv), cur_mem)
+        upd_mem = self.env.write_buf_u32(cur_mem, off_bv, val_bv)
+        st.buf_mems[bkey] = upd_mem if dsl.is_true(m_b) else dsl.If(m_b, upd_mem, cur_mem)
         if const_off is not None:
-            prev_w, prev_v = st.const_stores.get((bkey, const_off), (dsl.BoolVal(False), dsl.Select(cur_mem, off_bv)))
+            prev_w, prev_v = st.const_stores.get(
+                (bkey, const_off),
+                (dsl.BoolVal(False), self.env.read_buf_u32(cur_mem, off_bv)),
+            )
             st.const_stores[(bkey, const_off)] = (_z3_or(prev_w, m_b), _z3_if(m_b, val_bv, prev_v))
+            if self.env.memory_model == "byte":
+                # Update any overlapping unaligned constant-offset shadows within +-3 bytes.
+                for ck in list(st.const_stores.keys()):
+                    cbk, k = ck
+                    if cbk == bkey and k != const_off and abs(k - const_off) < 4:
+                        ow, ov = st.const_stores[ck]
+                        ov_new = self.env.read_buf_u32(st.buf_mems[bkey], bv32(k))
+                        st.const_stores[ck] = (_z3_or(ow, m_b), _z3_if(m_b, ov_new, ov))
             st.output_pcs.setdefault(f"{bkey}+0x{const_off:x}", set()).add(nid)
         else:
+            self._update_const_stores_for_dyn_write(st, bkey, m_b, off_bv, val_bv)
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
 
     def _extract_img_channel(self, addr: Any) -> tuple[int, dsl.Z3BitVecExpr]:
@@ -300,25 +457,64 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         st.discarded = _z3_or(st.terminated, st.demoted)
         st.output_pcs.setdefault("discarded", set()).add(nid)
 
+    def _lower_output_lane(self, out_key: str, val: Any) -> Any:
+        """Lower an output lane to pure Real when joint backfill demand is `F32`, else BV32."""
+        tag = self.env.shared_output_demands.get(out_key)
+        if tag is not None and tag.kind is DemandKind.F32:
+            return self.domain.to_z3_real_f32(val)
+        return self.domain.lower_z3_bv32(val)
+
+    def _default_output_lane(self, out_key: str) -> Any:
+        tag = self.env.shared_output_demands.get(out_key)
+        if tag is not None and tag.kind is DemandKind.F32:
+            return dsl.RealVal(0)
+        return bv32(0)
+
     def _write_frag_color(self, st: BlockEffectState, mask: Any, rt: int, vec4: tuple[Any, ...], nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
-        v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
-        prev = st.frag_colors.get(rt, (bv32(0),) * 4)
+        v4 = tuple(self._lower_output_lane(f"frag_color[{rt}][{c}]", vec4[c]) for c in range(4))
+        prev = st.frag_colors.get(
+            rt, tuple(self._default_output_lane(f"frag_color[{rt}][{c}]") for c in range(4))
+        )
         st.frag_colors[rt] = tuple(_z3_if(m_b, n, p) for n, p in zip(v4, prev))
         st.output_pcs.setdefault(f"frag_color[{rt}]", set()).add(nid)
 
     def _write_builtin_output(self, st: BlockEffectState, mask: Any, bi: int, payload: Any, nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
-        pl = self.domain.lower_z3_val(payload)
+        if isinstance(payload, tuple):
+            pl: Any = tuple(
+                self._lower_output_lane(f"builtin_out[{bi}][{c}]", payload[c]) for c in range(len(payload))
+            )
+        else:
+            pl = self._lower_output_lane(f"builtin_out[{bi}][0]", payload)
         st.builtin_outputs[bi] = _z3_if(m_b, pl, st.builtin_outputs[bi]) if bi in st.builtin_outputs else pl
         st.output_pcs.setdefault(f"builtin_out[{bi}]", set()).add(nid)
 
     def _write_vert_varying(self, st: BlockEffectState, mask: Any, loc: int, vec4: tuple[Any, ...], nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
-        v4 = tuple(self.domain.lower_z3_bv32(v) for v in vec4)
-        prev = st.vert_varyings.get(loc, (bv32(0),) * 4)
+        v4 = tuple(self._lower_output_lane(f"vert_var[{loc}][{c}]", vec4[c]) for c in range(4))
+        prev = st.vert_varyings.get(
+            loc, tuple(self._default_output_lane(f"vert_var[{loc}][{c}]") for c in range(4))
+        )
         st.vert_varyings[loc] = tuple(_z3_if(m_b, n, p) for n, p in zip(v4, prev))
         st.output_pcs.setdefault(f"vert_var[{loc}]", set()).add(nid)
+
+    def _havoc_atomic_old_val(
+        self,
+        st: BlockEffectState,
+        bkey: str | None,
+        const_off: int | None,
+        off: Any,
+        addr: Any,
+        op_tag: str,
+        nid: int,
+    ) -> Any:
+        """Return a deterministic fresh havoced pre-atomic value representing other invocations."""
+        akey = bkey if bkey is not None else "fallback_mem"
+        seq_idx = len(st.atomic_events.get(akey, []))
+        idx_bv = self.domain.lower_z3_bv32(off) if bkey is not None else self.domain.lower_z3_bv64(addr)
+        raw = self.env.get_atomic_old_val(akey, seq_idx, idx_bv)
+        return self.domain.lift_z3_bv32(raw)
 
     def _record_atomic(self, st: BlockEffectState, mask: Any, bkey: str | None, off: Any, addr: Any, op_tag: str, arg: Any, cmp_val: Any, new_val: Any, nid: int) -> None:
         m_b = self.domain.lower_z3_bool(mask)
@@ -329,7 +525,9 @@ class SymbolicSsaInterpreter(SsaInterpreter):
         new_bv = self.domain.lower_z3_bv32(new_val)
         if bkey is not None:
             cur_mem = st.buf_mems.get(bkey, self.env.get_buf_mem(bkey))
-            st.buf_mems[bkey] = dsl.Store(cur_mem, off_bv, new_bv) if dsl.is_true(m_b) else dsl.If(m_b, dsl.Store(cur_mem, off_bv, new_bv), cur_mem)
+            upd_mem = self.env.write_buf_u32(cur_mem, off_bv, new_bv)
+            st.buf_mems[bkey] = upd_mem if dsl.is_true(m_b) else dsl.If(m_b, upd_mem, cur_mem)
+            self._update_const_stores_for_dyn_write(st, bkey, m_b, off_bv, new_bv)
             st.atomic_events.setdefault(bkey, []).append((m_b, op_tag, off_bv, arg_bv, cmp_bv))
             st.output_pcs.setdefault(f"atomic:{bkey}", set()).add(nid)
             st.output_pcs.setdefault(f"{bkey}:dyn", set()).add(nid)
@@ -339,10 +537,103 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             st.output_pcs.setdefault("atomic:fallback_mem", set()).add(nid)
             st.output_pcs.setdefault("fallback_mem", set()).add(nid)
 
+    def _on_control_barrier(self, st: BlockEffectState, mask: Any, nid: int) -> None:
+        """
+        Model workgroup synchronization (`ControlBarrier`) soundly:
+          1. Snapshot pre-barrier writes to shared/mutable buffers so dropped
+             or divergent pre-barrier stores are still caught by the verifier.
+          2. Havoc all shared/mutable buffers (`wls_shared`, `workgroup:*`,
+             `ssbo:*`) to fresh symmetric post-barrier arrays so local stores
+             cannot falsely forward past synchronization.
+        """
+        m_b = self.domain.lower_z3_bool(mask)
+        if dsl.is_false(m_b):
+            return
+        self._barrier_epoch += 1
+        epoch = self._barrier_epoch
+
+        mutable_keys = {
+            bk
+            for bk in (
+                set(st.buf_mems)
+                | set(self.env.init_buf_mem)
+                | {cbk for cbk, _ in st.const_stores}
+            )
+            if is_shared_mutable_bkey(bk)
+        }
+        snap = {bk: st.buf_mems[bk] for bk in sorted(mutable_keys) if bk in st.buf_mems}
+        if snap:
+            st.barrier_snapshots.append((epoch, m_b, snap))
+
+        for bk in sorted(mutable_keys):
+            bar_mem = self.env.get_barrier_buf_mem(bk, epoch)
+            cur_mem = st.buf_mems.get(bk, self.env.get_buf_mem(bk))
+            st.buf_mems[bk] = bar_mem if dsl.is_true(m_b) else dsl.If(m_b, bar_mem, cur_mem)
+            for ck in list(st.const_stores.keys()):
+                cbk, k = ck
+                if cbk != bk:
+                    continue
+                if dsl.is_true(m_b):
+                    del st.const_stores[ck]
+                else:
+                    prev_w, prev_v = st.const_stores[ck]
+                    st.const_stores[ck] = (
+                        _z3_and(_z3_not(m_b), prev_w),
+                        _z3_if(m_b, self.env.read_buf_u32(bar_mem, bv32(k)), prev_v),
+                    )
+
+        if self.env.allow_ssbo_aliasing and st.ssbo_shared_mem is not None:
+            bar_sm = self.env.get_barrier_buf_mem("ssbo_shared", epoch)
+            st.ssbo_shared_mem = bar_sm if dsl.is_true(m_b) else dsl.If(m_b, bar_sm, st.ssbo_shared_mem)
+
+        st.output_pcs.setdefault(f"barrier:{epoch}", set()).add(nid)
+
+    def _record_div_guard(self, st: BlockEffectState, reach: Any, op: str, denom: Any) -> None:
+        if not self.guard_div_by_zero:
+            return
+        lanes = denom if isinstance(denom, tuple) else (denom,)
+        m_b = self._active_mask(st, reach)
+        if dsl.is_false(m_b):
+            return
+        for lane in lanes:
+            if self.domain.const_int_val(lane) is not None:
+                continue
+            d_bv = self.domain.lower_z3_bv32(lane)
+            guard = d_bv != bv32(0) if dsl.is_true(m_b) else _z3_or(_z3_not(m_b), d_bv != bv32(0))
+            self.div_nonzero_guards.append(guard)
+
+    def quad_deriv(self, op: str, x: Any, state: Any) -> Any:
+        if hasattr(self.domain, "quad_deriv"):
+            return self.domain.quad_deriv(
+                self.env, op, x, demoted=state.demoted if state is not None else None
+            )
+        return self.fp_unary(op, x)
+
+    def _as_vec4(self, vec: Any) -> tuple[Any, ...]:
+        """Preserve UVal lanes intact under backfill so `_lower_output_lane` avoids premature bridging."""
+        if getattr(self.domain, "backfill", False):
+            return tuple(
+                vec[c] if isinstance(vec, tuple) and c < len(vec) else self.const_u32(0)
+                for c in range(4)
+            )
+        return super()._as_vec4(vec)
+
     def _eval_node(self, node: dict[str, Any], st: BlockEffectState, reach: z3.BoolRef) -> Z3Val:
         nid = int(node["id"])
         if nid in self.cutpoints:
             return self.cutpoints[nid]
+        if self.demand_annotations is not None:
+            if nid in self.demand_annotations.dead_nodes:
+                self.elided_dead_nodes += 1
+                return self.default_value()
+            op = node["op"]
+            if op in ("ConstU32", "ConstS32", "ConstF32"):
+                tag = self.demand_annotations.tag_of(nid)
+                imm_u32 = int(node.get("imm_u32", 0))
+                if tag.kind is DemandKind.F32 and hasattr(self.domain, "const_f32"):
+                    return self.domain.const_f32(_u32_to_f32(imm_u32))
+                if tag.kind is DemandKind.BOOL:
+                    return self.domain.const_bool(imm_u32 != 0)
         return self.eval_node(node, self.values, st, reach)
 
     def collect_pcs_for_nodes(self, root_nids: set[int], max_visit: int = 2048) -> list[int]:
@@ -420,8 +711,16 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             fallback_mem=self.env.fallback_mem,
             atomic_events={},
             output_pcs={},
+            barrier_snapshots=[],
+            ssbo_shared_mem=self.env.get_ssbo_shared_mem() if self.env.allow_ssbo_aliasing else None,
         )
         self.iter_branch_decisions = []
+        self.loop_truncated = dsl.BoolVal(False)
+        self.no_exit_reached = False
+        self._barrier_epoch = 0
+        self.unaligned_accesses = []
+        self.div_nonzero_guards = []
+        self.elided_dead_nodes = 0
         if not self.blocks:
             return init_state
 
@@ -546,7 +845,12 @@ class SymbolicSsaInterpreter(SsaInterpreter):
             exit_states.clear()
             backedges = _eval_block_slice(loop_slice, allow_backedges=True, iter_idx=unroll_iter - 1)
 
+        # Record disjunction of any dropped backedge conditions as the truncation guard.
+        for _, _, bcond in backedges:
+            self.loop_truncated = _z3_or(self.loop_truncated, bcond)
+
         self.block_reach = blk_reach
         if not exit_states:
+            self.no_exit_reached = True
             return blk_out_state.get(len(self.blocks) - 1, init_state)
         return _merge_states(exit_states, self.env)

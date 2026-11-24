@@ -1167,7 +1167,14 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertNotEqual(cex[0], cex[1])
 
     def test_v34_frag_stress_branch_unsat_end_to_end(self) -> None:
-        """Regression test for v34: frag_stress_branch_d38c3ea1.spv proves UNSAT on all 5 outputs."""
+        """
+        Regression test for v34 + v35 Gap #1:
+        In v34, frag_stress_branch_d38c3ea1.spv falsely proved UNSAT only because
+        tex_sample dropped the 3rd (lod) argument. With Gap #1 fixed in v35, the
+        verifier soundly detects the distinct LOD encoding (SPIR-V float32 vs
+        Valhall 8.8 fixed-point s32 from TEX_GRADIENT + FAU clamps) as SAT while
+        preserving MBS2 texture key parity (tex:0:1) and non-inverted clamp_0_1.
+        """
         import os
 
         from tools.verify.shader_equiv_verifier import verify_spv_file
@@ -1182,8 +1189,8 @@ class TestShaderEquivVerifier(unittest.TestCase):
             canonicalize=True,
             enable_conditioned_unify=True,
         )
-        self.assertEqual(res.status, "UNSAT")
-        self.assertEqual(len(res.checked_outputs), 5)
+        self.assertEqual(res.status, "SAT")
+        self.assertTrue(any(m.output_name == "discarded" for m in res.mismatches))
 
 if __name__ == "__main__":
     unittest.main()

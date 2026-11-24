@@ -35,21 +35,27 @@ from tools.symbolic_ssa import (
     _bv32_to_real,
     _is_real2bv,
     _z3_and,
+    _z3_if,
     _z3_not,
     _z3_or,
 )
-from tools.symbolic_ssa.z3utils import dsl
-from tools.symbolic_ssa.z3simplifier import _merged_local_rule
+from tools.symbolic_ssa.domains.backfill import (
+    DemandBackfillAnalysis,
+    annotate_ssa_demands,
+    merge_miter_demands,
+)
 from tools.symbolic_ssa.z3simplifier import (
     PassPipeline,
     SimplificationContext,
     SimplifyQuery,
+    _merged_local_rule,
     build_default_pipeline,
-    rewrite_dag,
     census_ast,
     format_z3_ast,
+    rewrite_dag,
     solve_simplified_miter,
 )
+from tools.symbolic_ssa.z3utils import dsl
 from tools.verify.panfrost_z3_model import (
     bv32,
     bv32_to_fp32,
@@ -81,7 +87,9 @@ class ShaderEquivResult:
     valhall_blocks: int = 0
     has_loops: bool = False
     max_unroll_depth: int = 0
+    loop_truncated: bool = False
     asymmetric_outputs: list[str] = dataclasses.field(default_factory=list)
+    soundness_assumptions: list[str] = dataclasses.field(default_factory=list)
 
 
 def _format_model_cex(
@@ -260,6 +268,10 @@ def verify_equivalence_bundle(
     dump_ast: bool = False,
     dump_ast_stream: Any = None,
     enable_conditioned_unify: bool = False,
+    memory_model: str = "word",
+    allow_ssbo_aliasing: bool = False,
+    strict_fp_edges: bool = False,
+    guard_div_by_zero: bool = True,
 ) -> ShaderEquivResult:
     """Verify all-path formal equivalence of direct_ssa and valhall_ssa in a JSON bundle."""
     t0 = time.perf_counter()
@@ -301,7 +313,24 @@ def verify_equivalence_bundle(
         res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return res
 
-    env = SymbolicShaderEnv(bundle, domain=domain, fp_mode=fp_mode)
+    env = SymbolicShaderEnv(
+        bundle,
+        domain=domain,
+        fp_mode=fp_mode,
+        memory_model=memory_model,
+        allow_ssbo_aliasing=allow_ssbo_aliasing,
+        strict_fp_edges=strict_fp_edges,
+    )
+
+    d_ann = None
+    v_ann = None
+    if domain == "udomain_backfill":
+        d_ann = DemandBackfillAnalysis(direct_ssa, env, is_valhall=False).analyze()
+        v_ann = DemandBackfillAnalysis(valhall_ssa, env, is_valhall=True).analyze()
+        shared_in, shared_out = merge_miter_demands(d_ann, v_ann)
+        env.set_shared_demands(shared_in, shared_out)
+        direct_ssa = annotate_ssa_demands(direct_ssa, d_ann)
+        valhall_ssa = annotate_ssa_demands(valhall_ssa, v_ann)
 
     def _collect_sym_bkeys(ssa_d: dict[str, Any]) -> set[str]:
         ks: set[str] = set()
@@ -312,14 +341,55 @@ def verify_equivalence_bundle(
         return ks
 
     env.shared_sym_bkeys = _collect_sym_bkeys(bundle.get("direct_ssa", {})) & _collect_sym_bkeys(bundle.get("valhall_ssa", {}))
-    d_eval = SymbolicSsaInterpreter(direct_ssa, env, is_valhall_side=False, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
-    v_eval = SymbolicSsaInterpreter(valhall_ssa, env, is_valhall_side=True, fp_mode=fp_mode, max_unroll=max_unroll, domain=domain)
+    d_eval = SymbolicSsaInterpreter(
+        direct_ssa,
+        env,
+        is_valhall_side=False,
+        fp_mode=fp_mode,
+        max_unroll=max_unroll,
+        domain=domain,
+        demand_annotations=d_ann,
+        strict_fp_edges=strict_fp_edges,
+        guard_div_by_zero=guard_div_by_zero,
+    )
+    v_eval = SymbolicSsaInterpreter(
+        valhall_ssa,
+        env,
+        is_valhall_side=True,
+        fp_mode=fp_mode,
+        max_unroll=max_unroll,
+        domain=domain,
+        demand_annotations=v_ann,
+        strict_fp_edges=strict_fp_edges,
+        guard_div_by_zero=guard_div_by_zero,
+    )
 
     d_st = d_eval.evaluate()
     v_st = v_eval.evaluate()
     res.has_loops = d_eval.has_loops or v_eval.has_loops
     res.max_unroll_depth = max(d_eval.max_unroll_depth, v_eval.max_unroll_depth)
     preconditions = env.build_preconditions()
+
+    # Include symbolic integer divisor non-zero guards (Gap #7c).
+    div_guards = list(d_eval.div_nonzero_guards) + list(v_eval.div_nonzero_guards)
+    if div_guards:
+        seen_dg: set[int] = set()
+        for dg in div_guards:
+            gid = dg.get_id()
+            if gid not in seen_dg:
+                seen_dg.add(gid)
+                preconditions.append(dg)
+        res.soundness_assumptions.append("nonzero_integer_divisors")
+
+    if domain in ("udomain", "udomain_backfill") and not strict_fp_edges:
+        res.soundness_assumptions.append("real_fp_arithmetic_finite_no_rounding")
+    ssbo_keys = [k for k in env.buf_base_map if k.startswith("ssbo:")]
+    if len(ssbo_keys) > 1 and not allow_ssbo_aliasing:
+        res.soundness_assumptions.append("disjoint_ssbo_bindings")
+    unaligned = sorted(set(d_eval.unaligned_accesses) | set(v_eval.unaligned_accesses))
+    if unaligned and memory_model == "word":
+        res.soundness_assumptions.append(f"word_granular_memory_unaligned_accesses:{','.join(unaligned[:4])}")
+        res.notes.append(f"Unaligned accesses detected under word memory model: {unaligned[:4]} (rerun with memory_model='byte')")
     pc_disasm: dict[str, str] = bundle.get("mbs2_context", {}).get("pc_disasm", {})
 
     def lookup_pcs(key: str) -> list[tuple[int, str]]:
@@ -387,18 +457,33 @@ def verify_equivalence_bundle(
 
     all_sym = sorted(set(d_st.sym_buf_stores.keys()) | set(v_st.sym_buf_stores.keys()))
     for stag in all_sym:
-        dw, dv, doff = d_st.sym_buf_stores.get(stag, (dsl.BoolVal(False), bv32(0), bv32(0)))
-        vw, vv, voff = v_st.sym_buf_stores.get(stag, (dsl.BoolVal(False), bv32(0), bv32(0)))
-        checks.append((f"{stag}.written", dw, vw, None, stag))
-        checks.append((f"{stag}.off", doff, voff, _z3_or(dw, vw), stag))
-        checks.append((f"{stag}.value", dv, vv, _z3_or(dw, vw), stag))
+        d_log = d_st.sym_buf_stores.get(stag, [])
+        v_log = v_st.sym_buf_stores.get(stag, [])
+        if len(d_log) <= 1 and len(v_log) <= 1:
+            dw, dv, doff = d_log[0] if d_log else (dsl.BoolVal(False), bv32(0), bv32(0))
+            vw, vv, voff = v_log[0] if v_log else (dsl.BoolVal(False), bv32(0), bv32(0))
+            checks.append((f"{stag}.written", dw, vw, None, stag))
+            checks.append((f"{stag}.off", doff, voff, _z3_or(dw, vw), stag))
+            checks.append((f"{stag}.value", dv, vv, _z3_or(dw, vw), stag))
+        else:
+            safe_s = "".join(c if c.isalnum() or c == "_" else "_" for c in stag)
+            probe_off = dsl.BitVec(f"probe_sym_{safe_s}_off", 32)
+            env.inputs[f"probe_sym_{safe_s}_off"] = probe_off
+            d_val = env.get_sym_buf_slot(stag, probe_off)
+            for w_c, w_v, w_o in d_log:
+                d_val = _z3_if(_z3_and(w_c, probe_off == w_o), w_v, d_val)
+            v_val = env.get_sym_buf_slot(stag, probe_off)
+            for w_c, w_v, w_o in v_log:
+                v_val = _z3_if(_z3_and(w_c, probe_off == w_o), w_v, v_val)
+            checks.append((f"{stag}[probe_off]", d_val, v_val, None, stag))
 
     all_cs = sorted(set(d_st.const_stores.keys()) | set(v_st.const_stores.keys()))
     for bkey, off in all_cs:
         if _is_scratch_region(bkey):
             continue
-        dw, dv = d_st.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
-        vw, vv = v_st.const_stores.get((bkey, off), (dsl.BoolVal(False), dsl.Select(env.get_buf_mem(bkey), bv32(off))))
+        def_v = env.read_buf_u32(env.get_buf_mem(bkey), bv32(off))
+        dw, dv = d_st.const_stores.get((bkey, off), (dsl.BoolVal(False), def_v))
+        vw, vv = v_st.const_stores.get((bkey, off), (dsl.BoolVal(False), def_v))
         tag = f"{bkey}+0x{off:x}"
         checks.append((f"{tag}.written", dw, vw, None, tag))
         checks.append((f"{tag}.value", dv, vv, _z3_or(dw, vw), tag))
@@ -416,7 +501,50 @@ def verify_equivalence_bundle(
         probe_name = f"probe_{bkey.replace(':', '_')}_off"
         probe_off = dsl.BitVec(probe_name, 32)
         env.inputs[probe_name] = probe_off
-        checks.append((f"{bkey}[probe_off]", dsl.Select(d_mem, probe_off), dsl.Select(v_mem, probe_off), None, f"{bkey}:dyn"))
+        checks.append((f"{bkey}[probe_off]", env.read_buf_u32(d_mem, probe_off), env.read_buf_u32(v_mem, probe_off), None, f"{bkey}:dyn"))
+
+    if env.allow_ssbo_aliasing and (d_st.ssbo_shared_mem is not None or v_st.ssbo_shared_mem is not None):
+        d_sm = d_st.ssbo_shared_mem if d_st.ssbo_shared_mem is not None else env.get_ssbo_shared_mem()
+        v_sm = v_st.ssbo_shared_mem if v_st.ssbo_shared_mem is not None else env.get_ssbo_shared_mem()
+        if not d_sm.eq(v_sm):
+            probe_addr = dsl.BitVec("probe_ssbo_shared_addr", 64)
+            env.inputs["probe_ssbo_shared_addr"] = probe_addr
+            checks.append(("ssbo_shared[probe_addr]", env.read_buf_u32(d_sm, probe_addr), env.read_buf_u32(v_sm, probe_addr), None, "ssbo_shared"))
+
+    if d_st.barrier_snapshots or v_st.barrier_snapshots:
+        n_bar = max(len(d_st.barrier_snapshots), len(v_st.barrier_snapshots))
+        for bidx in range(n_bar):
+            if bidx >= len(d_st.barrier_snapshots) or bidx >= len(v_st.barrier_snapshots):
+                checks.append((
+                    f"barrier[{bidx}].present",
+                    dsl.BoolVal(bidx < len(d_st.barrier_snapshots)),
+                    dsl.BoolVal(bidx < len(v_st.barrier_snapshots)),
+                    None,
+                    f"barrier:{bidx + 1}",
+                ))
+                continue
+            _dep, d_bm, d_snap = d_st.barrier_snapshots[bidx]
+            _vep, v_bm, v_snap = v_st.barrier_snapshots[bidx]
+            for bk in sorted(set(d_snap) | set(v_snap)):
+                dm = d_snap.get(bk, env.get_buf_mem(bk))
+                vm = v_snap.get(bk, env.get_buf_mem(bk))
+                if not dm.eq(vm):
+                    pname = f"probe_bar{bidx}_{bk.replace(':', '_')}_off"
+                    poff = dsl.BitVec(pname, 32)
+                    env.inputs[pname] = poff
+                    checks.append((
+                        f"barrier[{bidx}].{bk}[probe_off]",
+                        env.read_buf_u32(dm, poff),
+                        env.read_buf_u32(vm, poff),
+                        _z3_or(d_bm, v_bm),
+                        f"barrier:{bidx + 1}",
+                    ))
+
+    if res.has_loops:
+        d_trunc = d_eval.loop_truncated
+        v_trunc = v_eval.loop_truncated
+        if not d_trunc.eq(v_trunc):
+            checks.append(("loop_truncated", d_trunc, v_trunc, None, "loop_truncated"))
 
     all_im_keys = sorted(set(d_st.image_mems.keys()) | set(v_st.image_mems.keys()))
     for ikey in all_im_keys:
@@ -653,7 +781,34 @@ def verify_equivalence_bundle(
             res.notes.append(f"Exact FP timed out; real ({real_res.status}) and UF ({uf_res.status}) fallbacks could not prove equivalence")
         res.status = "UNKNOWN"
     else:
-        res.status = "BOUNDED_UNSAT" if res.has_loops else "UNSAT"
+        if res.has_loops:
+            any_trunc = _z3_or(d_eval.loop_truncated, v_eval.loop_truncated)
+            if d_eval.no_exit_reached or v_eval.no_exit_reached:
+                res.loop_truncated = True
+            elif dsl.is_false(any_trunc):
+                res.loop_truncated = False
+            else:
+                # Check whether any dropped backedge condition is actually satisfiable under preconditions.
+                t_rc, _ = _solve_miter_eq(
+                    any_trunc,
+                    dsl.BoolVal(False),
+                    None,
+                    min(500, timeout_ms),
+                    env,
+                    preconditions=preconditions,
+                    check_name="loop_truncation_check",
+                    verbose=verbose,
+                    pipeline=pipeline,
+                )
+                res.loop_truncated = t_rc != "UNSAT"
+            if res.loop_truncated:
+                res.status = "BOUNDED_UNSAT"
+                res.notes.append(f"BMC_EQUIV(k={res.max_unroll_depth}): loop backedge truncated")
+            else:
+                res.status = "UNSAT"
+                res.notes.append(f"Full EQUIV: all loop backedges provably exited within k={res.max_unroll_depth}")
+        else:
+            res.status = "UNSAT"
 
     res.elapsed_ms = (time.perf_counter() - t0) * 1000.0
     return res
@@ -671,6 +826,10 @@ def verify_spv_file(
     domain: str = "udomain",
     dump_ast: bool = False,
     enable_conditioned_unify: bool = False,
+    memory_model: str = "word",
+    allow_ssbo_aliasing: bool = False,
+    strict_fp_edges: bool = False,
+    guard_div_by_zero: bool = True,
 ) -> ShaderEquivResult:
     """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
@@ -705,6 +864,10 @@ def verify_spv_file(
             domain=domain,
             dump_ast=dump_ast,
             enable_conditioned_unify=enable_conditioned_unify,
+            memory_model=memory_model,
+            allow_ssbo_aliasing=allow_ssbo_aliasing,
+            strict_fp_edges=strict_fp_edges,
+            guard_div_by_zero=guard_div_by_zero,
         )
     finally:
         if os.path.exists(tmp_json):
@@ -716,7 +879,10 @@ def main() -> int:
     ap.add_argument("spv_or_json", help="Path to .spv shader or pre-dumped equivalence bundle .json")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--timeout-ms", type=int, default=3000, help="Per-output Z3 timeout in ms")
-    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="udomain", help="Symbolic value domain (default: udomain)")
+    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_backfill", "udomain_exact"], default="udomain", help="Symbolic value domain (default: udomain)")
+    ap.add_argument("--memory-model", choices=["word", "byte"], default="word", help="Buffer memory granularity (default: word)")
+    ap.add_argument("--allow-ssbo-aliasing", action="store_true", help="Model mutable SSBO bindings in a shared flat address space")
+    ap.add_argument("--strict-fp-edges", action="store_true", help="Enable strict NaN/Inf/domain-error predicates in Real UDomain")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact")
     ap.add_argument("--max-unroll", type=int, default=1, help="Bounded loop unroll depth (default: 1)")
     ap.add_argument("--dump-smt2", default=None, help="Write Z3 SMT-LIB2 miter queries to this file")
@@ -792,6 +958,9 @@ def main() -> int:
             canonicalize=args.canonicalize,
             dump_ast=args.dump_ast,
             enable_conditioned_unify=args.conditioned_unify,
+            memory_model=args.memory_model,
+            allow_ssbo_aliasing=args.allow_ssbo_aliasing,
+            strict_fp_edges=args.strict_fp_edges,
         )
     else:
         r = verify_spv_file(
