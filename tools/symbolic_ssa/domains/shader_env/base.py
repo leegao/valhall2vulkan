@@ -180,7 +180,18 @@ class ShaderEnvBase:
         if self.unique_workgroup_key is not None:
             self.buf_base_map["wls_shared"] = self.get_buf_base(self.unique_workgroup_key)
 
+        direct_keys = {str(b.get("key", "")) for b in self.direct_bindings if b.get("key")}
+        has_push_const_only = (
+            "push_const" in direct_keys
+            or any(
+                int(se.get("rack", -1)) == 0 and int(se.get("addr", -1)) == 0 and se.get("key") == "push_const"
+                for se in self.mbs2.get("pilot_srt", [])
+            )
+        ) and ("ubo:0:0" not in direct_keys)
+
         for pf in self.mbs2.get("pilot_fau", []):
+            if has_push_const_only and pf.get("key") == "ubo:0:0":
+                pf = dict(pf, key="push_const")
             key = pf.get("key", "")
             if pf.get("resolved") and key:
                 self.get_buf_base(key)
@@ -193,6 +204,8 @@ class ShaderEnvBase:
         self.viewport_fau_words: dict[int, int] = {}
         self.pilot_by_word: dict[int, tuple[dict[str, Any], bool]] = {}
         for pf in self.mbs2.get("pilot_fau", []):
+            if has_push_const_only and pf.get("key") == "ubo:0:0":
+                pf = dict(pf, key="push_const")
             vkind = pf.get("value_kind", "")
             is_const = vkind == "const_int" and pf.get("has_const_value", False)
             if is_const or (pf.get("resolved") and pf.get("key")):
@@ -215,7 +228,9 @@ class ShaderEnvBase:
                     off = uoff + k * 4
                     self.viewport_fau_words[w0 + k] = 0x3F800000 if off < 16 else 0x00000000
                 continue
-            bkey = f"ubo:0:{rl.get('binding', 0)}"
+            bkey = str(rl.get("key") or f"ubo:0:{rl.get('binding', 0)}")
+            if has_push_const_only and bkey == "ubo:0:0":
+                bkey = "push_const"
             for k in range(nwords):
                 self.rloc_by_word[w0 + k] = (bkey, uoff + k * 4)
 

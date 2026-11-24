@@ -664,6 +664,10 @@ class DemandBackfillAnalysis:
                 push(args[0], D_BV32)
                 push(args[1], D_BV32)
             return
+        if op == "ImageTexelAddr" and len(args) >= 2:
+            push(args[0], D_BV32)
+            push(args[1], D_BV32)
+            return
         if op == "Split64" and args:
             if tau_out.kind is DemandKind.F32:
                 push(args[0], D_F32X2)

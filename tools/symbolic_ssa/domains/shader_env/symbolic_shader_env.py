@@ -409,13 +409,16 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     return self.pilot_exec_fau_words[word_idx]
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
-                if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
+                if pf.get("has_byte_offset", False) and not pf.get("is_derived", False) and int(pf.get("byte_size", 4)) >= 4:
                     bkey = str(pf["key"])
                     boff = int(pf["byte_offset"])
                     ro_val = self.get_ro_buf_slot_value(bkey, boff)
                     if ro_val is not None:
                         return ro_val
                     return self.read_buf_u32(self.get_buf_mem(bkey), _dsl_bv32(boff))
+                self._ensure_pilot_executed()
+                if word_idx in self.pilot_exec_fau_words:
+                    return self.pilot_exec_fau_words[word_idx]
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if pf.get("is_derived", False):
                 self._ensure_pilot_executed()

@@ -227,7 +227,7 @@ class ConcreteShaderEnv(ShaderEnvBase):
                     return self.pilot_exec_fau_words[word_idx]
                 return self._sample_fau_word(word_idx)
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
-                if pf.get("has_byte_offset", False):
+                if pf.get("has_byte_offset", False) and int(pf.get("byte_size", 4)) >= 4:
                     return self.read_init_buf(pf["key"], int(pf["byte_offset"]))
                 self._ensure_pilot_executed()
                 if word_idx in self.pilot_exec_fau_words:
