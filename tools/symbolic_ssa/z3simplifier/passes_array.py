@@ -53,9 +53,9 @@ def _is_concrete_index(idx: dsl.ExprRef) -> Optional[str]:
 
 def _is_uninterpreted_array_const(expr: dsl.ExprRef) -> bool:
     return (
-        expr.sort().kind() == dsl.Z3_ARRAY_SORT
+        expr.sort().kind() == dsl.Z3SortKind.ARRAY
         and dsl.is_const(expr)
-        and expr.decl().kind() == dsl.Z3_OP_UNINTERPRETED
+        and expr.decl().kind() == dsl.Z3OpKind.UNINTERPRETED
     )
 
 
@@ -78,7 +78,7 @@ def _find_scalarizable_arrays(roots: List[dsl.ExprRef]) -> Set[int]:
         if not dsl.is_app(cur):
             continue
         kind = cur.decl().kind()
-        if kind == dsl.Z3_OP_SELECT and cur.num_args() == 2:
+        if kind == dsl.Z3OpKind.SELECT and cur.num_args() == 2:
             arr, idx = cur.arg(0), cur.arg(1)
             if _is_uninterpreted_array_const(arr):
                 aid = arr.get_id()
@@ -88,7 +88,7 @@ def _find_scalarizable_arrays(roots: List[dsl.ExprRef]) -> Set[int]:
                 if idx.get_id() not in visited:
                     stack.append(idx)
                 continue
-        if kind == dsl.Z3_OP_STORE and cur.num_args() == 3:
+        if kind == dsl.Z3OpKind.STORE and cur.num_args() == 3:
             arr = cur.arg(0)
             if _is_uninterpreted_array_const(arr):
                 disqualified.add(arr.get_id())
@@ -131,7 +131,7 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         def _rule(node: dsl.ExprRef) -> Optional[dsl.ExprRef]:
-            if dsl.is_app(node) and node.decl().kind() == dsl.Z3_OP_SELECT and node.num_args() == 2:
+            if dsl.is_app(node) and node.decl().kind() == dsl.Z3OpKind.SELECT and node.num_args() == 2:
                 arr, idx = node.arg(0), node.arg(1)
                 if arr.get_id() in scalarizable:
                     idx_tag = _is_concrete_index(idx)
@@ -177,27 +177,27 @@ class ReadOnlyArrayScalarizePass(Z3QueryPass):
 
 
 _PURE_REAL_ARITH_KINDS: Set[int] = {
-    dsl.Z3_OP_ADD,
-    dsl.Z3_OP_SUB,
-    dsl.Z3_OP_UMINUS,
-    dsl.Z3_OP_MUL,
-    dsl.Z3_OP_DIV,
-    dsl.Z3_OP_POWER,
-    dsl.Z3_OP_ANUM,
-    dsl.Z3_OP_EQ,
-    dsl.Z3_OP_DISTINCT,
-    dsl.Z3_OP_LT,
-    dsl.Z3_OP_LE,
-    dsl.Z3_OP_GT,
-    dsl.Z3_OP_GE,
-    dsl.Z3_OP_AND,
-    dsl.Z3_OP_OR,
-    dsl.Z3_OP_NOT,
-    dsl.Z3_OP_IMPLIES,
-    dsl.Z3_OP_XOR,
-    dsl.Z3_OP_TRUE,
-    dsl.Z3_OP_FALSE,
-    dsl.Z3_OP_ITE,
+    dsl.Z3OpKind.ADD,
+    dsl.Z3OpKind.SUB,
+    dsl.Z3OpKind.UMINUS,
+    dsl.Z3OpKind.MUL,
+    dsl.Z3OpKind.DIV,
+    dsl.Z3OpKind.POWER,
+    dsl.Z3OpKind.ANUM,
+    dsl.Z3OpKind.EQ,
+    dsl.Z3OpKind.DISTINCT,
+    dsl.Z3OpKind.LT,
+    dsl.Z3OpKind.LE,
+    dsl.Z3OpKind.GT,
+    dsl.Z3OpKind.GE,
+    dsl.Z3OpKind.AND,
+    dsl.Z3OpKind.OR,
+    dsl.Z3OpKind.NOT,
+    dsl.Z3OpKind.IMPLIES,
+    dsl.Z3OpKind.XOR,
+    dsl.Z3OpKind.TRUE,
+    dsl.Z3OpKind.FALSE,
+    dsl.Z3OpKind.ITE,
 }
 
 
@@ -211,7 +211,7 @@ def _contains_real_sort(roots: List[dsl.ExprRef], limit: int = 50000) -> bool:
         if cid in visited:
             continue
         visited.add(cid)
-        if cur.sort().kind() == dsl.Z3_REAL_SORT:
+        if cur.sort().kind() == dsl.Z3SortKind.REAL:
             return True
         if dsl.is_app(cur):
             for i in range(cur.num_args()):
@@ -232,7 +232,7 @@ def _is_pure_qfnra_expr(expr: dsl.ExprRef) -> bool:
             continue
         visited.add(cid)
         sk = cur.sort().kind()
-        if sk not in (dsl.Z3_REAL_SORT, dsl.Z3_BOOL_SORT):
+        if sk not in (dsl.Z3SortKind.REAL, dsl.Z3SortKind.BOOL):
             return False
         if dsl.is_const(cur):
             continue
@@ -277,10 +277,10 @@ class TheoryPurifyRealPass(Z3QueryPass):
         r_sk = query.rhs.sort().kind()
         if l_sk != r_sk:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
-        if l_sk == dsl.Z3_BOOL_SORT:
+        if l_sk == dsl.Z3SortKind.BOOL:
             if not _contains_real_sort([query.lhs, query.rhs], limit=ctx.max_dag_nodes):
                 return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
-        elif l_sk != dsl.Z3_REAL_SORT:
+        elif l_sk != dsl.Z3SortKind.REAL:
             return query, PassStats(self.name, False, 0, (time.perf_counter() - t0) * 1000.0)
 
         abs_pairs: List[Tuple[dsl.ExprRef, dsl.ExprRef]] = []
@@ -301,18 +301,18 @@ class TheoryPurifyRealPass(Z3QueryPass):
                 return None
             sk = node.sort().kind()
             kind = node.decl().kind()
-            if sk == dsl.Z3_REAL_SORT:
+            if sk == dsl.Z3SortKind.REAL:
                 if kind in _PURE_REAL_ARITH_KINDS:
-                    if kind == dsl.Z3_OP_ITE and not _is_pure_qfnra_expr(node.arg(0)):
+                    if kind == dsl.Z3OpKind.ITE and not _is_pure_qfnra_expr(node.arg(0)):
                         return _abstract_node(node, "purify_ite", dsl.RealSort())
                     return None
                 return _abstract_node(node, "purify_r", dsl.RealSort())
-            if sk == dsl.Z3_BOOL_SORT:
+            if sk == dsl.Z3SortKind.BOOL:
                 if kind not in _PURE_REAL_ARITH_KINDS:
                     return _abstract_node(node, "purify_b", dsl.BoolSort())
-                if kind in (dsl.Z3_OP_EQ, dsl.Z3_OP_DISTINCT):
+                if kind in (dsl.Z3OpKind.EQ, dsl.Z3OpKind.DISTINCT):
                     for i in range(node.num_args()):
-                        if node.arg(i).sort().kind() not in (dsl.Z3_REAL_SORT, dsl.Z3_BOOL_SORT):
+                        if node.arg(i).sort().kind() not in (dsl.Z3SortKind.REAL, dsl.Z3SortKind.BOOL):
                             return _abstract_node(node, "purify_b", dsl.BoolSort())
                 return None
             return None

@@ -109,31 +109,31 @@ def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
         name = decl.name()
         sort_kind = node.sort().kind()
 
-        if sort_kind == dsl.Z3_FLOATING_POINT_SORT:
+        if sort_kind == dsl.Z3SortKind.FLOATING_POINT:
             fp_ops += 1
-        elif kind == dsl.Z3_OP_MUL and sort_kind == dsl.Z3_REAL_SORT:
+        elif kind == dsl.Z3OpKind.MUL and sort_kind == dsl.Z3SortKind.REAL:
             non_const = sum(1 for i in range(node.num_args()) if not dsl.is_rational_value(node.arg(i)))
             if non_const >= 2:
                 nlin_real += 1
-        elif kind == dsl.Z3_OP_DIV and sort_kind == dsl.Z3_REAL_SORT:
+        elif kind == dsl.Z3OpKind.DIV and sort_kind == dsl.Z3SortKind.REAL:
             if not dsl.is_rational_value(node.arg(1)):
                 nlin_real += 1
         elif kind in (
-            dsl.Z3_OP_BMUL,
-            dsl.Z3_OP_BSDIV,
-            dsl.Z3_OP_BUDIV,
-            dsl.Z3_OP_BSREM,
-            dsl.Z3_OP_BUREM,
-            dsl.Z3_OP_BSHL,
-            dsl.Z3_OP_BLSHR,
-            dsl.Z3_OP_BASHR,
+            dsl.Z3OpKind.BMUL,
+            dsl.Z3OpKind.BSDIV,
+            dsl.Z3OpKind.BUDIV,
+            dsl.Z3OpKind.BSREM,
+            dsl.Z3OpKind.BUREM,
+            dsl.Z3OpKind.BSHL,
+            dsl.Z3OpKind.BLSHR,
+            dsl.Z3OpKind.BASHR,
         ):
             bv_mul_shift += 1
-        elif kind == dsl.Z3_OP_SELECT:
+        elif kind == dsl.Z3OpKind.SELECT:
             arr_sel += 1
-        elif kind == dsl.Z3_OP_STORE:
+        elif kind == dsl.Z3OpKind.STORE:
             arr_st += 1
-        elif kind == dsl.Z3_OP_ITE:
+        elif kind == dsl.Z3OpKind.ITE:
             ites += 1
             if (
                 node.num_args() == 3
@@ -145,7 +145,7 @@ def census_ast(roots: Sequence[dsl.ExprRef], limit: int = 100000) -> AstCensus:
                 bool_wrappers += 1
         if name in _BRIDGE_NAMES:
             bridges += 1
-        if kind in (dsl.Z3_OP_BV2INT, dsl.Z3_OP_INT2BV, dsl.Z3_OP_TO_INT, dsl.Z3_OP_TO_REAL):
+        if kind in (dsl.Z3OpKind.BV2INT, dsl.Z3OpKind.INT2BV, dsl.Z3OpKind.TO_INT, dsl.Z3OpKind.TO_REAL):
             int_bv += 1
 
     max_d = max(depths.values()) if depths else 0
@@ -238,65 +238,65 @@ def rebuild_app(node: dsl.ExprRef, new_args: Sequence[dsl.ExprRef]) -> dsl.ExprR
     decl = node.decl()
     kind = decl.kind()
 
-    if kind == dsl.Z3_OP_EXTRACT:
+    if kind == dsl.Z3OpKind.EXTRACT:
         hi = node.params()[0]
         lo = node.params()[1]
         return dsl.Extract(hi, lo, new_args[0])
-    if kind == dsl.Z3_OP_ZERO_EXT:
+    if kind == dsl.Z3OpKind.ZERO_EXT:
         return dsl.ZeroExt(node.params()[0], new_args[0])
-    if kind == dsl.Z3_OP_SIGN_EXT:
+    if kind == dsl.Z3OpKind.SIGN_EXT:
         return dsl.SignExt(node.params()[0], new_args[0])
-    if kind == dsl.Z3_OP_CONCAT:
+    if kind == dsl.Z3OpKind.CONCAT:
         return dsl.Concat(*new_args)
-    if kind == dsl.Z3_OP_ITE:
+    if kind == dsl.Z3OpKind.ITE:
         return dsl.If(new_args[0], new_args[1], new_args[2])
-    if kind == dsl.Z3_OP_AND:
+    if kind == dsl.Z3OpKind.AND:
         return dsl.And(*new_args)
-    if kind == dsl.Z3_OP_OR:
+    if kind == dsl.Z3OpKind.OR:
         return dsl.Or(*new_args)
-    if kind == dsl.Z3_OP_NOT:
+    if kind == dsl.Z3OpKind.NOT:
         return dsl.Not(new_args[0])
-    if kind == dsl.Z3_OP_EQ:
+    if kind == dsl.Z3OpKind.EQ:
         return new_args[0] == new_args[1]
-    if kind == dsl.Z3_OP_DISTINCT and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.DISTINCT and len(new_args) == 2:
         return new_args[0] != new_args[1]
-    if kind == dsl.Z3_OP_SELECT:
+    if kind == dsl.Z3OpKind.SELECT:
         return dsl.Select(new_args[0], new_args[1])
-    if kind == dsl.Z3_OP_STORE:
+    if kind == dsl.Z3OpKind.STORE:
         return dsl.Store(new_args[0], new_args[1], new_args[2])
-    if kind == dsl.Z3_OP_ADD:
+    if kind == dsl.Z3OpKind.ADD:
         acc = new_args[0]
         for a in new_args[1:]:
             acc = acc + a
         return acc
-    if kind == dsl.Z3_OP_SUB and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.SUB and len(new_args) == 2:
         return new_args[0] - new_args[1]
-    if kind == dsl.Z3_OP_UMINUS and len(new_args) == 1:
+    if kind == dsl.Z3OpKind.UMINUS and len(new_args) == 1:
         return -new_args[0]
-    if kind == dsl.Z3_OP_MUL:
+    if kind == dsl.Z3OpKind.MUL:
         acc = new_args[0]
         for a in new_args[1:]:
             acc = acc * a
         return acc
-    if kind == dsl.Z3_OP_DIV and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.DIV and len(new_args) == 2:
         return new_args[0] / new_args[1]
-    if kind == dsl.Z3_OP_BADD and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BADD and len(new_args) == 2:
         return new_args[0] + new_args[1]
-    if kind == dsl.Z3_OP_BSUB and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BSUB and len(new_args) == 2:
         return new_args[0] - new_args[1]
-    if kind == dsl.Z3_OP_BMUL and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BMUL and len(new_args) == 2:
         return new_args[0] * new_args[1]
-    if kind == dsl.Z3_OP_BAND and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BAND and len(new_args) == 2:
         return new_args[0] & new_args[1]
-    if kind == dsl.Z3_OP_BOR and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BOR and len(new_args) == 2:
         return new_args[0] | new_args[1]
-    if kind == dsl.Z3_OP_BXOR and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BXOR and len(new_args) == 2:
         return new_args[0] ^ new_args[1]
-    if kind == dsl.Z3_OP_BSHL and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BSHL and len(new_args) == 2:
         return new_args[0] << new_args[1]
-    if kind == dsl.Z3_OP_BLSHR and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BLSHR and len(new_args) == 2:
         return dsl.LShR(new_args[0], new_args[1])
-    if kind == dsl.Z3_OP_BASHR and len(new_args) == 2:
+    if kind == dsl.Z3OpKind.BASHR and len(new_args) == 2:
         return new_args[0] >> new_args[1]
     return decl(*(dsl.lower(a) for a in new_args))
 
@@ -363,11 +363,11 @@ def format_z3_ast(
             return "false"
         d = n.decl()
         k = d.kind()
-        if k == dsl.Z3_OP_EXTRACT:
+        if k == dsl.Z3OpKind.EXTRACT:
             return f"Extract[{n.params()[0]}:{n.params()[1]}]"
-        if k == dsl.Z3_OP_ZERO_EXT:
+        if k == dsl.Z3OpKind.ZERO_EXT:
             return f"ZeroExt[{n.params()[0]}]"
-        if k == dsl.Z3_OP_SIGN_EXT:
+        if k == dsl.Z3OpKind.SIGN_EXT:
             return f"SignExt[{n.params()[0]}]"
         return d.name()
 

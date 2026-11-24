@@ -53,16 +53,16 @@ from tools.symbolic_ssa.z3utils import dsl
 
 _COMMUTATIVE_KINDS: frozenset[int] = frozenset(
     {
-        dsl.Z3_OP_ADD,
-        dsl.Z3_OP_MUL,
-        dsl.Z3_OP_AND,
-        dsl.Z3_OP_OR,
-        dsl.Z3_OP_EQ,
-        dsl.Z3_OP_BADD,
-        dsl.Z3_OP_BMUL,
-        dsl.Z3_OP_BAND,
-        dsl.Z3_OP_BOR,
-        dsl.Z3_OP_BXOR,
+        dsl.Z3OpKind.ADD,
+        dsl.Z3OpKind.MUL,
+        dsl.Z3OpKind.AND,
+        dsl.Z3OpKind.OR,
+        dsl.Z3OpKind.EQ,
+        dsl.Z3OpKind.BADD,
+        dsl.Z3OpKind.BMUL,
+        dsl.Z3OpKind.BAND,
+        dsl.Z3OpKind.BOR,
+        dsl.Z3OpKind.BXOR,
     }
 )
 
@@ -115,7 +115,7 @@ def _collect_all_leaf_signatures(
         if expanded:
             if cid not in sigs:
                 if dsl.is_const(cur):
-                    sigs[cid] = frozenset((cid,)) if cur.decl().kind() == dsl.Z3_OP_UNINTERPRETED else frozenset()
+                    sigs[cid] = frozenset((cid,)) if cur.decl().kind() == dsl.Z3OpKind.UNINTERPRETED else frozenset()
                 elif dsl.is_app(cur) and cur.num_args() > 0:
                     acc: set[int] = set()
                     for i in range(cur.num_args()):
@@ -153,7 +153,7 @@ def _collect_leaf_signature(
             continue
         visited.add(cid)
         if dsl.is_const(cur):
-            if cur.decl().kind() == dsl.Z3_OP_UNINTERPRETED:
+            if cur.decl().kind() == dsl.Z3OpKind.UNINTERPRETED:
                 leaves.add(cid)
             continue
         if dsl.is_app(cur):
@@ -171,7 +171,7 @@ def _is_liftable_subexpr(node: dsl.ExprRef, depth: int, min_depth: int) -> bool:
     if not dsl.is_app(node) or node.num_args() == 0:
         return False
     sk = node.sort().kind()
-    return sk in (dsl.Z3_BV_SORT, dsl.Z3_REAL_SORT, dsl.Z3_INT_SORT, dsl.Z3_BOOL_SORT)
+    return sk in (dsl.Z3SortKind.BV, dsl.Z3SortKind.REAL, dsl.Z3SortKind.INT, dsl.Z3SortKind.BOOL)
 
 
 class ExactCseUnificationPass(Z3QueryPass):
@@ -260,7 +260,7 @@ def _contains_ite(roots: list[dsl.ExprRef], limit: int = 64) -> bool:
             continue
         visited.add(cid)
         if dsl.is_app(cur):
-            if cur.decl().kind() == dsl.Z3_OP_ITE:
+            if cur.decl().kind() == dsl.Z3OpKind.ITE:
                 return True
             for i in range(cur.num_args()):
                 ch = cur.arg(i)
@@ -328,7 +328,7 @@ class _IncrementalWlpSolver:
         if lhs.sort() != rhs.sort():
             return False, (time.perf_counter() - t0) * 1000.0
 
-        if lhs.sort().kind() == dsl.Z3_REAL_SORT and rhs.sort().kind() == dsl.Z3_REAL_SORT:
+        if lhs.sort().kind() == dsl.Z3SortKind.REAL and rhs.sort().kind() == dsl.Z3SortKind.REAL:
             if count_ast_nodes([lhs, rhs], limit=49) <= 48 and not _contains_ite([lhs, rhs]):
                 diff = dsl.simplify(lhs - rhs, som=True, arith_lhs=True)
                 if dsl.is_rational_value(diff) and diff.numerator_as_long() == 0:
@@ -391,7 +391,7 @@ def _same_operator_head(lhs: dsl.ExprRef, rhs: dsl.ExprRef) -> bool:
     lk, rk = ld.kind(), rd.kind()
     if lk != rk:
         return False
-    if lk == dsl.Z3_OP_UNINTERPRETED:
+    if lk == dsl.Z3OpKind.UNINTERPRETED:
         return ld.name() == rd.name()
     if ld.params() != rd.params():
         return False
@@ -457,9 +457,9 @@ def _align_children(
 
 def _are_negated_bools(a: dsl.ExprRef, b: dsl.ExprRef) -> bool:
     """Return True if `a` and `b` are syntactic boolean negations (including Real cmp complements)."""
-    if dsl.is_app(b) and b.decl().kind() == dsl.Z3_OP_NOT and b.num_args() == 1 and a.eq(b.arg(0)):
+    if dsl.is_app(b) and b.decl().kind() == dsl.Z3OpKind.NOT and b.num_args() == 1 and a.eq(b.arg(0)):
         return True
-    if dsl.is_app(a) and a.decl().kind() == dsl.Z3_OP_NOT and a.num_args() == 1 and b.eq(a.arg(0)):
+    if dsl.is_app(a) and a.decl().kind() == dsl.Z3OpKind.NOT and a.num_args() == 1 and b.eq(a.arg(0)):
         return True
     if dsl.is_app(a) and dsl.is_app(b) and a.num_args() == 2 and b.num_args() == 2:
         ak, bk = a.decl().kind(), b.decl().kind()
@@ -468,18 +468,18 @@ def _are_negated_bools(a: dsl.ExprRef, b: dsl.ExprRef) -> bool:
         # (x < y) <-> !(x >= y) <-> !(y <= x); (x <= y) <-> !(x > y) <-> !(y < x)
         if a0.eq(b0) and a1.eq(b1):
             if (ak, bk) in (
-                (dsl.Z3_OP_LT, dsl.Z3_OP_GE),
-                (dsl.Z3_OP_GE, dsl.Z3_OP_LT),
-                (dsl.Z3_OP_LE, dsl.Z3_OP_GT),
-                (dsl.Z3_OP_GT, dsl.Z3_OP_LE),
+                (dsl.Z3OpKind.LT, dsl.Z3OpKind.GE),
+                (dsl.Z3OpKind.GE, dsl.Z3OpKind.LT),
+                (dsl.Z3OpKind.LE, dsl.Z3OpKind.GT),
+                (dsl.Z3OpKind.GT, dsl.Z3OpKind.LE),
             ):
                 return True
         if a0.eq(b1) and a1.eq(b0):
             if (ak, bk) in (
-                (dsl.Z3_OP_LT, dsl.Z3_OP_LE),
-                (dsl.Z3_OP_LE, dsl.Z3_OP_LT),
-                (dsl.Z3_OP_GT, dsl.Z3_OP_GE),
-                (dsl.Z3_OP_GE, dsl.Z3_OP_GT),
+                (dsl.Z3OpKind.LT, dsl.Z3OpKind.LE),
+                (dsl.Z3OpKind.LE, dsl.Z3OpKind.LT),
+                (dsl.Z3OpKind.GT, dsl.Z3OpKind.GE),
+                (dsl.Z3OpKind.GE, dsl.Z3OpKind.GT),
             ):
                 return True
     return False
@@ -542,7 +542,7 @@ def _anti_unify_pair(
 
         matched_ops += 1
         kind = a.decl().kind()
-        if kind == dsl.Z3_OP_ITE and a.num_args() == 3:
+        if kind == dsl.Z3OpKind.ITE and a.num_args() == 3:
             ca, ta, fa = a.arg(0), a.arg(1), a.arg(2)
             cb, tb, fb = b.arg(0), b.arg(1), b.arg(2)
             if ca.eq(cb):

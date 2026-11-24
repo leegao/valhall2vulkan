@@ -64,12 +64,12 @@ def _is_power_of_two(n: int) -> int | None:
 
 _BV_WRAP_KINDS = frozenset(
     {
-        dsl.Z3_OP_EXTRACT, dsl.Z3_OP_ZERO_EXT, dsl.Z3_OP_SIGN_EXT, dsl.Z3_OP_CONCAT,
-        dsl.Z3_OP_BV2INT, dsl.Z3_OP_INT2BV, dsl.Z3_OP_TO_REAL, dsl.Z3_OP_TO_INT,
-        dsl.Z3_OP_SLT, dsl.Z3_OP_SLEQ, dsl.Z3_OP_SGT, dsl.Z3_OP_SGEQ,
-        dsl.Z3_OP_ULT, dsl.Z3_OP_ULEQ, dsl.Z3_OP_UGT, dsl.Z3_OP_UGEQ,
-        dsl.Z3_OP_ITE, dsl.Z3_OP_EQ, dsl.Z3_OP_DISTINCT,
-        dsl.Z3_OP_NOT, dsl.Z3_OP_AND, dsl.Z3_OP_OR,
+        dsl.Z3OpKind.EXTRACT, dsl.Z3OpKind.ZERO_EXT, dsl.Z3OpKind.SIGN_EXT, dsl.Z3OpKind.CONCAT,
+        dsl.Z3OpKind.BV2INT, dsl.Z3OpKind.INT2BV, dsl.Z3OpKind.TO_REAL, dsl.Z3OpKind.TO_INT,
+        dsl.Z3OpKind.SLT, dsl.Z3OpKind.SLEQ, dsl.Z3OpKind.SGT, dsl.Z3OpKind.SGEQ,
+        dsl.Z3OpKind.ULT, dsl.Z3OpKind.ULEQ, dsl.Z3OpKind.UGT, dsl.Z3OpKind.UGEQ,
+        dsl.Z3OpKind.ITE, dsl.Z3OpKind.EQ, dsl.Z3OpKind.DISTINCT,
+        dsl.Z3OpKind.NOT, dsl.Z3OpKind.AND, dsl.Z3OpKind.OR,
     }
 )
 
@@ -226,9 +226,9 @@ def _bv_wrapper_rule(node: dsl.ExprRef) -> dsl.ExprRef | None:
 
 _BV_ALG_KINDS = frozenset(
     {
-        dsl.Z3_OP_BMUL, dsl.Z3_OP_BADD, dsl.Z3_OP_BSUB,
-        dsl.Z3_OP_BSHL, dsl.Z3_OP_BLSHR, dsl.Z3_OP_BASHR,
-        dsl.Z3_OP_BAND, dsl.Z3_OP_BOR, dsl.Z3_OP_BXOR,
+        dsl.Z3OpKind.BMUL, dsl.Z3OpKind.BADD, dsl.Z3OpKind.BSUB,
+        dsl.Z3OpKind.BSHL, dsl.Z3OpKind.BLSHR, dsl.Z3OpKind.BASHR,
+        dsl.Z3OpKind.BAND, dsl.Z3OpKind.BOR, dsl.Z3OpKind.BXOR,
     }
 )
 

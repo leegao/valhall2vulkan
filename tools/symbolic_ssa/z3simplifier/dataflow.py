@@ -360,7 +360,7 @@ def _rewrite_with_dataflow(
                         kb_map[cid] = KnownBits.const(cur.as_long(), cur.size())
                     continue
 
-                if cur.decl().kind() == dsl.Z3_OP_ITE and cur.num_args() == 3:
+                if cur.decl().kind() == dsl.Z3OpKind.ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True:
                         stack.append((cur, True))
@@ -379,7 +379,7 @@ def _rewrite_with_dataflow(
                     if ch.get_id() not in memo:
                         stack.append((ch, False))
             else:
-                if cur.decl().kind() == dsl.Z3_OP_ITE and cur.num_args() == 3:
+                if cur.decl().kind() == dsl.Z3OpKind.ITE and cur.num_args() == 3:
                     cond_b = env.lookup_bool(cur.arg(0))
                     if cond_b is True and cur.arg(1).get_id() in memo:
                         memo[cid] = memo[cur.arg(1).get_id()]

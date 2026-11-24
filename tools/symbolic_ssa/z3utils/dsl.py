@@ -25,8 +25,6 @@ from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union
 
 import z3
 
-from z3.z3consts import *
-
 
 class Z3OpKind(IntEnum):
     """Auto-generated from `dir(z3)` `Z3_OP_*` constants."""
