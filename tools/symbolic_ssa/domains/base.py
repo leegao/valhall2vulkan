@@ -451,7 +451,7 @@ class SsaDomain(Generic[V], abc.ABC):
         return self.hw_uf(None, f"fp_{op}", a, b)
 
     def fp_clamp(self, x: Any, lo: Any, hi: Any) -> Any:
-        return self.fp_binary("FMin", self.fp_binary("FMax", x, lo), hi)
+        return self.fp_binary("NMin", self.fp_binary("NMax", x, lo), hi)
 
     def fp_fma(self, a: Any, b: Any, c: Any) -> Any:
         return self.fp_binary("FAdd", self.fp_binary("FMul", a, b), c)

@@ -88,6 +88,7 @@ SSA_OP_DEFAULTS = {
     "FNeg": "F32",
     "FClamp": "F32",
     "FMax": "F32",
+    "NMax": "F32",
     "VecConstruct2": "V2F32",
     "VecConstruct4": "V4U32",
 }
@@ -235,7 +236,7 @@ class _DslToCppAst:
             self._node_idx += 1
             nv = f"_n{self._node_idx}"
             vt = vt_hint or SSA_OP_DEFAULTS.get(expr.op, "U32")
-            if vt_hint is None and expr.op in ("VecConstruct2", "FClamp", "FMax", "FAbs", "FNeg"):
+            if vt_hint is None and expr.op in ("VecConstruct2", "FClamp", "FMax", "NMax", "FAbs", "FNeg"):
                 if expr.args and isinstance(expr.args[0], VarRef):
                     at = env_types.get(expr.args[0].name)
                     if at in DSL_VALTYPE_MAP:

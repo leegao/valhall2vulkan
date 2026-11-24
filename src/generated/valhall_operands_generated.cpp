@@ -549,8 +549,8 @@ SsaId apply_f32_clamp(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&
         return ctx.sb.emit(blk, std::move(_n48));
     } else if (abi::has_clamp_0_inf(ctx, blk, ins, rule)) {
         SsaNode _n49{};
-        _n49.op = tables::SsaOp::FMax;
-        _n49.type = ValType::F32;
+        _n49.op = tables::SsaOp::NMax;
+        _n49.type = ValType::U32;
         _n49.args = { val_f32, abi::f32_bits(ctx, blk, ins, rule, 0) };
         _n49.effects.flags |= EffectSet::kFlagUsesGlsl450;
         return ctx.sb.emit(blk, std::move(_n49));
@@ -610,8 +610,8 @@ SsaId apply_v2f16_clamp(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
         _n56.effects.flags |= EffectSet::kFlagUsesGlsl450;
         SsaId vz = ctx.sb.emit(blk, std::move(_n56));
         SsaNode _n57{};
-        _n57.op = tables::SsaOp::FMax;
-        _n57.type = ValType::F32;
+        _n57.op = tables::SsaOp::NMax;
+        _n57.type = ValType::U32;
         _n57.args = { vec2_f32, vz };
         _n57.effects.flags |= EffectSet::kFlagUsesGlsl450;
         return ctx.sb.emit(blk, std::move(_n57));

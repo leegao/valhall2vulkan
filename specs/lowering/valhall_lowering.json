@@ -525,7 +525,7 @@
         "} else if (@has_clamp_m1_1()) {",
         "  return FClamp(%val_f32, @f32_bits(0xbf800000u), @f32_bits(0x3f800000u));",
         "} else if (@has_clamp_0_inf()) {",
-        "  return FMax(%val_f32, @f32_bits(0));",
+        "  return NMax(%val_f32, @f32_bits(0));",
         "}",
         "return %val_f32;"
       ],
@@ -555,7 +555,7 @@
         "} else if (@has_clamp_0_inf()) {",
         "  %z : f32 = @f32_bits(0);",
         "  %vz : v2f32 = VecConstruct2(%z, %z);",
-        "  return FMax(%vec2_f32, %vz);",
+        "  return NMax(%vec2_f32, %vz);",
         "}",
         "return %vec2_f32;"
       ],
@@ -2117,8 +2117,8 @@
         "%out : f32 = %exp_val;",
         "if ($has_src1) {",
         "  %not_nan : bool = FCmpOrdEq(%1, %1);",
-        "  %is_ovf : bool = FCmpOrdGe(%1, #f32(128.0));",
-        "  %is_udf : bool = FCmpOrdLe(%1, #f32(-150.0));",
+        "  %is_ovf : bool = FCmpOrdGe(%1, #f32(2147483648.0));",
+        "  %is_udf : bool = FCmpOrdLe(%1, #f32(-2516582400.0));",
         "  %r_udf : f32 = Select(%is_udf, #f32(0.0), %exp_val);",
         "  %r_ovf : f32 = Select(%is_ovf, #f32_bits(0x7f800000), %r_udf);",
         "  %out = Select(%not_nan, %r_ovf, #f32_bits(0x7fc00000));",

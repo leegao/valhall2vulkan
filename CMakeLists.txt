@@ -418,6 +418,12 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_test(
+    NAME test_v40_clamp_idvs_fexp
+    COMMAND ${Python3_EXECUTABLE} -m unittest tools.symbolic_ssa.test_v40_clamp_idvs_fexp
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

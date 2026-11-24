@@ -499,19 +499,63 @@ bool correction_uses_cody_waite_residual(const ValhallSsaModule& mod,
 ///     where `inv_w = FDiv(1.0, w)`, reconstruct clip-space `VecConstruct4(x, y, z, w)`.
 bool canonicalize_vertex_viewport_epilogue(ValhallSsaModule& mod, FpOptResult& result) {
     bool any_changed = false;
-    auto is_screen_space_pos_vec = [&](SsaId vec_id, SsaId* out_inv_w) -> bool {
+    auto unwrap_bc = [&](SsaId id) -> SsaId {
+        for (int depth = 0; depth < 8 && id != kInvalidSsa; ++depth) {
+            const auto& n = mod.get(id);
+            if ((n.op == SsaOp::Copy || n.op == SsaOp::Bitcast) && !n.args.empty()) {
+                id = n.args[0];
+            } else {
+                break;
+            }
+        }
+        return id;
+    };
+    auto is_rcp_f32 = [&](SsaId id) -> bool {
+        id = unwrap_bc(id);
+        if (id == kInvalidSsa || mod.get(id).op != SsaOp::FDiv || mod.get(id).args.size() != 2) {
+            return false;
+        }
+        return is_const_f32_bits(mod, mod.get(id).args[0], 0x3f800000u);
+    };
+    auto is_screen_space_pos_vec = [&](SsaId vec_id, SsaId* out_inv_w, SsaId* out_orig_w) -> bool {
         vec_id = unwrap_copies(mod, vec_id);
         if (vec_id == kInvalidSsa || mod.get(vec_id).op != SsaOp::VecConstruct4 ||
             mod.get(vec_id).args.size() != 4) {
             return false;
         }
-        SsaId w_id = unwrap_copies(mod, mod.get(vec_id).args[3]);
-        if (w_id == kInvalidSsa || mod.get(w_id).op != SsaOp::FDiv || mod.get(w_id).args.size() != 2) {
-            return false;
+        SsaId w_id = unwrap_bc(mod.get(vec_id).args[3]);
+        if (w_id == kInvalidSsa) return false;
+        if (is_rcp_f32(w_id)) {
+            *out_inv_w = w_id;
+            if (out_orig_w) *out_orig_w = unwrap_copies(mod, mod.get(w_id).args[1]);
+            return true;
         }
-        if (!is_const_f32_bits(mod, mod.get(w_id).args[0], 0x3f800000u)) return false;
-        *out_inv_w = w_id;
-        return true;
+        // Mali IDVS guardband epilogue: Select(FCmpOrdLt(orig_w, 0.0), FNeg(rcp), rcp).
+        const auto& wn = mod.get(w_id);
+        if (wn.op == SsaOp::Select && wn.args.size() == 3) {
+            SsaId t_id = unwrap_bc(wn.args[1]);
+            SsaId f_id = unwrap_bc(wn.args[2]);
+            bool neg_then_pos = (t_id != kInvalidSsa && mod.get(t_id).op == SsaOp::FNeg &&
+                                 !mod.get(t_id).args.empty() &&
+                                 unwrap_bc(mod.get(t_id).args[0]) == f_id && is_rcp_f32(f_id));
+            bool pos_then_neg = (f_id != kInvalidSsa && mod.get(f_id).op == SsaOp::FNeg &&
+                                 !mod.get(f_id).args.empty() &&
+                                 unwrap_bc(mod.get(f_id).args[0]) == t_id && is_rcp_f32(t_id));
+            if (neg_then_pos || pos_then_neg) {
+                *out_inv_w = w_id;
+                if (out_orig_w) {
+                    SsaId c_id = unwrap_copies(mod, wn.args[0]);
+                    if (c_id != kInvalidSsa && mod.get(c_id).op == SsaOp::FCmpOrdLt &&
+                        mod.get(c_id).args.size() == 2) {
+                        *out_orig_w = unwrap_copies(mod, mod.get(c_id).args[0]);
+                    } else {
+                        *out_orig_w = kInvalidSsa;
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
     };
 
     for (size_t b = 0; b < mod.blocks.size(); ++b) {
@@ -533,7 +577,7 @@ bool canonicalize_vertex_viewport_epilogue(ValhallSsaModule& mod, FpOptResult& r
                 SsaId sid = pos_stores[idx];
                 const auto& st = mod.get(sid);
                 SsaId inv_w = kInvalidSsa;
-                if (is_screen_space_pos_vec(st.args[0], &inv_w)) {
+                if (is_screen_space_pos_vec(st.args[0], &inv_w, nullptr)) {
                     tok_remap[sid] = st.args[1];
                     auto& mut = mod.get_mut(sid);
                     mut.op = SsaOp::Nop;
@@ -558,8 +602,8 @@ bool canonicalize_vertex_viewport_epilogue(ValhallSsaModule& mod, FpOptResult& r
         SsaId sid = pos_stores[0];
         SsaId vec_id = unwrap_copies(mod, mod.get(sid).args[0]);
         SsaId inv_w = kInvalidSsa;
-        if (!is_screen_space_pos_vec(vec_id, &inv_w)) continue;
-        SsaId orig_w = unwrap_copies(mod, mod.get(inv_w).args[1]);
+        SsaId orig_w = kInvalidSsa;
+        if (!is_screen_space_pos_vec(vec_id, &inv_w, &orig_w)) continue;
         auto extract_clip_xy = [&](SsaId coord_id) -> SsaId {
             coord_id = unwrap_copies(mod, coord_id);
             if (coord_id == kInvalidSsa || mod.get(coord_id).op != SsaOp::Fma || mod.get(coord_id).args.size() != 3) {
@@ -588,6 +632,16 @@ bool canonicalize_vertex_viewport_epilogue(ValhallSsaModule& mod, FpOptResult& r
                 return kInvalidSsa;
             }
             SsaId ndc_z = unwrap_copies(mod, mod.get(z_id).args[0]);
+            if (ndc_z != kInvalidSsa && mod.get(ndc_z).op == SsaOp::Bitcast && !mod.get(ndc_z).args.empty()) {
+                ndc_z = unwrap_copies(mod, mod.get(ndc_z).args[0]);
+            }
+            if (ndc_z != kInvalidSsa && mod.get(ndc_z).op == SsaOp::Select && mod.get(ndc_z).args.size() == 3) {
+                SsaId b1 = unwrap_copies(mod, mod.get(ndc_z).args[1]);
+                if (b1 != kInvalidSsa && mod.get(b1).op == SsaOp::Bitcast && !mod.get(b1).args.empty()) {
+                    b1 = unwrap_copies(mod, mod.get(b1).args[0]);
+                }
+                ndc_z = b1;
+            }
             if (ndc_z != kInvalidSsa && mod.get(ndc_z).op == SsaOp::FClamp && !mod.get(ndc_z).args.empty()) {
                 ndc_z = unwrap_copies(mod, mod.get(ndc_z).args[0]);
             }

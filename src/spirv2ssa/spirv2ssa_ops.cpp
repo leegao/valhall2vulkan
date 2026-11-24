@@ -212,7 +212,7 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
         case kGlslLog2: emit_unary(SsaOp::Log2); break;
         case kGlslSqrt: emit_unary(SsaOp::Sqrt); break;
         case kGlslInverseSqrt: emit_unary(SsaOp::InverseSqrt); break;
-        case kGlslFMin: emit_binary(SsaOp::FMin); break;
+        case kGlslFMin: emit_binary(SsaOp::NMin); break;
         case kGlslUMin: {
             LoweredValue a = arg_val(0), b = arg_val(1);
             for (uint32_t i = 0; i < nlanes; ++i) {
@@ -229,7 +229,7 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
             }
             break;
         }
-        case kGlslFMax: emit_binary(SsaOp::FMax); break;
+        case kGlslFMax: emit_binary(SsaOp::NMax); break;
         case kGlslUMax: {
             LoweredValue a = arg_val(0), b = arg_val(1);
             for (uint32_t i = 0; i < nlanes; ++i) {
