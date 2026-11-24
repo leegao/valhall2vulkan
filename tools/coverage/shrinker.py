@@ -139,13 +139,26 @@ def align_vertex_gl_position(
         return d_out
 
     cx, cy, cz, cw = (_u32_to_f32(_c_u32(d_out[k])) for k in keys)
-    if math.isnan(cw):
+    # Exact Mali Position FIFO epilogue (`gl_mali_ViewportTransform`):
+    #   r0 = (|x| + |y| + |z|) * 0x272428e0
+    #   r1 = FMAX.nan_propagate(|w|, 0.0f)
+    #   denom = FMAX.nan_propagate(r0, r1)
+    #   inv_w = (w < 0.0f) ? -(1.0f / denom) : (1.0f / denom)
+    #   z_out = (|z| > |w|) ? (z * inv_w) : clamp_m1_1(z * inv_w)
+    # Note: because r0 includes |x|+|y|+|z| via FMAX.nan_propagate, a NaN in ANY
+    # clip-space coordinate propagates into inv_w and all four output lanes.
+    eps = _u32_to_f32(0x272428E0)
+    r0 = abs(cx) * eps + abs(cy) * eps + abs(cz) * eps
+    aw = abs(cw)
+    if math.isnan(r0) or math.isnan(aw):
         inv_w = float("nan")
-    elif cw == 0.0:
-        # Mali clamps |w| below via FMAX(|w|, k0fr2f) before FRCP, producing finite/inf reciprocal with sign of w.
-        inv_w = math.copysign(float("inf"), cw)
     else:
-        inv_w = 1.0 / cw
+        denom = max(r0, aw, 0.0)
+        if denom == 0.0:
+            inv_w_abs = float("inf")
+        else:
+            inv_w_abs = 1.0 / denom
+        inv_w = -inv_w_abs if (cw < 0.0) else inv_w_abs
 
     # Identity viewport from ShaderEnvBase: scale=(1,1,1), bias=(0,0,0)
     x_vp = cx * inv_w
@@ -156,13 +169,20 @@ def align_vertex_gl_position(
     else:
         z_clamped = max(-1.0, min(1.0, z_ndc))
 
-    u_z_clamped = _f32_to_u32(z_clamped)
-    u_z_unclamped = _f32_to_u32(z_ndc)
-    vz = v_out[keys[2]]
-    if classify_value_diff(u_z_unclamped, vz, keys[2], policy=policy)[0] != "REAL_DIVERGENCE":
-        u_z_out = u_z_unclamped
+    # Mali selects unclamped z_ndc when |z| > |w|, else clamp_m1_1(z_ndc).
+    if not math.isnan(cz) and not math.isnan(cw) and abs(cz) > abs(cw):
+        z_pref = z_ndc
     else:
-        u_z_out = u_z_clamped
+        z_pref = z_clamped
+    u_z_pref = _f32_to_u32(z_pref)
+    u_z_alt = _f32_to_u32(z_ndc if z_pref is z_clamped else z_clamped)
+    vz = v_out[keys[2]]
+    if classify_value_diff(u_z_pref, vz, keys[2], policy=policy)[0] != "REAL_DIVERGENCE":
+        u_z_out = u_z_pref
+    elif classify_value_diff(u_z_alt, vz, keys[2], policy=policy)[0] != "REAL_DIVERGENCE":
+        u_z_out = u_z_alt
+    else:
+        u_z_out = u_z_pref
 
     out = dict(d_out)
     out[keys[0]] = _f32_to_u32(x_vp)

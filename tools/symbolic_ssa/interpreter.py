@@ -606,7 +606,15 @@ class SsaInterpreter(Generic[V]):
             return self.domain.extract_lane(args[0], imm_u32)
         if op == "VecShuffle":
             return self.domain.shuffle_lanes(args[0], args[1], (imm_u32, imm_u32_2))
-        if op in ("Pack64", "ImageTexelAddr"):
+        if op == "Pack64":
+            return self.pack64(args[0], args[1])
+        if op == "ImageTexelAddr":
+            if aux_str:
+                if self._env is not None:
+                    base_hi = (self._env.get_buf_base(aux_str) >> 32) & 0xFFFFFFFF
+                    x_off = self.int32_binary("BitAnd", args[0], self.const_u32(0xFFFF))
+                    return self.pack64(x_off, self.const_u32(base_hi))
+                return self.default_value()
             return self.pack64(args[0], args[1])
         if op == "Split64":
             return self.split64(args[0])

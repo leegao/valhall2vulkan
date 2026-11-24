@@ -150,8 +150,9 @@ class TestV36ConcolicAndLoweringFixes(unittest.TestCase):
             overrides={"bi_19_0": _f32_to_u32(0.25), "bi_19_1": _f32_to_u32(0.75)},
         )
         _, outs = ConcreteSsaInterpreter(ssa, is_valhall_side=True).evaluate(env)
-        self.assertEqual(outs["frag_color[0].r"], _f32_to_u32(0.25))
-        self.assertEqual(outs["frag_color[0].g"], _f32_to_u32(0.75))
+        # Mali's `sample` table packs (x, y) as Q8.8 signed 16-bit halfwords: (192 << 16) | 64
+        self.assertEqual(outs["frag_color[0].r"] & 0xFFFF, 64)
+        self.assertEqual((outs["frag_color[0].r"] >> 16) & 0xFFFF, 192)
 
         # Symbolic env precondition links mem_gl_SamplePosition[0, 4] to bi_19_0, bi_19_1
         senv = SymbolicShaderEnv(_empty_bundle("Fragment"))

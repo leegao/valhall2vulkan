@@ -867,6 +867,13 @@
     "load_frag_special": {
       "ret": "SsaId",
       "args": []
+    },
+    "lea_tex": {
+      "ret": "SsaId",
+      "args": [
+        "SsaId",
+        "SsaId"
+      ]
     }
   },
   "lookup_tables": {
@@ -2084,7 +2091,16 @@
       "inline_ops": [
         "%qf : f32 = ConvertSToF(%0);",
         "%scaled : f32 = Ldexp(%qf, #s32(-24));",
-        "%out : f32 = Exp2(%scaled);"
+        "%exp_val : f32 = Exp2(%scaled);",
+        "%out : f32 = %exp_val;",
+        "if ($has_src1) {",
+        "  %not_nan : bool = FCmpOrdEq(%1, %1);",
+        "  %is_ovf : bool = FCmpOrdGe(%1, #f32(128.0));",
+        "  %is_udf : bool = FCmpOrdLe(%1, #f32(-150.0));",
+        "  %r_udf : f32 = Select(%is_udf, #f32(0.0), %exp_val);",
+        "  %r_ovf : f32 = Select(%is_ovf, #f32_bits(0x7f800000), %r_udf);",
+        "  %out = Select(%not_nan, %r_ovf, #f32_bits(0x7fc00000));",
+        "}"
       ]
     },
     {
@@ -2150,10 +2166,12 @@
         "%m : f32 = Select(%is_norm, %red_f, %0);",
         "%denom : f32 = FSub(%m, #f32(1.0));",
         "%is_one : bool = FCmpOrdEq(%m, #f32(1.0));",
+        "%is_pinf : bool = FCmpOrdEq(%0, #f32_bits(0x7f800000));",
         "%log2m : f32 = Log2(%m);",
         "%quot : f32 = FDiv(%log2m, %denom);",
         "%inv_ln2 : f32 = #f32_bits(0x3fb8aa3b);",
-        "%out : f32 = Select(%is_one, %inv_ln2, %quot);"
+        "%r1 : f32 = Select(%is_one, %inv_ln2, %quot);",
+        "%out : f32 = Select(%is_pinf, #f32_bits(0x7f800000), %r1);"
       ]
     },
     {
@@ -5985,7 +6003,7 @@
         "%xy : u32 = %0;",
         "%z_layer : u32 = #u32(0);",
         "if ($has_src1) { %z_layer = %1; }",
-        "%taddr : u64 = ImageTexelAddr(%xy, %z_layer);",
+        "%taddr : u64 = @lea_tex(%xy, %z_layer);",
         "%lo : u32 = @split64_lo(%taddr);",
         "%hi : u32 = @split64_hi(%taddr);",
         "@sr_set(0, %lo);",
@@ -6013,7 +6031,7 @@
         "%xy : u32 = %0;",
         "%z_layer : u32 = #u32(0);",
         "if ($has_src1) { %z_layer = %1; }",
-        "%taddr : u64 = ImageTexelAddr(%xy, %z_layer);",
+        "%taddr : u64 = @lea_tex(%xy, %z_layer);",
         "%lo : u32 = @split64_lo(%taddr);",
         "%hi : u32 = @split64_hi(%taddr);",
         "@sr_set(0, %lo);",

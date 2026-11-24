@@ -1027,7 +1027,7 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
 
     const auto op = static_cast<SpvOp>(inst.opcode);
     SsaNode ts{};
-    if (op == SpvOpImageFetch) {
+    if (op == SpvOpImageFetch || op == SpvOpImageRead) {
         ts.op = SsaOp::TexFetch;
     } else if (op == SpvOpImageGather || op == SpvOpImageDrefGather) {
         ts.op = SsaOp::TexGather;
@@ -1099,7 +1099,8 @@ void SpirvLowerer::lower_image_write(uint32_t blk_id, const SpirvInst& inst) {
     }
 
     // Represent image stores via PsbStore on a synthetic image buffer key indexed by packed (x,y).
-    SsaId x = !coord.lanes.empty() ? coord.lanes[0] : sb_.emit_const_u32(blk_id, 0u);
+    SsaId x_raw = !coord.lanes.empty() ? coord.lanes[0] : sb_.emit_const_u32(blk_id, 0u);
+    SsaId x = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, x_raw), sb_.emit_const_u32(blk_id, 0xFFFFu)});
     SsaId y = (coord.lanes.size() >= 2) ? coord.lanes[1] : sb_.emit_const_u32(blk_id, 0u);
     SsaId xy = emit_op(blk_id, SsaOp::Pack64, ValType::U64, {x, y});
     for (uint32_t c = 0; c < texel.lanes.size(); ++c) {

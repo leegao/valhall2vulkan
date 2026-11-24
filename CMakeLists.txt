@@ -402,6 +402,11 @@ add_test(NAME test_v36_concolic_and_lowering
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME test_v37_sweep_and_fba18fbe
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/symbolic_ssa/test_v37_sweep_and_fba18fbe.py
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

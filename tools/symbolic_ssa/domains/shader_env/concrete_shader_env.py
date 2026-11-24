@@ -50,6 +50,11 @@ class ConcreteShaderEnv(ShaderEnvBase):
         if name in self.overrides:
             v = self.overrides[name]
             return (1 if v else 0) if isinstance(v, bool) else (int(v) & MASK32)
+        if name in ("bi_19_0", "bi_19_1"):
+            # Vulkan gl_SamplePosition lies on a subpixel grid in [0.0, 1.0);
+            # using 1/256 granularity ensures exact Q8.8 fixed-point round-trip in Mali's sample table.
+            h = _det_hash_u32(name, self.seed, self.vec_idx)
+            return _f32_to_u32((h & 0xFF) / 256.0)
         if self.vec_idx < len(_CORNER_U32S):
             h = _det_hash_u32(name, self.seed, self.vec_idx)
             if (h & 3) == 0:
@@ -62,9 +67,18 @@ class ConcreteShaderEnv(ShaderEnvBase):
 
     def read_init_buf(self, bkey: str, off32: int) -> int:
         if bkey == "gl_SamplePosition":
-            # Valhall sample position table stores (x, y) float32 pairs per sample; align with bi_19 (SpvBuiltInSamplePosition).
-            lane = (off32 >> 2) & 1
-            return self.sample_u32(f"bi_19_{lane}")
+            # Valhall's `sample` sideband table packs each sample's (x, y) as two signed 16-bit Q8.8
+            # fixed-point integers in one 32-bit word (`h0 = x * 256`, `h1 = y * 256`), which the
+            # shader unpacks via `S16_TO_F32(h0/h1) * (1/256)`.
+            import math
+            import struct
+            ux = self.sample_u32("bi_19_0")
+            uy = self.sample_u32("bi_19_1")
+            fx = struct.unpack("<f", struct.pack("<I", ux))[0]
+            fy = struct.unpack("<f", struct.pack("<I", uy))[0]
+            sx = 0 if (math.isnan(fx) or math.isinf(fx)) else max(-32768, min(32767, round(fx * 256.0)))
+            sy = 0 if (math.isnan(fy) or math.isinf(fy)) else max(-32768, min(32767, round(fy * 256.0)))
+            return ((sy & 0xFFFF) << 16) | (sx & 0xFFFF)
         if bkey == "pilot_srt_0":
             rack = off32 // 16
             rem = off32 % 16

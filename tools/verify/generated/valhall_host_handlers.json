@@ -1,5 +1,5 @@
 {
-  "function_count": 119,
+  "function_count": 120,
   "functions": [
     {
       "body": [
@@ -72013,6 +72013,671 @@
       "short_namespace": "abi",
       "source_file": "src/valhall_pass1_handlers.cpp",
       "start_line": 1051
+    },
+    {
+      "body": [
+        {
+          "canonical_type": "valhall::compiler::SsaNode",
+          "init": {
+            "canonical_type": "valhall::compiler::SsaNode",
+            "items": [
+              {
+                "canonical_type": "const unsigned int",
+                "kind": "ident",
+                "loc": {
+                  "col": 16,
+                  "line": 46
+                },
+                "name": "kInvalidSsa",
+                "type": "const SsaId"
+              },
+              {
+                "canonical_type": "valhall::tables::SsaOp",
+                "kind": "scoped_ident",
+                "loc": {
+                  "col": 24,
+                  "line": 47
+                },
+                "parts": [
+                  "valhall",
+                  "tables",
+                  "SsaOp",
+                  "Nop"
+                ],
+                "qualified_name": "valhall::tables::SsaOp::Nop",
+                "type": "valhall::tables::SsaOp"
+              },
+              {
+                "canonical_type": "valhall::compiler::ValType",
+                "kind": "scoped_ident",
+                "loc": {
+                  "col": 20,
+                  "line": 48
+                },
+                "parts": [
+                  "valhall",
+                  "compiler",
+                  "ValType",
+                  "Void"
+                ],
+                "qualified_name": "valhall::compiler::ValType::Void",
+                "type": "valhall::compiler::ValType"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 25,
+                  "line": 49
+                },
+                "type": "int",
+                "value": "0"
+              },
+              {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 29,
+                  "line": 50
+                },
+                "type": "bool",
+                "value": false
+              },
+              {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 27,
+                  "line": 51
+                },
+                "type": "bool",
+                "value": false
+              },
+              {
+                "canonical_type": "std::vector<unsigned int>",
+                "items": [],
+                "kind": "init_list",
+                "loc": {
+                  "col": 16,
+                  "line": 713
+                },
+                "type": "std::vector<SsaId>"
+              },
+              {
+                "canonical_type": "std::vector<valhall::compiler::PhiIncoming>",
+                "items": [],
+                "kind": "init_list",
+                "loc": {
+                  "col": 16,
+                  "line": 713
+                },
+                "type": "std::vector<PhiIncoming>"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 57
+                },
+                "type": "int",
+                "value": "0"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 58
+                },
+                "type": "int",
+                "value": "0"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 26,
+                  "line": 59
+                },
+                "type": "int",
+                "value": "0"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 26,
+                  "line": 60
+                },
+                "type": "int",
+                "value": "0"
+              },
+              {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 21,
+                  "line": 61
+                },
+                "type": "bool",
+                "value": false
+              },
+              {
+                "canonical_type": "bool",
+                "kind": "literal",
+                "lit_kind": "bool",
+                "loc": {
+                  "col": 22,
+                  "line": 62
+                },
+                "type": "bool",
+                "value": false
+              },
+              {
+                "canonical_type": "std::basic_string<char>",
+                "items": [],
+                "kind": "init_list",
+                "loc": {
+                  "col": 16,
+                  "line": 713
+                },
+                "type": "std::string"
+              },
+              {
+                "canonical_type": "valhall::tables::EffectMask",
+                "items": [
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 25,
+                      "line": 413
+                    },
+                    "type": "int",
+                    "value": "0"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 25,
+                      "line": 414
+                    },
+                    "type": "int",
+                    "value": "0"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 26,
+                      "line": 415
+                    },
+                    "type": "int",
+                    "value": "0"
+                  },
+                  {
+                    "canonical_type": "int",
+                    "int_value": 0,
+                    "kind": "literal",
+                    "lit_kind": "int",
+                    "loc": {
+                      "col": 22,
+                      "line": 416
+                    },
+                    "type": "int",
+                    "value": "0"
+                  }
+                ],
+                "kind": "init_list",
+                "loc": {
+                  "col": 31,
+                  "line": 66
+                },
+                "type": "tables::EffectMask"
+              },
+              {
+                "canonical_type": "int",
+                "kind": "unary",
+                "loc": {
+                  "col": 29,
+                  "line": 69
+                },
+                "op": "-",
+                "operand": {
+                  "canonical_type": "int",
+                  "int_value": 1,
+                  "kind": "literal",
+                  "lit_kind": "int",
+                  "loc": {
+                    "col": 30,
+                    "line": 69
+                  },
+                  "type": "int",
+                  "value": "1"
+                },
+                "postfix": false,
+                "type": "int"
+              },
+              {
+                "canonical_type": "int",
+                "int_value": 0,
+                "kind": "literal",
+                "lit_kind": "int",
+                "loc": {
+                  "col": 24,
+                  "line": 70
+                },
+                "type": "int",
+                "value": "0"
+              }
+            ],
+            "kind": "init_list",
+            "loc": {
+              "col": 15,
+              "line": 713
+            },
+            "type": "SsaNode"
+          },
+          "is_struct_zero": false,
+          "kind": "var_decl",
+          "loc": {
+            "col": 13,
+            "line": 713
+          },
+          "name": "st",
+          "type": "SsaNode"
+        },
+        {
+          "expr": {
+            "canonical_type": "valhall::tables::SsaOp",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 714
+            },
+            "op": "=",
+            "target": {
+              "canonical_type": "valhall::tables::SsaOp",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 714
+              },
+              "member": "op",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 714
+                },
+                "name": "st",
+                "type": "SsaNode"
+              },
+              "type": "tables::SsaOp"
+            },
+            "type": "tables::SsaOp",
+            "value": {
+              "canonical_type": "valhall::tables::SsaOp",
+              "kind": "scoped_ident",
+              "loc": {
+                "col": 13,
+                "line": 714
+              },
+              "parts": [
+                "valhall",
+                "tables",
+                "SsaOp",
+                "ImageTexelAddr"
+              ],
+              "qualified_name": "valhall::tables::SsaOp::ImageTexelAddr",
+              "type": "valhall::tables::SsaOp"
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 714
+          }
+        },
+        {
+          "expr": {
+            "canonical_type": "valhall::compiler::ValType",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 715
+            },
+            "op": "=",
+            "target": {
+              "canonical_type": "valhall::compiler::ValType",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 715
+              },
+              "member": "type",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 715
+                },
+                "name": "st",
+                "type": "SsaNode"
+              },
+              "type": "ValType"
+            },
+            "type": "ValType",
+            "value": {
+              "canonical_type": "valhall::compiler::ValType",
+              "kind": "scoped_ident",
+              "loc": {
+                "col": 15,
+                "line": 715
+              },
+              "parts": [
+                "valhall",
+                "compiler",
+                "ValType",
+                "U64"
+              ],
+              "qualified_name": "valhall::compiler::ValType::U64",
+              "type": "valhall::compiler::ValType"
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 715
+          }
+        },
+        {
+          "expr": {
+            "canonical_type": "std::vector<unsigned int>",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 718
+            },
+            "op": "=",
+            "target": {
+              "canonical_type": "std::vector<unsigned int>",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 718
+              },
+              "member": "args",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 718
+                },
+                "name": "st",
+                "type": "SsaNode"
+              },
+              "type": "std::vector<SsaId>"
+            },
+            "type": "vector<unsigned int>",
+            "value": {
+              "canonical_type": "const unsigned int[2]",
+              "items": [
+                {
+                  "canonical_type": "unsigned int",
+                  "kind": "ident",
+                  "loc": {
+                    "col": 17,
+                    "line": 718
+                  },
+                  "name": "xy",
+                  "type": "SsaId"
+                },
+                {
+                  "canonical_type": "unsigned int",
+                  "kind": "ident",
+                  "loc": {
+                    "col": 26,
+                    "line": 718
+                  },
+                  "name": "z_layer",
+                  "type": "SsaId"
+                }
+              ],
+              "kind": "init_list",
+              "loc": {
+                "col": 15,
+                "line": 718
+              },
+              "type": "const value_type[2]"
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 718
+          }
+        },
+        {
+          "expr": {
+            "canonical_type": "bool",
+            "kind": "assign",
+            "loc": {
+              "col": 5,
+              "line": 719
+            },
+            "op": "=",
+            "target": {
+              "canonical_type": "bool",
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 5,
+                "line": 719
+              },
+              "member": "is_barrier_or_cf",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "ident",
+                "loc": {
+                  "col": 5,
+                  "line": 719
+                },
+                "name": "st",
+                "type": "SsaNode"
+              },
+              "type": "bool"
+            },
+            "type": "bool",
+            "value": {
+              "canonical_type": "bool",
+              "kind": "literal",
+              "lit_kind": "bool",
+              "loc": {
+                "col": 27,
+                "line": 719
+              },
+              "type": "bool",
+              "value": true
+            }
+          },
+          "kind": "expr_stmt",
+          "loc": {
+            "col": 5,
+            "line": 719
+          }
+        },
+        {
+          "expr": {
+            "args": [
+              {
+                "canonical_type": "unsigned int",
+                "kind": "ident",
+                "loc": {
+                  "col": 24,
+                  "line": 721
+                },
+                "name": "blk",
+                "type": "uint32_t"
+              },
+              {
+                "args": [
+                  {
+                    "canonical_type": "valhall::compiler::SsaNode",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 39,
+                      "line": 721
+                    },
+                    "name": "st",
+                    "type": "SsaNode"
+                  }
+                ],
+                "callee": {
+                  "canonical_type": "<builtin fn type>",
+                  "kind": "scoped_ident",
+                  "loc": {
+                    "col": 29,
+                    "line": 721
+                  },
+                  "parts": [
+                    "std",
+                    "move"
+                  ],
+                  "qualified_name": "std::move",
+                  "type": "<builtin fn type>"
+                },
+                "canonical_type": "valhall::compiler::SsaNode",
+                "kind": "call",
+                "loc": {
+                  "col": 29,
+                  "line": 721
+                },
+                "qualified_callee": "std::move",
+                "template_args": [
+                  "valhall::compiler::SsaNode &"
+                ],
+                "type": "typename std::remove_reference<valhall::compiler::SsaNode &>::type"
+              }
+            ],
+            "callee": {
+              "is_arrow": false,
+              "kind": "member",
+              "loc": {
+                "col": 12,
+                "line": 721
+              },
+              "member": "emit",
+              "obj": {
+                "canonical_type": "valhall::compiler::SsaBuilder",
+                "is_arrow": false,
+                "kind": "member",
+                "loc": {
+                  "col": 12,
+                  "line": 721
+                },
+                "member": "sb",
+                "obj": {
+                  "canonical_type": "valhall::compiler::Pass1Context",
+                  "kind": "ident",
+                  "loc": {
+                    "col": 12,
+                    "line": 721
+                  },
+                  "name": "ctx",
+                  "type": "Pass1Context"
+                },
+                "type": "SsaBuilder"
+              }
+            },
+            "canonical_type": "unsigned int",
+            "kind": "call",
+            "loc": {
+              "col": 12,
+              "line": 721
+            },
+            "qualified_callee": "valhall::compiler::SsaBuilder::emit",
+            "template_args": [],
+            "type": "SsaId"
+          },
+          "kind": "return",
+          "loc": {
+            "col": 5,
+            "line": 721
+          }
+        }
+      ],
+      "canonical_ret_type": "unsigned int",
+      "end_line": 722,
+      "is_inline": false,
+      "is_method": false,
+      "is_static": false,
+      "name": "lea_tex",
+      "namespace": "valhall::compiler::abi",
+      "params": [
+        {
+          "canonical_type": "valhall::compiler::Pass1Context &",
+          "name": "ctx",
+          "type": "Pass1Context &"
+        },
+        {
+          "canonical_type": "unsigned int",
+          "name": "blk",
+          "type": "uint32_t"
+        },
+        {
+          "canonical_type": "const valhall::DecodedValhallInst &",
+          "name": "",
+          "type": "const DecodedValhallInst &"
+        },
+        {
+          "canonical_type": "const valhall::tables::LoweringRuleSpec *",
+          "name": "",
+          "type": "const tables::LoweringRuleSpec *"
+        },
+        {
+          "canonical_type": "unsigned int",
+          "name": "xy",
+          "type": "SsaId"
+        },
+        {
+          "canonical_type": "unsigned int",
+          "name": "z_layer",
+          "type": "SsaId"
+        }
+      ],
+      "qualified_name": "valhall::compiler::abi::lea_tex",
+      "ret_type": "SsaId",
+      "short_namespace": "abi",
+      "source_file": "src/valhall_pass1_handlers.cpp",
+      "start_line": 712
     }
   ],
   "generator": "clang_ast_dumper (LLVM 21)",

@@ -366,11 +366,11 @@ def format_z3_ast(
                 let_defs.append((lname, node))
 
     def _op_label(n: dsl.ExprRef) -> str:
-        if isinstance(n, dsl.Z3BvConst):
+        if isinstance(n, dsl.Z3BvConst) or dsl.is_bv_value(n):
             return f"bv{n.size()}(0x{n.as_long():x})"
-        if isinstance(n, dsl.Z3RealConst):
+        if isinstance(n, dsl.Z3RealConst) or dsl.is_rational_value(n):
             return n.as_decimal(6).rstrip("?")
-        if isinstance(n, dsl.Z3IntConst):
+        if isinstance(n, dsl.Z3IntConst) or dsl.is_int_value(n):
             return str(n.as_long())
         if dsl.is_true(n):
             return "true"

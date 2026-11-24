@@ -122,6 +122,7 @@ SsaId load_frag_var_idx(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
 /// into `LoadBuiltinInput` for `PointCoord`, `BaryCoordKHR`, or `FragCoord.{w,z}`.
 SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule);
 SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId uv, bool is_gather, SsaId tok);
+SsaId lea_tex(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId xy, SsaId z_layer);
 
 SsaId store_builtin_pos(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId pos_vec, SsaId tok);
 SsaId store_builtin_depth(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId z_f32, SsaId tok);

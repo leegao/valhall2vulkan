@@ -85,6 +85,16 @@ class SymbolicShaderEnv(ShaderEnvBase):
         self.fau_sym: Any = dsl.Array("fau_sym", BV32, BV32)
         self.lane_id: Any = dsl.BitVec("lane_id", 5)
         self.inputs["lane_id"] = self.lane_id
+        self._pilot_executed: bool = False
+        self.pilot_exec_fau_words: dict[int, Any] = {}
+        self._pilot_srt_by_rack: dict[int, dict[int, str]] = {}
+        for se in self.mbs2.get("pilot_srt", []):
+            rk = int(se.get("rack", 0))
+            ad = int(se.get("addr", 0))
+            ky = str(se.get("key", ""))
+            if ky:
+                self._pilot_srt_by_rack.setdefault(rk, {})[ad] = ky
+                self.get_buf_base(ky)
 
     def set_shared_demands(
         self,
@@ -128,6 +138,29 @@ class SymbolicShaderEnv(ShaderEnvBase):
         Returns `None` when the slot is mutable, multi-typed (`TOP_BITS`), or
         not in backfill mode.
         """
+        if bkey == "pilot_srt_0":
+            rack = const_off // 16
+            rem = const_off % 16
+            rbase = self.get_buf_base(f"pilot_srt_rack_{rack}")
+            if rem == 0:
+                return self.domain.lift_z3_bv32(_dsl_bv32(rbase & MASK32))
+            if rem == 4:
+                return self.domain.lift_z3_bv32(_dsl_bv32((rbase >> 32) & MASK32))
+            return self.domain.lift_z3_bv32(_dsl_bv32(0))
+        if bkey.startswith("pilot_srt_rack_"):
+            rack = int(bkey[len("pilot_srt_rack_"):])
+            desc_idx = const_off // 32
+            field_off = const_off % 32
+            tkey = self._pilot_srt_by_rack.get(rack, {}).get(desc_idx)
+            if tkey is not None:
+                if field_off == 4:
+                    return self.domain.lift_z3_bv32(_dsl_bv32(0x10000))
+                bbase = self.get_buf_base(tkey)
+                if field_off == 8:
+                    return self.domain.lift_z3_bv32(_dsl_bv32(bbase & MASK32))
+                if field_off == 12:
+                    return self.domain.lift_z3_bv32(_dsl_bv32((bbase >> 32) & MASK32))
+            return self.domain.lift_z3_bv32(_dsl_bv32(0))
         if not self.shared_demands or not is_readonly_bkey(bkey):
             return None
         slot_key = f"buf_slot:{bkey}:{const_off}"
@@ -289,6 +322,14 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     found.add(self.base_to_buf[region])
                     if len(found) > 1:
                         return None
+            elif dsl.is_app(cur) and cur.decl().kind() == dsl.Z3OpKind.CONCAT and cur.num_args() == 2 and cur.arg(0).size() == 32:
+                hi_c = _try_const_u64(z3utils.simplify(cur.arg(0), relift=True))
+                if hi_c is not None:
+                    region = hi_c << 32
+                    if region in self.base_to_buf:
+                        found.add(self.base_to_buf[region])
+                        if len(found) > 1:
+                            return None
             elif isinstance(cur, dsl.Z3OpBvAdd):
                 stack.extend(cur.children())
         return next(iter(found)) if len(found) == 1 else None
@@ -309,7 +350,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
                 return hint_key, off, _dsl_bv32(off)
             return None, c, _dsl_bv32(off)
 
-        hi = _try_const_u64(dsl.Extract(63, 32, addr_expr))
+        hi = _try_const_u64(z3utils.simplify(dsl.Extract(63, 32, addr_expr), relift=True))
         if hi is not None:
             region = hi << 32
             if region in self.base_to_buf:
@@ -363,6 +404,9 @@ class SymbolicShaderEnv(ShaderEnvBase):
                 cv = int(pf["const_value"])
                 return _dsl_bv32((cv >> 32) & MASK32) if is_hi else _dsl_bv32(cv & MASK32)
             if vkind in ("buffer_size", "descriptor_addr", "abi_preload", "unknown"):
+                self._ensure_pilot_executed()
+                if word_idx in self.pilot_exec_fau_words:
+                    return self.pilot_exec_fau_words[word_idx]
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
                 if pf.get("has_byte_offset", False) and not pf.get("is_derived", False):
@@ -374,6 +418,9 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     return self.read_buf_u32(self.get_buf_mem(bkey), _dsl_bv32(boff))
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             if pf.get("is_derived", False):
+                self._ensure_pilot_executed()
+                if word_idx in self.pilot_exec_fau_words:
+                    return self.pilot_exec_fau_words[word_idx]
                 return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
             base = self.get_buf_base(pf["key"])
             if pf.get("has_pointer_offset", False):
@@ -387,4 +434,23 @@ class SymbolicShaderEnv(ShaderEnvBase):
             if ro_val is not None:
                 return ro_val
             return self.read_buf_u32(self.get_buf_mem(bkey), _dsl_bv32(uoff))
+        self._ensure_pilot_executed()
+        if word_idx in self.pilot_exec_fau_words:
+            return self.pilot_exec_fau_words[word_idx]
         return dsl.Select(self.fau_sym, _dsl_bv32(word_idx))
+
+    def _ensure_pilot_executed(self) -> None:
+        """Lazily execute `bundle['pilot_ssa']` once symbolically to compute derived FAU words."""
+        if self._pilot_executed:
+            return
+        self._pilot_executed = True
+        pilot_ssa = self.bundle.get("pilot_ssa")
+        if not pilot_ssa:
+            return
+        from tools.symbolic_ssa.symbolic_interpreter import SymbolicSsaInterpreter
+        p_interp = SymbolicSsaInterpreter(pilot_ssa, self, is_valhall_side=True)
+        p_state = p_interp.evaluate()
+        for (bkey, byte_off), entry in p_state.const_stores.items():
+            if bkey == "pilot_fau_0" and (byte_off & 3) == 0:
+                val = entry[1] if isinstance(entry, tuple) and len(entry) == 2 else entry
+                self.pilot_exec_fau_words[byte_off // 4] = val

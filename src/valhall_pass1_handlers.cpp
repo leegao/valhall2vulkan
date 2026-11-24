@@ -668,14 +668,19 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
         is_dref = true;
     }
     bool is_explicit_lod = false;
-    if (auto it = ins.modifier_strs.find("lod_mode"); it != ins.modifier_strs.end() && it->second == "explicit") {
-        is_explicit_lod = true;
+    bool is_zero_lod = false;
+    if (auto it = ins.modifier_strs.find("lod_mode"); it != ins.modifier_strs.end()) {
+        if (it->second == "explicit") is_explicit_lod = true;
+        else if (it->second == "zero") is_zero_lod = true;
+    }
+    if (!is_explicit_lod && ctx.opts.stage != ShaderStage::Fragment) {
+        is_zero_lod = true;
     }
     if (is_grad) ts.op = SsaOp::ImageQueryLod;
     else if (is_fetch) ts.op = SsaOp::TexFetch;
     else if (is_gather) ts.op = SsaOp::TexGather;
     else if (is_dref) ts.op = SsaOp::TexSampleDref;
-    else if (is_explicit_lod) ts.op = SsaOp::TexSampleLod;
+    else if (is_explicit_lod || is_zero_lod) ts.op = SsaOp::TexSampleLod;
     else ts.op = SsaOp::TexSample;
     ts.type = ValType::TupleValToken;
     ts.imm_u32 = tex_idx;
@@ -695,6 +700,9 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.aux_bool = (ctx.opts.stage == ShaderStage::Fragment && !is_gather);
     ts.aux_bool2 = is_gather;
     ts.args = { uv };
+    if (ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) {
+        ts.args.push_back(ctx.sb.emit_const_u32(blk, 0u));
+    }
     uint32_t sr_cnt = abi::sr_read_count(ctx, blk, ins, nullptr);
     if (sr_cnt > 2u &&
         ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
@@ -707,6 +715,44 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
     return ctx.sb.emit(blk, std::move(ts));
+}
+
+SsaId lea_tex(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, SsaId xy, SsaId z_layer) {
+    uint32_t tex_idx = 0;
+    bool has_tex_idx = false;
+    if (auto it_idx = ins.fields.find("index"); it_idx != ins.fields.end()) {
+        tex_idx = it_idx->second;
+        has_tex_idx = true;
+    } else if (auto it_tidx = ins.fields.find("texture_index"); it_tidx != ins.fields.end()) {
+        tex_idx = it_tidx->second;
+        has_tex_idx = true;
+    } else if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::FauUniform) {
+        uint32_t fau_off = static_cast<uint32_t>(ins.srcs[0].fau_index64) * 8u;
+        auto it_fau = ctx.opts.fau_tex_handle_indices.find(fau_off);
+        if (it_fau != ctx.opts.fau_tex_handle_indices.end()) {
+            tex_idx = it_fau->second;
+            has_tex_idx = true;
+        }
+    }
+    SsaNode n{};
+    n.op = SsaOp::ImageTexelAddr;
+    n.type = ValType::U64;
+    n.imm_u32 = tex_idx;
+    if (has_tex_idx) {
+        uint32_t d_set = 0;
+        uint32_t binding = tex_idx;
+        for (const auto& s : ctx.opts.samplers) {
+            if (s.tex_index == tex_idx) {
+                d_set = s.descriptor_set;
+                binding = s.binding;
+                break;
+            }
+        }
+        n.aux_str = "tex:" + std::to_string(d_set) + ":" + std::to_string(binding);
+    }
+    n.args = { xy, z_layer };
+    n.is_barrier_or_cf = true;
+    return ctx.sb.emit(blk, std::move(n));
 }
 
 SsaId store_builtin_pos(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId pos_vec, SsaId tok) {
