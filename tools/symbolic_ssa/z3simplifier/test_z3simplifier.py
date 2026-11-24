@@ -758,5 +758,85 @@ class TestZ3SimplifierPasses(unittest.TestCase):
         res = solve_simplified_miter(q_big, PassPipeline([]), timeout_ms=500)
         self.assertEqual(res.status, "UNSAT")
 
+    def test_v34_dsl_comparison_no_pep207_inversion(self) -> None:
+        """Regression test for v34: Z3OpArithCmp/Z3OpBvCmp must not flip under PEP 207 subclass dispatch."""
+        from tools.symbolic_ssa import z3utils as sz3
+        from tools.symbolic_ssa.z3simplifier import _merged_local_rule, rewrite_dag
+        from tools.symbolic_ssa.z3simplifier.ast_utils import rebuild_app
+
+        x = sz3.Real("x_cmp")
+        i = sz3.Int("i_cmp")
+        a = sz3.BitVec("a_cmp", 32)
+
+        cmp_cases = [
+            x >= sz3.RealVal(0),
+            x <= sz3.RealVal(1),
+            x > sz3.RealVal(0),
+            x < sz3.RealVal(1),
+            i >= sz3.IntVal(0),
+            i <= sz3.IntVal(1),
+            a >= sz3.BitVecVal(0, 32),
+            a <= sz3.BitVecVal(1, 32),
+            a > sz3.BitVecVal(0, 32),
+            a < sz3.BitVecVal(1, 32),
+            sz3.UGE(a, sz3.BitVecVal(0, 32)),
+            sz3.ULE(a, sz3.BitVecVal(1, 32)),
+        ]
+        s = z3.Solver()
+        for expr in cmp_cases:
+            self.assertEqual(expr.decl().kind(), expr.op_kind(), f"decl/op_kind mismatch for {expr!r}")
+            rebuilt = rebuild_app(expr, [expr.arg(0), expr.arg(1)])
+            self.assertNotIsInstance(rebuilt, sz3.Z3OpUFApp)
+            s.push()
+            s.add(sz3.lower(expr) != sz3.lower(rebuilt))
+            self.assertEqual(s.check(), z3.unsat, f"rebuild_app inverted {expr!r}")
+            s.pop()
+
+        # End-to-end clamp_0_1 soundness: two distinct texture UFs must NOT collapse to constant 1.
+        u = sz3.BitVec("u_coord", 32)
+        f1 = sz3.Function("hw_tex_a", sz3.BitVecSort(32), sz3.BitVecSort(32))
+        f2 = sz3.Function("hw_tex_b", sz3.BitVecSort(32), sz3.BitVecSort(32))
+        b2f = sz3.Function("u_bv32_to_f32", sz3.BitVecSort(32), sz3.RealSort())
+
+        def clamp01(val: sz3.ExprRef) -> sz3.ExprRef:
+            lo = sz3.If(val >= sz3.RealVal(0), val, sz3.RealVal(0))
+            return sz3.If(lo <= sz3.RealVal(1), lo, sz3.RealVal(1))
+
+        lhs = clamp01(b2f(f1(sz3.Extract(31, 0, sz3.ZeroExt(32, u)))))
+        rhs = clamp01(b2f(f2(sz3.Extract(31, 0, sz3.ZeroExt(32, u)))))
+        lhs_rw, _ = rewrite_dag(lhs, _merged_local_rule)
+        rhs_rw, _ = rewrite_dag(rhs, _merged_local_rule)
+        pipe = build_default_pipeline(enable_conditioned_unify=True)
+        res = solve_simplified_miter(SimplifyQuery(lhs=lhs_rw, rhs=rhs_rw), pipe, timeout_ms=1000)
+        self.assertEqual(res.status, "SAT")
+
+    def test_v34_dsl_deep_dag_to_z3_no_recursion_error(self) -> None:
+        """Regression test for v34: iterative bottom-up Z3Expr.to_z3 handles >1000-deep DAGs."""
+        from tools.symbolic_ssa import z3utils as sz3
+
+        acc = sz3.BitVec("deep_x", 32)
+        one = sz3.BitVecVal(1, 32)
+        for _ in range(1500):
+            acc = acc + one
+        z3_expr = acc.to_z3
+        self.assertIsNotNone(z3_expr)
+        self.assertIsInstance(acc.get_id(), int)
+
+    def test_v34_conditioned_unify_distinct_uf_signatures(self) -> None:
+        """Regression test for v34: leaf signatures distinguish non-nullary UF declarations."""
+        from tools.symbolic_ssa import z3utils as sz3
+        from tools.symbolic_ssa.z3simplifier.passes_unify import (
+            _collect_all_leaf_signatures,
+        )
+
+        u = sz3.BitVec("u_sig", 32)
+        f1 = sz3.Function("hw_tex_tex:0:1_c3", sz3.BitVecSort(32), sz3.BitVecSort(32))
+        f2 = sz3.Function("hw_tex_tex_0_c3", sz3.BitVecSort(32), sz3.BitVecSort(32))
+        e1 = f1(u)
+        e2 = f2(u)
+        sig1 = _collect_all_leaf_signatures(e1)[e1.get_id()]
+        sig2 = _collect_all_leaf_signatures(e2)[e2.get_id()]
+        self.assertNotEqual(sig1, sig2)
+
 if __name__ == "__main__":
     unittest.main()

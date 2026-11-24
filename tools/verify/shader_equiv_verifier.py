@@ -169,7 +169,8 @@ def _solve_miter_eq(
                 f"refined={res.refined_from_overapprox} simp=({res.stats.summary_line()})",
                 file=sys.stderr,
             )
-        return "SAT", _format_model_cex(res.model, lhs, rhs, env)
+        cex_q = res.exact_query if res.refined_from_overapprox else res.simplified_query
+        return "SAT", _format_model_cex(res.model, cex_q.lhs, cex_q.rhs, env)
 
     if verbose:
         lhs_kind = lhs.sort().kind() if hasattr(lhs, "sort") else "unknown"

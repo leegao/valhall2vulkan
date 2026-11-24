@@ -5,12 +5,12 @@ Do not hand-edit generated enum tables or node dataclasses; re-run `gen_dsl.py` 
 Lazy-lowering, Z3-API-compatible immutable dataclass AST DSL for Z3 expressions:
   - Pattern-matchable via Python `match`/`case`
   - Full operator overloads matching Z3's `ExprRef`/`BoolRef`/`BitVecRef`/`ArithRef`/`FPRef`/`ArrayRef`:
-  - ExprRef: __bool__, __firstlineno__, __static_attributes__
-  - BoolRef: __add__, __and__, __bool__, __firstlineno__, __invert__, __mul__, __or__, __radd__, __rmul__, __static_attributes__, __xor__
-  - BitVecRef: __add__, __and__, __bool__, __div__, __firstlineno__, __invert__, __lshift__, __mod__, __mul__, __neg__, __or__, __pos__, __radd__, __rand__, __rdiv__, __rlshift__, __rmod__, __rmul__, __ror__, __rrshift__, __rshift__, __rsub__, __rtruediv__, __rxor__, __static_attributes__, __sub__, __truediv__, __xor__
-  - ArithRef: __abs__, __add__, __bool__, __div__, __firstlineno__, __mod__, __mul__, __neg__, __pos__, __pow__, __radd__, __rdiv__, __rmod__, __rmul__, __rpow__, __rsub__, __rtruediv__, __static_attributes__, __sub__, __truediv__
-  - FPRef: __add__, __bool__, __div__, __firstlineno__, __mod__, __mul__, __neg__, __pos__, __radd__, __rdiv__, __rmod__, __rmul__, __rsub__, __rtruediv__, __static_attributes__, __sub__, __truediv__
-  - ArrayRef: __bool__, __firstlineno__, __getitem__, __static_attributes__
+  - ExprRef: __bool__
+  - BoolRef: __add__, __and__, __bool__, __invert__, __mul__, __or__, __radd__, __rmul__, __xor__
+  - BitVecRef: __add__, __and__, __bool__, __div__, __invert__, __lshift__, __mod__, __mul__, __neg__, __or__, __pos__, __radd__, __rand__, __rdiv__, __rlshift__, __rmod__, __rmul__, __ror__, __rrshift__, __rshift__, __rsub__, __rtruediv__, __rxor__, __sub__, __truediv__, __xor__
+  - ArithRef: __abs__, __add__, __bool__, __div__, __mod__, __mul__, __neg__, __pos__, __pow__, __radd__, __rdiv__, __rmod__, __rmul__, __rpow__, __rsub__, __rtruediv__, __sub__, __truediv__
+  - FPRef: __add__, __bool__, __div__, __mod__, __mul__, __neg__, __pos__, __radd__, __rdiv__, __rmod__, __rmul__, __rsub__, __rtruediv__, __sub__, __truediv__
+  - ArrayRef: __bool__, __getitem__
   - Lazy and memoized `.to_z3` property (and `.lower()` method) realizing concrete `z3.ExprRef`s on demand
 """
 
@@ -724,9 +724,24 @@ class Z3Expr:
         cached = self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
-        built = self._build_z3()
-        object.__setattr__(self, "_z3_cache", built)
-        return built
+        # Iteratively populate `_z3_cache` bottom-up so deep DAGs never hit Python's recursion limit.
+        stack: list[tuple[Z3Expr, bool]] = [(self, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if node._z3_cache is not None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                continue
+            if expanded:
+                object.__setattr__(node, "_z3_cache", node._build_z3())
+                continue
+            ch_list = node.children()
+            if not ch_list:
+                object.__setattr__(node, "_z3_cache", node._build_z3())
+                continue
+            stack.append((node, True))
+            for ch in ch_list:
+                if isinstance(ch, Z3Expr) and ch._z3_cache is None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                    stack.append((ch, False))
+        return self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
 
     def lower(self) -> Any:
         """Return the memoized lowered `z3.ExprRef` for this DSL node."""
@@ -2492,10 +2507,12 @@ class Z3OpBvCmp(Z3BoolExpr):
 
     def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
-        if self.op is BvCmpOp.SLT: return a < b
-        if self.op is BvCmpOp.SLEQ: return a <= b
-        if self.op is BvCmpOp.SGT: return a > b
-        if self.op is BvCmpOp.SGEQ: return a >= b
+        # node.decl()(*node.children())  <==>  node, but Python invokes the reflected comparison
+        # method on the RHS (b) first
+        if self.op is BvCmpOp.SLT: return z3.BitVecRef.__lt__(a, b)
+        if self.op is BvCmpOp.SLEQ: return z3.BitVecRef.__le__(a, b)
+        if self.op is BvCmpOp.SGT: return z3.BitVecRef.__gt__(a, b)
+        if self.op is BvCmpOp.SGEQ: return z3.BitVecRef.__ge__(a, b)
         if self.op is BvCmpOp.ULT: return z3.ULT(a, b)
         if self.op is BvCmpOp.ULEQ: return z3.ULE(a, b)
         if self.op is BvCmpOp.UGT: return z3.UGT(a, b)
@@ -2872,10 +2889,10 @@ class Z3OpArithCmp(Z3BoolExpr):
 
     def _build_z3(self) -> Any:
         a, b = lower(self.lhs), lower(self.rhs)
-        if self.op is ArithCmpOp.LT: return a < b
-        if self.op is ArithCmpOp.LE: return a <= b
-        if self.op is ArithCmpOp.GT: return a > b
-        return a >= b
+        if self.op is ArithCmpOp.LT: return z3.ArithRef.__lt__(a, b)
+        if self.op is ArithCmpOp.LE: return z3.ArithRef.__le__(a, b)
+        if self.op is ArithCmpOp.GT: return z3.ArithRef.__gt__(a, b)
+        return z3.ArithRef.__ge__(a, b)
 
     def children(self) -> tuple[Any, ...]:
         return (self.lhs, self.rhs)

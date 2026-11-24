@@ -235,7 +235,7 @@ def rebuild_app(node: dsl.ExprRef, new_args: Sequence[Any]) -> dsl.ExprRef:
         node = dsl.view(node)
     args: list[Any] = [a if isinstance(a, dsl.Z3Expr) else dsl.view(a) for a in new_args]
     decl = node.decl()
-    kind = decl.kind()
+    kind = node.op_kind()
 
     if kind == dsl.Z3OpKind.EXTRACT:
         hi = decl.params()[0]
@@ -297,6 +297,22 @@ def rebuild_app(node: dsl.ExprRef, new_args: Sequence[Any]) -> dsl.ExprRef:
         return dsl.LShR(args[0], args[1])
     if kind == dsl.Z3OpKind.BASHR and len(args) == 2:
         return args[0] >> args[1]
+    if kind in (dsl.Z3OpKind.LT, dsl.Z3OpKind.SLT) and len(args) == 2:
+        return args[0] < args[1]
+    if kind in (dsl.Z3OpKind.LE, dsl.Z3OpKind.SLEQ) and len(args) == 2:
+        return args[0] <= args[1]
+    if kind in (dsl.Z3OpKind.GT, dsl.Z3OpKind.SGT) and len(args) == 2:
+        return args[0] > args[1]
+    if kind in (dsl.Z3OpKind.GE, dsl.Z3OpKind.SGEQ) and len(args) == 2:
+        return args[0] >= args[1]
+    if kind == dsl.Z3OpKind.ULT and len(args) == 2:
+        return dsl.ULT(args[0], args[1])
+    if kind == dsl.Z3OpKind.ULEQ and len(args) == 2:
+        return dsl.ULE(args[0], args[1])
+    if kind == dsl.Z3OpKind.UGT and len(args) == 2:
+        return dsl.UGT(args[0], args[1])
+    if kind == dsl.Z3OpKind.UGEQ and len(args) == 2:
+        return dsl.UGE(args[0], args[1])
     return decl.rebuild(args)
 
 

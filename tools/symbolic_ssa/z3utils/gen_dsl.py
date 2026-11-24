@@ -793,10 +793,10 @@ NODE_SPECS: tuple[NodeSpec, ...] = (
         ),
         lower_body=(
             "a, b = lower(self.lhs), lower(self.rhs)\n"
-            "        if self.op is BvCmpOp.SLT: return a < b\n"
-            "        if self.op is BvCmpOp.SLEQ: return a <= b\n"
-            "        if self.op is BvCmpOp.SGT: return a > b\n"
-            "        if self.op is BvCmpOp.SGEQ: return a >= b\n"
+            "        if self.op is BvCmpOp.SLT: return z3.BitVecRef.__lt__(a, b)\n"
+            "        if self.op is BvCmpOp.SLEQ: return z3.BitVecRef.__le__(a, b)\n"
+            "        if self.op is BvCmpOp.SGT: return z3.BitVecRef.__gt__(a, b)\n"
+            "        if self.op is BvCmpOp.SGEQ: return z3.BitVecRef.__ge__(a, b)\n"
             "        if self.op is BvCmpOp.ULT: return z3.ULT(a, b)\n"
             "        if self.op is BvCmpOp.ULEQ: return z3.ULE(a, b)\n"
             "        if self.op is BvCmpOp.UGT: return z3.UGT(a, b)\n"
@@ -1066,10 +1066,10 @@ NODE_SPECS: tuple[NodeSpec, ...] = (
         ),
         lower_body=(
             "a, b = lower(self.lhs), lower(self.rhs)\n"
-            "        if self.op is ArithCmpOp.LT: return a < b\n"
-            "        if self.op is ArithCmpOp.LE: return a <= b\n"
-            "        if self.op is ArithCmpOp.GT: return a > b\n"
-            "        return a >= b"
+            "        if self.op is ArithCmpOp.LT: return z3.ArithRef.__lt__(a, b)\n"
+            "        if self.op is ArithCmpOp.LE: return z3.ArithRef.__le__(a, b)\n"
+            "        if self.op is ArithCmpOp.GT: return z3.ArithRef.__gt__(a, b)\n"
+            "        return z3.ArithRef.__ge__(a, b)"
         ),
         children_expr="(self.lhs, self.rhs)",
         op_kind_expr="_ARITH_CMP_OP_TO_KIND[self.op]",
@@ -1961,9 +1961,24 @@ class Z3Expr:
         cached = self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
-        built = self._build_z3()
-        object.__setattr__(self, "_z3_cache", built)
-        return built
+        # Iteratively populate `_z3_cache` bottom-up so deep DAGs never hit Python's recursion limit.
+        stack: list[tuple[Z3Expr, bool]] = [(self, False)]
+        while stack:
+            node, expanded = stack.pop()
+            if node._z3_cache is not None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                continue
+            if expanded:
+                object.__setattr__(node, "_z3_cache", node._build_z3())
+                continue
+            ch_list = node.children()
+            if not ch_list:
+                object.__setattr__(node, "_z3_cache", node._build_z3())
+                continue
+            stack.append((node, True))
+            for ch in ch_list:
+                if isinstance(ch, Z3Expr) and ch._z3_cache is None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                    stack.append((ch, False))
+        return self._z3_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
 
     def lower(self) -> Any:
         """Return the memoized lowered `z3.ExprRef` for this DSL node."""

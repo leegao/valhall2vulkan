@@ -4,7 +4,9 @@
 #include "valhall_ssa_json.h"
 
 #include <cstdio>
+#include <map>
 #include <sstream>
+#include <utility>
 
 namespace valhall::spirv2valhall {
 
@@ -95,6 +97,91 @@ bool lookup_mbs2_buffer_binding(
 
 } // namespace
 
+void populate_mbs2_translate_options(
+    const ExtractResult& extract_res,
+    const ExtractedEbin& primary_eb,
+    ValhallTranslateOptions* vopts,
+    bool remap_varyings) {
+    if (!vopts) return;
+
+    if (extract_res.mbs2.has_kern && extract_res.mbs2.kern.has_workgroup_size) {
+        vopts->local_size_x = extract_res.mbs2.kern.wg_x;
+        vopts->local_size_y = extract_res.mbs2.kern.wg_y;
+        vopts->local_size_z = extract_res.mbs2.kern.wg_z;
+    }
+
+    if (remap_varyings) {
+        for (const auto& sym : extract_res.mbs2.cmmn.sinp) {
+            if (sym.rack_index == 11u && sym.location != 0xFFFFu) {
+                vopts->frag_varying_addr_to_loc[sym.address] = sym.location;
+            }
+        }
+        for (const auto& sym : extract_res.mbs2.cmmn.sout) {
+            if (sym.rack_index == 3u && !sym.name.empty()) {
+                vopts->vert_sout_attr_names[sym.address] = sym.name;
+            }
+        }
+    }
+
+    std::map<uint32_t, uint32_t> simg_addrs;
+    for (const auto& sym : extract_res.mbs2.cmmn.simg) {
+        valhall::CombinedSamplerBindingSpec spec;
+        spec.tex_index = sym.address;
+        spec.descriptor_set = (sym.rack_index >= 68u) ? (sym.rack_index - 68u)
+                            : (sym.rack_index >= 4u ? (sym.rack_index - 4u) : 0u);
+        spec.binding = (sym.binding != 0xFFFFu) ? sym.binding : sym.address;
+        vopts->samplers.push_back(spec);
+        simg_addrs[sym.address] = spec.binding;
+    }
+
+    std::map<uint32_t, uint32_t> fcst_all;
+    for (const auto& f : extract_res.mbs2.cmmn.fcsts) fcst_all[f.reg_offset] = f.value;
+    if (primary_eb.meta.has_dbug) {
+        for (const auto& f : primary_eb.meta.dbug.fcsts) fcst_all[f.reg_offset] = f.value;
+    }
+
+    {
+        std::map<std::pair<uint32_t, uint32_t>, std::string> pka_buf_by_rack_addr;
+        auto add_pka = [&](const std::vector<Mbs2Symbol>& syms, bool is_ssbo) {
+            for (const auto& sym : syms) {
+                std::string bname = sym.name;
+                if (!is_ssbo && sym.rack_index == 0u && sym.binding == 0xFFFFu) {
+                    bname = "push_const";
+                } else if (sym.binding != 0xFFFFu) {
+                    uint32_t d_set = (sym.rack_index >= 4u) ? (sym.rack_index - 4u) : 0u;
+                    bname = std::string(is_ssbo ? "ssbo:" : "ubo:") +
+                            std::to_string(d_set) + ":" + std::to_string(sym.binding);
+                }
+                pka_buf_by_rack_addr[{sym.rack_index, sym.address}] = std::move(bname);
+            }
+        };
+        add_pka(extract_res.mbs2.cmmn.suni, false);
+        add_pka(extract_res.mbs2.cmmn.s3bo, true);
+        for (const auto& kv : fcst_all) {
+            uint32_t rack = (kv.second >> 24u) & 0xFFu;
+            uint32_t addr = kv.second & 0xFFFFu;
+            auto it = pka_buf_by_rack_addr.find({rack, addr});
+            if (it != pka_buf_by_rack_addr.end()) {
+                vopts->fau_pka_buf_names[kv.first] = it->second;
+            }
+        }
+    }
+
+    if (!simg_addrs.empty()) {
+        for (const auto& kv : fcst_all) {
+            if ((kv.first & 7u) != 0u) continue;
+            auto hi_it = fcst_all.find(kv.first + 4u);
+            if (hi_it == fcst_all.end()) continue;
+            if (kv.second == 0xFFFFFFFFu) {
+                uint32_t desc_addr = hi_it->second & 0xFFFFu;
+                if (simg_addrs.count(desc_addr)) {
+                    vopts->fau_tex_handle_indices[kv.first] = desc_addr;
+                }
+            }
+        }
+    }
+}
+
 bool build_equivalence_bundle_json(
     const std::string& spv_path,
     const ExtractResult& extract_res,
@@ -154,11 +241,7 @@ bool build_equivalence_bundle_json(
     vopts.ssa_opt_fp_fast_math = opt.fp_fast_math;
     vopts.ssa_opt_fp_tile_rewrites = opt.enable_fp_tile_rewrites;
     vopts.ssa_opt_fp_cpp_rewrites = opt.enable_fp_cpp_rewrites;
-    if (extract_res.mbs2.has_kern && extract_res.mbs2.kern.has_workgroup_size) {
-        vopts.local_size_x = extract_res.mbs2.kern.wg_x;
-        vopts.local_size_y = extract_res.mbs2.kern.wg_y;
-        vopts.local_size_z = extract_res.mbs2.kern.wg_z;
-    }
+    populate_mbs2_translate_options(extract_res, *primary_eb, &vopts, /*remap_varyings=*/false);
 
     cfg::ControlFlowGraph pri_cfg = cfg::build_cfg(primary_eb->instructions);
     cfg::ControlFlowGraph sec_cfg;

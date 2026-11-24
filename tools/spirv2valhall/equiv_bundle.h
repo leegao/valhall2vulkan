@@ -2,6 +2,7 @@
 
 #include "spirv2valhall.h"
 #include "spirv2ssa.h"
+#include "valhall_to_spirv.h"
 
 #include <string>
 #include <vector>
@@ -19,6 +20,17 @@ struct EquivBundleOptions {
     bool enable_fp_tile_rewrites = true;
     bool enable_fp_cpp_rewrites = true;
 };
+
+/// Populate MBS2-derived metadata (workgroup size, samplers, FAU texture handle
+/// indices, PKA buffer names, and optionally fragment/vertex varying location maps)
+/// onto `vopts` for `valhall_pass1` lowering.
+/// Set `remap_varyings = false` when downstream consumers remap `sinp` themselves
+/// (e.g. `equiv_bundle` JSON consumers) to prevent double-remapping.
+void populate_mbs2_translate_options(
+    const ExtractResult& extract_res,
+    const ExtractedEbin& primary_eb,
+    ValhallTranslateOptions* vopts,
+    bool remap_varyings = true);
 
 bool build_equivalence_bundle_json(
     const std::string& spv_path,

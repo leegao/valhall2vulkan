@@ -102,9 +102,9 @@ def _collect_subexprs_with_depth(
 def _collect_all_leaf_signatures(
     root: dsl.ExprRef,
     limit: int = 50000,
-) -> dict[int, frozenset[int]]:
-    """Compute free-variable leaf signatures for all reachable subexpressions in one O(N) DAG pass."""
-    sigs: dict[int, frozenset[int]] = {}
+) -> dict[int, frozenset[int | str]]:
+    """Compute free-variable + UF-symbol signatures for all reachable subexpressions in one O(N) DAG pass."""
+    sigs: dict[int, frozenset[int | str]] = {}
     visited: set[int] = set()
     stack: list[tuple[dsl.ExprRef, bool]] = [(root, False)]
 
@@ -116,7 +116,10 @@ def _collect_all_leaf_signatures(
                 if dsl.is_const(cur):
                     sigs[cid] = frozenset((cid,)) if cur.decl().kind() == dsl.Z3OpKind.UNINTERPRETED else frozenset()
                 elif dsl.is_app(cur) and cur.num_args() > 0:
-                    acc: set[int] = set()
+                    acc: set[int | str] = set()
+                    decl = cur.decl()
+                    if decl.kind() == dsl.Z3OpKind.UNINTERPRETED:
+                        acc.add(f"uf:{decl.name()}")
                     for i in range(cur.num_args()):
                         ch_sig = sigs.get(cur.arg(i).get_id())
                         if ch_sig:
@@ -631,7 +634,7 @@ class ConditionedUnificationPass(Z3QueryPass):
         l_sigs = _collect_all_leaf_signatures(query.lhs, limit=ctx.max_dag_nodes)
         r_sigs = _collect_all_leaf_signatures(query.rhs, limit=ctx.max_dag_nodes)
 
-        r_buckets: dict[tuple[int, frozenset[int]], list[tuple[int, dsl.ExprRef]]] = {}
+        r_buckets: dict[tuple[int, frozenset[int | str]], list[tuple[int, dsl.ExprRef]]] = {}
         for rid, rexpr in r_nodes.items():
             if rid == query.rhs.get_id() or rid in l_nodes:
                 continue

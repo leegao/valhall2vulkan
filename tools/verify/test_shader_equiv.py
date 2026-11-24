@@ -1149,5 +1149,41 @@ class TestShaderEquivVerifier(unittest.TestCase):
         self.assertEqual(res.status, "UNSAT")
         self.assertIn("Check #0", buf.getvalue())
 
+    def test_v34_cex_uses_scalarized_exact_query(self) -> None:
+        """Regression test for v34: SAT counterexample formats distinct values from scalarized exact_query."""
+        import z3
+
+        from tools.symbolic_ssa import SymbolicShaderEnv
+        from tools.verify.shader_equiv_verifier import _solve_miter_eq
+
+        env = SymbolicShaderEnv({"stage": "Compute", "mbs2_context": {}, "direct_bindings": []}, domain="udomain")
+        arr = z3.Array("mem_ubo_0_0", z3.BitVecSort(32), z3.BitVecSort(32))
+        lhs = z3.Select(arr, z3.BitVecVal(0, 32)) + z3.BitVecVal(1, 32)
+        rhs = z3.Select(arr, z3.BitVecVal(0, 32)) + z3.BitVecVal(2, 32)
+        status, cex = _solve_miter_eq(lhs, rhs, None, timeout_ms=1000, env=env, enable_conditioned_unify=True)
+        self.assertEqual(status, "SAT")
+        self.assertIsNotNone(cex)
+        assert cex is not None
+        self.assertNotEqual(cex[0], cex[1])
+
+    def test_v34_frag_stress_branch_unsat_end_to_end(self) -> None:
+        """Regression test for v34: frag_stress_branch_d38c3ea1.spv proves UNSAT on all 5 outputs."""
+        import os
+
+        from tools.verify.shader_equiv_verifier import verify_spv_file
+
+        spv = "samples/frag_stress_branch_d38c3ea1.spv"
+        if not (os.path.exists("./build/spirv2valhall") and os.path.exists(spv)):
+            self.skipTest("spirv2valhall binary or sample shader not present")
+        res = verify_spv_file(
+            spv,
+            timeout_ms=5000,
+            domain="udomain",
+            canonicalize=True,
+            enable_conditioned_unify=True,
+        )
+        self.assertEqual(res.status, "UNSAT")
+        self.assertEqual(len(res.checked_outputs), 5)
+
 if __name__ == "__main__":
     unittest.main()
