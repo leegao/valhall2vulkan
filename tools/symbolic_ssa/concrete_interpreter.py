@@ -25,6 +25,8 @@ class _ConcreteState:
     builtin_outputs: dict[int, Any] = dataclasses.field(default_factory=dict)
     vert_varyings: dict[int, tuple[int, ...]] = dataclasses.field(default_factory=dict)
     buf_writes: dict[tuple[str, int], int] = dataclasses.field(default_factory=dict)
+    buf_bytes: dict[tuple[str, int], int] = dataclasses.field(default_factory=dict)
+    written_words: set[tuple[str, int]] = dataclasses.field(default_factory=set)
     sym_buf_writes: dict[tuple[str, int], int] = dataclasses.field(default_factory=dict)
     img_writes: dict[tuple[str, int], list[int]] = dataclasses.field(default_factory=dict)
     fallback_writes: dict[int, int] = dataclasses.field(default_factory=dict)
@@ -71,17 +73,39 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         # Also fall through to underlying buffer write so concrete buf_writes stays synchronized.
         return False
 
+    def _read_byte(self, st: _ConcreteState, bkey: str, byte_off: int) -> int:
+        assert self._env is not None
+        if (bkey, byte_off) in st.buf_bytes:
+            return st.buf_bytes[(bkey, byte_off)]
+        word_off = byte_off & ~3
+        word_val = self._env.read_init_buf(bkey, word_off)
+        return (word_val >> ((byte_off & 3) * 8)) & 0xFF
+
     def _read_buf(self, st: _ConcreteState, bkey: str | None, const_off: int | None, off: int, addr: int) -> int:
+        return self._read_buf_sized(st, bkey, const_off, off, addr, 4)
+
+    def _read_buf_sized(self, st: _ConcreteState, bkey: str | None, const_off: int | None, off: int, addr: int, width: int) -> int:
         assert self._env is not None
         if bkey is not None:
-            return st.buf_writes.get((bkey, off), self._env.read_init_buf(bkey, off))
+            val = 0
+            for i in range(width):
+                val |= self._read_byte(st, bkey, (off + i) & 0xFFFFFFFF) << (8 * i)
+            return val
         return st.fallback_writes.get(addr, self._env.read_fallback_mem(addr))
 
     def _write_buf(self, st: _ConcreteState, mask: bool, bkey: str | None, const_off: int | None, off: int, addr: int, val: int, nid: int) -> None:
+        self._write_buf_sized(st, mask, bkey, const_off, off, addr, val, nid, 4)
+
+    def _write_buf_sized(self, st: _ConcreteState, mask: bool, bkey: str | None, const_off: int | None, off: int, addr: int, val: int, nid: int, width: int) -> None:
         if not mask:
             return
         if bkey is not None:
-            st.buf_writes[(bkey, off)] = val
+            for i in range(width):
+                boff = (off + i) & 0xFFFFFFFF
+                st.buf_bytes[(bkey, boff)] = (val >> (8 * i)) & 0xFF
+                st.written_words.add((bkey, boff & ~3))
+            if width == 4 and (off & 3) == 0:
+                st.buf_writes[(bkey, off)] = val & 0xFFFFFFFF
         else:
             st.fallback_writes[addr] = val
 
@@ -127,7 +151,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         if not mask:
             return
         if bkey is not None:
-            st.buf_writes[(bkey, off)] = new_val
+            self._write_buf_sized(st, True, bkey, off, off, addr, new_val, nid, 4)
             st.atomic_events.setdefault(bkey, []).append((op_tag, off, arg, cmp_val))
         else:
             st.fallback_writes[addr] = new_val
@@ -200,10 +224,10 @@ class ConcreteSsaInterpreter(SsaInterpreter):
             for loc, vec in st.vert_varyings.items():
                 for c in range(4):
                     outs[f"vert_var[{loc}][{c}]"] = vec[c]
-            for (bkey, off), v in st.buf_writes.items():
-                if bkey in ("tls_private", "wls_shared") or bkey.startswith("workgroup:"):
+            for bkey, woff in sorted(st.written_words):
+                if bkey in ("tls_private", "wls_shared", "pilot_srt_0") or bkey.startswith(("workgroup:", "pilot_srt_rack_")):
                     continue
-                outs[f"{bkey}+0x{off:x}"] = v
+                outs[f"{bkey}+0x{woff:x}"] = self._read_buf_sized(st, bkey, woff, woff, 0, 4)
             for (ikey, xy), vec in st.img_writes.items():
                 for c, cname in enumerate(("r", "g", "b", "a")):
                     outs[f"img:{ikey}[0x{xy:x}].{cname}"] = vec[c]

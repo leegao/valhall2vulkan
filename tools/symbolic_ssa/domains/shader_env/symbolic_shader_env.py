@@ -262,6 +262,12 @@ class SymbolicShaderEnv(ShaderEnvBase):
                     conds.append(self.inputs["bi_29"] == lidx_expr)
                 else:
                     conds.append(dsl.ULT(self.inputs["bi_29"], _dsl_bv32(lx * ly * lz)))
+        if "gl_SamplePosition" in self.init_buf_mem:
+            sp_mem = self.init_buf_mem["gl_SamplePosition"]
+            if "bi_19_0" in self.inputs:
+                conds.append(self.read_buf_u32(sp_mem, _dsl_bv32(0)) == self.inputs["bi_19_0"])
+            if "bi_19_1" in self.inputs:
+                conds.append(self.read_buf_u32(sp_mem, _dsl_bv32(4)) == self.inputs["bi_19_1"])
         return conds
 
     def get_img_mem(self, key: str) -> tuple[Any, ...]:

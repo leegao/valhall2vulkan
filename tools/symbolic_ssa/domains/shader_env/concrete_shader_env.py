@@ -35,6 +35,16 @@ class ConcreteShaderEnv(ShaderEnvBase):
         self.seed = seed
         self.overrides: dict[str, Any] = overrides if overrides is not None else {}
         self.lane_id = int(self.overrides.get("lane_id", vec_idx & 31)) & 31
+        self._pilot_executed: bool = False
+        self.pilot_exec_fau_words: dict[int, int] = {}
+        self._pilot_srt_by_rack: dict[int, dict[int, str]] = {}
+        for se in self.mbs2.get("pilot_srt", []):
+            rk = int(se.get("rack", 0))
+            ad = int(se.get("addr", 0))
+            ky = str(se.get("key", ""))
+            if ky:
+                self._pilot_srt_by_rack.setdefault(rk, {})[ad] = ky
+                self.get_buf_base(ky)
 
     def sample_u32(self, name: str) -> int:
         if name in self.overrides:
@@ -51,6 +61,33 @@ class ConcreteShaderEnv(ShaderEnvBase):
         return rng.getrandbits(32)
 
     def read_init_buf(self, bkey: str, off32: int) -> int:
+        if bkey == "gl_SamplePosition":
+            # Valhall sample position table stores (x, y) float32 pairs per sample; align with bi_19 (SpvBuiltInSamplePosition).
+            lane = (off32 >> 2) & 1
+            return self.sample_u32(f"bi_19_{lane}")
+        if bkey == "pilot_srt_0":
+            rack = off32 // 16
+            rem = off32 % 16
+            rbase = self.get_buf_base(f"pilot_srt_rack_{rack}")
+            if rem == 0:
+                return rbase & MASK32
+            if rem == 4:
+                return (rbase >> 32) & MASK32
+            return 0
+        if bkey.startswith("pilot_srt_rack_"):
+            rack = int(bkey[len("pilot_srt_rack_"):])
+            desc_idx = off32 // 32
+            field_off = off32 % 32
+            tkey = self._pilot_srt_by_rack.get(rack, {}).get(desc_idx)
+            if tkey is not None:
+                if field_off == 4:
+                    return 0x10000
+                bbase = self.get_buf_base(tkey)
+                if field_off == 8:
+                    return bbase & MASK32
+                if field_off == 12:
+                    return (bbase >> 32) & MASK32
+            return 0
         if bkey == "wls_shared" and self.unique_workgroup_key is not None:
             bkey = self.unique_workgroup_key
         key = f"mem:{bkey}:{off32 & MASK32}"
@@ -171,10 +208,16 @@ class ConcreteShaderEnv(ShaderEnvBase):
                 cv = int(pf["const_value"])
                 return ((cv >> 32) & MASK32) if is_hi else (cv & MASK32)
             if vkind in ("buffer_size", "descriptor_addr", "abi_preload", "unknown") or pf.get("is_derived", False):
+                self._ensure_pilot_executed()
+                if word_idx in self.pilot_exec_fau_words:
+                    return self.pilot_exec_fau_words[word_idx]
                 return self._sample_fau_word(word_idx)
             if vkind == "symbol_value" or pf.get("is_loaded_value", False):
                 if pf.get("has_byte_offset", False):
                     return self.read_init_buf(pf["key"], int(pf["byte_offset"]))
+                self._ensure_pilot_executed()
+                if word_idx in self.pilot_exec_fau_words:
+                    return self.pilot_exec_fau_words[word_idx]
                 return self._sample_fau_word(word_idx)
             base = self.get_buf_base(pf["key"])
             if pf.get("has_pointer_offset", False):
@@ -185,4 +228,25 @@ class ConcreteShaderEnv(ShaderEnvBase):
         if word_idx in self.rloc_by_word:
             bkey, uoff = self.rloc_by_word[word_idx]
             return self.read_init_buf(bkey, uoff)
+        self._ensure_pilot_executed()
+        if word_idx in self.pilot_exec_fau_words:
+            return self.pilot_exec_fau_words[word_idx]
         return self._sample_fau_word(word_idx)
+
+    def _ensure_pilot_executed(self) -> None:
+        """Lazily execute `bundle['pilot_ssa']` once to compute all derived FAU words."""
+        if self._pilot_executed:
+            return
+        self._pilot_executed = True
+        pilot_ssa = self.bundle.get("pilot_ssa")
+        if not pilot_ssa:
+            return
+        from tools.symbolic_ssa.concrete_interpreter import ConcreteSsaInterpreter
+        p_interp = ConcreteSsaInterpreter(pilot_ssa, is_valhall_side=True)
+        _, p_outs = p_interp.evaluate(self)
+        prefix = "pilot_fau_0+0x"
+        for k, v in p_outs.items():
+            if k.startswith(prefix):
+                byte_off = int(k[len(prefix):], 16)
+                if (byte_off & 3) == 0:
+                    self.pilot_exec_fau_words[byte_off // 4] = int(v) & MASK32

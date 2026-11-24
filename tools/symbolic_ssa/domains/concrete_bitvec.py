@@ -142,6 +142,32 @@ class ConcreteBitvecDomain(SsaDomain):
             if f < 0.0: return 0x7FC00000
             if f == 0.0: return 0xFF800000
             return _f32_to_u32(math.log2(f))
+        if op == "Fract":
+            return _f32_to_u32(f - math.floor(f)) if math.isfinite(f) else 0x7FC00000
+        if op == "FrexpExp":
+            if not math.isfinite(f) or f == 0.0:
+                return 0
+            _, exp = math.frexp(f)
+            return exp & MASK32
+        if op == "FrexpSignificand":
+            if not math.isfinite(f) or f == 0.0:
+                return u
+            mant, _ = math.frexp(f)
+            return _f32_to_u32(mant)
+        if op == "Atan":
+            return _f32_to_u32(math.atan(f))
+        if op == "Asin":
+            return _f32_to_u32(math.asin(f)) if -1.0 <= f <= 1.0 else 0x7FC00000
+        if op == "Acos":
+            return _f32_to_u32(math.acos(f)) if -1.0 <= f <= 1.0 else 0x7FC00000
+        if op == "Sinh":
+            try: return _f32_to_u32(math.sinh(f))
+            except OverflowError: return 0xFF800000 if f < 0.0 else 0x7F800000
+        if op == "Cosh":
+            try: return _f32_to_u32(math.cosh(f))
+            except OverflowError: return 0x7F800000
+        if op == "Tanh":
+            return _f32_to_u32(math.tanh(f))
         return _det_hash_u32(f"fp_{op}", u)
 
     def fp_binary(self, op: str, a: Any, b: Any) -> int:
@@ -156,17 +182,31 @@ class ConcreteBitvecDomain(SsaDomain):
                 if fa == 0.0: return 0x7FC00000
                 return ((ua ^ ub) & 0x80000000) | 0x7F800000
             return _f32_to_u32(fa / fb)
-        if op in ("FMin", "NMin"):
+        if op == "FMin":
+            if math.isnan(fa) or math.isnan(fb): return 0x7FC00000
+            return ua if fa <= fb else ub
+        if op == "NMin":
             if math.isnan(fa): return ub
             if math.isnan(fb): return ua
             return ua if fa <= fb else ub
-        if op in ("FMax", "NMax"):
+        if op == "FMax":
+            if math.isnan(fa) or math.isnan(fb): return 0x7FC00000
+            return ua if fa >= fb else ub
+        if op == "NMax":
             if math.isnan(fa): return ub
             if math.isnan(fb): return ua
             return ua if fa >= fb else ub
+        if op == "Ldexp":
+            if math.isnan(fa): return 0x7FC00000
+            if not math.isfinite(fa) or fa == 0.0: return ua
+            try: return _f32_to_u32(math.ldexp(fa, _s32(ub)))
+            except OverflowError: return (ua & 0x80000000) | 0x7F800000
+        if op == "Atan2":
+            if math.isnan(fa) or math.isnan(fb): return 0x7FC00000
+            return _f32_to_u32(math.atan2(fa, fb))
         if op == "Pow":
             try: return _f32_to_u32(math.pow(fa, fb))
-            except Exception: return 0x7FC00000
+            except (ValueError, OverflowError): return 0x7FC00000
         return _det_hash_u32(f"fp_{op}", ua, ub)
 
     def fp_fma(self, a: Any, b: Any, c: Any) -> int:
@@ -185,6 +225,11 @@ class ConcreteBitvecDomain(SsaDomain):
         if op == "FCmpOrdLt": return (not unord) and (fa < fb)
         if op == "FCmpOrdLe": return (not unord) and (fa <= fb)
         if op == "FCmpOrdNe": return (not unord) and (fa != fb)
+        if op == "FCmpUnordEq": return unord or (fa == fb)
+        if op == "FCmpUnordGt": return unord or (fa > fb)
+        if op == "FCmpUnordGe": return unord or (fa >= fb)
+        if op == "FCmpUnordLt": return unord or (fa < fb)
+        if op == "FCmpUnordLe": return unord or (fa <= fb)
         if op == "FCmpUnordNe": return unord or (fa != fb)
         if op == "FCmpTotal":
             def _key(u: int) -> int:

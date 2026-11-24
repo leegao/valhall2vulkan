@@ -672,6 +672,31 @@ class ConcreteUDomain(_BaseUDomain):
         if op == "Log2": return self.const_f32(math.log2(fx) if fx > 0.0 else (float("-inf") if fx == 0.0 else float("nan")))
         if op == "Sin": return self.const_f32(math.sin(fx) if math.isfinite(fx) else float("nan"))
         if op == "Cos": return self.const_f32(math.cos(fx) if math.isfinite(fx) else float("nan"))
+        if op == "Exp":
+            try: return self.const_f32(math.exp(fx))
+            except OverflowError: return self.const_f32(float("inf"))
+        if op == "Log":
+            return self.const_f32(math.log(fx) if fx > 0.0 else (float("-inf") if fx == 0.0 else float("nan")))
+        if op == "FrexpExp":
+            if not math.isfinite(fx) or fx == 0.0:
+                return self.const_u32(0)
+            _, exp = math.frexp(fx)
+            return self.const_u32(exp & MASK32)
+        if op == "FrexpSignificand":
+            if not math.isfinite(fx) or fx == 0.0:
+                return self.const_f32(fx)
+            mant, _ = math.frexp(fx)
+            return self.const_f32(mant)
+        if op == "Atan": return self.const_f32(math.atan(fx) if not math.isnan(fx) else float("nan"))
+        if op == "Asin": return self.const_f32(math.asin(fx) if -1.0 <= fx <= 1.0 else float("nan"))
+        if op == "Acos": return self.const_f32(math.acos(fx) if -1.0 <= fx <= 1.0 else float("nan"))
+        if op == "Sinh":
+            try: return self.const_f32(math.sinh(fx))
+            except OverflowError: return self.const_f32(float("-inf") if fx < 0.0 else float("inf"))
+        if op == "Cosh":
+            try: return self.const_f32(math.cosh(fx))
+            except OverflowError: return self.const_f32(float("inf"))
+        if op == "Tanh": return self.const_f32(math.tanh(fx) if not math.isnan(fx) else float("nan"))
         return self.const_f32(0.0)
 
     def fp_binary(self, op: str, a: Any, b: Any) -> UVal:
@@ -684,14 +709,33 @@ class ConcreteUDomain(_BaseUDomain):
                 if fa == 0.0: return self.const_f32(float("nan"))
                 return self.const_f32(float("inf") if (fa > 0.0) else float("-inf"))
             return self.const_f32(fa / fb)
-        if op in ("FMin", "NMin"):
+        if op == "FMin":
+            if math.isnan(fa) or math.isnan(fb): return self.const_f32(float("nan"))
+            return self.const_f32(min(fa, fb))
+        if op == "NMin":
             if math.isnan(fa): return self.const_f32(fb)
             if math.isnan(fb): return self.const_f32(fa)
             return self.const_f32(min(fa, fb))
-        if op in ("FMax", "NMax"):
+        if op == "FMax":
+            if math.isnan(fa) or math.isnan(fb): return self.const_f32(float("nan"))
+            return self.const_f32(max(fa, fb))
+        if op == "NMax":
             if math.isnan(fa): return self.const_f32(fb)
             if math.isnan(fb): return self.const_f32(fa)
             return self.const_f32(max(fa, fb))
+        if op == "Ldexp":
+            if math.isnan(fa) or not math.isfinite(fa) or fa == 0.0:
+                return self.const_f32(fa)
+            eb = self.to_bvec64(b) & MASK32
+            sb = eb - 0x100000000 if (eb & 0x80000000) else eb
+            try: return self.const_f32(math.ldexp(fa, sb))
+            except OverflowError: return self.const_f32(float("-inf") if fa < 0.0 else float("inf"))
+        if op == "Atan2":
+            if math.isnan(fa) or math.isnan(fb): return self.const_f32(float("nan"))
+            return self.const_f32(math.atan2(fa, fb))
+        if op == "Pow":
+            try: return self.const_f32(math.pow(fa, fb))
+            except (ValueError, OverflowError): return self.const_f32(float("nan"))
         return self.const_f32(0.0)
 
     def fp_fma(self, a: Any, b: Any, c: Any) -> UVal:

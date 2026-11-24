@@ -327,8 +327,15 @@ class SsaInterpreter(Generic[V]):
     def load_sideband_u64(self, imm_u32: int, aux_str: str) -> Any:
         if self._env is None:
             return self.default_value()
-        if aux_str and (aux_str.startswith(("ssbo:", "ubo:", "workgroup:")) or aux_str == "push_const"):
+        if aux_str and (
+            aux_str.startswith(("ssbo:", "ubo:", "workgroup:"))
+            or aux_str in ("push_const", "gl_SamplePosition")
+        ):
             return self.const_u64(self._env.get_buf_base(aux_str))
+        if imm_u32 == 2:
+            return self.const_u64(self._env.get_buf_base("pilot_srt_0"))
+        if imm_u32 == 3:
+            return self.const_u64(self._env.get_buf_base("pilot_fau_0"))
         if imm_u32 == 6:
             return self.const_u64(self._env.get_buf_base("tls_private"))
         if imm_u32 == 7:
@@ -412,7 +419,11 @@ class SsaInterpreter(Generic[V]):
     def _read_sym_slot(self, state: Any, sym_tag: str, off: Any) -> Any | None: return None
     def _write_sym_slot(self, state: Any, mask: Any, sym_tag: str, off: Any, val: Any, nid: int) -> bool: return False
     def _read_buf(self, state: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any) -> Any: return self.default_value()
+    def _read_buf_sized(self, state: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, width: int) -> Any:
+        return self._read_buf(state, bkey, const_off, off, addr)
     def _write_buf(self, state: Any, mask: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, val: Any, nid: int) -> None: pass
+    def _write_buf_sized(self, state: Any, mask: Any, bkey: str | None, const_off: int | None, off: Any, addr: Any, val: Any, nid: int, width: int) -> None:
+        self._write_buf(state, mask, bkey, const_off, off, addr, val, nid)
     def _extract_img_channel(self, addr: Any) -> tuple[int, Any]: return (0, addr)
     def _write_img_channel(self, state: Any, mask: Any, ikey: str, xy_addr: Any, ch_idx: int, val: Any, nid: int) -> None: pass
     def _write_img_texel(self, state: Any, mask: Any, ikey: str, xy: Any, vec4: tuple[Any, ...], nid: int) -> None: pass
@@ -461,7 +472,10 @@ class SsaInterpreter(Generic[V]):
             eff_hint = bkey_hint
         bkey, const_off, off = self._resolve_buf_addr(addr, eff_hint)
         bkey = self._normalize_bkey(bkey)
-        val = self._read_buf(state, bkey, const_off, off, addr)
+        width = int(node.get("imm_u32", 4))
+        if width not in (1, 2, 4):
+            width = 4
+        val = self._read_buf_sized(state, bkey, const_off, off, addr, width)
         return (val, args[1] if len(args) > 1 else self.const_u32(0))
 
     def psb_store(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:
@@ -487,7 +501,10 @@ class SsaInterpreter(Generic[V]):
             eff_hint = aux_str
         bkey, const_off, off = self._resolve_buf_addr(addr, eff_hint)
         bkey = self._normalize_bkey(bkey)
-        self._write_buf(state, mask, bkey, const_off, off, addr, val, nid)
+        width = int(node.get("imm_u32", 4))
+        if width not in (1, 2, 4):
+            width = 4
+        self._write_buf_sized(state, mask, bkey, const_off, off, addr, val, nid, width)
         return tok
 
     def kill(self, node: dict[str, Any], args: list[Any], state: Any, reach: Any) -> Any:

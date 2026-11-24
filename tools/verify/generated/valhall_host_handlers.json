@@ -53584,12 +53584,70 @@
                 "kind": "binary",
                 "left": {
                   "canonical_type": "bool",
-                  "kind": "ident",
+                  "kind": "binary",
+                  "left": {
+                    "args": [
+                      {
+                        "canonical_type": "const char[10]",
+                        "kind": "literal",
+                        "lit_kind": "string",
+                        "loc": {
+                          "col": 28,
+                          "line": 761
+                        },
+                        "type": "const char[10]",
+                        "value": "PointSize"
+                      }
+                    ],
+                    "callee": {
+                      "is_arrow": false,
+                      "kind": "member",
+                      "loc": {
+                        "col": 13,
+                        "line": 761
+                      },
+                      "member": "find",
+                      "obj": {
+                        "canonical_type": "std::basic_string<char>",
+                        "kind": "ident",
+                        "loc": {
+                          "col": 13,
+                          "line": 761
+                        },
+                        "name": "sout_name",
+                        "type": "std::string"
+                      }
+                    },
+                    "canonical_type": "unsigned long",
+                    "kind": "call",
+                    "loc": {
+                      "col": 13,
+                      "line": 761
+                    },
+                    "qualified_callee": "std::basic_string<char>::find",
+                    "template_args": [],
+                    "type": "size_type"
+                  },
                   "loc": {
                     "col": 13,
                     "line": 761
                   },
-                  "name": "is_f16",
+                  "op": "!=",
+                  "right": {
+                    "canonical_type": "const unsigned long",
+                    "kind": "scoped_ident",
+                    "loc": {
+                      "col": 44,
+                      "line": 761
+                    },
+                    "parts": [
+                      "std",
+                      "basic_string<char>",
+                      "npos"
+                    ],
+                    "qualified_name": "std::basic_string<char>::npos",
+                    "type": "const typename basic_string<char, std::char_traits<char>, std::allocator<char>>::size_type"
+                  },
                   "type": "bool"
                 },
                 "loc": {
@@ -53601,67 +53659,50 @@
                   "canonical_type": "bool",
                   "kind": "binary",
                   "left": {
-                    "args": [
-                      {
-                        "canonical_type": "const char[10]",
-                        "kind": "literal",
-                        "lit_kind": "string",
-                        "loc": {
-                          "col": 38,
-                          "line": 761
-                        },
-                        "type": "const char[10]",
-                        "value": "PointSize"
-                      }
-                    ],
+                    "canonical_type": "bool",
+                    "kind": "ident",
+                    "loc": {
+                      "col": 66,
+                      "line": 761
+                    },
+                    "name": "is_f16",
+                    "type": "bool"
+                  },
+                  "loc": {
+                    "col": 66,
+                    "line": 761
+                  },
+                  "op": "&&",
+                  "right": {
+                    "args": [],
                     "callee": {
                       "is_arrow": false,
                       "kind": "member",
                       "loc": {
-                        "col": 23,
+                        "col": 76,
                         "line": 761
                       },
-                      "member": "find",
+                      "member": "empty",
                       "obj": {
                         "canonical_type": "std::basic_string<char>",
                         "kind": "ident",
                         "loc": {
-                          "col": 23,
+                          "col": 76,
                           "line": 761
                         },
                         "name": "sout_name",
                         "type": "std::string"
                       }
                     },
-                    "canonical_type": "unsigned long",
+                    "canonical_type": "bool",
                     "kind": "call",
                     "loc": {
-                      "col": 23,
+                      "col": 76,
                       "line": 761
                     },
-                    "qualified_callee": "std::basic_string<char>::find",
+                    "qualified_callee": "std::basic_string<char>::empty",
                     "template_args": [],
-                    "type": "size_type"
-                  },
-                  "loc": {
-                    "col": 23,
-                    "line": 761
-                  },
-                  "op": "!=",
-                  "right": {
-                    "canonical_type": "const unsigned long",
-                    "kind": "scoped_ident",
-                    "loc": {
-                      "col": 54,
-                      "line": 761
-                    },
-                    "parts": [
-                      "std",
-                      "basic_string<char>",
-                      "npos"
-                    ],
-                    "qualified_name": "std::basic_string<char>::npos",
-                    "type": "const typename basic_string<char, std::char_traits<char>, std::allocator<char>>::size_type"
+                    "type": "bool"
                   },
                   "type": "bool"
                 },

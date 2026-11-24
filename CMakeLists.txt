@@ -397,6 +397,11 @@ add_test(NAME test_v35_backfill_and_soundness
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME test_v36_concolic_and_lowering
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/symbolic_ssa/test_v36_concolic_and_lowering.py
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

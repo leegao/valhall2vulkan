@@ -19,6 +19,7 @@ from tools.coverage.reachability import solve_maximal_reachability
 from tools.coverage.shrinker import (
     DiffPolicy,
     DivergenceReport,
+    align_vertex_gl_position,
     classify_value_diff,
     localize_and_shrink_divergence,
 )
@@ -66,6 +67,7 @@ def _compare_pair_on_env(
     """
     d_vals, d_out = d_interp.execute_one(cenv)
     v_vals, v_out = v_interp.execute_one(cenv)
+    d_out = align_vertex_gl_position(d_out, v_out, cenv, policy=policy)
 
     all_keys = sorted(set(d_out.keys()) | set(v_out.keys()))
     checked = 0

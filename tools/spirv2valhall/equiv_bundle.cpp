@@ -116,10 +116,10 @@ void populate_mbs2_translate_options(
                 vopts->frag_varying_addr_to_loc[sym.address] = sym.location;
             }
         }
-        for (const auto& sym : extract_res.mbs2.cmmn.sout) {
-            if (sym.rack_index == 3u && !sym.name.empty()) {
-                vopts->vert_sout_attr_names[sym.address] = sym.name;
-            }
+    }
+    for (const auto& sym : extract_res.mbs2.cmmn.sout) {
+        if (sym.rack_index == 3u && !sym.name.empty()) {
+            vopts->vert_sout_attr_names[sym.address] = sym.name;
         }
     }
 
@@ -418,6 +418,33 @@ bool build_equivalence_bundle_json(
     }
     os << ']';
 
+    // Pilot SRT descriptor table: (rack, address) -> canonical buffer key
+    os << ",\"pilot_srt\":[";
+    bool first_srt = true;
+    auto emit_srt = [&](const std::vector<Mbs2Symbol>& syms, const char* kind_str) {
+        for (const auto& s : syms) {
+            if (!first_srt) os << ',';
+            first_srt = false;
+            uint32_t d_set = (s.rack_index >= 4u) ? (s.rack_index - 4u) : 0u;
+            uint32_t bind = (s.binding != 0xFFFFu) ? s.binding : s.address;
+            std::string key;
+            if (std::string(kind_str) == "ubo" && s.rack_index == 0u && s.binding == 0xFFFFu) {
+                key = "push_const";
+            } else {
+                key = std::string(kind_str) + ":" + std::to_string(d_set) + ":" + std::to_string(bind);
+            }
+            os << "{\"rack\":" << static_cast<unsigned>(s.rack_index)
+               << ",\"addr\":" << s.address
+               << ",\"kind\":\"" << kind_str << '"'
+               << ",\"key\":";
+            write_json_str(os, key);
+            os << '}';
+        }
+    };
+    emit_srt(extract_res.mbs2.cmmn.suni, "ubo");
+    emit_srt(extract_res.mbs2.cmmn.s3bo, "ssbo");
+    os << ']';
+
     // Disassembly map: orig_pc -> formatted Valhall ISA instruction string
     os << ",\"pc_disasm\":{";
     for (size_t i = 0; i < primary_eb->instructions.size(); ++i) {
@@ -432,6 +459,21 @@ bool build_equivalence_bundle_json(
     // Serialized SSA modules
     os << ",\"direct_ssa\":" << compiler::serialize_ssa_module_json(direct_res.ssa);
     os << ",\"valhall_ssa\":" << compiler::serialize_ssa_module_json(p1_res.ssa);
+    for (const auto& eb : extract_res.ebins) {
+        if (eb.role == EbinRole::Pilot && !eb.instructions.empty()) {
+            cfg::ControlFlowGraph pilot_cfg = cfg::build_cfg(eb.instructions);
+            cfg::ControlFlowGraph empty_cfg;
+            ValhallTranslateOptions pilot_opts;
+            pilot_opts.stage = valhall::ShaderStage::Pilot;
+            pilot_opts.arch = vopts.arch;
+            pilot_opts.tolerant_ssa = true;
+            compiler::Pass1Result pilot_p1 = compiler::run_pass1_lowering(pilot_cfg, empty_cfg, pilot_opts);
+            if (pilot_p1.ok) {
+                os << ",\"pilot_ssa\":" << compiler::serialize_ssa_module_json(pilot_p1.ssa);
+            }
+            break;
+        }
+    }
     os << '}';
 
     *out_json = os.str();

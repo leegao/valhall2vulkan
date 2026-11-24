@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from tools.symbolic_ssa.env import (
     ConcreteShaderEnv,
     _c_u32,
+    _f32_to_u32,
     _f32_ulp_diff,
     _u32_to_f32,
 )
@@ -109,6 +110,68 @@ def classify_value_diff(
     return "REAL_DIVERGENCE", ud
 
 
+def align_vertex_gl_position(
+    d_out: Dict[str, Any],
+    v_out: Dict[str, Any],
+    env: ConcreteShaderEnv,
+    policy: Optional[DiffPolicy] = None,
+) -> Dict[str, Any]:
+    """
+    Align Direct SPIR-V clip-space `gl_Position` (`builtin_out[0][0..3]`) with
+    Mali's Position FIFO viewport-transformed epilogue `(x/w, y/w, z_vp, 1/w)`
+    whenever `gl_mali_ViewportTransform` is present in `env.viewport_fau_words`.
+
+    Returns a shallow copy of `d_out` with aligned `builtin_out[0][0..3]` when
+    transformation applies, leaving `d_out` untouched if clip-space already
+    matches or `gl_mali_ViewportTransform` is absent.
+    """
+    if env.stage != "Vertex" or not env.viewport_fau_words:
+        return d_out
+    keys = [f"builtin_out[0][{c}]" for c in range(4)]
+    if not all(k in d_out and k in v_out for k in keys):
+        return d_out
+
+    # If raw clip-space already matches v_out (e.g. ST_CHECKED.istream already inverted it), keep as-is.
+    if all(
+        classify_value_diff(d_out[k], v_out[k], k, policy=policy)[0] != "REAL_DIVERGENCE"
+        for k in keys
+    ):
+        return d_out
+
+    cx, cy, cz, cw = (_u32_to_f32(_c_u32(d_out[k])) for k in keys)
+    if math.isnan(cw):
+        inv_w = float("nan")
+    elif cw == 0.0:
+        # Mali clamps |w| below via FMAX(|w|, k0fr2f) before FRCP, producing finite/inf reciprocal with sign of w.
+        inv_w = math.copysign(float("inf"), cw)
+    else:
+        inv_w = 1.0 / cw
+
+    # Identity viewport from ShaderEnvBase: scale=(1,1,1), bias=(0,0,0)
+    x_vp = cx * inv_w
+    y_vp = cy * inv_w
+    z_ndc = cz * inv_w
+    if math.isnan(z_ndc):
+        z_clamped = float("nan")
+    else:
+        z_clamped = max(-1.0, min(1.0, z_ndc))
+
+    u_z_clamped = _f32_to_u32(z_clamped)
+    u_z_unclamped = _f32_to_u32(z_ndc)
+    vz = v_out[keys[2]]
+    if classify_value_diff(u_z_unclamped, vz, keys[2], policy=policy)[0] != "REAL_DIVERGENCE":
+        u_z_out = u_z_unclamped
+    else:
+        u_z_out = u_z_clamped
+
+    out = dict(d_out)
+    out[keys[0]] = _f32_to_u32(x_vp)
+    out[keys[1]] = _f32_to_u32(y_vp)
+    out[keys[2]] = u_z_out
+    out[keys[3]] = _f32_to_u32(inv_w)
+    return out
+
+
 def _extract_comparable_outputs(
     d_out: Dict[str, Any],
     v_out: Dict[str, Any],
@@ -131,8 +194,10 @@ def compare_concrete_outputs(
     """Execute both SSA modules under a concrete env and compare outputs under DiffPolicy."""
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-    d_vals, d_out = d_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=overrides))
-    v_vals, v_out = v_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=overrides))
+    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=overrides)
+    d_vals, d_out = d_interp.execute_one(cenv)
+    v_vals, v_out = v_interp.execute_one(cenv)
+    d_out = align_vertex_gl_position(d_out, v_out, cenv, policy=policy)
 
     for name, dv, vv, _ in _extract_comparable_outputs(d_out, v_out):
         kind, _ = classify_value_diff(dv, vv, name, policy=policy)
@@ -222,8 +287,10 @@ def localize_and_shrink_divergence(
     )
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-    d_vals, d_out = d_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=shrunk))
-    v_vals, v_out = v_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=shrunk))
+    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=shrunk)
+    d_vals, d_out = d_interp.execute_one(cenv)
+    v_vals, v_out = v_interp.execute_one(cenv)
+    d_out = align_vertex_gl_position(d_out, v_out, cenv, policy=policy)
 
     benign_cnt = 0
     first_real: Optional[Tuple[str, Any, Any, Optional[int]]] = None

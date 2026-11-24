@@ -758,7 +758,7 @@ SsaId store_vert_varying(Pass1Context& ctx, uint32_t blk, const DecodedValhallIn
                 sout_name = sit->second;
             }
         }
-        if (is_f16 || sout_name.find("PointSize") != std::string::npos) {
+        if (sout_name.find("PointSize") != std::string::npos || (is_f16 && sout_name.empty())) {
             SsaNode ex0{}; ex0.op = SsaOp::VecExtract; ex0.type = ValType::F32; ex0.imm_u32 = 0; ex0.args = { vec };
             SsaId raw_u32 = ctx.sb.emit_bitcast(blk, ValType::U32, ctx.sb.emit(blk, std::move(ex0)));
             SsaId up2 = ctx.emit_op(blk, SsaOp::UnpackHalf2x16, ValType::V2F32, { raw_u32 });
