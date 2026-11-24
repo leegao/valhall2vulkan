@@ -50,18 +50,31 @@ class TestLoweringExtractor(unittest.TestCase):
         self.assertEqual(len(lscale), 1)
         self.assertFalse(any("Arity mismatch" in w for w in lscale[0]["warnings"]))
 
-    def test_direct_ssa_op_and_scalar_bleed_capture(self) -> None:
-        ins = InstLoweringContext(
+    def test_direct_ssa_op_and_packed_lane_capture(self) -> None:
+        ins_u32 = InstLoweringContext(
+            mnemonic="IADD",
+            variant="u32",
+            srcs=[SourceOperandDesc(reg_num=0), SourceOperandDesc(reg_num=1)],
+            has_dest=True,
+            dest_reg=2,
+        )
+        ssa_u32, tr_u32 = self.ext.lower_instruction(ins_u32)
+        self.assertEqual(tr_u32.rule_kind, "DirectSsaOp")
+        self.assertIn("IAdd", tr_u32.emitted_ops)
+        self.assertIn(2, ssa_u32.reg_writes)
+
+        ins_v2 = InstLoweringContext(
             mnemonic="IADD",
             variant="v2u16",
             srcs=[SourceOperandDesc(reg_num=0), SourceOperandDesc(reg_num=1)],
             has_dest=True,
             dest_reg=2,
         )
-        ssa, tr = self.ext.lower_instruction(ins)
-        self.assertEqual(tr.rule_kind, "DirectSsaOp")
-        self.assertIn("IAdd", tr.emitted_ops)
-        self.assertIn(2, ssa.reg_writes)
+        ssa_v2, tr_v2 = self.ext.lower_instruction(ins_v2)
+        self.assertEqual(tr_v2.rule_kind, "InlineOps")
+        self.assertIn("IAdd", tr_v2.emitted_ops)
+        self.assertIn("BitOr", tr_v2.emitted_ops)
+        self.assertIn(2, ssa_v2.reg_writes)
 
     def test_dynamic_lookup_rule(self) -> None:
         ins_sup = InstLoweringContext(

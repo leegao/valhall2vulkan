@@ -1545,6 +1545,28 @@
     {
       "mnemonic": "MKVEC",
       "variants": [
+        "v2i8"
+      ],
+      "op_class": "alu_vec_pack",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%out : u32 = BitAnd(%0, @u32(255));",
+        "if ($has_src1) { %out = @bfi(%out, %1, 8, 8); }",
+        "if ($has_src2) { %out = @bfi(%out, %2, 16, 16); }"
+      ]
+    },
+    {
+      "mnemonic": "MKVEC",
+      "variants": [
         "*"
       ],
       "op_class": "alu_vec_pack",
@@ -2552,24 +2574,32 @@
         "if ($has_src1) { %y = %1; }",
         "%z : f32 = #f32(0);",
         "if ($has_src2) { %z = %2; }",
+        "%nx_nan : bool = LogicalNot(FCmpOrdEq(%x, %x));",
+        "%ny_nan : bool = LogicalNot(FCmpOrdEq(%y, %y));",
+        "%nz_nan : bool = LogicalNot(FCmpOrdEq(%z, %z));",
+        "%any_nan : bool = LogicalOr(LogicalOr(%nx_nan, %ny_nan), %nz_nan);",
         "%ax : f32 = FAbs(%x);",
         "%ay : f32 = FAbs(%y);",
         "%az : f32 = FAbs(%z);",
-        "%cxy : bool = FCmpOrdGe(%ax, %ay);",
-        "%cxz : bool = FCmpOrdGe(%ax, %az);",
-        "%is_x : bool = LogicalAnd(%cxy, %cxz);",
-        "%is_y : bool = FCmpOrdGe(%ay, %az);",
+        "%mxy : f32 = NMax(%ax, %ay);",
+        "%m : f32 = NMax(%mxy, %az);",
+        "%is_inf_raw : bool = FCmpOrdEq(%m, #f32_bits(0x7f800000));",
+        "%is_inf : bool = LogicalAnd(%is_inf_raw, LogicalNot(%any_nan));",
         "%nx : bool = FCmpOrdLt(%x, #f32(0));",
         "%ny : bool = FCmpOrdLt(%y, #f32(0));",
         "%nz : bool = FCmpOrdLt(%z, #f32(0));",
         "%fx : u32 = Select(%nx, #u32(1), #u32(0));",
         "%fy : u32 = Select(%ny, #u32(3), #u32(2));",
         "%fz : u32 = Select(%nz, #u32(5), #u32(4));",
-        "%fyz : u32 = Select(%is_y, %fy, %fz);",
-        "%face : u32 = Select(%is_x, %fx, %fyz);",
-        "%out : u32 = Shl(%face, #u32(29));"
+        "%is_z : bool = FCmpOrdEq(%az, %m);",
+        "%is_y : bool = FCmpOrdEq(%ay, %m);",
+        "%fyx : u32 = Select(%is_y, %fy, %fx);",
+        "%fzyx : u32 = Select(%is_z, %fz, %fyx);",
+        "%face : u32 = Select(%any_nan, #u32(4), %fzyx);",
+        "%inf_bit : u32 = Select(%is_inf, #u32(65536), #u32(0));",
+        "%out : u32 = BitOr(Shl(%face, #u32(29)), %inf_bit);"
       ],
-      "comment": "Valhall CUBEFACE2(x,y,z) returns u32 face index (0..5) packed in bits [31:29] (face << 29)."
+      "comment": "Valhall CUBEFACE2(x,y,z) returns (face << 29) | (is_inf << 16); NaN -> face 4; tie-break |z| >= |y| >= |x|."
     },
     {
       "mnemonic": "CUBE_SSEL",
@@ -2641,11 +2671,7 @@
       "mnemonic": "IADD",
       "variants": [
         "u32",
-        "s32",
-        "v2u16",
-        "v2s16",
-        "v4u8",
-        "v4s8"
+        "s32"
       ],
       "op_class": "int_binary",
       "ssa_op": "IAdd",
@@ -2657,6 +2683,64 @@
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": []
+    },
+    {
+      "mnemonic": "IADD",
+      "variants": [
+        "v2u16",
+        "v2s16"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%lo0 : u32 = BitAnd(%0, #u32(65535));",
+        "%lo1 : u32 = BitAnd(%1, #u32(65535));",
+        "%rlo : u32 = BitAnd(IAdd(%lo0, %lo1), #u32(65535));",
+        "%hi0 : u32 = ShrU(%0, #u32(16));",
+        "%hi1 : u32 = ShrU(%1, #u32(16));",
+        "%rhi : u32 = Shl(IAdd(%hi0, %hi1), #u32(16));",
+        "%out : u32 = BitOr(%rlo, %rhi);"
+      ]
+    },
+    {
+      "mnemonic": "IADD",
+      "variants": [
+        "v4u8",
+        "v4s8"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%a0 : u32 = BitAnd(%0, #u32(255));",
+        "%b0 : u32 = BitAnd(%1, #u32(255));",
+        "%r0 : u32 = BitAnd(IAdd(%a0, %b0), #u32(255));",
+        "%a1 : u32 = BitAnd(ShrU(%0, #u32(8)), #u32(255));",
+        "%b1 : u32 = BitAnd(ShrU(%1, #u32(8)), #u32(255));",
+        "%r1 : u32 = Shl(BitAnd(IAdd(%a1, %b1), #u32(255)), #u32(8));",
+        "%a2 : u32 = BitAnd(ShrU(%0, #u32(16)), #u32(255));",
+        "%b2 : u32 = BitAnd(ShrU(%1, #u32(16)), #u32(255));",
+        "%r2 : u32 = Shl(BitAnd(IAdd(%a2, %b2), #u32(255)), #u32(16));",
+        "%a3 : u32 = ShrU(%0, #u32(24));",
+        "%b3 : u32 = ShrU(%1, #u32(24));",
+        "%r3 : u32 = Shl(IAdd(%a3, %b3), #u32(24));",
+        "%out : u32 = BitOr(BitOr(%r0, %r1), BitOr(%r2, %r3));"
+      ]
     },
     {
       "mnemonic": "IADD",
@@ -2743,11 +2827,7 @@
       "mnemonic": "ISUB",
       "variants": [
         "u32",
-        "s32",
-        "v2u16",
-        "v2s16",
-        "v4u8",
-        "v4s8"
+        "s32"
       ],
       "op_class": "int_binary",
       "ssa_op": "ISub",
@@ -2759,6 +2839,64 @@
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": []
+    },
+    {
+      "mnemonic": "ISUB",
+      "variants": [
+        "v2u16",
+        "v2s16"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%lo0 : u32 = BitAnd(%0, #u32(65535));",
+        "%lo1 : u32 = BitAnd(%1, #u32(65535));",
+        "%rlo : u32 = BitAnd(ISub(%lo0, %lo1), #u32(65535));",
+        "%hi0 : u32 = ShrU(%0, #u32(16));",
+        "%hi1 : u32 = ShrU(%1, #u32(16));",
+        "%rhi : u32 = Shl(ISub(%hi0, %hi1), #u32(16));",
+        "%out : u32 = BitOr(%rlo, %rhi);"
+      ]
+    },
+    {
+      "mnemonic": "ISUB",
+      "variants": [
+        "v4u8",
+        "v4s8"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%a0 : u32 = BitAnd(%0, #u32(255));",
+        "%b0 : u32 = BitAnd(%1, #u32(255));",
+        "%r0 : u32 = BitAnd(ISub(%a0, %b0), #u32(255));",
+        "%a1 : u32 = BitAnd(ShrU(%0, #u32(8)), #u32(255));",
+        "%b1 : u32 = BitAnd(ShrU(%1, #u32(8)), #u32(255));",
+        "%r1 : u32 = Shl(BitAnd(ISub(%a1, %b1), #u32(255)), #u32(8));",
+        "%a2 : u32 = BitAnd(ShrU(%0, #u32(16)), #u32(255));",
+        "%b2 : u32 = BitAnd(ShrU(%1, #u32(16)), #u32(255));",
+        "%r2 : u32 = Shl(BitAnd(ISub(%a2, %b2), #u32(255)), #u32(16));",
+        "%a3 : u32 = ShrU(%0, #u32(24));",
+        "%b3 : u32 = ShrU(%1, #u32(24));",
+        "%r3 : u32 = Shl(ISub(%a3, %b3), #u32(24));",
+        "%out : u32 = BitOr(BitOr(%r0, %r1), BitOr(%r2, %r3));"
+      ]
     },
     {
       "mnemonic": "ISUB",
@@ -2806,11 +2944,7 @@
       "mnemonic": "IMUL",
       "variants": [
         "u32",
-        "s32",
-        "v2u16",
-        "v2s16",
-        "v4u8",
-        "v4s8"
+        "s32"
       ],
       "op_class": "int_binary",
       "ssa_op": "IMul",
@@ -2822,6 +2956,64 @@
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": []
+    },
+    {
+      "mnemonic": "IMUL",
+      "variants": [
+        "v2u16",
+        "v2s16"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%lo0 : u32 = BitAnd(%0, #u32(65535));",
+        "%lo1 : u32 = BitAnd(%1, #u32(65535));",
+        "%rlo : u32 = BitAnd(IMul(%lo0, %lo1), #u32(65535));",
+        "%hi0 : u32 = ShrU(%0, #u32(16));",
+        "%hi1 : u32 = ShrU(%1, #u32(16));",
+        "%rhi : u32 = Shl(IMul(%hi0, %hi1), #u32(16));",
+        "%out : u32 = BitOr(%rlo, %rhi);"
+      ]
+    },
+    {
+      "mnemonic": "IMUL",
+      "variants": [
+        "v4u8",
+        "v4s8"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%a0 : u32 = BitAnd(%0, #u32(255));",
+        "%b0 : u32 = BitAnd(%1, #u32(255));",
+        "%r0 : u32 = BitAnd(IMul(%a0, %b0), #u32(255));",
+        "%a1 : u32 = BitAnd(ShrU(%0, #u32(8)), #u32(255));",
+        "%b1 : u32 = BitAnd(ShrU(%1, #u32(8)), #u32(255));",
+        "%r1 : u32 = Shl(BitAnd(IMul(%a1, %b1), #u32(255)), #u32(8));",
+        "%a2 : u32 = BitAnd(ShrU(%0, #u32(16)), #u32(255));",
+        "%b2 : u32 = BitAnd(ShrU(%1, #u32(16)), #u32(255));",
+        "%r2 : u32 = Shl(BitAnd(IMul(%a2, %b2), #u32(255)), #u32(16));",
+        "%a3 : u32 = ShrU(%0, #u32(24));",
+        "%b3 : u32 = ShrU(%1, #u32(24));",
+        "%r3 : u32 = Shl(IMul(%a3, %b3), #u32(24));",
+        "%out : u32 = BitOr(BitOr(%r0, %r1), BitOr(%r2, %r3));"
+      ]
     },
     {
       "mnemonic": "IMUL",

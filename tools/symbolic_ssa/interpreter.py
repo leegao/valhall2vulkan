@@ -332,6 +332,8 @@ class SsaInterpreter(Generic[V]):
             or aux_str in ("push_const", "gl_SamplePosition")
         ):
             return self.const_u64(self._env.get_buf_base(aux_str))
+        if imm_u32 == 1:
+            return self.const_u64(self._env.get_buf_base("ebin_rodata"))
         if imm_u32 == 2:
             return self.const_u64(self._env.get_buf_base("pilot_srt_0"))
         if imm_u32 == 3:

@@ -54,6 +54,11 @@ class TestAllPathsMiter(unittest.TestCase):
             ("MOV", "i32", {}),
         ]
         sound_cases.append(("MUX", "i32", {"muxf": "int_zero"}))
+        sound_cases.append(("MKVEC", "v2i8", {}))
+        sound_cases.append(("IADD", "v2u16", {}))
+        sound_cases.append(("ISUB", "v4u8", {}))
+        sound_cases.append(("IMUL", "v2u16", {}))
+        sound_cases.append(("CUBEFACE2", "", {}))
         for mnem, var, mods in sound_cases:
             mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)
             self.assertEqual(
@@ -64,13 +69,8 @@ class TestAllPathsMiter(unittest.TestCase):
 
     def test_known_unpatched_defects_produce_sat_counterexamples(self) -> None:
         buggy_cases = [
-            ("IADD", "v2u16", {}),
-            ("ISUB", "v4u8", {}),
-            ("IMUL", "v2u16", {}),
             ("HADD", "v2u16", {}),
             ("IADD", "s32", {"saturate": True}),
-            ("MKVEC", "v2i8", {}),
-            ("CUBEFACE2", "", {}),
             ("IDPADD", "v4s8", {}),
             ("FMIN", "f32", {"nan_mode": "nan_suppress"}),  # Psi_pan deterministic -0.0 < +0.0 vs ssa_z3_eval fpMin
         ]

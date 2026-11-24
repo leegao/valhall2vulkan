@@ -241,10 +241,91 @@ class ShaderEnvBase:
             int(s["addr"]): int(s["location"]) for s in self.mbs2.get("sout", []) if int(s.get("location", -1)) >= 0
         }
 
+        self._pilot_srt_by_rack: dict[int, dict[int, str]] = {}
+        for se in self.mbs2.get("pilot_srt", []):
+            rk = int(se.get("rack", 0))
+            ad = int(se.get("addr", 0))
+            ky = str(se.get("key", ""))
+            if ky:
+                self._pilot_srt_by_rack.setdefault(rk, {})[ad] = ky
+                self.get_buf_base(ky)
+
+        ro = self.mbs2.get("ebin_rodata") or {}
+        self._ebin_rodata_offset: int = int(ro.get("offset", 0))
+        ro_hex = str(ro.get("hex", ""))
+        self._ebin_rodata_bytes: bytes = bytes.fromhex(ro_hex) if ro_hex else b""
+        if self._ebin_rodata_bytes:
+            self.get_buf_base("ebin_rodata")
+
+    REGION_STRIDE_HI: int = 0x100
+
     def get_buf_base(self, key: str) -> int:
         if key not in self.buf_base_map:
-            base = self._next_region << 32
+            base = (self._next_region * self.REGION_STRIDE_HI) << 32
             self._next_region += 1
             self.buf_base_map[key] = base
             self.base_to_buf[base] = key
         return self.buf_base_map[key]
+
+    def resolve_region_hi32(self, hi32: int) -> str | None:
+        """Resolve a 64-bit pointer's upper 32 bits to its owning buffer key.
+
+        Tolerates small carry/borrow deltas (within +/-0x40 * 4GB) introduced by
+        signed `IADD.s64` / `SHADD.s64` or shifted unsigned 32-bit offsets without
+        colliding with adjacent regions spaced by `REGION_STRIDE_HI` (0x100 * 4GB).
+        """
+        h = int(hi32) & MASK32
+        exact = h << 32
+        if exact in self.base_to_buf:
+            return self.base_to_buf[exact]
+        stride = self.REGION_STRIDE_HI
+        rounded = (h + (stride // 2)) & ~(stride - 1)
+        if rounded > 0 and abs(h - rounded) <= (stride // 4):
+            cand = rounded << 32
+            if cand in self.base_to_buf:
+                return self.base_to_buf[cand]
+        return None
+
+    def read_pilot_srt_u32(self, bkey: str, off32: int) -> int | None:
+        """Read a 32-bit word from virtual Pilot SRT tables (`pilot_srt_0` / `pilot_srt_rack_<r>`)."""
+        if bkey == "pilot_srt_0":
+            rack = off32 // 16
+            rem = off32 % 16
+            rbase = self.get_buf_base(f"pilot_srt_rack_{rack}")
+            if rem == 0:
+                return rbase & MASK32
+            if rem == 4:
+                return (rbase >> 32) & MASK32
+            return 0
+        if bkey.startswith("pilot_srt_rack_"):
+            rack = int(bkey[len("pilot_srt_rack_"):])
+            desc_idx = off32 // 32
+            field_off = off32 % 32
+            tkey = self._pilot_srt_by_rack.get(rack, {}).get(desc_idx)
+            if tkey is not None:
+                if field_off == 4:
+                    return 0x10000
+                bbase = self.get_buf_base(tkey)
+                if field_off == 8:
+                    return bbase & MASK32
+                if field_off == 12:
+                    return (bbase >> 32) & MASK32
+            return 0
+        return None
+
+    def read_ebin_rodata_byte(self, off32: int) -> int:
+        """Read one byte from the embedded EBIN data_section at EBIN-relative byte offset `off32`."""
+        rel = (int(off32) & MASK32) - self._ebin_rodata_offset
+        if 0 <= rel < len(self._ebin_rodata_bytes):
+            return self._ebin_rodata_bytes[rel]
+        return 0
+
+    def read_ebin_rodata_u32(self, off32: int) -> int:
+        """Read a little-endian 32-bit word from the embedded EBIN data_section at `off32`."""
+        base = int(off32) & MASK32
+        return (
+            self.read_ebin_rodata_byte(base)
+            | (self.read_ebin_rodata_byte(base + 1) << 8)
+            | (self.read_ebin_rodata_byte(base + 2) << 16)
+            | (self.read_ebin_rodata_byte(base + 3) << 24)
+        )

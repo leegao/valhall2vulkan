@@ -37,14 +37,7 @@ class ConcreteShaderEnv(ShaderEnvBase):
         self.lane_id = int(self.overrides.get("lane_id", vec_idx & 31)) & 31
         self._pilot_executed: bool = False
         self.pilot_exec_fau_words: dict[int, int] = {}
-        self._pilot_srt_by_rack: dict[int, dict[int, str]] = {}
-        for se in self.mbs2.get("pilot_srt", []):
-            rk = int(se.get("rack", 0))
-            ad = int(se.get("addr", 0))
-            ky = str(se.get("key", ""))
-            if ky:
-                self._pilot_srt_by_rack.setdefault(rk, {})[ad] = ky
-                self.get_buf_base(ky)
+
 
     def sample_u32(self, name: str) -> int:
         if name in self.overrides:
@@ -79,29 +72,11 @@ class ConcreteShaderEnv(ShaderEnvBase):
             sx = 0 if (math.isnan(fx) or math.isinf(fx)) else max(-32768, min(32767, round(fx * 256.0)))
             sy = 0 if (math.isnan(fy) or math.isinf(fy)) else max(-32768, min(32767, round(fy * 256.0)))
             return ((sy & 0xFFFF) << 16) | (sx & 0xFFFF)
-        if bkey == "pilot_srt_0":
-            rack = off32 // 16
-            rem = off32 % 16
-            rbase = self.get_buf_base(f"pilot_srt_rack_{rack}")
-            if rem == 0:
-                return rbase & MASK32
-            if rem == 4:
-                return (rbase >> 32) & MASK32
-            return 0
-        if bkey.startswith("pilot_srt_rack_"):
-            rack = int(bkey[len("pilot_srt_rack_"):])
-            desc_idx = off32 // 32
-            field_off = off32 % 32
-            tkey = self._pilot_srt_by_rack.get(rack, {}).get(desc_idx)
-            if tkey is not None:
-                if field_off == 4:
-                    return 0x10000
-                bbase = self.get_buf_base(tkey)
-                if field_off == 8:
-                    return bbase & MASK32
-                if field_off == 12:
-                    return (bbase >> 32) & MASK32
-            return 0
+        if bkey == "ebin_rodata":
+            return self.read_ebin_rodata_u32(off32)
+        srt_val = self.read_pilot_srt_u32(bkey, off32)
+        if srt_val is not None:
+            return srt_val
         if bkey == "wls_shared" and self.unique_workgroup_key is not None:
             bkey = self.unique_workgroup_key
         key = f"mem:{bkey}:{off32 & MASK32}"
@@ -158,10 +133,10 @@ class ConcreteShaderEnv(ShaderEnvBase):
         return _det_hash_u32(tag, self.seed, self.vec_idx, *(int(a) & MASK32 for a in args))
 
     def resolve_addr(self, addr64: int, hint_key: str = "") -> tuple[str | None, int]:
-        region = (addr64 >> 32) << 32
         off = addr64 & MASK32
-        if region in self.base_to_buf:
-            return self.base_to_buf[region], off
+        bkey = self.resolve_region_hi32(addr64 >> 32)
+        if bkey is not None:
+            return bkey, off
         if hint_key:
             return hint_key, off
         return None, off

@@ -445,6 +445,19 @@ bool build_equivalence_bundle_json(
     emit_srt(extract_res.mbs2.cmmn.s3bo, "ssbo");
     os << ']';
 
+    // Embedded read-only data section (LUTs / constant tables addressed via PC-relative ADR)
+    if (primary_eb != nullptr && !primary_eb->data_section.empty() &&
+        primary_eb->meta.data_section_offset != 0xFFFFFFFFu) {
+        static constexpr char kHex[] = "0123456789abcdef";
+        os << ",\"ebin_rodata\":{\"offset\":" << primary_eb->meta.data_section_offset
+           << ",\"size\":" << primary_eb->data_section.size()
+           << ",\"hex\":\"";
+        for (uint8_t byte : primary_eb->data_section) {
+            os << kHex[(byte >> 4) & 0xFu] << kHex[byte & 0xFu];
+        }
+        os << "\"}";
+    }
+
     // Disassembly map: orig_pc -> formatted Valhall ISA instruction string
     os << ",\"pc_disasm\":{";
     for (size_t i = 0; i < primary_eb->instructions.size(); ++i) {

@@ -412,6 +412,12 @@ add_test(NAME test_v38_backfill_pushconst_subword_fau
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(
+    NAME test_v39_rodata_and_abi_parity
+    COMMAND ${Python3_EXECUTABLE} -m unittest tools.symbolic_ssa.test_v39_rodata_and_abi_parity
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

@@ -87,14 +87,7 @@ class SymbolicShaderEnv(ShaderEnvBase):
         self.inputs["lane_id"] = self.lane_id
         self._pilot_executed: bool = False
         self.pilot_exec_fau_words: dict[int, Any] = {}
-        self._pilot_srt_by_rack: dict[int, dict[int, str]] = {}
-        for se in self.mbs2.get("pilot_srt", []):
-            rk = int(se.get("rack", 0))
-            ad = int(se.get("addr", 0))
-            ky = str(se.get("key", ""))
-            if ky:
-                self._pilot_srt_by_rack.setdefault(rk, {})[ad] = ky
-                self.get_buf_base(ky)
+
 
     def set_shared_demands(
         self,
@@ -138,29 +131,11 @@ class SymbolicShaderEnv(ShaderEnvBase):
         Returns `None` when the slot is mutable, multi-typed (`TOP_BITS`), or
         not in backfill mode.
         """
-        if bkey == "pilot_srt_0":
-            rack = const_off // 16
-            rem = const_off % 16
-            rbase = self.get_buf_base(f"pilot_srt_rack_{rack}")
-            if rem == 0:
-                return self.domain.lift_z3_bv32(_dsl_bv32(rbase & MASK32))
-            if rem == 4:
-                return self.domain.lift_z3_bv32(_dsl_bv32((rbase >> 32) & MASK32))
-            return self.domain.lift_z3_bv32(_dsl_bv32(0))
-        if bkey.startswith("pilot_srt_rack_"):
-            rack = int(bkey[len("pilot_srt_rack_"):])
-            desc_idx = const_off // 32
-            field_off = const_off % 32
-            tkey = self._pilot_srt_by_rack.get(rack, {}).get(desc_idx)
-            if tkey is not None:
-                if field_off == 4:
-                    return self.domain.lift_z3_bv32(_dsl_bv32(0x10000))
-                bbase = self.get_buf_base(tkey)
-                if field_off == 8:
-                    return self.domain.lift_z3_bv32(_dsl_bv32(bbase & MASK32))
-                if field_off == 12:
-                    return self.domain.lift_z3_bv32(_dsl_bv32((bbase >> 32) & MASK32))
-            return self.domain.lift_z3_bv32(_dsl_bv32(0))
+        if bkey == "ebin_rodata":
+            return self.domain.lift_z3_bv32(_dsl_bv32(self.read_ebin_rodata_u32(const_off)))
+        srt_val = self.read_pilot_srt_u32(bkey, const_off)
+        if srt_val is not None:
+            return self.domain.lift_z3_bv32(_dsl_bv32(srt_val))
         if not self.shared_demands or not is_readonly_bkey(bkey):
             return None
         slot_key = f"buf_slot:{bkey}:{const_off}"
@@ -195,9 +170,24 @@ class SymbolicShaderEnv(ShaderEnvBase):
         if key == "wls_shared" and self.unique_workgroup_key is not None:
             key = self.unique_workgroup_key
         if key not in self.init_buf_mem:
-            safe = key.replace(":", "_")
-            val_sort = BV8 if self.memory_model == "byte" else BV32
-            self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, val_sort)
+            if key == "ebin_rodata" and self._ebin_rodata_bytes:
+                if self.memory_model == "byte":
+                    arr = dsl.K(BV32, dsl.BitVecVal(0, 8))
+                    for i, bval in enumerate(self._ebin_rodata_bytes):
+                        if bval != 0:
+                            arr = dsl.Store(arr, _dsl_bv32(self._ebin_rodata_offset + i), dsl.BitVecVal(bval, 8))
+                else:
+                    arr = dsl.K(BV32, _dsl_bv32(0))
+                    n = len(self._ebin_rodata_bytes)
+                    for i in range(0, n, 4):
+                        w = self.read_ebin_rodata_u32(self._ebin_rodata_offset + i)
+                        if w != 0:
+                            arr = dsl.Store(arr, _dsl_bv32(self._ebin_rodata_offset + i), _dsl_bv32(w))
+                self.init_buf_mem[key] = arr
+            else:
+                safe = key.replace(":", "_")
+                val_sort = BV8 if self.memory_model == "byte" else BV32
+                self.init_buf_mem[key] = dsl.Array(f"mem_{safe}", BV32, val_sort)
         return self.init_buf_mem[key]
 
     def get_ssbo_shared_mem(self) -> Any:
@@ -296,11 +286,19 @@ class SymbolicShaderEnv(ShaderEnvBase):
                 else:
                     conds.append(dsl.ULT(self.inputs["bi_29"], _dsl_bv32(lx * ly * lz)))
         if "gl_SamplePosition" in self.init_buf_mem:
+            # Mali's `sample` sideband table packs (x, y) as two Q8.8 signed 16-bit halfwords
+            # in a single 32-bit word (`h0 = x * 256`, `h1 = y * 256`), matching ConcreteShaderEnv.
             sp_mem = self.init_buf_mem["gl_SamplePosition"]
+            sp_word = self.read_buf_u32(sp_mem, _dsl_bv32(0))
+            inv_256 = self.domain.const_u32(0x3B800000)
             if "bi_19_0" in self.inputs:
-                conds.append(self.read_buf_u32(sp_mem, _dsl_bv32(0)) == self.inputs["bi_19_0"])
+                sx_s32 = self.domain.lift_z3_bv32(dsl.SignExt(16, dsl.Extract(15, 0, sp_word)))
+                sx_f32 = self.domain.fp_binary("FMul", self.domain.cast_value("ConvertSToF", sx_s32, "f32"), inv_256)
+                conds.append(self.domain.lower_z3_bv32(sx_f32) == self.inputs["bi_19_0"])
             if "bi_19_1" in self.inputs:
-                conds.append(self.read_buf_u32(sp_mem, _dsl_bv32(4)) == self.inputs["bi_19_1"])
+                sy_s32 = self.domain.lift_z3_bv32(dsl.SignExt(16, dsl.Extract(31, 16, sp_word)))
+                sy_f32 = self.domain.fp_binary("FMul", self.domain.cast_value("ConvertSToF", sy_s32, "f32"), inv_256)
+                conds.append(self.domain.lower_z3_bv32(sy_f32) == self.inputs["bi_19_1"])
         return conds
 
     def get_img_mem(self, key: str) -> tuple[Any, ...]:
@@ -317,17 +315,17 @@ class SymbolicShaderEnv(ShaderEnvBase):
             cur = stack.pop()
             visited += 1
             if dsl.is_bv_value(cur) and cur.size() == 64:
-                region = (dsl.as_long(cur) >> 32) << 32
-                if region in self.base_to_buf:
-                    found.add(self.base_to_buf[region])
+                bkey = self.resolve_region_hi32(dsl.as_long(cur) >> 32)
+                if bkey is not None:
+                    found.add(bkey)
                     if len(found) > 1:
                         return None
             elif dsl.is_app(cur) and cur.decl().kind() == dsl.Z3OpKind.CONCAT and cur.num_args() == 2 and cur.arg(0).size() == 32:
                 hi_c = _try_const_u64(z3utils.simplify(cur.arg(0), relift=True))
                 if hi_c is not None:
-                    region = hi_c << 32
-                    if region in self.base_to_buf:
-                        found.add(self.base_to_buf[region])
+                    bkey = self.resolve_region_hi32(hi_c)
+                    if bkey is not None:
+                        found.add(bkey)
                         if len(found) > 1:
                             return None
             elif isinstance(cur, dsl.Z3OpBvAdd):
@@ -342,21 +340,21 @@ class SymbolicShaderEnv(ShaderEnvBase):
         """Decompose a 64-bit address into (buf_key, const_offset_or_None, offset_bv32)."""
         c = _try_const_u64(addr_expr)
         if c is not None:
-            region = (c >> 32) << 32
             off = c & MASK32
-            if region in self.base_to_buf:
-                return self.base_to_buf[region], off, _dsl_bv32(off)
+            bkey = self.resolve_region_hi32(c >> 32)
+            if bkey is not None:
+                return bkey, off, _dsl_bv32(off)
             if hint_key:
                 return hint_key, off, _dsl_bv32(off)
             return None, c, _dsl_bv32(off)
 
         hi = _try_const_u64(z3utils.simplify(dsl.Extract(63, 32, addr_expr), relift=True))
         if hi is not None:
-            region = hi << 32
-            if region in self.base_to_buf:
+            bkey = self.resolve_region_hi32(hi)
+            if bkey is not None:
                 lo = z3utils.simplify(dsl.Extract(31, 0, addr_expr), relift=True)
                 lo_c = _try_const_u64(lo)
-                return self.base_to_buf[region], lo_c, lo
+                return bkey, lo_c, lo
 
         bkey = self._find_base_region_in_add(addr_expr)
         if bkey is not None:
