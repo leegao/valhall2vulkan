@@ -135,6 +135,34 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
                 return a
         return None
 
+    def _is_valhall_persp_var(self, nid: int) -> bool:
+        n = self.nodes_by_id.get(nid)
+        if not n or n.get("op") != "VecExtract" or not n.get("args"):
+            return False
+        base = self.nodes_by_id.get(int(n["args"][0]))
+        return bool(base and base.get("op") == "LoadFragVarying" and not base.get("aux_bool", False))
+
+    def _is_valhall_frag_w(self, nid: int) -> bool:
+        n = self.nodes_by_id.get(nid)
+        if not n or n.get("op") != "VecExtract" or int(n.get("imm_u32", 0)) != 3 or not n.get("args"):
+            return False
+        base = self.nodes_by_id.get(int(n["args"][0]))
+        return bool(base and base.get("op") == "LoadBuiltinInput" and base.get("aux_str") == "gl_FragCoord")
+
+    def fp_binary(self, op: str, a: Any, b: Any) -> Any:
+        if (
+            op == "FMul"
+            and self._cur_node is not None
+            and self._cur_node.get("orig_pc") is not None
+            and isinstance(a, int)
+            and isinstance(b, int)
+        ):
+            if self._is_valhall_persp_var(a) and self._is_valhall_frag_w(b):
+                return a
+            if self._is_valhall_persp_var(b) and self._is_valhall_frag_w(a):
+                return b
+        return None
+
 
 def pass_gvn_dce(
     blocks_by_id: dict[int, dict[str, Any]],

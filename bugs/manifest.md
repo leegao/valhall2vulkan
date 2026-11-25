@@ -28,6 +28,10 @@ This manifest catalogues every closed and open equivalence divergence discovered
 
 ---
 
+| **BUG-013** | CLOSED (v45) | Canonicalizer (`pass_gvn_dce.py`) | `f97218f0` (`30->0`), `d338ddaf`, `frag_unique_04` (`27->12`) | `LD_VAR_IMM` + `LD_VAR_SPECIAL frag_w` emitted `FMul(VecExtract(LoadFragVarying[!flat]), gl_FragCoord.w)` on Valhall when `LoadFragVarying` already returns perspective-divided varyings. | `tools/symbolic_ssa/passes/pass_gvn_dce.py` (`V1_split_persp_var_w`). Test: `test_v45_frag_w_tex_wide_and_fp_range`. |
+| **BUG-014** | CLOSED (v45) | Lowering (`valhall_pass1_handlers.cpp`) | `d338ddaf` (`64->0`), `d83fa6fc` (`64->0`) | `tex_sample` ignored `[r_smp:r_tex]` wide register-pair texture indices (`0x04000000 | tex_idx`), ignored `lod_mode=none` (zero LOD), and pushed zero LOD before `array_idx`. | `src/valhall_pass1_handlers.cpp` (`tex_sample`). Test: `test_v45_frag_w_tex_wide_and_fp_range`. |
+| **BUG-015** | CLOSED (v45) | Modeling / ABI (`concrete_shader_env.py`, `symbolic_shader_env.py`, `equiv_bundle.cpp`) | `df118580` (`1->0`), `da01e63c` (`61->59`) | Direct `BaseVertex` (`bi_4424`) / `BaseInstance` (`bi_4425`) and `gl_mali_non_rmu_buffer` (`0x00000002` at `76, 80, 88`) were randomized instead of `0`. | `tools/symbolic_ssa/domains/shader_env/{concrete,symbolic}_shader_env.py`, `tools/spirv2valhall/equiv_bundle.cpp`. Test: `test_v45_frag_w_tex_wide_and_fp_range`. |
+
 ## Open Bugs (Active Backlog)
 
 | ID | Status | Layer | Recorded Repro / Shaders | Root Cause & Next Action |

@@ -85,6 +85,7 @@ def triage_divergence(
     raw_direct_ssa: dict[str, Any] | None = None,
     raw_valhall_ssa: dict[str, Any] | None = None,
     policy: DiffPolicy | None = None,
+    fp_range: str = "unconstrained",
 ) -> TriageReport:
     """
     Analyze a localized concrete divergence and produce evidence-based triage hints
@@ -100,15 +101,15 @@ def triage_divergence(
     canon_side = ""
     if raw_direct_ssa is not None and raw_valhall_ssa is not None:
         raw_div, _, _, _, _, _ = compare_concrete_outputs(
-            bundle, raw_direct_ssa, raw_valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy
+            bundle, raw_direct_ssa, raw_valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy, fp_range=fp_range
         )
         if not raw_div:
             canon_introduced = True
             d_raw_vs_v_can, _, _, _, _, _ = compare_concrete_outputs(
-                bundle, raw_direct_ssa, valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy
+                bundle, raw_direct_ssa, valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy, fp_range=fp_range
             )
             d_can_vs_v_raw, _, _, _, _, _ = compare_concrete_outputs(
-                bundle, direct_ssa, raw_valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy
+                bundle, direct_ssa, raw_valhall_ssa, overrides=ov, vec_idx=vec_idx, policy=policy, fp_range=fp_range
             )
             if d_can_vs_v_raw and not d_raw_vs_v_can:
                 canon_side = "direct"
@@ -121,7 +122,7 @@ def triage_divergence(
             )
 
     # Re-execute once on the minimal witness to inspect concrete traces.
-    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=ov)
+    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=ov, fp_range=fp_range)
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
     d_vals, _ = d_interp.execute_one(cenv)

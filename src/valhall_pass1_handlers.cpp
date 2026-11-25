@@ -721,6 +721,15 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
             tex_idx = it_fau->second;
             has_tex_idx = true;
         }
+    } else if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register) {
+        SsaId hi_id = ctx.sb.current_reg(blk, (ins.srcs[0].reg_num & 62u) + 1u);
+        if (hi_id != kInvalidSsa) {
+            const auto& hn = ctx.mod.get(hi_id);
+            if (hn.op == SsaOp::ConstU32 && (hn.imm_u32 >> 24) == 0x04u) {
+                tex_idx = hn.imm_u32 & 0xFFFFu;
+                has_tex_idx = true;
+            }
+        }
     }
     SsaNode ts{};
     bool is_grad = (ins.mnemonic == Mnemonic::TEX_GRADIENT ||
@@ -737,7 +746,7 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     bool is_zero_lod = false;
     if (auto it = ins.modifier_strs.find("lod_mode"); it != ins.modifier_strs.end()) {
         if (it->second == "explicit") is_explicit_lod = true;
-        else if (it->second == "zero") is_zero_lod = true;
+        else if (it->second == "zero" || it->second == "none") is_zero_lod = true;
     }
     if (!is_explicit_lod && ctx.opts.stage != ShaderStage::Fragment) {
         is_zero_lod = true;
@@ -766,9 +775,6 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.aux_bool = (ctx.opts.stage == ShaderStage::Fragment && !is_gather);
     ts.aux_bool2 = is_gather;
     ts.args = { uv };
-    if (ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) {
-        ts.args.push_back(ctx.sb.emit_const_u32(blk, 0u));
-    }
     uint32_t sr_cnt = abi::sr_read_count(ctx, blk, ins, nullptr);
     if (sr_cnt > 2u &&
         ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
@@ -776,6 +782,9 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
         for (uint32_t sr_i = 2u; sr_i < max_sr; ++sr_i) {
             ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
         }
+    }
+    if (ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) {
+        ts.args.push_back(ctx.sb.emit_const_u32(blk, 0u));
     }
     ts.args.push_back(tok);
     ts.is_barrier_or_cf = true;

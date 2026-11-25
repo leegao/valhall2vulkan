@@ -370,6 +370,8 @@ class SymbolicShaderEnv(ShaderEnvBase):
         return None, None, dsl.Extract(31, 0, addr_expr)
 
     def get_builtin(self, builtin_id: int, val_type: str) -> Z3Val:
+        if builtin_id in (4424, 4425):
+            return _dsl_bv32(0)
         name = f"bi_{builtin_id}"
         if val_type == "V4F32":
             return tuple(self._make_demanded_scalar(f"{name}_{c}", f"{name}_{c}") for c in range(4))

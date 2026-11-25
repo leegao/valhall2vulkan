@@ -29,11 +29,13 @@ class ConcreteShaderEnv(ShaderEnvBase):
         vec_idx: int,
         seed: int = 0x5A17,
         overrides: dict[str, Any] | None = None,
+        fp_range: str = "unconstrained",
     ):
         self._init_abi_layout(bundle)
         self.vec_idx = vec_idx
         self.seed = seed
         self.overrides: dict[str, Any] = overrides if overrides is not None else {}
+        self.fp_range = fp_range
         self.lane_id = int(self.overrides.get("lane_id", vec_idx & 31)) & 31
         self._pilot_executed: bool = False
         self.pilot_exec_fau_words: dict[int, int] = {}
@@ -43,11 +45,21 @@ class ConcreteShaderEnv(ShaderEnvBase):
         if name in self.overrides:
             v = self.overrides[name]
             return (1 if v else 0) if isinstance(v, bool) else (int(v) & MASK32)
+        if name in ("bi_4424", "bi_4425"):
+            return 0
         if name in ("bi_19_0", "bi_19_1"):
             # Vulkan gl_SamplePosition lies on a subpixel grid in [0.0, 1.0);
             # using 1/256 granularity ensures exact Q8.8 fixed-point round-trip in Mali's sample table.
             h = _det_hash_u32(name, self.seed, self.vec_idx)
             return _f32_to_u32((h & 0xFF) / 256.0)
+        if self.fp_range == "vulkan":
+            rng = random.Random(_det_hash_u32(name, self.seed, self.vec_idx))
+            if name in ("bi_42", "bi_43"):
+                return rng.randrange(0, 64)
+            _VULKAN_NICE_F32 = (-16.0, -4.0, -2.0, -1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 16.0)
+            if (self.vec_idx & 3) == 0 or rng.randrange(4) == 0:
+                return _f32_to_u32(rng.choice(_VULKAN_NICE_F32))
+            return _f32_to_u32(rng.uniform(-16.0, 16.0))
         if self.vec_idx < len(_CORNER_U32S):
             h = _det_hash_u32(name, self.seed, self.vec_idx)
             if (h & 3) == 0:
@@ -59,6 +71,8 @@ class ConcreteShaderEnv(ShaderEnvBase):
         return rng.getrandbits(32)
 
     def read_init_buf(self, bkey: str, off32: int) -> int:
+        if bkey == "gl_mali_non_rmu_buffer" and (int(off32) & 0xFFFFFFFF) in (76, 80, 88):
+            return 0
         if bkey == "gl_SamplePosition":
             # Valhall's `sample` sideband table packs each sample's (x, y) as two signed 16-bit Q8.8
             # fixed-point integers in one 32-bit word (`h0 = x * 256`, `h1 = y * 256`), which the

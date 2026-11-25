@@ -100,6 +100,7 @@ def run_concolic_equiv_fuzz(
     auto_shrink: bool = True,
     seed: int = 0x5A17,
     domain: str = "udomain",
+    fp_range: str = "unconstrained",
 ) -> ConcolicEquivFuzzResult:
     """
     Concolically seed input vectors from `seed_side` (`direct` or `valhall`) to
@@ -125,7 +126,7 @@ def run_concolic_equiv_fuzz(
 
     # Phase 1: Initial concrete differential seed vectors (corner cases + PRNG).
     for i in range(k_init):
-        cenv = ConcreteShaderEnv(bundle, vec_idx=i, seed=seed)
+        cenv = ConcreteShaderEnv(bundle, vec_idx=i, seed=seed, fp_range=fp_range)
         d_vals, v_vals, chk, ben, is_div = _compare_pair_on_env(d_interp, v_interp, cenv, eff_policy)
         max_checked_outputs = max(max_checked_outputs, chk)
         total_benign += ben
@@ -164,7 +165,7 @@ def run_concolic_equiv_fuzz(
             reach_vecs += 1
             ov = dict(p.witness_overrides)
             tested_overrides.append(ov)
-            cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, seed=seed, overrides=ov)
+            cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, seed=seed, overrides=ov, fp_range=fp_range)
             d_vals, v_vals, chk, ben, is_div = _compare_pair_on_env(d_interp, v_interp, cenv, eff_policy)
             max_checked_outputs = max(max_checked_outputs, chk)
             total_benign += ben
@@ -194,7 +195,7 @@ def run_concolic_equiv_fuzz(
             vec_idx = k_init + reach_vecs + cov_vecs
             cov_vecs += 1
             tested_overrides.append(dict(ov))
-            cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, seed=seed, overrides=ov)
+            cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, seed=seed, overrides=ov, fp_range=fp_range)
             d_vals, v_vals, chk, ben, is_div = _compare_pair_on_env(d_interp, v_interp, cenv, eff_policy)
             max_checked_outputs = max(max_checked_outputs, chk)
             total_benign += ben
@@ -217,6 +218,7 @@ def run_concolic_equiv_fuzz(
             overrides=div_ov,
             vec_idx=div_idx,
             policy=eff_policy,
+            fp_range=fp_range,
         )
 
     if max_checked_outputs == 0:

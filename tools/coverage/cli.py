@@ -45,6 +45,7 @@ def _handle_divergence(
         raw_direct_ssa=raw_d_ssa if args.canonicalize else None,
         raw_valhall_ssa=raw_v_ssa if args.canonicalize else None,
         policy=policy,
+        fp_range=args.fp_range,
     )
     for line in format_divergence_and_triage(rep, triage, trace_diff=args.trace_diff):
         print(line)
@@ -79,6 +80,7 @@ def main() -> int:
     ap.add_argument("--max-rounds", type=int, default=12, help="Maximum synthesis rounds")
     ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="udomain", help="Symbolic value domain")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact", help="Z3 FP mode")
+    ap.add_argument("--fp-range", choices=["unconstrained", "vulkan"], default="unconstrained", help="Concrete input FP range")
     ap.add_argument("--canonicalize", action="store_true", help="Canonicalize SSA before synthesis")
     ap.add_argument(
         "--maximal-reachability",
@@ -162,6 +164,7 @@ def main() -> int:
             max_paths=args.max_paths,
             policy=policy,
             auto_shrink=True,
+            fp_range=args.fp_range,
         )
         print(
             f"[EQUIV-FUZZ] {os.path.basename(args.spv_or_json)} status={ef.status} "

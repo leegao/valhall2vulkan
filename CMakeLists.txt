@@ -451,6 +451,13 @@ set_tests_properties(test_v44_base_vertex_and_triage PROPERTIES
     ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
 )
 
+add_test(
+  NAME test_v45_frag_w_tex_wide_and_fp_range
+  COMMAND ${Python3_EXECUTABLE} -m unittest tools/symbolic_ssa/test_v45_frag_w_tex_wide_and_fp_range.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+set_tests_properties(test_v45_frag_w_tex_wide_and_fp_range PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:/working_dir/c_43dda7b22cb4bd91/pydeps")
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

@@ -213,11 +213,12 @@ def compare_concrete_outputs(
     overrides: Optional[Dict[str, Any]] = None,
     vec_idx: int = 0,
     policy: Optional[DiffPolicy] = None,
+    fp_range: str = "unconstrained",
 ) -> Tuple[bool, Optional[str], str, str, Dict[int, Any], Dict[int, Any]]:
     """Execute both SSA modules under a concrete env and compare outputs under DiffPolicy."""
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=overrides)
+    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=overrides, fp_range=fp_range)
     d_vals, d_out = d_interp.execute_one(cenv)
     v_vals, v_out = v_interp.execute_one(cenv)
     d_out = align_vertex_gl_position(d_out, v_out, cenv, policy=policy)
@@ -236,6 +237,7 @@ def shrink_counterexample_overrides(
     overrides: Dict[str, Any],
     vec_idx: int = 0,
     policy: Optional[DiffPolicy] = None,
+    fp_range: str = "unconstrained",
 ) -> Dict[str, Any]:
     """
     1-minimal delta-shrinker over concrete input overrides: drops or zeros
@@ -243,7 +245,7 @@ def shrink_counterexample_overrides(
     """
     cur = dict(overrides)
     div, target_name, *_ = compare_concrete_outputs(
-        bundle, direct_ssa, valhall_ssa, cur, vec_idx=vec_idx, policy=policy
+        bundle, direct_ssa, valhall_ssa, cur, vec_idx=vec_idx, policy=policy, fp_range=fp_range
     )
     if not div:
         return cur
@@ -251,8 +253,8 @@ def shrink_counterexample_overrides(
     def still_diverges(cand: Dict[str, Any]) -> bool:
         d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
         v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-        _, d_out = d_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=cand))
-        _, v_out = v_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=cand))
+        _, d_out = d_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=cand, fp_range=fp_range))
+        _, v_out = v_interp.execute_one(ConcreteShaderEnv(bundle, vec_idx, overrides=cand, fp_range=fp_range))
         for name, dv, vv, _ in _extract_comparable_outputs(d_out, v_out):
             if name == target_name:
                 kind, _ = classify_value_diff(dv, vv, name, policy=policy)
@@ -299,6 +301,7 @@ def localize_and_shrink_divergence(
     overrides: Optional[Dict[str, Any]] = None,
     vec_idx: int = 0,
     policy: Optional[DiffPolicy] = None,
+    fp_range: str = "unconstrained",
 ) -> DivergenceReport:
     """
     Shrink a concrete counterexample to a 1-minimal witness under DiffPolicy
@@ -306,11 +309,11 @@ def localize_and_shrink_divergence(
     """
     orig_ov = dict(overrides) if overrides is not None else {}
     shrunk = shrink_counterexample_overrides(
-        bundle, direct_ssa, valhall_ssa, orig_ov, vec_idx=vec_idx, policy=policy
+        bundle, direct_ssa, valhall_ssa, orig_ov, vec_idx=vec_idx, policy=policy, fp_range=fp_range
     )
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=shrunk)
+    cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=shrunk, fp_range=fp_range)
     d_vals, d_out = d_interp.execute_one(cenv)
     v_vals, v_out = v_interp.execute_one(cenv)
     d_out = align_vertex_gl_position(d_out, v_out, cenv, policy=policy)
