@@ -1,4 +1,6 @@
 #include "equiv_bundle.h"
+#include "ssa_defau_devirt.h"
+#include "ssa_opt_pipeline.h"
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
 #include "valhall_ssa_json.h"
@@ -246,7 +248,7 @@ bool build_equivalence_bundle_json(
     vopts.stage = to_compiler_stage(extract_res.stage_info.stage);
     vopts.arch = extract_res.arch;
     vopts.tolerant_ssa = true;
-    vopts.run_ssa_opt = opt.run_ssa_opt;
+    vopts.run_ssa_opt = opt.run_defau ? false : opt.run_ssa_opt;
     vopts.ssa_opt_fp_fast_math = opt.fp_fast_math;
     vopts.ssa_opt_fp_tile_rewrites = opt.enable_fp_tile_rewrites;
     vopts.ssa_opt_fp_cpp_rewrites = opt.enable_fp_cpp_rewrites;
@@ -259,6 +261,19 @@ bool build_equivalence_bundle_json(
     }
 
     compiler::Pass1Result p1_res = compiler::run_pass1_lowering(pri_cfg, sec_cfg, vopts);
+    if (p1_res.ok && opt.run_defau) {
+        auto fau_summary = build_fau_summary_for_ebin(
+            extract_res.mbs2, extract_res.ebins, extract_res.arch, *primary_eb);
+        valhall::dataflow::run_ssa_defau_devirt(p1_res.ssa, fau_summary);
+        if (opt.run_ssa_opt) {
+            valhall::dataflow::SsaOptPipelineOptions popts;
+            popts.fp_mode = opt.fp_fast_math ? valhall::dataflow::FpOptMode::FastMath
+                                               : valhall::dataflow::FpOptMode::StrictIEEE;
+            popts.enable_fp_tile_rewrites = opt.enable_fp_tile_rewrites;
+            popts.enable_fp_cpp_rewrites = opt.enable_fp_cpp_rewrites;
+            valhall::dataflow::run_ssa_opt_pipeline(p1_res.ssa, popts);
+        }
+    }
 
     // 3. Assemble JSON bundle
     std::ostringstream os;
@@ -434,7 +449,8 @@ bool build_equivalence_bundle_json(
         for (const auto& s : syms) {
             if (!first_srt) os << ',';
             first_srt = false;
-            uint32_t d_set = (s.rack_index >= 4u) ? (s.rack_index - 4u) : 0u;
+            uint32_t d_set = (s.rack_index >= 68u) ? (s.rack_index - 68u)
+                           : (s.rack_index >= 4u ? (s.rack_index - 4u) : 0u);
             uint32_t bind = (s.binding != 0xFFFFu) ? s.binding : s.address;
             std::string key;
             if (std::string(kind_str) == "ubo" && s.rack_index == 0u && s.binding == 0xFFFFu) {
@@ -452,6 +468,7 @@ bool build_equivalence_bundle_json(
     };
     emit_srt(extract_res.mbs2.cmmn.suni, "ubo");
     emit_srt(extract_res.mbs2.cmmn.s3bo, "ssbo");
+    emit_srt(extract_res.mbs2.cmmn.simg, "tex");
     os << ']';
 
     // Embedded read-only data section (LUTs / constant tables addressed via PC-relative ADR)

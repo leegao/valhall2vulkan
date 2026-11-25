@@ -82,7 +82,13 @@ def ensure_spv_path(path: str) -> Iterator[str]:
             os.remove(tmp_spv)
 
 
-def load_equiv_bundle(spv_or_spvasm_or_json: str, bin_path: str, timeout: int = 15) -> dict[str, Any]:
+def load_equiv_bundle(
+    spv_or_spvasm_or_json: str,
+    bin_path: str,
+    timeout: int = 15,
+    defau: bool = True,
+    opt_ssa: bool = True,
+) -> dict[str, Any]:
     """Load an equivalence bundle JSON from a .json, .spv, or .spvasm input."""
     if spv_or_spvasm_or_json.endswith(".json"):
         with open(spv_or_spvasm_or_json, "r", encoding="utf-8") as fh:
@@ -91,8 +97,13 @@ def load_equiv_bundle(spv_or_spvasm_or_json: str, bin_path: str, timeout: int = 
         fd, tmp_json = tempfile.mkstemp(suffix=".json")
         os.close(fd)
         try:
+            cmd = [bin_path, spv_path, "--quiet", "--dump-equiv-json", tmp_json]
+            if defau:
+                cmd.append("--defau")
+            if opt_ssa:
+                cmd.append("--opt-ssa")
             proc = subprocess.run(
-                [bin_path, spv_path, "--quiet", "--dump-equiv-json", tmp_json],
+                cmd,
                 check=False,
                 capture_output=True,
                 text=True,

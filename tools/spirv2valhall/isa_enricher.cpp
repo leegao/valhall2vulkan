@@ -501,7 +501,14 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
 
     std::map<std::pair<uint32_t, uint32_t>, std::string> canon_buf_by_rack_addr;
     for (const auto& sym : mbs2.cmmn.suni) {
-        canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = canonical_mbs2_buffer_name(sym, false);
+        if (sym.rack_index == 0u && sym.name == "gl_mali_non_rmu_buffer") {
+            canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = "gl_mali_non_rmu_buffer";
+            if ((sym.address & 0xFFFFu) == 0u && sym.address >= 0x10000u) {
+                canon_buf_by_rack_addr[{0u, sym.address >> 16u}] = "gl_mali_non_rmu_buffer";
+            }
+        } else {
+            canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = canonical_mbs2_buffer_name(sym, false);
+        }
     }
     for (const auto& sym : mbs2.cmmn.s3bo) {
         canon_buf_by_rack_addr[{sym.rack_index, sym.address}] = canonical_mbs2_buffer_name(sym, true);
@@ -550,6 +557,7 @@ dataflow::FauSummaryMap build_fau_summary_for_ebin(
     // without overwriting Pilot-computed FAU entries.
     auto seed_rlocs = [&](const std::vector<Mbs2Symbol>& list, bool is_ssbo) {
         for (const auto& sym : list) {
+            if (sym.name == "gl_mali_ViewportTransform") continue;
             std::string bname = canonical_mbs2_buffer_name(sym, is_ssbo);
             for (const auto& r : sym.rlocs) {
                 uint32_t words = std::max<uint32_t>(1u, (r.size + 3u) / 4u);

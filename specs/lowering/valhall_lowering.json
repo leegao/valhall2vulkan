@@ -1536,14 +1536,19 @@
         "*"
       ],
       "op_class": "alu_mov",
-      "ssa_op": "Copy",
       "dest_type": "u32",
       "src_types": [
         "u32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
-      "effects": []
+      "effects": [],
+      "inline_ops": [
+        "%out : u32 = %0;",
+        "if (@dest_mod_eq(\"h1\")) { %out = ShrU(%out, #u32(16)); }",
+        "else if ($dest_mod_is_byte) { %out = ShrU(%out, @u32($dest_mod_byte_off)); }"
+      ],
+      "ssa_op": "@INLINE_OPS"
     },
     {
       "mnemonic": "MKVEC",

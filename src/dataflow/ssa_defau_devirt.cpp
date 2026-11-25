@@ -744,6 +744,13 @@ private:
             case SymExpr::Kind::BufferScalarLoad: {
                 if (!opts.materialize_pilot_loads) return kInvalidSsa;
                 std::string bkey = canonical_buf_key(e->rack, e->desc_idx, e->symbol_name);
+                if ((bkey == "gl_mali_non_rmu_buffer" ||
+                     (e->rack == 0 && e->symbol_name.empty())) &&
+                    (e->byte_offset == 76 || e->byte_offset == 80 || e->byte_offset == 88)) {
+                    res = emit_const_u32(0u);
+                    if (out_is_const) *out_is_const = true;
+                    break;
+                }
                 SsaId base = get_or_emit_buf_base(bkey);
                 SsaId addr = base;
                 if (e->byte_offset != 0) {

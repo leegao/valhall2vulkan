@@ -17,7 +17,7 @@ static const LoweringRuleSpec kLoweringRules[] = {
     { "ADR", 9u, OpClass::AluAdr, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, false, 0x7e00u, false, { 0x1u, 0x0u, 0x0u, 0x1u } },
     { "MOV", 10u, OpClass::AluMov, LoweringKind::DirectSsaOp, SsaOp::Copy, "Copy", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "MOV_IMM", 11u, OpClass::AluMovImm, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
-    { "SWZ", 12u, OpClass::AluMov, LoweringKind::DirectSsaOp, SsaOp::Copy, "Copy", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
+    { "SWZ", 12u, OpClass::AluMov, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "MKVEC", 13u, OpClass::AluVecPack, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "MKVEC", 14u, OpClass::AluVecPack, LoweringKind::InlineOps, SsaOp::Nop, "@INLINE_OPS", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x0u } },
     { "FABS", 15u, OpClass::FpUnary, LoweringKind::DirectSsaOp, SsaOp::FAbs, "FAbs", false, false, 0x7e00u, false, { 0x0u, 0x0u, 0x0u, 0x2u } },

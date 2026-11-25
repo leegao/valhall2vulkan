@@ -70,6 +70,22 @@ class ConcreteShaderEnv(ShaderEnvBase):
             return _f32_to_u32(rng.uniform(-16.0, 16.0))
         return rng.getrandbits(32)
 
+    def _get_image_wh(self, tkey: str) -> tuple[int, int]:
+        w = (_det_hash_u32(f"img_w:{tkey}", self.seed, self.vec_idx) & 0x3FF) + 1
+        h = (_det_hash_u32(f"img_h:{tkey}", self.seed, self.vec_idx) & 0x3FF) + 1
+        return (w, h)
+
+    def read_pilot_srt_u32(self, bkey: str, off32: int) -> int | None:
+        if bkey == "pilot_srt_rack_4":
+            desc_idx = off32 // 32
+            field_off = off32 % 32
+            if field_off == 4 and self._pilot_srt_by_rack.get(4, {}).get(desc_idx) is None:
+                tex_key = self._pilot_srt_by_rack.get(68, {}).get(desc_idx)
+                if tex_key is not None:
+                    w, h = self._get_image_wh(tex_key)
+                    return (((h - 1) & 0xFFFF) << 16) | ((w - 1) & 0xFFFF)
+        return super().read_pilot_srt_u32(bkey, off32)
+
     def read_init_buf(self, bkey: str, off32: int) -> int:
         if bkey == "gl_mali_non_rmu_buffer" and (int(off32) & 0xFFFFFFFF) in (76, 80, 88):
             return 0
@@ -143,11 +159,37 @@ class ConcreteShaderEnv(ShaderEnvBase):
                 return int(tbl[key]) & MASK32
             if spec.get("default") is not None:
                 return int(spec["default"]) & MASK32
+        base_uf = uf_name[3:] if uf_name.startswith("hw_") else uf_name
+        if base_uf.startswith("imgq_") and "_c" in base_uf:
+            body, _, comp_s = base_uf.rpartition("_c")
+            if comp_s in ("0", "1"):
+                parts = body[len("imgq_"):].split("_")
+                if len(parts) >= 3 and parts[0] == "tex":
+                    tkey = f"tex:{parts[1]}:{parts[2]}"
+                    w, h = self._get_image_wh(tkey)
+                    raw_lod = int(args[0]) & MASK32 if args else 0
+                    if raw_lod & 0x80000000:
+                        lod = 0
+                    else:
+                        lod = min(31, raw_lod)
+                    dim = w if comp_s == "0" else h
+                    return max(1, dim >> lod)
+        norm_args = [int(a) & MASK32 for a in args]
+        if base_uf.startswith("tex_texsamplelod_") and len(norm_args) in (3, 4):
+            lod_idx = len(norm_args) - 1
+            lod_u = norm_args[lod_idx]
+            if (lod_u & 0x80000000) and (lod_u & 0x7FFFFFFF) <= 0x7F800000:
+                norm_args[lod_idx] = 0
+        elif base_uf.startswith("tex_texfetch_") and len(norm_args) >= 2:
+            norm_args[0] &= 0xFFFF
+            norm_args[1] &= 0xFFFF
         tag = fallback_tag or uf_name
-        return _det_hash_u32(tag, self.seed, self.vec_idx, *(int(a) & MASK32 for a in args))
+        return _det_hash_u32(tag, self.seed, self.vec_idx, *norm_args)
 
     def resolve_addr(self, addr64: int, hint_key: str = "") -> tuple[str | None, int]:
         off = addr64 & MASK32
+        if hint_key.startswith("tex:"):
+            return hint_key, off
         bkey = self.resolve_region_hi32(addr64 >> 32)
         if bkey is not None:
             return bkey, off

@@ -23,8 +23,8 @@ from tools.verify.cec import run_concrete_diff
 from tools.verify.spvasm_io import load_equiv_bundle
 
 
-def _load_bundle(spv_or_json: str, bin_path: str) -> dict:
-    return load_equiv_bundle(spv_or_json, bin_path, timeout=15)
+def _load_bundle(spv_or_json: str, bin_path: str, *, defau: bool = True, opt_ssa: bool = True) -> dict:
+    return load_equiv_bundle(spv_or_json, bin_path, timeout=15, defau=defau, opt_ssa=opt_ssa)
 
 
 def _handle_divergence(
@@ -81,7 +81,12 @@ def main() -> int:
     ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="udomain", help="Symbolic value domain")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact", help="Z3 FP mode")
     ap.add_argument("--fp-range", choices=["unconstrained", "vulkan"], default="unconstrained", help="Concrete input FP range")
-    ap.add_argument("--canonicalize", action="store_true", help="Canonicalize SSA before synthesis")
+    ap.add_argument("--canonicalize", action="store_true", default=True, help="Canonicalize SSA before synthesis (default: on)")
+    ap.add_argument("--no-canonicalize", dest="canonicalize", action="store_false", help="Disable SSA canonicalization")
+    ap.add_argument("--defau", action="store_true", default=True, help="Run De-FAU devirtualization (default: on)")
+    ap.add_argument("--no-defau", dest="defau", action="store_false", help="Disable De-FAU devirtualization")
+    ap.add_argument("--opt-ssa", action="store_true", default=True, help="Run C++ ssa-opt canonicalization passes (default: on)")
+    ap.add_argument("--no-opt-ssa", dest="opt_ssa", action="store_false", help="Disable C++ ssa-opt passes")
     ap.add_argument(
         "--maximal-reachability",
         action="store_true",
@@ -133,7 +138,7 @@ def main() -> int:
     args = ap.parse_args()
 
     try:
-        bundle = _load_bundle(args.spv_or_json, args.bin)
+        bundle = _load_bundle(args.spv_or_json, args.bin, defau=args.defau, opt_ssa=args.opt_ssa)
     except Exception as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1

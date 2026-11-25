@@ -54,5 +54,22 @@ class TestCorpusSynth(unittest.TestCase):
             self.assertIn(rec.equiv_status, ("EQUIV_EXACT", "EQUIV_WITHIN_ULP", "DIVERGED"))
 
 
+    def test_valhall_isel_catalog_covers_lowering_spec(self) -> None:
+        from tools.corpus_synth.valhall_isel_catalog import (
+            VALHALL_ISEL_CATALOG,
+            audit_lowering_spec_coverage,
+            get_rule_for_mnemonic,
+        )
+
+        audit = audit_lowering_spec_coverage("specs/lowering/valhall_lowering.json")
+        self.assertEqual(audit["missing_from_catalog"], [])
+        self.assertEqual(audit["extra_in_catalog"], [])
+        self.assertEqual(len(VALHALL_ISEL_CATALOG), len(audit["spec_total"]))
+        self.assertEqual(get_rule_for_mnemonic("HADD").tier, "compute")
+        self.assertEqual(get_rule_for_mnemonic("BARRIER").tier, "compute")
+        self.assertEqual(get_rule_for_mnemonic("CUBEFACE1").tier, "graphics")
+        self.assertEqual(get_rule_for_mnemonic("KABOOM").tier, "internal")
+
+
 if __name__ == "__main__":
     unittest.main()

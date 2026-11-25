@@ -16,6 +16,7 @@ namespace valhall::spirv2valhall {
 /// - `direct_bindings`: Resource bindings table from src/spirv2ssa/
 struct EquivBundleOptions {
     bool run_ssa_opt = false;
+    bool run_defau = false;
     bool fp_fast_math = false;
     bool enable_fp_tile_rewrites = true;
     bool enable_fp_cpp_rewrites = true;

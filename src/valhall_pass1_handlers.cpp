@@ -774,17 +774,33 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     }
     ts.aux_bool = (ctx.opts.stage == ShaderStage::Fragment && !is_gather);
     ts.aux_bool2 = is_gather;
+    bool has_texel_offset = false;
+    if (auto it = ins.modifier_strs.find("texel_offset");
+        it != ins.modifier_strs.end() && it->second != "none") {
+        has_texel_offset = true;
+    }
     ts.args = { uv };
     uint32_t sr_cnt = abi::sr_read_count(ctx, blk, ins, nullptr);
-    if (sr_cnt > 2u &&
+    uint32_t max_sr = std::min<uint32_t>(sr_cnt, 8u);
+    uint32_t extra_end = (has_texel_offset && max_sr > 2u) ? (max_sr - 1u) : max_sr;
+    if (extra_end > 2u &&
         ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
-        uint32_t max_sr = std::min<uint32_t>(sr_cnt, 8u);
-        for (uint32_t sr_i = 2u; sr_i < max_sr; ++sr_i) {
+        for (uint32_t sr_i = 2u; sr_i < extra_end; ++sr_i) {
             ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
         }
     }
     if (ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) {
         ts.args.push_back(ctx.sb.emit_const_u32(blk, 0u));
+    }
+    if (has_texel_offset && max_sr > 2u &&
+        ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
+        SsaId packed_off = abi::sr_get(ctx, blk, ins, nullptr, max_sr - 1u);
+        SsaId zero_u32 = ctx.sb.emit_const_u32(blk, 0u);
+        SsaId eight_u32 = ctx.sb.emit_const_u32(blk, 8u);
+        SsaId dx = ctx.emit_op(blk, SsaOp::BfeS, ValType::S32, {packed_off, zero_u32, eight_u32});
+        SsaId dy = ctx.emit_op(blk, SsaOp::BfeS, ValType::S32, {packed_off, eight_u32, eight_u32});
+        ts.args.push_back(dx);
+        ts.args.push_back(dy);
     }
     ts.args.push_back(tok);
     ts.is_barrier_or_cf = true;

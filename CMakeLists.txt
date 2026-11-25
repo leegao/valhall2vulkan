@@ -458,6 +458,15 @@ add_test(
 )
 set_tests_properties(test_v45_frag_w_tex_wide_and_fp_range PROPERTIES ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:/working_dir/c_43dda7b22cb4bd91/pydeps")
 
+add_test(
+  NAME test_v46_defau_swz_tex_and_imgq
+  COMMAND ${VALHALL_PYTHON} -m unittest tools/symbolic_ssa/test_v46_defau_swz_tex_and_imgq.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+set_tests_properties(test_v46_defau_swz_tex_and_imgq PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

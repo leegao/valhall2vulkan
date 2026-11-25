@@ -109,8 +109,10 @@ int main(int argc, char** argv) {
             equiv_opts.run_ssa_opt = true;
         } else if (arg == "--defau") {
             run_defau = true;
+            equiv_opts.run_defau = true;
         } else if (arg == "--dump-devirt-fallbacks") {
             run_defau = true;
+            equiv_opts.run_defau = true;
             dump_devirt_fallbacks = true;
         } else if (arg == "--opt-fp-mode" && i + 1 < argc) {
             std::string m = argv[++i];
