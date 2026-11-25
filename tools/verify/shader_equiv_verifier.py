@@ -19,9 +19,7 @@ import argparse
 import dataclasses
 import json
 import os
-import subprocess
 import sys
-import tempfile
 import time
 from typing import Any
 
@@ -60,6 +58,7 @@ from tools.verify.panfrost_z3_model import (
     bv32,
     bv32_to_fp32,
 )
+from tools.verify.spvasm_io import load_equiv_bundle as _load_equiv_bundle
 
 
 @dataclasses.dataclass
@@ -831,52 +830,40 @@ def verify_spv_file(
     strict_fp_edges: bool = False,
     guard_div_by_zero: bool = True,
 ) -> ShaderEquivResult:
-    """Compile a .spv through both pipelines and run the Z3 equivalence verifier."""
+    """Compile a .spv or .spvasm through both pipelines and run the Z3 equivalence verifier."""
     t0 = time.perf_counter()
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
-        tmp_json = tf.name
     try:
-        proc = subprocess.run(
-            [spirv2valhall_bin, spv_path, "--quiet", "--dump-equiv-json", tmp_json],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if proc.returncode != 0:
-            return ShaderEquivResult(
-                spv_path=spv_path,
-                stage="Unknown",
-                status="ERROR",
-                fp_mode=fp_mode,
-                elapsed_ms=(time.perf_counter() - t0) * 1000.0,
-                notes=[proc.stderr.strip()[:200]],
-            )
-        with open(tmp_json, "r", encoding="utf-8") as fh:
-            bundle = json.load(fh)
-        return verify_equivalence_bundle(
-            bundle,
-            timeout_ms=timeout_ms,
+        bundle = _load_equiv_bundle(spv_path, spirv2valhall_bin, timeout=15)
+    except Exception as exc:
+        return ShaderEquivResult(
+            spv_path=spv_path,
+            stage="Unknown",
+            status="ERROR",
             fp_mode=fp_mode,
-            max_unroll=max_unroll,
-            dump_smt2_path=dump_smt2_path,
-            verbose=verbose,
-            canonicalize=canonicalize,
-            domain=domain,
-            dump_ast=dump_ast,
-            enable_conditioned_unify=enable_conditioned_unify,
-            memory_model=memory_model,
-            allow_ssbo_aliasing=allow_ssbo_aliasing,
-            strict_fp_edges=strict_fp_edges,
-            guard_div_by_zero=guard_div_by_zero,
+            elapsed_ms=(time.perf_counter() - t0) * 1000.0,
+            notes=[str(exc)[:200]],
         )
-    finally:
-        if os.path.exists(tmp_json):
-            os.remove(tmp_json)
+    return verify_equivalence_bundle(
+        bundle,
+        timeout_ms=timeout_ms,
+        fp_mode=fp_mode,
+        max_unroll=max_unroll,
+        dump_smt2_path=dump_smt2_path,
+        verbose=verbose,
+        canonicalize=canonicalize,
+        domain=domain,
+        dump_ast=dump_ast,
+        enable_conditioned_unify=enable_conditioned_unify,
+        memory_model=memory_model,
+        allow_ssbo_aliasing=allow_ssbo_aliasing,
+        strict_fp_edges=strict_fp_edges,
+        guard_div_by_zero=guard_div_by_zero,
+    )
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Z3 All-Path Formal Equivalence Verifier for ValhallSSA")
-    ap.add_argument("spv_or_json", help="Path to .spv shader or pre-dumped equivalence bundle .json")
+    ap.add_argument("spv_or_json", help="Path to .spv/.spvasm shader or pre-dumped equivalence bundle .json")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--timeout-ms", type=int, default=3000, help="Per-output Z3 timeout in ms")
     ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_backfill", "udomain_exact"], default="udomain", help="Symbolic value domain (default: udomain)")
@@ -896,25 +883,11 @@ def main() -> int:
 
     if args.cec:
         from tools.verify.cec import verify_with_cec
-        if args.spv_or_json.endswith(".json"):
-            with open(args.spv_or_json, "r", encoding="utf-8") as fh:
-                bundle = json.load(fh)
-        else:
-            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
-                tmp_json = tf.name
-            try:
-                proc = subprocess.run(
-                    [args.bin, args.spv_or_json, "--quiet", "--dump-equiv-json", tmp_json],
-                    capture_output=True, text=True, timeout=15,
-                )
-                if proc.returncode != 0:
-                    print(f"[ERROR] {os.path.basename(args.spv_or_json)}: {proc.stderr.strip()[:200]}")
-                    return 1
-                with open(tmp_json, "r", encoding="utf-8") as fh:
-                    bundle = json.load(fh)
-            finally:
-                if os.path.exists(tmp_json):
-                    os.remove(tmp_json)
+        try:
+            bundle = _load_equiv_bundle(args.spv_or_json, args.bin, timeout=15)
+        except Exception as exc:
+            print(f"[ERROR] {os.path.basename(args.spv_or_json)}: {str(exc)[:200]}")
+            return 1
         s2r = verify_with_cec(
             bundle,
             canonicalize=True if args.canonicalize is None else args.canonicalize,

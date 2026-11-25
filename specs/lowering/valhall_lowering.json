@@ -1163,6 +1163,9 @@
       ],
       "inline_ops": [
         "if (@src_oob(%src_idx)) { return @u64(0); }",
+        "if (@src_swz_eq(%src_idx, \"b0\") || @src_swz_eq(%src_idx, \"b1\") || @src_swz_eq(%src_idx, \"b2\") || @src_swz_eq(%src_idx, \"b3\") || @src_swz_eq(%src_idx, \"h0\") || @src_swz_eq(%src_idx, \"h1\")) {",
+        "  return @widen_to_u64(@fetch_src_int32(%src_idx, %sign_extend_subword), %sign_extend_subword);",
+        "}",
         "if (@src_is_reg(%src_idx)) {",
         "  if (@src_swz_eq(%src_idx, \"w0\")) { return @widen_to_u64(@src_read_reg_base(%src_idx, 0), %sign_extend_subword); }",
         "  if (@src_swz_eq(%src_idx, \"w1\")) { return @widen_to_u64(@src_read_reg_base(%src_idx, 1), %sign_extend_subword); }",
@@ -4957,14 +4960,20 @@
         "*"
       ],
       "op_class": "cvt_f32_to_s32",
-      "ssa_op": "ConvertFToS",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "s32",
       "src_types": [
         "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
-      "effects": []
+      "effects": [
+        "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%rnd : f32 = @LOOKUP(round_mode, $modifiers.round)(%0);",
+        "%out : s32 = ConvertFToS(%rnd);"
+      ]
     },
     {
       "mnemonic": "F32_TO_U32",
@@ -4972,14 +4981,20 @@
         "*"
       ],
       "op_class": "cvt_f32_to_u32",
-      "ssa_op": "ConvertFToU",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "u32",
       "src_types": [
         "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
-      "effects": []
+      "effects": [
+        "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%rnd : f32 = @LOOKUP(round_mode, $modifiers.round)(%0);",
+        "%out : u32 = ConvertFToU(%rnd);"
+      ]
     },
     {
       "mnemonic": "F16_TO_S32",
@@ -5000,7 +5015,8 @@
       "inline_ops": [
         "%unp : v2f32 = UnpackHalf2x16(#raw0);",
         "%fval : f32 = @extract(%unp, $src0_swz_h1_u32);",
-        "%out : s32 = ConvertFToS(%fval);"
+        "%rnd : f32 = @LOOKUP(round_mode, $modifiers.round)(%fval);",
+        "%out : s32 = ConvertFToS(%rnd);"
       ]
     },
     {
@@ -5022,7 +5038,8 @@
       "inline_ops": [
         "%unp : v2f32 = UnpackHalf2x16(#raw0);",
         "%fval : f32 = @extract(%unp, $src0_swz_h1_u32);",
-        "%out : u32 = ConvertFToU(%fval);"
+        "%rnd : f32 = @LOOKUP(round_mode, $modifiers.round)(%fval);",
+        "%out : u32 = ConvertFToU(%rnd);"
       ]
     },
     {
@@ -5181,7 +5198,7 @@
         "*"
       ],
       "op_class": "cvt_v2f16_to_v2i16",
-      "ssa_op": "ConvertFToS",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "v2s16",
       "src_types": [
         "v2f16"
@@ -5190,6 +5207,10 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%rnd : v2f32 = @LOOKUP(round_mode, $modifiers.round)(%0);",
+        "%out : v2s32 = ConvertFToS(%rnd);"
       ]
     },
     {
@@ -5198,7 +5219,7 @@
         "*"
       ],
       "op_class": "cvt_v2f16_to_v2i16",
-      "ssa_op": "ConvertFToU",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "v2u16",
       "src_types": [
         "v2f16"
@@ -5207,6 +5228,10 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
+      ],
+      "inline_ops": [
+        "%rnd : v2f32 = @LOOKUP(round_mode, $modifiers.round)(%0);",
+        "%out : v2u32 = ConvertFToU(%rnd);"
       ]
     },
     {

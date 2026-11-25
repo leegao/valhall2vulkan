@@ -291,6 +291,13 @@ def _convert_stmt(node: Dict[str, Any]) -> Any:
             else_body=[_convert_stmt(s) for s in else_b] if else_b is not None else None,
             init=_convert_stmt(init_node) if init_node is not None else None,
         )
+    if kind == "while":
+        return CppFor(
+            init=None,
+            cond=_convert_expr(node.get("cond")),
+            step=None,
+            body=[_convert_stmt(s) for s in node.get("body", [])],
+        )
     if kind == "for":
         init_node = node.get("init")
         init = _convert_stmt(init_node) if init_node is not None else None
@@ -1041,7 +1048,7 @@ class CppSymbolicEvaluator:
             obj = self._eval_expr(expr.callee.obj, env, ssa, ins)
             m = expr.callee.member
             args = [self._eval_expr(a, env, ssa, ins) for a in expr.args]
-            if isinstance(obj, (list, dict, str)) and m in ("size", "empty", "find", "count", "at", "back", "push_back"):
+            if isinstance(obj, (list, dict, str)) and m in ("size", "empty", "find", "count", "at", "back", "push_back", "pop_back"):
                 if m == "size":
                     return len(obj)
                 if m == "empty":
@@ -1058,6 +1065,10 @@ class CppSymbolicEvaluator:
                     return obj[-1]
                 if m == "push_back":
                     obj.append(args[0])
+                    return None
+                if m == "pop_back":
+                    if obj:
+                        obj.pop()
                     return None
             if isinstance(obj, dict) and m == "end":
                 return ("end", obj)

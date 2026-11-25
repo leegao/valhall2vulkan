@@ -311,6 +311,9 @@ SsaId fetch_src_u64(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& i
     if (abi::src_oob(ctx, blk, ins, rule, src_idx)) {
         return abi::u64(ctx, blk, ins, rule, 0);
     }
+    if ((((((abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "b0") || abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "b1")) || abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "b2")) || abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "b3")) || abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "h0")) || abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "h1"))) {
+        return abi::widen_to_u64(ctx, blk, ins, rule, fetch_src_int32(ctx, blk, ins, rule, src_idx, sign_extend_subword), sign_extend_subword);
+    }
     if (abi::src_is_reg(ctx, blk, ins, rule, src_idx)) {
         if (abi::src_swz_eq(ctx, blk, ins, rule, src_idx, "w0")) {
             return abi::widen_to_u64(ctx, blk, ins, rule, abi::src_read_reg_base(ctx, blk, ins, rule, src_idx, 0), sign_extend_subword);

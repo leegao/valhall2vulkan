@@ -429,6 +429,11 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} -m unittest tools.symbolic_ssa.test_v41_ld_pka_srt_resolution
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+    add_test(
+        NAME test_v42_sweep_lowering_and_record
+        COMMAND ${Python3_EXECUTABLE} -m unittest tools.symbolic_ssa.test_v42_sweep_lowering_and_record
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
 
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
