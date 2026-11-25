@@ -13,6 +13,8 @@ struct Pass1Context {
     SsaBuilder sb;
     const ValhallTranslateOptions& opts;
     Pass1Result& res;
+    uint64_t last_pka_pc = ~0ULL;
+    std::string last_pka_buf_sym;
 
     Pass1Context(ValhallSsaModule& m, const ValhallTranslateOptions& o, Pass1Result& r)
         : mod(m), sb(m), opts(o), res(r) {}

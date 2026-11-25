@@ -157,6 +157,10 @@ void populate_mbs2_translate_options(
         };
         add_pka(extract_res.mbs2.cmmn.suni, false);
         add_pka(extract_res.mbs2.cmmn.s3bo, true);
+        for (const auto& kv : pka_buf_by_rack_addr) {
+            uint32_t packed_desc = (kv.first.first << 24u) | (kv.first.second & 0x00FFFFFFu);
+            vopts->srt_pka_buf_names[packed_desc] = kv.second;
+        }
         for (const auto& kv : fcst_all) {
             uint32_t rack = (kv.second >> 24u) & 0xFFu;
             uint32_t addr = kv.second & 0xFFFFu;

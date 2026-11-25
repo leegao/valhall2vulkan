@@ -454,12 +454,78 @@ SsaId tuple_tok(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, cons
 SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId addr, uint32_t elem_bytes, bool is_pka, SsaId tok) {
     SsaId eff_addr = addr;
     std::string buf_sym;
-    if (is_pka && ins.srcs.size() >= 2 && ins.srcs[1].kind == SourceKind::FauUniform) {
-        uint32_t word_off = static_cast<uint32_t>(ins.srcs[1].fau_index64) * 8u +
-                            (ins.srcs[1].word_select ? 4u : 0u);
-        auto it = ctx.opts.fau_pka_buf_names.find(word_off);
-        if (it != ctx.opts.fau_pka_buf_names.end() && !it->second.empty()) {
-            buf_sym = it->second;
+    if (is_pka && ins.srcs.size() >= 2) {
+        if (ins.pc == ctx.last_pka_pc) {
+            buf_sym = ctx.last_pka_buf_sym;
+        } else if (ins.srcs[1].kind == SourceKind::FauUniform) {
+            uint32_t word_off = static_cast<uint32_t>(ins.srcs[1].fau_index64) * 8u +
+                                (ins.srcs[1].word_select ? 4u : 0u);
+            auto it = ctx.opts.fau_pka_buf_names.find(word_off);
+            if (it != ctx.opts.fau_pka_buf_names.end() && !it->second.empty()) {
+                buf_sym = it->second;
+            }
+        } else if (ins.srcs[1].kind == SourceKind::Register) {
+            // Walk Copy/Bitcast/Phi chains (including cross-block Phi merges) to recover
+            // a unique ConstU32 packed SRT descriptor `(rack << 24) | desc_idx`.
+            SsaId start_id = ctx.sb.current_reg(blk, ins.srcs[1].reg_num);
+            std::vector<SsaId> work;
+            std::vector<SsaId> seen;
+            if (start_id != kInvalidSsa) work.push_back(start_id);
+            bool has_const = false;
+            bool conflict = false;
+            uint32_t packed_desc = 0u;
+            while (!work.empty() && !conflict && seen.size() < 32u) {
+                SsaId cur = work.back();
+                work.pop_back();
+                if (cur == kInvalidSsa) continue;
+                bool dup = false;
+                for (SsaId v : seen) { if (v == cur) { dup = true; break; } }
+                if (dup) continue;
+                seen.push_back(cur);
+                const auto& dn = ctx.res.ssa.get(cur);
+                if ((dn.op == SsaOp::Copy || dn.op == SsaOp::Bitcast) && !dn.args.empty()) {
+                    work.push_back(dn.args[0]);
+                } else if (dn.op == SsaOp::Phi) {
+                    bool any_inc = false;
+                    for (const auto& inc : dn.phi_incomings) {
+                        if (inc.value != kInvalidSsa) { work.push_back(inc.value); any_inc = true; }
+                    }
+                    for (SsaId a : dn.args) {
+                        if (a != kInvalidSsa) { work.push_back(a); any_inc = true; }
+                    }
+                    // Pass 1 seals Phi incomings after all blocks are lowered; walk already-lowered
+                    // forward predecessors via `block_out_regs` to recover loop-invariant descriptors.
+                    if (!any_inc && dn.block_id < ctx.res.ssa.blocks.size()) {
+                        for (uint32_t pred : ctx.res.ssa.blocks[dn.block_id].preds) {
+                            if (pred < dn.block_id) {
+                                SsaId pv = ctx.sb.current_reg(pred, ins.srcs[1].reg_num);
+                                if (pv != kInvalidSsa) work.push_back(pv);
+                            }
+                        }
+                    }
+                } else if (dn.op == SsaOp::ConstU32) {
+                    if (!has_const) {
+                        has_const = true;
+                        packed_desc = dn.imm_u32;
+                    } else if (packed_desc != dn.imm_u32) {
+                        conflict = true;
+                    }
+                } else {
+                    conflict = true;
+                }
+            }
+            if (has_const && !conflict) {
+                auto it = ctx.opts.srt_pka_buf_names.find(packed_desc);
+                if (it != ctx.opts.srt_pka_buf_names.end() && !it->second.empty()) {
+                    buf_sym = it->second;
+                }
+            }
+        }
+        if (ins.pc != ctx.last_pka_pc) {
+            ctx.last_pka_pc = ins.pc;
+            ctx.last_pka_buf_sym = buf_sym;
+        }
+        if (!buf_sym.empty()) {
             SsaNode base_n{};
             base_n.op = SsaOp::LoadSidebandU64;
             base_n.type = ValType::U64;

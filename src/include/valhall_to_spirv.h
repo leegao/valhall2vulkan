@@ -80,6 +80,7 @@ struct ValhallTranslateOptions {
     std::vector<CombinedSamplerBindingSpec> samplers;
     std::map<uint32_t, uint32_t> fau_tex_handle_indices;
     std::map<uint32_t, std::string> fau_pka_buf_names;
+    std::map<uint32_t, std::string> srt_pka_buf_names;
     std::map<uint32_t, uint32_t> frag_varying_addr_to_loc;
     std::map<uint32_t, std::string> vert_sout_attr_names;
     uint32_t num_color_attachments = 1;
