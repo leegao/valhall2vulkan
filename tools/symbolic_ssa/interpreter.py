@@ -391,7 +391,7 @@ class SsaInterpreter(Generic[V]):
                     uf_args.append(self.domain.as_u32(extra))
         else:
             uf_args.extend([self.const_u32(0), self.const_u32(0)])
-        if op == "TexGather" and imm_u32_2 != 0 and len(data_args) <= 1:
+        if op == "TexGather" and len(data_args) <= 1:
             uf_args.append(self.const_u32(imm_u32_2))
         tkey = aux_str or f"tex_{imm_u32}"
         op_tag = op.lower()

@@ -405,8 +405,18 @@ def verify_equivalence_bundle(
 
     all_rts = sorted(set(d_st.frag_colors.keys()) | set(v_st.frag_colors.keys()))
     for rt in all_rts:
-        dc = d_st.frag_colors.get(rt, (bv32(0),) * 4)
-        vc = v_st.frag_colors.get(rt, (bv32(0),) * 4)
+        d_has = rt in d_st.frag_colors
+        v_has = rt in v_st.frag_colors
+        if d_has != v_has:
+            side = "direct" if d_has else "valhall"
+            res.asymmetric_outputs.append(f"frag_color[{rt}]")
+            res.notes.append(f"Asymmetric frag_color[{rt}]: emitted only by {side}")
+            checks.append(
+                (f"frag_color[{rt}].present", dsl.BoolVal(d_has), dsl.BoolVal(v_has), not_disc, f"frag_color[{rt}]")
+            )
+            continue
+        dc = d_st.frag_colors[rt]
+        vc = v_st.frag_colors[rt]
         for ch, cname in enumerate(("r", "g", "b", "a")):
             checks.append((f"frag_color[{rt}].{cname}", dc[ch], vc[ch], not_disc, f"frag_color[{rt}]"))
 

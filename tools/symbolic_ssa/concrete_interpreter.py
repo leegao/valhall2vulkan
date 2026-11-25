@@ -40,13 +40,14 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         self,
         ssa_json: dict[str, Any],
         is_valhall_side: bool,
-        max_block_steps: int = 256,
+        max_block_steps: int = 2048,
         domain: ConcreteBitvecDomain | None = None,
     ):
         self.blocks_by_id: dict[int, dict[str, Any]] = {int(b["id"]): b for b in ssa_json.get("blocks", [])}
         self.nodes_by_id: dict[int, dict[str, Any]] = {int(n["id"]): n for n in ssa_json.get("nodes", [])}
         self.is_valhall = is_valhall_side
         self.max_block_steps = max_block_steps
+        self.last_truncated: bool = False
         self.domain: ConcreteBitvecDomain = domain if domain is not None else ConcreteBitvecDomain()
         self._env: ConcreteShaderEnv | None = None
 
@@ -169,6 +170,7 @@ class ConcreteSsaInterpreter(SsaInterpreter):
         cur_bid = 0
         prev_bid = -1
         steps = 0
+        self.last_truncated = False
         while cur_bid in self.blocks_by_id and steps < self.max_block_steps:
             steps += 1
             blk = self.blocks_by_id[cur_bid]
@@ -208,6 +210,8 @@ class ConcreteSsaInterpreter(SsaInterpreter):
             else:
                 break
 
+        if cur_bid in self.blocks_by_id and steps >= self.max_block_steps:
+            self.last_truncated = True
         outs: dict[str, Any] = {}
         if env.stage == "Fragment" or st.terminated or st.demoted:
             outs["discarded"] = bool(st.terminated or st.demoted)

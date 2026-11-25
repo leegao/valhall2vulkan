@@ -82,7 +82,7 @@ def _check_spv_reproduces(
             policy=policy,
         )
         return bool(div)
-    except Exception:
+    except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError):
         return False
 
 
@@ -113,6 +113,7 @@ def _try_spirv_reduce(
         "canonicalize": canonicalize,
         "max_ulp": policy.max_ulp,
         "target_output": rep.output_name,
+        "require_both_present": (rep.direct_val != "None" and rep.valhall_val != "None"),
     }
 
     with tempfile.TemporaryDirectory(prefix="valhall_reduce_") as td:
@@ -139,11 +140,11 @@ def _try_spirv_reduce(
                 "    if cfg['canonicalize']:\n"
                 "        d, _ = canonicalize_ssa_module(d)\n"
                 "        v, _ = canonicalize_ssa_module(v)\n"
-                "    div, _, _, _, _, _ = compare_concrete_outputs(\n"
+                "    div, out_name, d_str, v_str, _, _ = compare_concrete_outputs(\n"
                 "        b, d, v, overrides=cfg['overrides'], vec_idx=cfg['vec_idx'],\n"
                 "        policy=DiffPolicy(max_ulp=cfg['max_ulp'])\n"
                 "    )\n"
-                "    if div:\n"
+                "    if div and (not cfg.get('require_both_present') or (d_str != 'None' and v_str != 'None')):\n"
                 "        if os.path.getsize(cand) < os.path.getsize(best_path):\n"
                 "            shutil.copyfile(cand, best_path)\n"
                 "        sys.exit(0)\n"

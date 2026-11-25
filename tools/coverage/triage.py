@@ -63,7 +63,7 @@ def _fmt_hex_with_fp(val_str: str, output_name: str) -> str:
         if u != 0 and (u & 0x7F800000) == 0:
             return f"{val_str}(subnormal={f:.3e})"
         return f"{val_str}({f:.6g})"
-    except Exception:
+    except (ValueError, OverflowError):
         return val_str
 
 
@@ -122,8 +122,14 @@ def triage_divergence(
 
     # Re-execute once on the minimal witness to inspect concrete traces.
     cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=ov)
-    _d_vals, _ = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False).execute_one(cenv)
-    v_vals, _ = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True).execute_one(cenv)
+    d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
+    v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
+    _d_vals, _ = d_interp.execute_one(cenv)
+    v_vals, _ = v_interp.execute_one(cenv)
+    if d_interp.last_truncated or v_interp.last_truncated:
+        anomalies.append(
+            f"concrete_step_limit_truncated(direct={d_interp.last_truncated}, valhall={v_interp.last_truncated})"
+        )
 
     d_cone = _backward_cone(direct_ssa, _SINK_OPS)
     v_cone = _backward_cone(valhall_ssa, _SINK_OPS)
@@ -232,7 +238,10 @@ def triage_divergence(
                 arg_strs.append(f"v{aid}={av}")
         rv = v_vals.get(vid)
         rv_s = f"0x{rv & 0xFFFFFFFF:08x}" if isinstance(rv, int) and not isinstance(rv, bool) else str(rv)
-        special = _is_nan_or_inf_u32(rv)
+        vtype = str(vn.get("type", ""))
+        vop = str(vn.get("op", ""))
+        is_fp_node = vtype in ("F32", "F16", "V2F16", "V4F32") or vop.startswith("F") or vop in ("NMin", "NMax")
+        special = _is_nan_or_inf_u32(rv) if is_fp_node else None
         tag = f" [{special}]" if special else ""
         frontier_trace.append(
             f"0x{pc:x} v{vid} {vn['op']}({', '.join(arg_strs)}) -> {rv_s}{tag}"
@@ -244,7 +253,7 @@ def triage_divergence(
         suspect = "MODELING_CANONICALIZER"
     elif oob_rodata:
         suspect = "LOWERING_ADDR_OR_SWIZZLE"
-    elif has_tex_gradient or has_shadd_sample or has_cubeface or any("subnormal_ftz" in a for a in anomalies):
+    elif has_tex_gradient or has_shadd_sample or has_cubeface or any("subnormal_ftz" in a or "step_limit_truncated" in a for a in anomalies):
         suspect = "MODELING_ENV_OR_ABI"
     elif has_tex_gather and ("TexGather" in d_ops or "TexGather" in v_ops):
         suspect = "SPIRV2SSA_OR_MODELING_TEX_GATHER"

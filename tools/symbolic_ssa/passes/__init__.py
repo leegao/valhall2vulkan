@@ -6,6 +6,11 @@ from tools.symbolic_ssa.passes.cfg_tile_rewriter import (
     TileMatch,
     apply_cfg_tile_rules,
 )
+from tools.symbolic_ssa.passes.dominance import (
+    DominanceViolation,
+    compute_idom,
+    verify_ssa_dominance,
+)
 from tools.symbolic_ssa.passes.ir_utils import (
     COMMUTATIVE_OPS,
     CONTROL_MARKER_OPS,
@@ -52,11 +57,13 @@ __all__ = [
     "ConstVal",
     "ConstantFoldInterpreter",
     "ConstantPropDomain",
+    "DominanceViolation",
     "Stratum1Stats",
     "TileMatch",
     "apply_cfg_tile_rules",
     "canonicalize_ssa_module",
     "cfg_isomorphic",
+    "compute_idom",
     "join_const",
     "make_pure_diamond_rule",
     "make_pure_triangle_rule",
@@ -66,4 +73,5 @@ __all__ = [
     "pass_predicated_kill",
     "pass_prune_const_branches",
     "pass_readonly_tokens",
+    "verify_ssa_dominance",
 ]

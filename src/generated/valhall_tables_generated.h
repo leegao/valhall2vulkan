@@ -470,7 +470,7 @@ struct FusionTileSpec {
 };
 
 constexpr size_t kNumXmlInstructions = 627;
-constexpr size_t kNumLoweringRules = 249;
+constexpr size_t kNumLoweringRules = 251;
 constexpr size_t kNumCanonicalTiles = 155;
 constexpr size_t kNumFusionTiles = 52;
 

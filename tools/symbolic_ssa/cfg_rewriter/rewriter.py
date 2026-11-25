@@ -209,16 +209,20 @@ class CfgRewriter:
         terminator, and retarget downstream predecessor/Phi edges to `pred_id`.
         """
         pred = self.blocks_by_id[pred_id]
-        succ = self.blocks_by_id.pop(succ_id)
+        succ = self.blocks_by_id[succ_id]
 
         phi_repl: dict[int, int] = {}
         for pid in succ.get("phis", []):
             pn = self.nodes_by_id.get(pid)
             if pn and pn.get("phi"):
-                phi_repl[pid] = int(pn["phi"][0][1])
+                incoming = int(pn["phi"][0][1])
+                if incoming != pid:
+                    phi_repl[pid] = incoming
                 del self.nodes_by_id[pid]
         if phi_repl:
+            # Run replace_all_uses while succ is still in blocks_by_id so succ's branch_cond is updated too.
             replace_all_uses(self.blocks_by_id, self.nodes_by_id, phi_repl)
+        self.blocks_by_id.pop(succ_id)
 
         kept_pred_nodes = extract_non_marker_nodes(pred, self.nodes_by_id)
         kept_set = set(kept_pred_nodes)
