@@ -443,6 +443,14 @@ set_tests_properties(test_v43_dominance_asymmetry_and_iabs PROPERTIES
     ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
 )
 
+add_test(NAME test_v44_base_vertex_and_triage
+    COMMAND ${Python3_EXECUTABLE} -m unittest tools/symbolic_ssa/test_v44_base_vertex_and_triage.py -v
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(test_v44_base_vertex_and_triage PROPERTIES
+    ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
+)
+
 
 set(_VALHALL_USE_SYSTEM_CLANG FALSE)
 set(_VALHALL_USE_BUNDLED_LLVM21 FALSE)

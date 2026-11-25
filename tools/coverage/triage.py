@@ -124,7 +124,7 @@ def triage_divergence(
     cenv = ConcreteShaderEnv(bundle, vec_idx, overrides=ov)
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)
-    _d_vals, _ = d_interp.execute_one(cenv)
+    d_vals, _ = d_interp.execute_one(cenv)
     v_vals, _ = v_interp.execute_one(cenv)
     if d_interp.last_truncated or v_interp.last_truncated:
         anomalies.append(
@@ -248,12 +248,47 @@ def triage_divergence(
             + (f"  ; {dis}" if dis else "")
         )
 
+    # Detect unresolved pilot_fau slots that were not bound by ShaderEnvBase.
+    stage = str(bundle.get("stage", ""))
+    unres_pf = [
+        f"w{pf.get('word_idx')}(off={pf.get('byte_offset')})"
+        for pf in bundle.get("mbs2_context", {}).get("pilot_fau", [])
+        if not pf.get("resolved")
+        and not (
+            stage == "Vertex"
+            and pf.get("kind") == "unknown"
+            and pf.get("has_byte_offset")
+            and int(pf.get("byte_offset", -1)) in (76, 80)
+        )
+    ]
+    if unres_pf:
+        anomalies.append(f"unresolved_pilot_fau({', '.join(unres_pf[:4])})")
+
+    # Detect extreme-range or NaN inputs to Sin/Cos where Mali FP32 range reduction or clamp_m1_1 differs.
+    has_extreme_trig = False
+    has_nan_trig = False
+    for did in d_cone:
+        dn = d_nodes.get(did)
+        if not dn or dn.get("op") not in ("Sin", "Cos") or not dn.get("args"):
+            continue
+        a0 = d_vals.get(int(dn["args"][0]))
+        if isinstance(a0, int) and not isinstance(a0, bool):
+            f0 = _u32_to_f32(a0)
+            if math.isnan(f0):
+                has_nan_trig = True
+            elif math.isinf(f0) or abs(f0) > 50.0:
+                has_extreme_trig = True
+    if has_nan_trig:
+        anomalies.append("nan_trig_clamp(Mali FMA.clamp_m1_1 suppresses NaN in Sin/Cos)")
+    if has_extreme_trig:
+        anomalies.append("extreme_trig_range(Mali FP32 Sin/Cos range reduction |x|>50)")
+
     # Classify suspect category based on concrete evidence.
     if canon_introduced:
         suspect = "MODELING_CANONICALIZER"
     elif oob_rodata:
         suspect = "LOWERING_ADDR_OR_SWIZZLE"
-    elif has_tex_gradient or has_shadd_sample or has_cubeface or any("subnormal_ftz" in a or "step_limit_truncated" in a for a in anomalies):
+    elif has_tex_gradient or has_shadd_sample or has_cubeface or has_extreme_trig or has_nan_trig or any("subnormal_ftz" in a or "step_limit_truncated" in a or "unresolved_pilot_fau" in a for a in anomalies):
         suspect = "MODELING_ENV_OR_ABI"
     elif has_tex_gather and ("TexGather" in d_ops or "TexGather" in v_ops):
         suspect = "SPIRV2SSA_OR_MODELING_TEX_GATHER"

@@ -206,6 +206,18 @@ class ShaderEnvBase:
         for pf in self.mbs2.get("pilot_fau", []):
             if has_push_const_only and pf.get("key") == "ubo:0:0":
                 pf = dict(pf, key="push_const")
+            # Mali Vertex pilot shaders load BaseVertex (byte_offset=76) and BaseInstance
+            # (byte_offset=80) from the draw-parameter buffer and add them to r60/r61.
+            # Direct SPIR-V uses zero-based gl_VertexIndex/gl_InstanceIndex, so bind these
+            # unresolved Vertex draw-param FAU slots to 0.
+            if (
+                self.stage == "Vertex"
+                and not pf.get("resolved")
+                and pf.get("kind") == "unknown"
+                and pf.get("has_byte_offset")
+                and int(pf.get("byte_offset", -1)) in (76, 80)
+            ):
+                pf = dict(pf, value_kind="const_int", has_const_value=True, const_value=0)
             vkind = pf.get("value_kind", "")
             is_const = vkind == "const_int" and pf.get("has_const_value", False)
             if is_const or (pf.get("resolved") and pf.get("key")):

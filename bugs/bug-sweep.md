@@ -1,6 +1,6 @@
 # Bug Sweep & Repro Maintenance Guide
 
-This guide explains how to run equivalence sweeps with `tools.coverage` and `tools.verify.shader_equiv_verifier`, read the `[SHRINK]` / `[TRIAGE]` / `--trace-diff` diagnostics, record shrunken `.spvasm` repros into `bugs/`, and keep `bugs/manifest.md` up to date.
+This guide explains how to run equivalence sweeps with `tools.coverage` and `tools.verify.shader_equiv_verifier`, read the `[SHRINK]` / `[TRIAGE]` / `--trace-diff` diagnostics, root-cause divergences efficiently using the **Cluster-First Playbook**, record shrunken `.spvasm` repros into `bugs/`, and keep `bugs/manifest.md` up to date.
 
 ---
 
@@ -21,8 +21,6 @@ Before running sweeps or recording `.spvasm` files, ensure:
 
 ### Fast Concolic Equivalence Fuzzing (`tools.coverage`)
 
-The standard sweep command used across Checkpoint v42 and v43 is:
-
 ```bash
 python3 -m tools.coverage \
   --canonicalize --k-init 64 --domain udomain --fp-mode real \
@@ -36,8 +34,6 @@ python3 -m tools.coverage \
 
 ### Formal Z3 / CEC Verification (`tools.verify.shader_equiv_verifier`)
 
-Once you have a small `.spv` or `.spvasm` repro, you can cross-check with both concrete-equivalence checking (`--cec`) and all-path Z3 proving:
-
 ```bash
 # Fast concrete diff + cutpoint-guided CEC
 python3 -m tools.verify.shader_equiv_verifier --cec bugs/frag_unique_05_d392e446_frag_color_0_.a.spvasm
@@ -48,79 +44,38 @@ python3 -m tools.verify.shader_equiv_verifier \
   bugs/frag_unique_05_d392e446_frag_color_0_.a.spvasm
 ```
 
-### Batch Sweep Across `samples/*.spv` + Corpus
-
-To run a reproducible 75-shader sweep (all 25 `samples/*.spv` + 50 random shaders from a corpus directory using `seed=42`):
-
-```bash
-python3 - << 'EOF'
-import concurrent.futures, glob, json, os, random, subprocess, sys
-
-samples = sorted(glob.glob("samples/*.spv"))
-corpus_all = sorted(glob.glob("/path/to/spirv_samples/*.spv"))
-corpus50 = random.Random(42).sample(corpus_all, min(50, len(corpus_all)))
-targets = [("samples", p) for p in samples] + [("corpus50", p) for p in corpus50]
-
-def run_one(item):
-    grp, path = item
-    cmd = [
-        sys.executable, "-m", "tools.coverage",
-        "--canonicalize", "--k-init", "64", "--domain", "udomain",
-        "--fp-mode", "real", "--equiv-fuzz", path,
-    ]
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
-        return {"group": grp, "name": os.path.basename(path), "rc": p.returncode, "out": (p.stdout + p.stderr).strip()}
-    except subprocess.TimeoutExpired:
-        return {"group": grp, "name": os.path.basename(path), "rc": -1, "out": "TIMEOUT"}
-
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
-    rows = list(ex.map(run_one, targets))
-
-with open("/tmp/sweep_results.json", "w") as f:
-    json.dump(rows, f, indent=2)
-print(f"Wrote {len(rows)} results to /tmp/sweep_results.json")
-EOF
-```
-
 ---
 
 ## 3. Reading `[SHRINK]`, `[TRIAGE]`, and `--trace-diff` Output
 
-Example output from `samples/bcn_bc7.spv`:
-
-```text
-[EQUIV-FUZZ] bcn_bc7.spv status=DIVERGED seed=direct vecs=64(init=64,reach=0,cov=0) blocks=0/19 preds=357->357/1430 benign_fp=0 divs=1 elapsed=156.2ms
-  [SHRINK] vec=32 output=ssbo:0:0+0xea475f6c direct=0xff7bce63 valhall=0xffffc652 kind=REAL_DIVERGENCE ulp=None overrides=0->0 cone=(3530,3429)
-    frontier_pcs: 0x0(ICMP.s32.m1.ge r0, r61, u4.w0), 0x30(ARSHIFT.i32 r1, r2, k03020100.b2), ...
-  [TRIAGE] suspect=LOWERING_OR_SEMANTICS
-    cone_ops_diff: direct_only=[ConstS32,FDiv,ICmpSLe,IMul64,LogicalOr,SDiv,SMod] valhall_only=[Bfi,BitAnd64,BitNot,BitXor,ICmpSLt,ICmpUGt,LoadFau,Pack64]
-    frontier_trace:
-      0x38 v64 LoadFau() -> 0xfffffffc  ; AND.i32 r2, r2^, u5.w1
-      0x22d8 v9227 ShrU(v9219=0x416f59f4, v9226=0x00000003) -> 0x082deb3e  ; RSHIFT_AND.i32 r2, r2^, k03020100.b3, u10.w0
-```
-
-Read it top to bottom:
-
-1. **Summary line (`[EQUIV-FUZZ]`)**: `divs=1` out of `vecs=64` tells you this is an edge-case divergence (not a systematic every-vector bug like `divs=64`).
+1. **Summary line (`[EQUIV-FUZZ]`)**: Check `divs=N` out of `vecs=64`. `divs=1..4` usually signals an edge-case input (overflow, `w==0`, extreme trig `|x|>50`, or a rare branch); `divs=32..64` usually signals a systematic ABI/descriptor or instruction-lowering bug.
 2. **Witness line (`[SHRINK]`)**:
-   * `vec=32` + `overrides=0->0` gives the exact deterministic input vector needed to replay the failure.
-   * `output=ssbo:0:0+0xea475f6c direct=0xff7bce63 valhall=0xffffc652` shows the first diverging channel and both concrete values (FP channels also print decoded floats like `0x3efffffd(0.5)`).
-   * `cone=(3530,3429)` gives the backward dependency cone sizes (Direct SSA nodes, Valhall SSA nodes).
+   * `vec=<idx>` + `overrides=0->0` gives the exact deterministic input vector to replay.
+   * `output=... direct=... valhall=...` shows the first diverging channel and decoded FP32 values (e.g., `0x3efffffd(0.5)`).
+   * `cone=(D, V)` shows backward dependency cone sizes.
 3. **Triage line (`[TRIAGE]`)**:
-   * `suspect=MODELING_CANONICALIZER`: Raw (uncanonicalized) SSA already agrees on this witness — inspect `tools/symbolic_ssa/passes/` first!
-   * `suspect=LOWERING_ADDR_OR_SWIZZLE`: A `PsbLoad` in the Valhall cone read out-of-bounds of `ebin_rodata` — inspect 64-bit operand/swizzle lowering in `specs/lowering/valhall_lowering.json`.
-   * `suspect=MODELING_ENV_OR_ABI`: Known ABI/modeling gap (`TEX_GRADIENT`, `CUBEFACE`, `SHADD sample`, `subnormal_ftz`, or `concrete_step_limit_truncated`).
-   * `suspect=SPIRV2SSA_OR_MODELING_TEX_GATHER`: `TexGather` / `OpImageGather` mismatch.
-   * `suspect=LOWERING_OR_SEMANTICS`: No known modeling gap matched — likely a real ISA lowering or `spirv2ssa` bug.
-4. **`cone_ops_diff`**: Highlights SSA ops unique to one side's backward cone (e.g., `RoundEven` missing on Valhall, or `Bfi`/`BitAnd64` only on Valhall).
-5. **`frontier_trace` (`--trace-diff`)**: Lists the earliest Valhall SSA nodes whose concrete value never appears in the Direct SSA cone, alongside their exact concrete input values, output value, and Valhall disassembly. Look here for unexpected bitmasks, wrong lane extracts, or `LoadSidebandU64() -> 0x00000000`.
+   * `MODELING_CANONICALIZER`: Raw (uncanonicalized) SSA already agrees on this witness — run pass-by-pass bisection and `verify_ssa_dominance(can_ssa)` first!
+   * `LOWERING_ADDR_OR_SWIZZLE`: A `PsbLoad` read out-of-bounds of `ebin_rodata` — inspect 64-bit operand/swizzle lowering in `specs/lowering/valhall_lowering.json`.
+   * `MODELING_ENV_OR_ABI`: Known ABI/modeling gap (`TEX_GRADIENT`, `CUBEFACE`, `SHADD sample`, `subnormal_ftz`, `concrete_step_limit_truncated`, `unresolved_pilot_fau`, `extreme_trig_range`, or `nan_trig_clamp`).
+   * `SPIRV2SSA_OR_MODELING_TEX_GATHER`: `TexGather` / `OpImageGather` mismatch.
+   * `LOWERING_OR_SEMANTICS`: No known modeling gap matched — likely a real ISA lowering or `spirv2ssa` bug.
+4. **`cone_ops_diff`**: Highlights SSA ops unique to one side's backward cone.
+5. **`frontier_trace` (`--trace-diff`)**: Lists the earliest non-constant Valhall SSA nodes whose concrete value never appears in the Direct SSA cone, alongside their exact concrete operand values, output value, and Valhall disassembly.
 
 ---
 
-## 4. Recording Shrunken `.spvasm` Repros (`--record`)
+## 4. Cluster-First Root-Cause Playbook (Improved in v44)
 
-Whenever you uncover a new divergence cluster worth tracking:
+Instead of debugging shaders in arbitrary filename order, follow this 4-step triage funnel:
+
+1. **Sort by `(suspect, divs)`**: Start with `suspect=LOWERING_OR_SEMANTICS` and the **smallest `divs` count (`divs=1..6`)**. Low-divergence shaders have only 1–2 bugs left, so fixing one root cause often flips multiple shaders straight to `EQUIV`!
+2. **Check `unresolved_pilot_fau` and `mbs2_context` first**: Before tracing arithmetic, check whether `signals=[...]` reports `unresolved_pilot_fau(...)`, `concrete_step_limit_truncated(...)`, `extreme_trig_range(...)`, or `nan_trig_clamp(...)`. A single unresolved FAU slot (like `BaseVertex`/`BaseInstance` at `byte_offset=76/80`) can explain 10+ shaders at once.
+3. **Find the first F32 `NaN`/`Inf` origin on NaN-vs-finite diffs**: Whenever one side is `NaN` and the other is finite, scan FP32-typed nodes (`n["type"] == "F32"`) in topological order for the first node whose inputs are finite and whose output is `NaN`/`Inf`. This immediately distinguishes `FMA.clamp_m1_1` NaN suppression from `FRCP(FRSQ(+Inf))` overflow or `FMIN`/`FMAX` NaN-propagation bugs.
+4. **Walk backward 5–6 hops from the diverging store on both sides**: When both sides are finite with different magnitudes/signs (like `d5ded472` `25.59` vs `-13.30`), dump the 6-hop backward slice from the diverging `Store*` node on Direct and Valhall side-by-side. The first `Select`/`Phi`/`CSEL` or ALU op whose values disagree is the exact divergence point.
+
+---
+
+## 5. Recording Shrunken `.spvasm` Repros (`--record`) & Ops Workflow
 
 ```bash
 python3 -m tools.coverage \
@@ -130,23 +85,6 @@ python3 -m tools.coverage \
   path/to/failing.spv
 ```
 
-* `--record bugs/` automatically names the file `<shader_stem>_<sanitized_output>.spvasm` inside `bugs/`.
-* `spirv-reduce` runs inside an isolated temp directory (`cwd=td`), validates every candidate with `spirv-val`, rejects candidates that slip from a value mismatch into a `CHANNEL_ASYMMETRY` (`None`), and checkpoints the smallest verified `.spv` so even a timeout returns the best reduction found so far.
-* Pass `--no-reduce` if you want an immediate full disassembly without running `spirv-reduce`.
-
----
-
-## 5. Ops Workflow: Keeping `bugs/` Up to Date
-
-1. **When opening a new bug**:
-   * Record a `.spvasm` repro into `bugs/` using `--record bugs/`.
-   * Verify it replays cleanly with `python3 -m tools.coverage --canonicalize --equiv-fuzz bugs/<file>.spvasm`.
-   * Add an `OPEN` row to `bugs/manifest.md` with the next `BUG-1xx` ID, layer, repro path, and root-cause hypothesis.
-2. **When fixing a bug**:
-   * Verify the recorded `bugs/<file>.spvasm` now returns `EQUIV_EXACT` or `EQUIV_WITHIN_ULP` (or `UNSAT` in `shader_equiv_verifier`).
-   * Add a targeted unit/regression test in `tools/symbolic_ssa/test_v*.py` and register it in `CMakeLists.txt`.
-   * Move the entry in `bugs/manifest.md` from **Open Bugs** to **Closed Bugs** with the checkpoint version, fix location, and test name.
-   * Either keep the `.spvasm` in `bugs/` if a regression test references it directly, or remove it once covered by a unit test so `bugs/` stays focused on active repros.
-3. **Before committing**:
-   * Run `cmake --build build -j$(nproc)` and `ctest --test-dir build --output-on-failure`.
-   * Run `ruff check` on all modified/added Python files to keep lint clean.
+* `recorder.py` runs `spirv-reduce` inside an isolated temp directory (`cwd=td`), validates every candidate with `spirv-val`, rejects candidates that slip from a value divergence into an `OpUndef` channel-asymmetry (`None`), and checkpoints `best.spv` so timeouts still emit the smallest verified repro.
+* **Opening a bug**: Record into `bugs/`, verify replay via `tools.coverage`, and add an `OPEN` row to `bugs/manifest.md`.
+* **Closing a bug**: Verify the repro now passes, add a targeted unit test in `tools/symbolic_ssa/test_v*.py` registered in `CMakeLists.txt`, move the row in `bugs/manifest.md` to **Closed Bugs**, and verify `cmake --build build`, `ctest --test-dir build --output-on-failure`, and `ruff check` all pass with 0 errors.
