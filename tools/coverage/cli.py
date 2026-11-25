@@ -6,57 +6,73 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
-import tempfile
 
 from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
 from tools.coverage.reachability import solve_maximal_reachability
-from tools.coverage.shrinker import DiffPolicy, localize_and_shrink_divergence
+from tools.coverage.recorder import record_repro_spvasm
+from tools.coverage.shrinker import (
+    DiffPolicy,
+    DivergenceReport,
+    localize_and_shrink_divergence,
+)
 from tools.coverage.synthesizer import synthesize_coverage_vectors
+from tools.coverage.triage import format_divergence_and_triage, triage_divergence
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
 from tools.verify.cec import run_concrete_diff
+from tools.verify.spvasm_io import load_equiv_bundle
 
 
 def _load_bundle(spv_or_json: str, bin_path: str) -> dict:
-    if spv_or_json.endswith(".json"):
-        with open(spv_or_json, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
-        tmp_json = tf.name
-    try:
-        proc = subprocess.run(
-            [bin_path, spv_or_json, "--quiet", "--dump-equiv-json", tmp_json],
-            capture_output=True, text=True, timeout=15,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(proc.stderr.strip()[:200])
-        with open(tmp_json, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    finally:
-        if os.path.exists(tmp_json):
-            os.remove(tmp_json)
+    return load_equiv_bundle(spv_or_json, bin_path, timeout=15)
 
 
-def _print_divergence_report(rep) -> None:
-    print(
-        f"  [SHRINK] output={rep.output_name} direct={rep.direct_val} valhall={rep.valhall_val} "
-        f"kind={rep.diff_kind} ulp={rep.ulp_diff} "
-        f"overrides={rep.original_override_count}->{rep.shrunk_override_count} "
-        f"cone=({rep.cone_direct_size},{rep.cone_valhall_size})"
+def _handle_divergence(
+    args: argparse.Namespace,
+    bundle: dict,
+    d_ssa: dict,
+    v_ssa: dict,
+    raw_d_ssa: dict,
+    raw_v_ssa: dict,
+    rep: DivergenceReport,
+    policy: DiffPolicy,
+) -> None:
+    triage = triage_divergence(
+        bundle,
+        d_ssa,
+        v_ssa,
+        rep,
+        raw_direct_ssa=raw_d_ssa if args.canonicalize else None,
+        raw_valhall_ssa=raw_v_ssa if args.canonicalize else None,
+        policy=policy,
     )
-    if rep.frontier_pcs:
-        pcs_str = ", ".join(f"0x{pc:x}({dis})" if dis else f"0x{pc:x}" for pc, dis in rep.frontier_pcs[:6])
-        print(f"    frontier_pcs: {pcs_str}")
-    if rep.shrunk_overrides:
-        print(f"    shrunk_overrides: {json.dumps(rep.shrunk_overrides, sort_keys=True)[:200]}")
+    for line in format_divergence_and_triage(rep, triage, trace_diff=args.trace_diff):
+        print(line)
+    if args.record:
+        rec = record_repro_spvasm(
+            args.spv_or_json,
+            args.record,
+            args.bin,
+            bundle,
+            rep,
+            triage,
+            canonicalize=args.canonicalize,
+            policy=policy,
+            reduce_timeout_s=args.record_timeout_s,
+            reduce_steps=args.record_steps,
+            no_reduce=args.no_reduce,
+        )
+        print(
+            f"  [RECORD] path={rec.out_path} bytes={rec.original_bytes}->{rec.recorded_bytes} "
+            f"method={rec.reduce_method} verified={rec.verified_reproduces}"
+        )
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Concolic MaxSMT, Maximal-Reachability & Equivalence Fuzzer for ValhallSSA"
     )
-    ap.add_argument("spv_or_json", help="Path to .spv shader or equivalence bundle .json")
+    ap.add_argument("spv_or_json", help="Path to .spv/.spvasm shader or equivalence bundle .json")
     ap.add_argument("--bin", default="./build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--side", choices=["direct", "valhall"], default="direct", help="SSA side to target/seed from")
     ap.add_argument("--k-init", type=int, default=32, help="Initial concrete seed vectors")
@@ -79,6 +95,33 @@ def main() -> int:
         action="store_true",
         help="Auto-shrink and localize any concrete divergence discovered during fuzzing/coverage",
     )
+    ap.add_argument(
+        "--trace-diff",
+        action="store_true",
+        help="Print concrete Valhall frontier node values and disassembly for deeper triage",
+    )
+    ap.add_argument(
+        "--record",
+        default=None,
+        help="Record a shrunken .spvasm divergence reproduction to this file path or directory (e.g. bugs/)",
+    )
+    ap.add_argument(
+        "--no-reduce",
+        action="store_true",
+        help="Skip spirv-reduce shrinking when using --record (disassemble original shader directly)",
+    )
+    ap.add_argument(
+        "--record-timeout-s",
+        type=float,
+        default=15.0,
+        help="Max wall-clock seconds for spirv-reduce during --record (default: 15.0)",
+    )
+    ap.add_argument(
+        "--record-steps",
+        type=int,
+        default=120,
+        help="Max spirv-reduce step limit during --record (default: 120)",
+    )
     ap.add_argument("--max-ulp", type=int, default=2, help="Max benign FP32 ULP tolerance for DiffPolicy")
     ap.add_argument("--max-paths", type=int, default=32, help="Maximum disjoint paths to enumerate")
     ap.add_argument("--timeout-ms", type=int, default=500, help="Per-solve Z3 timeout in ms")
@@ -93,8 +136,10 @@ def main() -> int:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 1
 
-    d_ssa = bundle["direct_ssa"]
-    v_ssa = bundle["valhall_ssa"]
+    raw_d_ssa = bundle["direct_ssa"]
+    raw_v_ssa = bundle["valhall_ssa"]
+    d_ssa = raw_d_ssa
+    v_ssa = raw_v_ssa
     if args.canonicalize:
         d_ssa, _ = canonicalize_ssa_module(d_ssa)
         v_ssa, _ = canonicalize_ssa_module(v_ssa)
@@ -126,7 +171,7 @@ def main() -> int:
             f"benign_fp={ef.benign_fp_diffs} divs={ef.diverging_vectors} elapsed={ef.elapsed_ms:.1f}ms"
         )
         if ef.first_divergence is not None and ef.first_divergence.diverged:
-            _print_divergence_report(ef.first_divergence)
+            _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, ef.first_divergence, policy)
         if args.dump_vectors:
             with open(args.dump_vectors, "w", encoding="utf-8") as fh:
                 json.dump(ef.tested_overrides, fh, indent=2)
@@ -192,13 +237,13 @@ def main() -> int:
         f"({res.initial_pct:.1f}%->{res.final_pct:.1f}%) dead={res.dead_proved} "
         f"vecs={res.vectors_synthesized} elapsed={res.elapsed_ms:.1f}ms"
     )
-    if args.shrink:
+    if args.shrink or args.record:
         checked_any = False
         if cd.status == "MISMATCH":
             for i in range(args.k_init):
                 rep = localize_and_shrink_divergence(bundle, d_ssa, v_ssa, overrides={}, vec_idx=i, policy=policy)
                 if rep.diverged:
-                    _print_divergence_report(rep)
+                    _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, rep, policy)
                     checked_any = True
                     break
         if not checked_any:
@@ -207,7 +252,7 @@ def main() -> int:
                     bundle, d_ssa, v_ssa, overrides=ov, vec_idx=args.k_init + idx, policy=policy
                 )
                 if rep.diverged:
-                    _print_divergence_report(rep)
+                    _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, rep, policy)
                     break
     if args.dump_vectors:
         with open(args.dump_vectors, "w", encoding="utf-8") as fh:

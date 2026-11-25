@@ -1,0 +1,85 @@
+; ValhallSSA divergence reproduction recorded by tools.coverage --record
+; source: ff87069c5f568032fa8372d3c5d913404dfbef06fd9da2468d861cfe152158b0.spv
+; stage: Fragment arch: v10
+; size_bytes: 11212 -> 980 (method=spirv-reduce)
+; vec_idx: 0
+; output: frag_color[0].g direct=0x23a7e5b0 valhall=0x00000000 kind=REAL_DIVERGENCE ulp=598205872
+; shrunk_overrides: {}
+; triage_suspect: MODELING_ENV_OR_ABI
+; triage_signals: cone_has_TEX_GRADIENT(implicit->explicit LOD emulation); cone_has_CUBEFACE(cube-face projection vs 3D TexSample)
+; frontier_pcs: 0x30(S16_TO_F32 r2, r2^.h0), 0x50(FADD.f32 r2, r2^, k0fr2f.h1.neg), 0x68(FMUL.f32 r2, r2^, k255f256f.h1), 0x98(FMIN.f32.nan_propagate.clamp_0_inf r2, r2^, u6.w0), 0x1d8(CUBEFACE2 r54, r2, r3, r1), 0x208(CUBE_TSEL r1, r3^, r1^, r54)
+; repro_cmd: python3 -m tools.coverage --canonicalize --k-init 64 --domain udomain --fp-mode real --equiv-fuzz --shrink --trace-diff bugs/ff87069c5f56_frag_color_0_.g.spvasm
+; SPIR-V
+; Version: 1.3
+; Generator: Khronos; 0
+; Bound: 595
+; Schema: 0
+               OpCapability Shader
+               OpCapability GroupNonUniformBallot
+               OpCapability GroupNonUniformShuffle
+               OpCapability GroupNonUniformVote
+               OpCapability ImageBuffer
+               OpCapability ImageGatherExtended
+               OpCapability ImageQuery
+               OpCapability SampledBuffer
+               OpCapability Float64
+               OpCapability FragmentShaderPixelInterlockEXT
+               OpExtension "SPV_EXT_fragment_shader_interlock"
+        %286 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %56 "main" %45
+               OpExecutionMode %56 OriginUpperLeft
+               OpDecorate %45 Location 0
+       %uint = OpTypeInt 32 0
+     %uint_8 = OpConstant %uint 8
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+        %int = OpTypeInt 32 1
+    %uint_73 = OpConstant %uint 73
+  %uint_4096 = OpConstant %uint 4096
+         %24 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %25 = OpTypeSampledImage %24
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+         %45 = OpVariable %_ptr_Output_v4float Output
+       %void = OpTypeVoid
+         %55 = OpTypeFunction %void
+       %bool = OpTypeBool
+    %v3float = OpTypeVector %float 3
+      %int_0 = OpConstant %int 0
+      %int_1 = OpConstant %int 1
+    %v2float = OpTypeVector %float 2
+  %float_256 = OpConstant %float 256
+%float_0_00390625 = OpConstant %float 0.00390625
+    %float_2 = OpConstant %float 2
+    %float_0 = OpConstant %float 0
+        %293 = OpConstantComposite %v2float %float_0 %float_0
+     %v2bool = OpTypeVector %bool 2
+      %int_3 = OpConstant %int 3
+    %float_1 = OpConstant %float 1
+    %int_139 = OpConstant %int 139
+      %int_2 = OpConstant %int 2
+%_ptr_Output_float = OpTypePointer Output %float
+        %443 = OpConstantComposite %v3float %float_0 %float_0 %float_0
+     %v3bool = OpTypeVector %bool 3
+   %float_n0 = OpConstant %float -0
+        %585 = OpUndef %float
+        %586 = OpUndef %25
+        %587 = OpUndef %v2float
+        %588 = OpUndef %int
+        %589 = OpUndef %uint
+        %590 = OpUndef %v2bool
+        %591 = OpUndef %v4float
+        %592 = OpUndef %bool
+        %593 = OpUndef %v3float
+        %594 = OpUndef %v3bool
+         %56 = OpFunction %void None %55
+         %57 = OpLabel
+               OpSelectionMerge %378 None
+               OpBranchConditional %592 %364 %378
+        %364 = OpLabel
+        %366 = OpAccessChain %_ptr_Output_float %45 %int_0
+               OpStore %366 %float_256
+               OpReturn
+        %378 = OpLabel
+               OpReturn
+               OpFunctionEnd

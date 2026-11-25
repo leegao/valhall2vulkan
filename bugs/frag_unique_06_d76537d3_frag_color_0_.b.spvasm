@@ -1,0 +1,191 @@
+; ValhallSSA divergence reproduction recorded by tools.coverage --record
+; source: frag_unique_06_d76537d3.spv
+; stage: Fragment arch: v10
+; size_bytes: 8504 -> 2736 (method=spirv-reduce)
+; vec_idx: 0
+; output: frag_color[0].b direct=0x583ceefe valhall=0x8700e108 kind=REAL_DIVERGENCE ulp=3745370118
+; shrunk_overrides: {}
+; triage_suspect: MODELING_ENV_OR_ABI
+; triage_signals: cone_has_SHADD_sample(gl_SamplePosition/ImageQuerySize pilot)
+; frontier_pcs: 0x8(FMUL.f32.discard r63, u0.w0, r0^), 0x28(FMUL.f32 r2, u0.w1, r1), 0x30(BRANCH u1.w1.h0, 0xc0), 0x40(RSHIFT_AND.i32 r1, r61, k13121110.b0, u2.w1), 0x58(SHADD.u64 [r4:r5], sample, [r0:r1].w1, #0x2), 0x70(FMUL.f32 r1, r1^, u7.w0)
+; repro_cmd: python3 -m tools.coverage --canonicalize --k-init 64 --domain udomain --fp-mode real --equiv-fuzz --shrink --trace-diff bugs/frag_unique_06_d76537d3_frag_color_0_.b.spvasm
+; SPIR-V
+; Version: 1.3
+; Generator: Khronos; 0
+; Bound: 477
+; Schema: 0
+               OpCapability Shader
+               OpCapability GroupNonUniformBallot
+               OpCapability GroupNonUniformShuffle
+               OpCapability GroupNonUniformVote
+               OpCapability ImageBuffer
+               OpCapability ImageGatherExtended
+               OpCapability ImageQuery
+               OpCapability SampledBuffer
+               OpCapability Float64
+               OpCapability FragmentShaderPixelInterlockEXT
+               OpExtension "SPV_EXT_fragment_shader_interlock"
+        %226 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %29 "main" %24
+               OpExecutionMode %29 OriginUpperLeft
+               OpDecorate %18 DescriptorSet 0
+               OpDecorate %18 Binding 1
+               OpDecorate %24 Location 0
+       %uint = OpTypeInt 32 0
+     %uint_8 = OpConstant %uint 8
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+        %int = OpTypeInt 32 1
+    %uint_73 = OpConstant %uint 73
+         %14 = OpTypeImage %float 2D 0 0 1 1 Unknown
+         %15 = OpTypeSampledImage %14
+%_ptr_UniformConstant_15 = OpTypePointer UniformConstant %15
+         %18 = OpVariable %_ptr_UniformConstant_15 UniformConstant
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+         %24 = OpVariable %_ptr_Output_v4float Output
+       %void = OpTypeVoid
+         %28 = OpTypeFunction %void
+%_ptr_Function_int = OpTypePointer Function %int
+         %33 = OpTypeFunction %int %_ptr_Function_int %_ptr_Function_int %_ptr_Function_int
+%_ptr_Function_float = OpTypePointer Function %float
+    %v3float = OpTypeVector %float 3
+%_ptr_Function_v3float = OpTypePointer Function %v3float
+      %v2int = OpTypeVector %int 2
+      %int_0 = OpConstant %int 0
+      %int_1 = OpConstant %int 1
+      %int_2 = OpConstant %int 2
+      %int_3 = OpConstant %int 3
+ %float_0_25 = OpConstant %float 0.25
+%_ptr_Output_float = OpTypePointer Output %float
+    %float_1 = OpConstant %float 1
+       %bool = OpTypeBool
+%_ptr_Function_bool = OpTypePointer Function %bool
+      %int_5 = OpConstant %int 5
+    %float_0 = OpConstant %float 0
+      %int_4 = OpConstant %int 4
+    %int_4_0 = OpConstant %int 4
+         %29 = OpFunction %void None %28
+         %35 = OpLabel
+         %94 = OpVariable %_ptr_Function_float Function
+         %96 = OpVariable %_ptr_Function_float Function
+         %98 = OpVariable %_ptr_Function_float Function
+        %118 = OpVariable %_ptr_Function_float Function
+        %120 = OpVariable %_ptr_Function_float Function
+        %122 = OpVariable %_ptr_Function_float Function
+        %140 = OpVariable %_ptr_Function_v3float Function
+        %142 = OpVariable %_ptr_Function_float Function
+        %144 = OpVariable %_ptr_Function_float Function
+        %146 = OpVariable %_ptr_Function_float Function
+        %154 = OpVariable %_ptr_Function_int Function
+        %156 = OpVariable %_ptr_Function_int Function
+        %158 = OpVariable %_ptr_Function_int Function
+        %160 = OpVariable %_ptr_Function_int Function
+        %162 = OpVariable %_ptr_Function_int Function
+        %164 = OpVariable %_ptr_Function_v3float Function
+        %166 = OpVariable %_ptr_Function_float Function
+        %168 = OpVariable %_ptr_Function_float Function
+        %170 = OpVariable %_ptr_Function_float Function
+        %172 = OpVariable %_ptr_Function_float Function
+        %174 = OpVariable %_ptr_Function_float Function
+        %176 = OpVariable %_ptr_Function_float Function
+        %178 = OpVariable %_ptr_Function_float Function
+        %180 = OpVariable %_ptr_Function_float Function
+        %182 = OpVariable %_ptr_Function_float Function
+        %184 = OpVariable %_ptr_Function_float Function
+        %186 = OpVariable %_ptr_Function_float Function
+        %188 = OpVariable %_ptr_Function_float Function
+        %190 = OpVariable %_ptr_Function_float Function
+        %192 = OpVariable %_ptr_Function_float Function
+        %194 = OpVariable %_ptr_Function_float Function
+        %272 = OpLoad %15 %18
+        %284 = OpLoad %v3float %140
+        %290 = OpLoad %15 %18
+        %293 = OpCompositeConstruct %v2int %int_4_0 %int_4_0
+        %295 = OpImage %14 %290
+        %296 = OpImageFetch %v4float %295 %293 Sample %int_3
+        %297 = OpVectorShuffle %v3float %296 %296 0 1 2
+               OpStore %164 %297
+        %298 = OpLoad %v3float %164
+        %299 = OpCompositeExtract %float %298 0
+               OpStore %166 %299
+        %300 = OpLoad %v3float %164
+        %301 = OpCompositeExtract %float %300 1
+               OpStore %168 %301
+        %302 = OpLoad %v3float %164
+        %303 = OpCompositeExtract %float %302 2
+               OpStore %170 %303
+        %304 = OpLoad %float %94
+        %305 = OpLoad %float %118
+        %306 = OpFAdd %float %304 %305
+               OpStore %172 %306
+        %307 = OpLoad %float %96
+        %308 = OpLoad %float %120
+        %309 = OpFAdd %float %307 %308
+               OpStore %174 %309
+        %310 = OpLoad %float %98
+        %311 = OpLoad %float %122
+        %312 = OpFAdd %float %310 %311
+               OpStore %176 %312
+        %313 = OpLoad %float %172
+        %314 = OpLoad %float %142
+        %315 = OpFAdd %float %313 %314
+               OpStore %178 %315
+        %316 = OpLoad %float %174
+        %317 = OpLoad %float %144
+        %318 = OpFAdd %float %316 %317
+               OpStore %180 %318
+        %319 = OpLoad %float %176
+        %320 = OpLoad %float %146
+        %321 = OpFAdd %float %319 %320
+               OpStore %182 %321
+        %322 = OpLoad %float %178
+        %323 = OpLoad %float %166
+        %324 = OpFAdd %float %322 %323
+               OpStore %184 %324
+        %325 = OpLoad %float %180
+        %326 = OpLoad %float %168
+        %327 = OpFAdd %float %325 %326
+               OpStore %186 %327
+        %328 = OpLoad %float %182
+        %329 = OpLoad %float %170
+        %330 = OpFAdd %float %328 %329
+               OpStore %188 %330
+        %331 = OpLoad %float %184
+        %333 = OpFMul %float %331 %float_0_25
+               OpStore %190 %333
+        %334 = OpLoad %float %186
+        %335 = OpFMul %float %334 %float_0_25
+               OpStore %192 %335
+        %336 = OpLoad %float %188
+        %337 = OpFMul %float %336 %float_0_25
+               OpStore %194 %337
+        %339 = OpAccessChain %_ptr_Output_float %24 %int_0
+        %340 = OpLoad %float %190
+               OpStore %339 %340
+        %341 = OpAccessChain %_ptr_Output_float %24 %int_1
+        %342 = OpLoad %float %192
+               OpStore %341 %342
+        %343 = OpAccessChain %_ptr_Output_float %24 %int_2
+        %344 = OpLoad %float %194
+               OpStore %343 %344
+        %345 = OpAccessChain %_ptr_Output_float %24 %int_3
+               OpStore %345 %float_1
+               OpReturn
+               OpFunctionEnd
+         %34 = OpFunction %int None %33
+        %389 = OpFunctionParameter %_ptr_Function_int
+        %390 = OpFunctionParameter %_ptr_Function_int
+        %391 = OpFunctionParameter %_ptr_Function_int
+        %392 = OpLabel
+        %394 = OpVariable %_ptr_Function_int Function
+        %396 = OpVariable %_ptr_Function_float Function
+        %398 = OpVariable %_ptr_Function_bool Function
+        %400 = OpVariable %_ptr_Function_bool Function
+        %402 = OpVariable %_ptr_Function_float Function
+        %404 = OpVariable %_ptr_Function_float Function
+        %418 = OpVariable %_ptr_Function_int Function
+        %424 = OpVariable %_ptr_Function_int Function
+        %434 = OpLoad %int %389
+               OpReturnValue %int_4
+               OpFunctionEnd

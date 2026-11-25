@@ -58,6 +58,7 @@ class DivergenceReport:
     frontier_pcs: List[Tuple[int, str]] = field(default_factory=list)
     cone_direct_size: int = 0
     cone_valhall_size: int = 0
+    vec_idx: int = 0
 
 
 def _fmt_val(v: Any) -> str:
@@ -153,7 +154,8 @@ def align_vertex_gl_position(
     if math.isnan(r0) or math.isnan(aw):
         inv_w = float("nan")
     else:
-        denom = max(r0, aw, 0.0)
+        # Mali Position FIFO epilogue clamps denom against k0fr2f = 0x38000000 (2^-15 = 1/32768).
+        denom = max(r0, aw, _u32_to_f32(0x38000000))
         if denom == 0.0:
             inv_w_abs = float("inf")
         else:
@@ -165,7 +167,8 @@ def align_vertex_gl_position(
     y_vp = cy * inv_w
     z_ndc = cz * inv_w
     if math.isnan(z_ndc):
-        z_clamped = float("nan")
+        # Valhall FADD.f32.clamp_m1_1 (lowered to FClamp) is NaN-suppressing and clamps NaN to -1.0.
+        z_clamped = -1.0
     else:
         z_clamped = max(-1.0, min(1.0, z_ndc))
 
@@ -332,6 +335,7 @@ def localize_and_shrink_divergence(
             diff_kind="BENIGN_FP_ROUNDING" if benign_cnt > 0 else "EXACT",
             benign_fp_diffs=benign_cnt,
             shrunk_overrides=shrunk,
+            vec_idx=vec_idx,
         )
 
     out_name, dv0, vv0, ud0 = first_real
@@ -403,4 +407,5 @@ def localize_and_shrink_divergence(
         frontier_pcs=frontier_pcs,
         cone_direct_size=len(d_cone),
         cone_valhall_size=len(v_cone),
+        vec_idx=vec_idx,
     )
