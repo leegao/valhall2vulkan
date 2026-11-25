@@ -71,5 +71,35 @@ class TestCorpusSynth(unittest.TestCase):
         self.assertEqual(get_rule_for_mnemonic("KABOOM").tier, "internal")
 
 
+    def test_targeted_isa_synth_emits_and_validates(self) -> None:
+        if not os.path.exists("./build/spirv2valhall"):
+            self.skipTest("spirv2valhall binary not built")
+        from tools.corpus_synth.isa_target_synth import (
+            list_synthesizable_mnemonics,
+            synthesize_for_isa,
+        )
+
+        self.assertGreaterEqual(len(list_synthesizable_mnemonics()), 100)
+        for mn, cplx in [
+            ("HADD", "minimal"),
+            ("RROT", "medium"),
+            ("FMA", "branchy"),
+            ("BARRIER", "minimal"),
+            ("WMASK", "minimal"),
+            ("DISCARD", "minimal"),
+            ("LD_ATTR_IMM", "minimal"),
+        ]:
+            res = synthesize_for_isa(
+                mn,
+                complexity=cplx,
+                verify_equiv=True,
+                k_init=8,
+                fp_range="vulkan",
+            )
+            self.assertTrue(res.compiled_ok, f"{mn} ({cplx}) failed to compile: {res.error}")
+            self.assertTrue(res.target_emitted, f"{mn} ({cplx}) not emitted in EBIN[0]: {res.emitted_mnemonics}")
+            self.assertEqual(res.equiv_status, "EQUIV_EXACT", f"{mn} ({cplx}) diverged: {res.divergence_report}")
+
+
 if __name__ == "__main__":
     unittest.main()
