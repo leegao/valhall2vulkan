@@ -140,13 +140,27 @@ std::vector<uint32_t> make_inst(uint16_t op, const std::vector<uint32_t>& operan
 
 uint32_t map_glsl450_to_opencl_std(uint32_t glsl_op) {
     switch (glsl_op) {
+        case 1:  return 53;   // Round -> OpenCLstd_Rint
+        case 2:  return 53;   // RoundEven -> OpenCLstd_Rint
+        case 3:  return 66;   // Trunc -> OpenCLstd_Trunc
         case 4:  return 23;   // FAbs -> OpenCLstd_Fabs
         case 5:  return 141;  // SAbs -> OpenCLstd_SAbs
+        case 6:  return 103;  // FSign -> OpenCLstd_Sign
         case 8:  return 25;   // Floor -> OpenCLstd_Floor
         case 9:  return 12;   // Ceil -> OpenCLstd_Ceil
+        case 10: return 30;   // Fract -> OpenCLstd_Fract
+        case 11: return 100;  // Radians -> OpenCLstd_Radians
+        case 12: return 96;   // Degrees -> OpenCLstd_Degrees
         case 13: return 57;   // Sin -> OpenCLstd_Sin
         case 14: return 14;   // Cos -> OpenCLstd_Cos
+        case 15: return 62;   // Tan -> OpenCLstd_Tan
+        case 16: return 3;    // Asin -> OpenCLstd_Asin
+        case 17: return 0;    // Acos -> OpenCLstd_Acos (0 is valid, handled specially if needed)
+        case 18: return 6;    // Atan -> OpenCLstd_Atan
+        case 25: return 7;    // Atan2 -> OpenCLstd_Atan2
         case 26: return 48;   // Pow -> OpenCLstd_Pow
+        case 27: return 19;   // Exp -> OpenCLstd_Exp
+        case 28: return 37;   // Log -> OpenCLstd_Log
         case 29: return 20;   // Exp2 -> OpenCLstd_Exp2
         case 30: return 38;   // Log2 -> OpenCLstd_Log2
         case 31: return 61;   // Sqrt -> OpenCLstd_Sqrt
@@ -158,8 +172,17 @@ uint32_t map_glsl450_to_opencl_std(uint32_t glsl_op) {
         case 41: return 157;  // UMax -> OpenCLstd_UMax
         case 42: return 156;  // SMax -> OpenCLstd_SMax
         case 43: return 95;   // FClamp -> OpenCLstd_FClamp
+        case 44: return 150;  // UClamp -> OpenCLstd_UClamp
+        case 45: return 149;  // SClamp -> OpenCLstd_SClamp
+        case 46: return 99;   // FMix -> OpenCLstd_Mix
+        case 48: return 101;  // Step -> OpenCLstd_Step
+        case 49: return 102;  // SmoothStep -> OpenCLstd_Smoothstep
         case 50: return 26;   // Fma -> OpenCLstd_Fma
-        default: return 0;
+        case 52: return 34;   // Ldexp -> OpenCLstd_Ldexp
+        case 79: return 28;   // NMin -> OpenCLstd_Fmin
+        case 80: return 27;   // NMax -> OpenCLstd_Fmax
+        case 81: return 95;   // NClamp -> OpenCLstd_FClamp
+        default: return 0xFFFFFFFFu;
     }
 }
 
@@ -253,7 +276,8 @@ std::string find_panfrost_compiler(const std::string& explicit_path) {
 bool translate_vulkan_spv_to_opencl_spv(
     const std::vector<uint32_t>& vk_words,
     std::vector<uint32_t>* cl_words,
-    std::string* err) {
+    std::string* err,
+    std::vector<PanfrostArgBinding>* out_bindings) {
     if (vk_words.size() < 5 || vk_words[0] != kSpvMagic) {
         if (err) *err = "Invalid SPIR-V binary header";
         return false;
@@ -288,7 +312,11 @@ bool translate_vulkan_spv_to_opencl_spv(
     std::unordered_map<uint32_t, uint32_t> rarray_elem;
     std::unordered_map<uint32_t, uint32_t> fn_ret_type;
     std::unordered_set<uint32_t> buffer_block_structs;
+    std::unordered_set<uint32_t> unwrapped_structs;
+    std::unordered_set<uint32_t> unwrapped_rarrays;
     std::unordered_map<uint32_t, uint32_t> var_builtin;
+    std::unordered_map<uint32_t, uint32_t> var_set;
+    std::unordered_map<uint32_t, uint32_t> var_binding;
 
     struct BufferVarInfo {
         uint32_t var_id = 0;
@@ -327,6 +355,10 @@ bool translate_vulkan_spv_to_opencl_spv(
                 buffer_block_structs.insert(ins.words[1]);
             } else if (ins.words[2] == kDecBuiltIn && ins.words.size() >= 4) {
                 var_builtin[ins.words[1]] = ins.words[3];
+            } else if (ins.words[2] == kDecDescriptorSet && ins.words.size() >= 4) {
+                var_set[ins.words[1]] = ins.words[3];
+            } else if (ins.words[2] == kDecBinding && ins.words.size() >= 4) {
+                var_binding[ins.words[1]] = ins.words[3];
             }
         } else if (ins.op == kOpName && ins.words.size() >= 3) {
             existing_names[ins.words[1]] = decode_spv_string(ins.words, 2);
@@ -362,10 +394,24 @@ bool translate_vulkan_spv_to_opencl_spv(
                 if (ra_it != rarray_elem.end()) {
                     bi.elem_ty = ra_it->second;
                     bi.unwrapped_single_rarray = true;
+                    unwrapped_structs.insert(pointee);
+                    unwrapped_rarrays.insert(m0);
                 }
             }
             bi.cw_ptr_ty = bound++;
             bi.param_name = "buf_" + std::to_string(buf_vars.size());
+            if (out_bindings) {
+                PanfrostArgBinding ab;
+                ab.arg_idx = static_cast<uint32_t>(buf_vars.size());
+                ab.fau_offset = 24u + ab.arg_idx * 8u;
+                ab.descriptor_set = var_set.count(var_id) ? var_set[var_id] : 0u;
+                ab.binding = var_binding.count(var_id) ? var_binding[var_id] : ab.arg_idx;
+                ab.is_ssbo = (sc == kScStorageBuffer) ||
+                             (sc == kScUniform && buffer_block_structs.count(pointee));
+                ab.key = std::string(ab.is_ssbo ? "ssbo:" : "ubo:") +
+                         std::to_string(ab.descriptor_set) + ":" + std::to_string(ab.binding);
+                out_bindings->push_back(std::move(ab));
+            }
             buf_var_idx[var_id] = buf_vars.size();
             buf_vars.push_back(std::move(bi));
         } else if (sc == kScInput && var_builtin.count(var_id)) {
@@ -406,9 +452,7 @@ bool translate_vulkan_spv_to_opencl_spv(
     for (const auto& ins : insts) {
         if (ins.op != kOpCapability || ins.words.size() < 2) continue;
         uint32_t c = ins.words[1];
-        if (c == kCapShader || c == kCapStorageBuffer16BitAccess ||
-            c == kCapUniformAndStorageBuffer16BitAccess || c == kCapStorageBuffer8BitAccess ||
-            c == kCapPhysicalStorageBufferAddresses || emitted_caps.count(c)) {
+        if ((c != 9u && c != 22u && c != 39u) || emitted_caps.count(c)) {
             continue;
         }
         emitted_caps.insert(c);
@@ -526,14 +570,14 @@ bool translate_vulkan_spv_to_opencl_spv(
             if (ins.op == kOpVariable && ins.words.size() >= 4 && buf_var_idx.count(ins.words[2])) {
                 continue;
             }
-            // Drop OpTypeRuntimeArray and BufferBlock OpTypeStruct that are no longer needed.
-            if (ins.op == kOpTypeRuntimeArray) continue;
-            if (ins.op == kOpTypeStruct && buffer_block_structs.count(ins.words[1])) continue;
+            // Drop unwrapped OpTypeRuntimeArray and single-member BufferBlock structs.
+            if (ins.op == kOpTypeRuntimeArray && unwrapped_rarrays.count(ins.words[1])) continue;
+            if (ins.op == kOpTypeStruct && unwrapped_structs.count(ins.words[1])) continue;
             // Rewrite StorageBuffer/Uniform-BufferBlock OpTypePointer -> CrossWorkgroup.
             if (ins.op == kOpTypePointer && ins.words.size() == 4) {
                 uint32_t sc = ins.words[2];
                 uint32_t pt = ins.words[3];
-                if (buffer_block_structs.count(pt) || rarray_elem.count(pt)) continue;
+                if (unwrapped_structs.count(pt) || unwrapped_rarrays.count(pt)) continue;
                 if (sc == kScStorageBuffer || sc == kScUniform) {
                     emit(make_inst(kOpTypePointer, {ins.words[1], kScCrossWorkgroup, pt}));
                     continue;
@@ -565,7 +609,7 @@ bool translate_vulkan_spv_to_opencl_spv(
             }
         } else if (ins.op == kOpExtInst && ins.words.size() >= 5 && ins.words[3] == glsl_ext_id) {
             uint32_t cl_op = map_glsl450_to_opencl_std(ins.words[4]);
-            if (cl_op == 0) {
+            if (cl_op == 0xFFFFFFFFu) {
                 if (err) {
                     *err = "Unsupported GLSL.std.450 opcode " + std::to_string(ins.words[4]) +
                            " in --panfrost Vulkan->OpenCL translator";
@@ -717,7 +761,7 @@ PanfrostCompileResult compile_with_panfrost(
         std::vector<uint32_t> vk_words(raw_bytes.size() / 4);
         std::memcpy(vk_words.data(), raw_bytes.data(), raw_bytes.size());
         std::vector<uint32_t> cl_words;
-        if (!translate_vulkan_spv_to_opencl_spv(vk_words, &cl_words, &res.error)) {
+        if (!translate_vulkan_spv_to_opencl_spv(vk_words, &cl_words, &res.error, &res.arg_bindings)) {
             cleanup();
             return res;
         }
@@ -775,6 +819,103 @@ PanfrostCompileResult compile_with_panfrost(
     return res;
 }
 
+
+static void devirtualize_panfrost_fau(
+    valhall::compiler::ValhallSsaModule& ssa,
+    const std::vector<PanfrostArgBinding>& bindings) {
+    if (ssa.blocks.empty()) return;
+    // Map FAU word_idx -> (key, is_hi) for 64-bit buffer pointers at offset 24 + 8*i.
+    std::unordered_map<uint32_t, std::pair<std::string, bool>> word_to_buf;
+    for (const auto& ab : bindings) {
+        uint32_t w_lo = ab.fau_offset / 4u;
+        word_to_buf[w_lo] = {ab.key, false};
+        word_to_buf[w_lo + 1u] = {ab.key, true};
+    }
+
+    // Check if any LoadFau references a bound buffer or num_workgroups (words 0, 1, 2).
+    std::unordered_map<std::string, std::pair<valhall::compiler::SsaId, valhall::compiler::SsaId>> buf_lo_hi;
+    valhall::compiler::SsaId nwg_id = valhall::compiler::kInvalidSsa;
+    std::vector<valhall::compiler::SsaId> entry_prefix;
+
+    auto emit_entry = [&](valhall::compiler::SsaNode n) -> valhall::compiler::SsaId {
+        n.id = static_cast<valhall::compiler::SsaId>(ssa.nodes.size());
+        n.block_id = 0;
+        ssa.nodes.push_back(std::move(n));
+        entry_prefix.push_back(ssa.nodes.back().id);
+        return ssa.nodes.back().id;
+    };
+
+    auto get_buf_lo_hi = [&](const std::string& key) -> std::pair<valhall::compiler::SsaId, valhall::compiler::SsaId> {
+        auto it = buf_lo_hi.find(key);
+        if (it != buf_lo_hi.end()) return it->second;
+        valhall::compiler::SsaNode sb{};
+        sb.op = valhall::tables::SsaOp::LoadSidebandU64;
+        sb.type = valhall::compiler::ValType::U64;
+        sb.imm_u32 = 0x10u;
+        sb.aux_str = key;
+        auto base = emit_entry(std::move(sb));
+
+        valhall::compiler::SsaNode sp{};
+        sp.op = valhall::tables::SsaOp::Split64;
+        sp.type = valhall::compiler::ValType::TupleU32x2;
+        sp.args = {base};
+        auto sp_id = emit_entry(std::move(sp));
+
+        valhall::compiler::SsaNode lo{};
+        lo.op = valhall::tables::SsaOp::TupleExtract;
+        lo.type = valhall::compiler::ValType::U32;
+        lo.imm_u32 = 0;
+        lo.args = {sp_id};
+        auto lo_id = emit_entry(std::move(lo));
+
+        valhall::compiler::SsaNode hi{};
+        hi.op = valhall::tables::SsaOp::TupleExtract;
+        hi.type = valhall::compiler::ValType::U32;
+        hi.imm_u32 = 1;
+        hi.args = {sp_id};
+        auto hi_id = emit_entry(std::move(hi));
+
+        buf_lo_hi[key] = {lo_id, hi_id};
+        return {lo_id, hi_id};
+    };
+
+    auto get_nwg = [&]() -> valhall::compiler::SsaId {
+        if (nwg_id != valhall::compiler::kInvalidSsa) return nwg_id;
+        valhall::compiler::SsaNode bn{};
+        bn.op = valhall::tables::SsaOp::LoadBuiltinInput;
+        bn.type = valhall::compiler::ValType::V3U32;
+        bn.imm_u32 = 24u;  // SpvBuiltInNumWorkgroups
+        bn.aux_str = "gl_NumWorkGroups";
+        nwg_id = emit_entry(std::move(bn));
+        return nwg_id;
+    };
+
+    size_t orig_count = ssa.nodes.size();
+    for (size_t i = 0; i < orig_count; ++i) {
+        if (ssa.nodes[i].op != valhall::tables::SsaOp::LoadFau) continue;
+        uint32_t widx = ssa.nodes[i].imm_u32;
+        auto bit = word_to_buf.find(widx);
+        if (bit != word_to_buf.end()) {
+            auto [lo_id, hi_id] = get_buf_lo_hi(bit->second.first);
+            ssa.nodes[i].op = valhall::tables::SsaOp::Copy;
+            ssa.nodes[i].args = {bit->second.second ? hi_id : lo_id};
+            ssa.nodes[i].imm_u32 = 0;
+            ssa.nodes[i].aux_str = bit->second.first;
+        } else if (widx < 3u) {
+            auto nw = get_nwg();
+            ssa.nodes[i].op = valhall::tables::SsaOp::VecExtract;
+            ssa.nodes[i].type = valhall::compiler::ValType::U32;
+            ssa.nodes[i].args = {nw};
+            ssa.nodes[i].imm_u32 = widx;
+        }
+    }
+
+    if (!entry_prefix.empty()) {
+        auto& b0_nodes = ssa.blocks[0].nodes;
+        b0_nodes.insert(b0_nodes.begin(), entry_prefix.begin(), entry_prefix.end());
+    }
+}
+
 int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions& opts) {
     uint8_t arch = (opts.arch != 0) ? opts.arch : 10;
     PanfrostCompileResult cres =
@@ -818,6 +959,9 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
         valhall::cfg::ControlFlowGraph pri_cfg = valhall::cfg::build_cfg(pri_insts);
         valhall::cfg::ControlFlowGraph sec_cfg;
         primary_p1 = valhall::compiler::run_pass1_lowering(pri_cfg, sec_cfg, vopts);
+        if (primary_p1.ok && !cres.arg_bindings.empty()) {
+            devirtualize_panfrost_fau(primary_p1.ssa, cres.arg_bindings);
+        }
         if (opts.equiv_opts.run_ssa_opt && primary_p1.ok) {
             valhall::dataflow::SsaOptPipelineOptions oopt;
             oopt.fp_mode = opts.equiv_opts.fp_fast_math ? valhall::dataflow::FpOptMode::FastMath : valhall::dataflow::FpOptMode::StrictIEEE;
@@ -855,11 +999,48 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
                 }
             }
         }
+        std::ostringstream pc_js;
+        pc_js << "{";
+        if (!cres.kernels.empty()) {
+            const auto& kb0 = cres.kernels[0];
+            size_t n_insts = kb0.ebin_bytes.size() / 8;
+            for (size_t i = 0; i < n_insts; ++i) {
+                uint64_t word = 0;
+                std::memcpy(&word, kb0.ebin_bytes.data() + i * 8, 8);
+                auto di = valhall::decode_valhall_instruction(word, arch, i * 8);
+                if (i > 0) pc_js << ",";
+                pc_js << "\"" << (i * 8) << "\":\"";
+                for (char ch : di.disassembly) {
+                    if (ch == '\\' || ch == '"') pc_js << '\\';
+                    pc_js << ch;
+                }
+                pc_js << "\"";
+            }
+        }
+        pc_js << "}";
+        std::ostringstream ab_js;
+        ab_js << "[";
+        for (size_t i = 0; i < cres.arg_bindings.size(); ++i) {
+            const auto& ab = cres.arg_bindings[i];
+            if (i > 0) ab_js << ",";
+            ab_js << "{\"arg_idx\":" << ab.arg_idx
+                  << ",\"fau_offset\":" << ab.fau_offset
+                  << ",\"set\":" << ab.descriptor_set
+                  << ",\"binding\":" << ab.binding
+                  << ",\"key\":\"" << ab.key << "\"}";
+        }
+        ab_js << "]";
         std::ostringstream js;
         js << "{\n"
            << "  \"compiler\": \"" << mode_label << "\",\n"
            << "  \"stage\": \"Compute\",\n"
            << "  \"arch\": " << static_cast<int>(arch) << ",\n"
+           << "  \"local_size\": ["
+           << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[0]) << ","
+           << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[1]) << ","
+           << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[2]) << "],\n"
+           << "  \"panfrost_arg_bindings\": " << ab_js.str() << ",\n"
+           << "  \"pc_disasm\": " << pc_js.str() << ",\n"
            << "  \"direct_ok\": " << (direct_res.ok ? "true" : "false") << ",\n"
            << "  \"valhall_ok\": " << (primary_p1.ok ? "true" : "false") << ",\n"
            << "  \"direct_ssa\": " << valhall::compiler::serialize_ssa_module_json(direct_res.ssa) << ",\n"

@@ -23,10 +23,20 @@ struct PanfrostKernelBinary {
     std::string header_text;
 };
 
+struct PanfrostArgBinding {
+    uint32_t arg_idx = 0;
+    uint32_t fau_offset = 24;
+    uint32_t descriptor_set = 0;
+    uint32_t binding = 0;
+    bool is_ssbo = true;
+    std::string key;
+};
+
 struct PanfrostCompileResult {
     bool ok = false;
     std::string error;
     std::vector<PanfrostKernelBinary> kernels;
+    std::vector<PanfrostArgBinding> arg_bindings;
 };
 
 struct PanfrostRunOptions {
@@ -56,7 +66,8 @@ std::string find_panfrost_compiler(const std::string& explicit_path = "");
 bool translate_vulkan_spv_to_opencl_spv(
     const std::vector<uint32_t>& vk_words,
     std::vector<uint32_t>* cl_words,
-    std::string* err = nullptr);
+    std::string* err = nullptr,
+    std::vector<PanfrostArgBinding>* out_bindings = nullptr);
 
 /// Parse the generated C source emitted by `panfrost_compile` and extract each kernel's
 /// `bifrost_precompiled_kernel_info` metadata and raw Valhall EBIN bytecode.
