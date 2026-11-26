@@ -1,6 +1,9 @@
 #pragma once
 
 #include "equiv_bundle.h"
+#include "valhall_to_spirv.h"
+
+#include <map>
 
 #include <cstdint>
 #include <string>
@@ -10,12 +13,13 @@ namespace valhall::spirv2valhall {
 
 enum class PanfrostMode {
     None,
-    Vulkan,  // --panfrost: Vulkan compute SPIR-V -> OpenCL SPIR-V -> Panfrost -> Valhall ISA (-> SSA)
-    OpenCL,  // --panfrost-cl: OpenCL SPIR-V -> Panfrost -> Valhall ISA (-> SSA)
+    Vulkan,  // --panfrost: Native Mesa Panfrost Vulkan SPIR-V -> NIR -> Valhall ISA (VS/FS/CS)
+    OpenCL,  // --panfrost-cl: OpenCL (or translated Vulkan compute) SPIR-V -> panfrost_compile
 };
 
 struct PanfrostKernelBinary {
     std::string name;
+    valhall::ShaderStage stage = valhall::ShaderStage::Compute;
     uint8_t arch = 10;
     uint32_t local_size[3] = {1, 1, 1};
     uint32_t work_reg_count = 32;
@@ -37,6 +41,8 @@ struct PanfrostCompileResult {
     std::string error;
     std::vector<PanfrostKernelBinary> kernels;
     std::vector<PanfrostArgBinding> arg_bindings;
+    std::map<uint32_t, uint32_t> fau_const_words;
+    std::map<uint32_t, std::string> srt_pka_buf_names;
 };
 
 struct PanfrostRunOptions {

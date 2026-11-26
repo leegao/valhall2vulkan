@@ -1,4 +1,5 @@
 #include "panfrost_compiler.h"
+#include "panfrost_vk_compiler.h"
 
 #include "spirv2ssa.h"
 #include "ssa_opt_pipeline.h"
@@ -746,31 +747,63 @@ PanfrostCompileResult compile_with_panfrost(
         fs::remove_all(td, ec);
     };
 
-    std::string input_cl_spv = spv_path;
     if (mode == PanfrostMode::Vulkan) {
+        cleanup();
+        PanfrostVkCompileOutput vko = compile_vulkan_spv_via_panfrost(spv_path, arch, bin, verbose);
+        if (!vko.ok) {
+            res.error = vko.error;
+            return res;
+        }
+        PanfrostKernelBinary kb;
+        kb.name = vko.entry_point;
+        kb.stage = vko.stage;
+        kb.arch = vko.arch;
+        kb.local_size[0] = vko.local_size[0];
+        kb.local_size[1] = vko.local_size[1];
+        kb.local_size[2] = vko.local_size[2];
+        kb.work_reg_count = vko.work_reg_count;
+        kb.ebin_bytes = std::move(vko.ebin_bytes);
+        res.kernels.push_back(std::move(kb));
+        res.fau_const_words = std::move(vko.fau_const_words);
+        res.srt_pka_buf_names = std::move(vko.srt_pka_buf_names);
+        res.ok = true;
+        return res;
+    }
+
+    std::string input_cl_spv = spv_path;
+    if (mode == PanfrostMode::OpenCL) {
+        // Detect if input is a Vulkan GLCompute shader; if so, translate to OpenCL SPIR-V first.
         std::vector<uint8_t> raw_bytes;
-        if (!read_file_bytes(spv_path, &raw_bytes, &res.error)) {
-            cleanup();
-            return res;
+        if (read_file_bytes(spv_path, &raw_bytes, nullptr) && raw_bytes.size() >= 20 &&
+            (raw_bytes.size() % 4) == 0) {
+            std::vector<uint32_t> words(raw_bytes.size() / 4);
+            std::memcpy(words.data(), raw_bytes.data(), raw_bytes.size());
+            bool is_vk_compute = false;
+            size_t wi = 5;
+            while (wi < words.size()) {
+                uint16_t wc = static_cast<uint16_t>(words[wi] >> 16);
+                uint16_t op = static_cast<uint16_t>(words[wi] & 0xFFFFu);
+                if (wc == 0 || wi + wc > words.size()) break;
+                if (op == 15 && wc >= 4) {
+                    is_vk_compute = (words[wi + 1] == 5);  // SpvExecutionModelGLCompute
+                    break;
+                }
+                wi += wc;
+            }
+            if (is_vk_compute) {
+                std::vector<uint32_t> cl_words;
+                if (!translate_vulkan_spv_to_opencl_spv(words, &cl_words, &res.error, &res.arg_bindings)) {
+                    cleanup();
+                    return res;
+                }
+                fs::path cl_path = td / "translated_cl.spv";
+                std::ofstream ofs(cl_path, std::ios::binary);
+                ofs.write(reinterpret_cast<const char*>(cl_words.data()),
+                          static_cast<std::streamsize>(cl_words.size() * 4));
+                ofs.close();
+                input_cl_spv = cl_path.string();
+            }
         }
-        if (raw_bytes.size() < 20 || (raw_bytes.size() % 4) != 0) {
-            res.error = "Invalid SPIR-V binary size: " + spv_path;
-            cleanup();
-            return res;
-        }
-        std::vector<uint32_t> vk_words(raw_bytes.size() / 4);
-        std::memcpy(vk_words.data(), raw_bytes.data(), raw_bytes.size());
-        std::vector<uint32_t> cl_words;
-        if (!translate_vulkan_spv_to_opencl_spv(vk_words, &cl_words, &res.error, &res.arg_bindings)) {
-            cleanup();
-            return res;
-        }
-        fs::path cl_path = td / "translated_cl.spv";
-        std::ofstream ofs(cl_path, std::ios::binary);
-        ofs.write(reinterpret_cast<const char*>(cl_words.data()),
-                  static_cast<std::streamsize>(cl_words.size() * 4));
-        ofs.close();
-        input_cl_spv = cl_path.string();
     }
 
     fs::path out_h = td / "panfrost_out.h";
@@ -916,6 +949,33 @@ static void devirtualize_panfrost_fau(
     }
 }
 
+
+static void devirtualize_panfrost_vk_fau(
+    valhall::compiler::ValhallSsaModule& ssa,
+    const std::map<uint32_t, uint32_t>& fau_const_words) {
+    if (fau_const_words.empty()) return;
+    for (auto& node : ssa.nodes) {
+        if (node.op != valhall::tables::SsaOp::LoadFau) continue;
+        auto it = fau_const_words.find(node.imm_u32);
+        if (it != fau_const_words.end()) {
+            node.op = valhall::tables::SsaOp::ConstU32;
+            node.type = valhall::compiler::ValType::U32;
+            node.args.clear();
+            node.imm_u32 = it->second;
+            node.aux_str.clear();
+        }
+    }
+}
+
+static const char* stage_name_str(valhall::ShaderStage st) {
+    switch (st) {
+        case valhall::ShaderStage::Vertex: return "Vertex";
+        case valhall::ShaderStage::Fragment: return "Fragment";
+        case valhall::ShaderStage::Compute:
+        default: return "Compute";
+    }
+}
+
 int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions& opts) {
     uint8_t arch = (opts.arch != 0) ? opts.arch : 10;
     PanfrostCompileResult cres =
@@ -945,7 +1005,7 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
     if (!cres.kernels.empty() && need_ssa) {
         const auto& kb0 = cres.kernels[0];
         valhall::ValhallTranslateOptions vopts{};
-        vopts.stage = valhall::ShaderStage::Compute;
+        vopts.stage = kb0.stage;
         vopts.arch = arch;
         vopts.local_size_x = kb0.local_size[0];
         vopts.local_size_y = kb0.local_size[1];
@@ -961,6 +1021,9 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
         primary_p1 = valhall::compiler::run_pass1_lowering(pri_cfg, sec_cfg, vopts);
         if (primary_p1.ok && !cres.arg_bindings.empty()) {
             devirtualize_panfrost_fau(primary_p1.ssa, cres.arg_bindings);
+        }
+        if (primary_p1.ok && !cres.fau_const_words.empty()) {
+            devirtualize_panfrost_vk_fau(primary_p1.ssa, cres.fau_const_words);
         }
         if (opts.equiv_opts.run_ssa_opt && primary_p1.ok) {
             valhall::dataflow::SsaOptPipelineOptions oopt;
@@ -1030,11 +1093,32 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
                   << ",\"key\":\"" << ab.key << "\"}";
         }
         ab_js << "]";
+        std::ostringstream fau_js;
+        fau_js << "{";
+        bool first_fau = true;
+        for (const auto& [w, val] : cres.fau_const_words) {
+            if (!first_fau) fau_js << ",";
+            first_fau = false;
+            fau_js << "\"" << w << "\":" << val;
+        }
+        fau_js << "}";
+        std::ostringstream pka_js;
+        pka_js << "{";
+        bool first_pka = true;
+        for (const auto& [pid, name] : cres.srt_pka_buf_names) {
+            if (!first_pka) pka_js << ",";
+            first_pka = false;
+            pka_js << "\"" << pid << "\":\"" << name << "\"";
+        }
+        pka_js << "}";
+        const char* st_str = cres.kernels.empty() ? "Compute" : stage_name_str(cres.kernels[0].stage);
         std::ostringstream js;
         js << "{\n"
            << "  \"compiler\": \"" << mode_label << "\",\n"
-           << "  \"stage\": \"Compute\",\n"
+           << "  \"stage\": \"" << st_str << "\",\n"
            << "  \"arch\": " << static_cast<int>(arch) << ",\n"
+           << "  \"mbs2_context\": {\"fau_fcst_words\": " << fau_js.str()
+           << ", \"srt_pka_buf_names\": " << pka_js.str() << "},\n"
            << "  \"local_size\": ["
            << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[0]) << ","
            << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[1]) << ","
@@ -1058,7 +1142,7 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
         for (size_t i = 0; i < cres.kernels.size(); ++i) {
             const auto& kb = cres.kernels[i];
             valhall::ValhallTranslateOptions vopts{};
-            vopts.stage = valhall::ShaderStage::Compute;
+            vopts.stage = kb.stage;
             vopts.arch = arch;
             vopts.local_size_x = kb.local_size[0];
             vopts.local_size_y = kb.local_size[1];

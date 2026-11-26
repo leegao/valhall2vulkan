@@ -284,7 +284,37 @@ void main() {
         std::string pf_cl_out = read_text_file(pf_cl_ssa_txt);
         assert(pf_cl_out.find("--panfrost-cl --dump-ssa") != std::string::npos);
         assert(pf_cl_out.find("ValhallSSA") != std::string::npos);
-        std::cout << "[PASS] spirv2valhall --panfrost and --panfrost-cl verified end-to-end (ISA + SSA + JSON)\n";
+        // --panfrost native Vulkan multi-stage verification: Vertex, Fragment, and bcn_bc7 Compute
+        const std::string samples_dir = std::string(TEST_BUILD_DIR) + "/../samples";
+        const std::string pf_vert_txt = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_vert.txt";
+        assert(std::system((std::string(SPIRV2VALHALL_BIN_PATH) + " --panfrost -a 10 " +
+                            samples_dir + "/vert_rep_minimal.spv > " + pf_vert_txt).c_str()) == 0);
+        std::string pf_vert_out = read_text_file(pf_vert_txt);
+        assert(pf_vert_out.find("compiler=panfrost") != std::string::npos);
+        assert(pf_vert_out.find("invalid=0") != std::string::npos);
+
+        const std::string pf_frag_txt = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_frag.txt";
+        assert(std::system((std::string(SPIRV2VALHALL_BIN_PATH) + " --panfrost -a 10 " +
+                            samples_dir + "/frag_rep_minimal.spv > " + pf_frag_txt).c_str()) == 0);
+        std::string pf_frag_out = read_text_file(pf_frag_txt);
+        assert(pf_frag_out.find("compiler=panfrost") != std::string::npos);
+        assert(pf_frag_out.find("invalid=0") != std::string::npos);
+
+        const std::string pf_bc7_ssa = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_bc7_ssa.txt";
+        assert(std::system((std::string(SPIRV2VALHALL_BIN_PATH) + " --dump-ssa --opt-ssa --panfrost -a 10 " +
+                            samples_dir + "/bcn_bc7.spv > " + pf_bc7_ssa).c_str()) == 0);
+        std::string pf_bc7_out = read_text_file(pf_bc7_ssa);
+        assert(pf_bc7_out.find("ValhallSSA") != std::string::npos);
+
+        // --panfrost-cl also accepts Vulkan compute SPIR-V via the OpenCL translator path
+        const std::string pf_cl_vk_txt = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_cl_vk.txt";
+        assert(std::system((std::string(SPIRV2VALHALL_BIN_PATH) + " --panfrost-cl -a 10 " +
+                            comp_spv + " > " + pf_cl_vk_txt).c_str()) == 0);
+        std::string pf_cl_vk_out = read_text_file(pf_cl_vk_txt);
+        assert(pf_cl_vk_out.find("compiler=panfrost-cl") != std::string::npos);
+        assert(pf_cl_vk_out.find("invalid=0") != std::string::npos);
+
+        std::cout << "[PASS] spirv2valhall --panfrost (VS/FS/CS + bcn_bc7) and --panfrost-cl verified end-to-end\n";
     }
 
     cmpbe_chunk_EBIN dummy_ebin{};
