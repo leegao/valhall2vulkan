@@ -1,4 +1,5 @@
 #include "spirv2valhall.h"
+#include "panfrost_compiler.h"
 #include "cmpbe_chunks.h"
 
 #include <cassert>
@@ -242,6 +243,49 @@ void main() {
     std::ifstream spv_out0(cli_spv_pfx + "_0.spv", std::ios::binary);
     assert(spv_out0.good());
     std::cout << "[PASS] spirv2valhall CLI verified end-to-end with context dump, pilot shader, and --dump-spirv\n";
+
+    // Verify Panfrost compiler integration (--panfrost and --panfrost-cl) when prebuilt is available
+    {
+        std::string pf_bin = find_panfrost_compiler();
+        assert(!pf_bin.empty());
+
+        // --panfrost (Vulkan compute SPIR-V -> OpenCL SPIR-V -> Panfrost Valhall ISA & SSA)
+        const std::string pf_isa_txt = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_isa.txt";
+        const std::string pf_ssa_json = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_ssa.json";
+        std::string pf_cmd = std::string(SPIRV2VALHALL_BIN_PATH) + " --panfrost -a 10 " +
+                             "--dump-ssa-json " + pf_ssa_json + " " + comp_spv + " > " + pf_isa_txt;
+        assert(std::system(pf_cmd.c_str()) == 0);
+        std::string pf_out = read_text_file(pf_isa_txt);
+        assert(pf_out.find("compiler=panfrost") != std::string::npos);
+        assert(pf_out.find("PANFROST KERNEL[0]") != std::string::npos);
+        assert(pf_out.find("invalid=0") != std::string::npos);
+        std::string pf_json = read_text_file(pf_ssa_json);
+        assert(pf_json.find("\"blocks\"") != std::string::npos);
+        assert(pf_json.find("\"nodes\"") != std::string::npos);
+
+        // --panfrost-cl (OpenCL SPIR-V -> Panfrost Valhall ISA & --dump-ssa)
+        std::ifstream ifs(comp_spv, std::ios::binary);
+        std::vector<uint8_t> vk_bytes((std::istreambuf_iterator<char>(ifs)), {});
+        std::vector<uint32_t> vk_words(vk_bytes.size() / 4);
+        std::memcpy(vk_words.data(), vk_bytes.data(), vk_bytes.size());
+        std::vector<uint32_t> cl_words;
+        std::string terr;
+        assert(translate_vulkan_spv_to_opencl_spv(vk_words, &cl_words, &terr));
+        const std::string cl_spv = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_cl_input.spv";
+        {
+            std::ofstream ofs(cl_spv, std::ios::binary);
+            ofs.write(reinterpret_cast<const char*>(cl_words.data()),
+                      static_cast<std::streamsize>(cl_words.size() * 4));
+        }
+        const std::string pf_cl_ssa_txt = std::string(TEST_BUILD_DIR) + "/s2v_panfrost_cl_ssa.txt";
+        std::string pf_cl_cmd = std::string(SPIRV2VALHALL_BIN_PATH) + " --panfrost-cl -a 10 --dump-ssa " +
+                                cl_spv + " > " + pf_cl_ssa_txt;
+        assert(std::system(pf_cl_cmd.c_str()) == 0);
+        std::string pf_cl_out = read_text_file(pf_cl_ssa_txt);
+        assert(pf_cl_out.find("--panfrost-cl --dump-ssa") != std::string::npos);
+        assert(pf_cl_out.find("ValhallSSA") != std::string::npos);
+        std::cout << "[PASS] spirv2valhall --panfrost and --panfrost-cl verified end-to-end (ISA + SSA + JSON)\n";
+    }
 
     cmpbe_chunk_EBIN dummy_ebin{};
     (void)dummy_ebin;

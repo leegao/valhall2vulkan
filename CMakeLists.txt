@@ -215,6 +215,7 @@ add_library(spirv2valhall_lib STATIC
     tools/spirv2valhall/spirv_roundtrip.cpp
     tools/spirv2valhall/equiv_bundle.cpp
     tools/spirv2valhall/direct_isa_parser.cpp
+    tools/spirv2valhall/panfrost_compiler.cpp
     tools/spirv2valhall/spirv2valhall.cpp
 )
 target_include_directories(spirv2valhall_lib PUBLIC

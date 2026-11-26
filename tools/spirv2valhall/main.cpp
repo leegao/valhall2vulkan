@@ -1,6 +1,7 @@
 #include "spirv2valhall.h"
 #include "equiv_bundle.h"
 #include "direct_isa_parser.h"
+#include "panfrost_compiler.h"
 #include "spirv2ssa.h"
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
@@ -46,6 +47,9 @@ static void print_usage(const char* argv0) {
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
         << "  --mali-lib <PATH>           Path to libMali-Gxx_r55p0-00rel0.so\n"
+        << "  --panfrost                  Compile Vulkan SPIR-V via Mesa Panfrost (spirv -> isa -> ssa)\n"
+        << "  --panfrost-cl               Compile OpenCL SPIR-V via Mesa Panfrost (spirv -> isa -> ssa)\n"
+        << "  --panfrost-bin <PATH>       Path to panfrost_compile executable\n"
         << "  --no-strip-caps             Do not strip unused Float64/Interlock capabilities\n"
         << "  --mods                      Include decoded modifier key=value pairs\n"
         << "  --quiet                     Do not print text output to stdout\n"
@@ -83,6 +87,8 @@ int main(int argc, char** argv) {
     bool enrich = true;
     bool dump_spirv = false;
     bool quiet = false;
+    valhall::spirv2valhall::PanfrostMode panfrost_mode = valhall::spirv2valhall::PanfrostMode::None;
+    std::string panfrost_bin;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -138,6 +144,12 @@ int main(int argc, char** argv) {
             enrich = false;
         } else if (arg == "--mali-lib" && i + 1 < argc) {
             opts.mali_lib_path = argv[++i];
+        } else if (arg == "--panfrost") {
+            panfrost_mode = valhall::spirv2valhall::PanfrostMode::Vulkan;
+        } else if (arg == "--panfrost-cl") {
+            panfrost_mode = valhall::spirv2valhall::PanfrostMode::OpenCL;
+        } else if (arg == "--panfrost-bin" && i + 1 < argc) {
+            panfrost_bin = argv[++i];
         } else if (arg == "--no-strip-caps") {
             opts.strip_unused_caps = false;
         } else if (arg == "--mods") {
@@ -162,6 +174,25 @@ int main(int argc, char** argv) {
     if (spv_path.empty()) {
         print_usage(argv[0]);
         return 2;
+    }
+
+    // Mesa Panfrost compiler mode (--panfrost or --panfrost-cl).
+    if (panfrost_mode != valhall::spirv2valhall::PanfrostMode::None) {
+        valhall::spirv2valhall::PanfrostRunOptions popts;
+        popts.mode = panfrost_mode;
+        popts.arch = opts.arch;
+        popts.panfrost_bin = panfrost_bin;
+        popts.out_bin_prefix = out_bin_prefix;
+        popts.out_spirv_prefix = out_spirv_prefix;
+        popts.dump_ssa_json_path = dump_ssa_json_path;
+        popts.dump_equiv_json_path = dump_equiv_json_path;
+        popts.equiv_opts = equiv_opts;
+        popts.dump_ssa = dump_ssa;
+        popts.dump_spirv = dump_spirv;
+        popts.include_mods = include_mods;
+        popts.quiet = quiet;
+        popts.verbose = opts.verbose;
+        return valhall::spirv2valhall::run_panfrost_pipeline(spv_path, popts);
     }
 
     // Direct SPIR-V -> ValhallSSA mode (bypasses libMali compilation).
