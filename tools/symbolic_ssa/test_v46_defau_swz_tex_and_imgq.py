@@ -14,7 +14,7 @@ import unittest
 from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
 from tools.symbolic_ssa.domains.shader_env.concrete_shader_env import ConcreteShaderEnv
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
-from tools.verify.spvasm_io import load_equiv_bundle
+from tools.equivalence.spvasm_io import load_equiv_bundle
 
 BIN_PATH = "build/spirv2valhall"
 

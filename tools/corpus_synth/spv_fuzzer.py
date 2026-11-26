@@ -18,7 +18,7 @@ import time
 from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
 from tools.coverage.shrinker import DiffPolicy, DivergenceReport
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
-from tools.verify.spvasm_io import assemble_spvasm, disassemble_spv, find_spirv_tool, load_equiv_bundle, validate_spv
+from tools.equivalence.spvasm_io import assemble_spvasm, disassemble_spv, find_spirv_tool, load_equiv_bundle, validate_spv
 
 
 @dataclasses.dataclass

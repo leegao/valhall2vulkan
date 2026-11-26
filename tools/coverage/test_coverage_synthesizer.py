@@ -7,7 +7,7 @@ import unittest
 from tools.symbolic_ssa.z3utils import dsl
 
 from tools.coverage import collect_predicate_nodes, synthesize_coverage_vectors
-from tools.verify.cec import run_concrete_diff
+from tools.equivalence.cec import run_concrete_diff
 
 
 class TestCoverageSynthesizer(unittest.TestCase):
@@ -103,7 +103,7 @@ class TestCoverageSynthesizer(unittest.TestCase):
     def test_uf_and_image_array_override_decoding(self) -> None:
         import z3
         from tools.coverage import extract_concrete_overrides_from_model
-        from tools.verify.shader_equiv_verifier import SymbolicShaderEnv, bv32
+        from tools.equivalence.shader_equiv_verifier import SymbolicShaderEnv, bv32
         from tools.symbolic_ssa import ConcreteShaderEnv
 
         bundle = {"stage": "Compute", "direct_ok": True, "valhall_ok": True, "mbs2_context": {}, "direct_bindings": []}

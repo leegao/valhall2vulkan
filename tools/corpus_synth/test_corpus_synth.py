@@ -190,7 +190,7 @@ class TestCorpusSynth(unittest.TestCase):
         from tools.corpus_synth.spv_fuzzer import fuzz_spv_with_spirv_fuzz
         from tools.corpus_synth.valhall_isel_catalog import VALHALL_ISEL_CATALOG
         from tools.spec import load_isa_spec_index as spec_loader
-        from tools.verify.spvasm_io import find_spirv_tool
+        from tools.equivalence.spvasm_io import find_spirv_tool
 
         # 1. Unified tools.spec loader
         idx = spec_loader()

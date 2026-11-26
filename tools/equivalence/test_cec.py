@@ -3,7 +3,7 @@
 
 import unittest
 
-from tools.verify.cec import (
+from tools.equivalence.cec import (
     discover_cutpoint_candidates,
     run_concrete_diff,
     verify_with_cec,

@@ -21,8 +21,8 @@ from tools.verify import (
     LoweringSemanticsExtractor,
     SourceOperandDesc,
 )
-from tools.verify.shader_equiv_verifier import verify_spv_file
-from tools.verify.spvasm_io import find_spirv_tool, load_equiv_bundle
+from tools.equivalence.shader_equiv_verifier import verify_spv_file
+from tools.equivalence.spvasm_io import find_spirv_tool, load_equiv_bundle
 
 
 class TestV42SweepLoweringAndRecord(unittest.TestCase):

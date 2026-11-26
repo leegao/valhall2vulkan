@@ -19,7 +19,7 @@ from tools.coverage.shrinker import (
 )
 from tools.coverage.triage import TriageReport
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
-from tools.verify.spvasm_io import (
+from tools.equivalence.spvasm_io import (
     disassemble_spv,
     ensure_spv_path,
     find_spirv_tool,
@@ -128,7 +128,7 @@ def _try_spirv_reduce(
             fh.write(
                 f"#!{py_exe}\n"
                 "import json, os, shutil, sys\n"
-                "from tools.verify.spvasm_io import load_equiv_bundle\n"
+                "from tools.equivalence.spvasm_io import load_equiv_bundle\n"
                 "from tools.symbolic_ssa.passes import canonicalize_ssa_module\n"
                 "from tools.coverage.shrinker import DiffPolicy, compare_concrete_outputs\n"
                 f"with open({cfg_path!r}, 'r', encoding='utf-8') as f: cfg = json.load(f)\n"

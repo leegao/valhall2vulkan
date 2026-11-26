@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unit & Regression Tests for All-Path ValhallSSA Formal Equivalence Verifier
-(tools/verify/shader_equiv_verifier.py).
+(tools/equivalence/shader_equiv_verifier.py).
 
 Covers:
   1. Direct vs. Valhall-lowered end-to-end equivalence via spirv2valhall + libMali-Gxx
@@ -20,7 +20,7 @@ import tempfile
 import unittest
 
 from tools.symbolic_ssa.z3utils import dsl
-from tools.verify.shader_equiv_verifier import (
+from tools.equivalence.shader_equiv_verifier import (
     verify_equivalence_bundle,
 )
 
@@ -473,7 +473,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
 
     def test_smod_and_all_int_bit_fp_eval_paths(self) -> None:
         """Exercise every integer, bitwise, shift, div/rem/SMod, 64-bit, cmp, conv, and FP evaluator path."""
-        from tools.verify.shader_equiv_verifier import (
+        from tools.equivalence.shader_equiv_verifier import (
             SymbolicShaderEnv,
             SymbolicSsaInterpreter,
         )
@@ -1128,7 +1128,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         """--dump-ast must handle non-identical LHS/RHS where simplifier realizes Z3."""
         import io
 
-        from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
+        from tools.equivalence.shader_equiv_verifier import verify_equivalence_bundle
 
         ssa = {
             "blocks": [{"id": 0, "preds": [], "phis": [], "nodes": [1, 2, 3, 4, 5, 6, 7], "is_end": True}],
@@ -1154,7 +1154,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         import z3
 
         from tools.symbolic_ssa import SymbolicShaderEnv
-        from tools.verify.shader_equiv_verifier import _solve_miter_eq
+        from tools.equivalence.shader_equiv_verifier import _solve_miter_eq
 
         env = SymbolicShaderEnv({"stage": "Compute", "mbs2_context": {}, "direct_bindings": []}, domain="udomain")
         arr = z3.Array("mem_ubo_0_0", z3.BitVecSort(32), z3.BitVecSort(32))
@@ -1177,7 +1177,7 @@ class TestShaderEquivVerifier(unittest.TestCase):
         """
         import os
 
-        from tools.verify.shader_equiv_verifier import verify_spv_file
+        from tools.equivalence.shader_equiv_verifier import verify_spv_file
 
         spv = "samples/frag_stress_branch_d38c3ea1.spv"
         if not (os.path.exists("./build/spirv2valhall") and os.path.exists(spv)):

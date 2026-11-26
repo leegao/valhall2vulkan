@@ -51,7 +51,7 @@ from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
 from tools.coverage.shrinker import DiffPolicy, DivergenceReport
 from tools.coverage.slice_diff import format_slice_diff
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
-from tools.verify.spvasm_io import assemble_spvasm, load_equiv_bundle
+from tools.equivalence.spvasm_io import assemble_spvasm, load_equiv_bundle
 
 
 @dataclasses.dataclass

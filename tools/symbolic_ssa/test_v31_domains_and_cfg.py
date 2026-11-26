@@ -395,7 +395,7 @@ class TestUDomainIntegration(unittest.TestCase):
         }
 
     def test_verify_equivalence_bundle_udomain_fma_with_bitcasts(self):
-        from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
+        from tools.equivalence.shader_equiv_verifier import verify_equivalence_bundle
         bundle = self._make_fp_equiv_bundle()
         res = verify_equivalence_bundle(bundle, fp_mode="real", domain="udomain")
         self.assertEqual(res.status, "UNSAT")

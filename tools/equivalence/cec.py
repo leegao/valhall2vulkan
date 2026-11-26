@@ -42,7 +42,7 @@ from tools.symbolic_ssa import (
 )
 from tools.symbolic_ssa.passes import SIDE_EFFECT_OPS, canonicalize_ssa_module
 from tools.verify.panfrost_z3_model import bv32, bv32_to_fp32
-from tools.verify.shader_equiv_verifier import _solve_miter_eq
+from tools.equivalence.shader_equiv_verifier import _solve_miter_eq
 
 
 @dataclasses.dataclass

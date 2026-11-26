@@ -20,8 +20,8 @@ from tools.coverage.synthesizer import synthesize_coverage_vectors
 from tools.coverage.slice_diff import format_slice_diff
 from tools.coverage.triage import format_divergence_and_triage, triage_divergence
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
-from tools.verify.cec import run_concrete_diff
-from tools.verify.spvasm_io import load_equiv_bundle
+from tools.equivalence.cec import run_concrete_diff
+from tools.equivalence.spvasm_io import load_equiv_bundle
 
 
 def _load_bundle(spv_or_json: str, bin_path: str, *, defau: bool = True, opt_ssa: bool = True) -> dict:

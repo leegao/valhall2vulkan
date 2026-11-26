@@ -58,7 +58,7 @@ from tools.verify.panfrost_z3_model import (
     bv32,
     bv32_to_fp32,
 )
-from tools.verify.spvasm_io import load_equiv_bundle as _load_equiv_bundle
+from tools.equivalence.spvasm_io import load_equiv_bundle as _load_equiv_bundle
 
 
 @dataclasses.dataclass
@@ -892,7 +892,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.cec:
-        from tools.verify.cec import verify_with_cec
+        from tools.equivalence.cec import verify_with_cec
         try:
             bundle = _load_equiv_bundle(args.spv_or_json, args.bin, timeout=15)
         except Exception as exc:

@@ -1,6 +1,6 @@
 # Bug Sweep & Repro Maintenance Guide
 
-This guide explains how to run equivalence sweeps with `tools.coverage` and `tools.verify.shader_equiv_verifier`, read the `[SHRINK]` / `[TRIAGE]` / `--trace-diff` diagnostics, root-cause divergences efficiently using the **Cluster-First Playbook**, record shrunken `.spvasm` repros into `bugs/`, and keep `bugs/manifest.md` up to date.
+This guide explains how to run equivalence sweeps with `tools.coverage` and `tools.equivalence.shader_equiv_verifier`, read the `[SHRINK]` / `[TRIAGE]` / `--trace-diff` diagnostics, root-cause divergences efficiently using the **Cluster-First Playbook**, record shrunken `.spvasm` repros into `bugs/`, and keep `bugs/manifest.md` up to date.
 
 ---
 
@@ -32,14 +32,14 @@ python3 -m tools.coverage \
 * Exit code `0` on `EQUIV_EXACT` / `EQUIV_WITHIN_ULP` / `SKIP`; exit code `1` on `DIVERGED`.
 * Add `--trace-diff` when triaging a specific failure to print concrete Valhall frontier node evaluations.
 
-### Formal Z3 / CEC Verification (`tools.verify.shader_equiv_verifier`)
+### Formal Z3 / CEC Verification (`tools.equivalence.shader_equiv_verifier`)
 
 ```bash
 # Fast concrete diff + cutpoint-guided CEC
-python3 -m tools.verify.shader_equiv_verifier --cec bugs/frag_unique_05_d392e446_frag_color_0_.a.spvasm
+python3 -m tools.equivalence.shader_equiv_verifier --cec bugs/frag_unique_05_d392e446_frag_color_0_.a.spvasm
 
 # All-path Z3 miter proof
-python3 -m tools.verify.shader_equiv_verifier \
+python3 -m tools.equivalence.shader_equiv_verifier \
   --domain udomain_backfill --canonicalize --conditioned-unify \
   bugs/frag_unique_05_d392e446_frag_color_0_.a.spvasm
 ```

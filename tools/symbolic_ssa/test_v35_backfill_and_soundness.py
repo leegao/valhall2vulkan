@@ -46,7 +46,7 @@ from tools.symbolic_ssa.z3simplifier import (
     solve_simplified_miter,
 )
 from tools.symbolic_ssa.z3utils import dsl
-from tools.verify.shader_equiv_verifier import verify_equivalence_bundle
+from tools.equivalence.shader_equiv_verifier import verify_equivalence_bundle
 
 
 def _single_block(nodes: list[dict[str, Any]]) -> dict[str, Any]:

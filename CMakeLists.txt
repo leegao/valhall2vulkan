@@ -364,17 +364,17 @@ add_test(NAME test_all_paths_miter
 )
 
 add_test(NAME test_shader_equiv
-    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_shader_equiv.py
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/equivalence/test_shader_equiv.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 add_test(NAME test_canonicalize
-    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_canonicalize.py
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/equivalence/test_canonicalize.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 add_test(NAME test_cec
-    COMMAND "${VALHALL_PYTHON}" -m unittest tools/verify/test_cec.py
+    COMMAND "${VALHALL_PYTHON}" -m unittest tools/equivalence/test_cec.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
