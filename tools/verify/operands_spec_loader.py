@@ -13,7 +13,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-_TOOLS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_TOOLS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "specs"))
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 

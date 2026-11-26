@@ -171,7 +171,7 @@ class TestLoweringExtractor(unittest.TestCase):
         import subprocess
         import sys
         res = subprocess.run(
-            [sys.executable, os.path.join(REPO_ROOT, "tools/gen_valhall_tables.py"), "--check-operands"],
+            [sys.executable, os.path.join(REPO_ROOT, "tools/specs/gen_valhall_tables.py"), "--check-operands"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -196,7 +196,7 @@ class TestLoweringExtractor(unittest.TestCase):
 
 
     def test_single_quote_strings_and_unified_abi(self) -> None:
-        from tools.dsl_parser import Literal, parse_inline_ops
+        from tools.specs.dsl_parser import Literal, parse_inline_ops
         prog = parse_inline_ops(["if (@src_swz_eq(0, 'h1')) { return @u32(1); }"])
         self.assertEqual(len(prog.stmts), 1)
         # Verify unified ABI: no operands_host, all host_functions in abi_funcs

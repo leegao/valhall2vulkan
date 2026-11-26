@@ -63,7 +63,7 @@ def sanitize_param_name(name: str, idx: int) -> str:
 
 
 def main() -> int:
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parents[2]
     grammar_path = repo_root / "specs" / "spirv" / "spirv.core.grammar.json"
     out_dir = repo_root / "src" / "generated"
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -242,7 +242,7 @@ def _build_typed_view(opname: str, ins: dict) -> list[str]:
 
 
 def main() -> int:
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parents[2]
     grammar_path = repo_root / "specs" / "spirv" / "spirv.core.grammar.json"
     out_dir = repo_root / "src" / "generated"
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -569,7 +569,7 @@ if __name__ == "__main__":
     import json
     import os
 
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     spec_path = os.path.join(repo_root, "specs", "lowering", "valhall_lowering.json")
     with open(spec_path, "r", encoding="utf-8") as f:
         spec = json.load(f)
