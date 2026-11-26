@@ -1,8 +1,9 @@
 # `tools.corpus_synth` — Usage Guide & Flag Reference
 
-`tools.corpus_synth` is the Valhall ISA & SPIR-V corpus synthesizer for `valhall2spirv`. It supports two primary workflows:
-1. **Targeted ISA Synthesis (`--target-isa`)**: Deterministically synthesizes shaders targeting specific Valhall mnemonics, variants, and hardware field mutations, and validates lowering equivalence via `equiv_fuzzer`.
+`tools.corpus_synth` is the Valhall ISA & SPIR-V corpus synthesizer for `valhall2spirv`. It supports three workflows:
+1. **Targeted ISA Synthesis (`--target-isa`)**: Deterministically synthesizes shaders targeting specific Valhall mnemonics, variants, and hardware field mutations, and validates lowering equivalence via `tools.coverage.equiv_fuzzer` (all **129/129** SPIR-V-inducible mnemonics emit and pass equivalence as of Checkpoint v49, and all **201** mnemonics / **627** XML variants pass raw decode + Pass 1).
 2. **Greedy Coverage-Maximizing Synthesis (default)**: Synthesizes multi-block SPIR-V shaders maximizing unique Valhall ISA or SPIR-V opcode coverage.
+3. **Longitudinal Equivalence Stress Suite (`tools.corpus_synth.longitudinal_fuzz`)**: Runs a curated multi-instruction stress suite combining control flow, textures, atomics, bitfields, and transcendentals.
 
 ---
 
@@ -28,16 +29,19 @@ python3 -m tools.corpus_synth.cli \
 - Runs `equiv_fuzzer` on 16 Vulkan-range vectors.
 - On mismatch, prints the 6-hop Direct vs Valhall concrete backward slice (`--slice-diff 6`) and dumps `/tmp/repro_acmpxchg/isa_acmpxchg_minimal.spvasm`.
 
-### 3. Sweep All 129 SPIR-V-Inducible Mnemonics
+### 3. Full 129-Mnemonic Branchy Equivalence & Field-Mutation Sweep
 ```bash
 python3 -m tools.corpus_synth.cli \
   --target-isa ALL \
   --mode spirv \
   --verify-equiv \
-  --k-init 16 \
+  --k-init 128 \
   --fp-range vulkan \
-  --output-shaders /tmp/isa_sweep_failures
+  --output-shaders /tmp/isa_sweep_failures \
+  --mutate-fields --variants --complexity branchy \
+  --max-coverage-seeds --slice-diff 10
 ```
+Expected summary: `[ISA-SYNTH SUMMARY] emitted=129/129 equiv=129/129 raw=8594/8594`.
 
 ### 4. Pin Intermediate SSA Values to Catch Optimizer / Intermediate Divergences
 ```bash
@@ -62,7 +66,7 @@ python3 -m tools.corpus_synth.cli \
   --k-init 16 \
   --fp-range vulkan
 ```
-*(Automatically locates `third_party/prebuilts/spirv-tools/spirv-fuzz` if installed.)*
+*(Automatically locates `third_party/prebuilts/spirv-tools/spirv-fuzz` via `tools.equivalence.spvasm_io.find_spirv_tool`.)*
 
 ### 6. Full 627-Variant & 17-Fragment Raw Valhall Decode + Pass-1 Sweep
 ```bash
@@ -85,9 +89,18 @@ python3 -m tools.corpus_synth.cli \
   --output-shaders /tmp/greedy_corpus
 ```
 
+### 8. Longitudinal Multi-Feature Equivalence Suite
+```python
+from tools.corpus_synth.longitudinal_fuzz import run_longitudinal_suite
+
+results = run_longitudinal_suite(k_init=16)
+for r in results:
+    print(r.name, r.status, r.diverging_vectors)
+```
+
 ---
 
-## Complete Flag Reference
+## Complete Flag Reference (`python3 -m tools.corpus_synth.cli`)
 
 | Flag | Default | Description |
 |---|---|---|
@@ -113,3 +126,11 @@ python3 -m tools.corpus_synth.cli \
 | `--bin <PATH>` | `./build/spirv2valhall` | Path to `spirv2valhall` binary. |
 | `--seed <INT>` | `0xC0DE` | PRNG seed for synthesis and `spirv-fuzz`. |
 | `--out-dir <DIR>` | `None` | Legacy alias for `--output-shaders`. |
+
+---
+
+## Running Unit Tests
+
+```bash
+ctest --test-dir build --output-on-failure -R "test_corpus_synth|test_v49_isa_sweep_fixes"
+```
