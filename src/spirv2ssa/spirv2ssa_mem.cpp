@@ -451,7 +451,12 @@ PointerRef SpirvLowerer::lower_access_chain(uint32_t blk_id, const SpirvInst& in
                 }
                 cur_type = (c_idx < t->member_types.size()) ? t->member_types[c_idx] : 0;
             } else if (t->kind == SpirvTypeKind::Array || t->kind == SpirvTypeKind::RuntimeArray) {
-                uint32_t stride = (t->array_stride != 0) ? t->array_stride : mod_.type_byte_size(t->elem_type);
+                const SpirvType* et = mod_.get_type(t->elem_type);
+                bool is_desc_array = (t->array_stride == 0 && et && et->kind == SpirvTypeKind::Struct &&
+                                      (et->is_block || et->is_buffer_block));
+                uint32_t stride = is_desc_array
+                                      ? 0x01000000u
+                                      : ((t->array_stride != 0) ? t->array_stride : mod_.type_byte_size(t->elem_type));
                 if (is_const_idx) {
                     uint64_t delta = uint64_t(c_idx) * uint64_t(stride);
                     res.const_offset += delta;
@@ -905,15 +910,37 @@ void SpirvLowerer::flush_stage_outputs(uint32_t blk_id) {
             sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
         } else if (res_.stage == ShaderStage::Vertex) {
             uint32_t loc = (gv->dec.location >= 0) ? static_cast<uint32_t>(gv->dec.location) : 0u;
-            SsaId vec4 = pack_to_vec4_f32(blk_id, lv, false);
-            SsaNode st{};
-            st.op = SsaOp::StoreVertVarying;
-            st.type = ValType::Token;
-            st.imm_u32 = loc;
-            st.args = {vec4, sb_.current_token(blk_id)};
-            st.is_barrier_or_cf = true;
-            st.is_side_effect = true;
-            sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
+            if (pt->kind == SpirvTypeKind::Array && pt->count > 0u) {
+                uint32_t elem_lanes = flat_lane_count(pt->elem_type);
+                if (elem_lanes == 0u) elem_lanes = 1u;
+                uint32_t elem_slots = (elem_lanes + 3u) / 4u;
+                for (uint32_t e = 0; e < pt->count; ++e) {
+                    LoweredValue elv{};
+                    elv.spv_type_id = pt->elem_type;
+                    for (uint32_t k = 0; k < elem_lanes && (e * elem_lanes + k) < lv.lanes.size(); ++k) {
+                        elv.lanes.push_back(lv.lanes[e * elem_lanes + k]);
+                    }
+                    SsaId vec4 = pack_to_vec4_f32(blk_id, elv, false);
+                    SsaNode st{};
+                    st.op = SsaOp::StoreVertVarying;
+                    st.type = ValType::Token;
+                    st.imm_u32 = loc + e * elem_slots;
+                    st.args = {vec4, sb_.current_token(blk_id)};
+                    st.is_barrier_or_cf = true;
+                    st.is_side_effect = true;
+                    sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
+                }
+            } else {
+                SsaId vec4 = pack_to_vec4_f32(blk_id, lv, false);
+                SsaNode st{};
+                st.op = SsaOp::StoreVertVarying;
+                st.type = ValType::Token;
+                st.imm_u32 = loc;
+                st.args = {vec4, sb_.current_token(blk_id)};
+                st.is_barrier_or_cf = true;
+                st.is_side_effect = true;
+                sb_.set_token(blk_id, sb_.emit(blk_id, std::move(st)));
+            }
         }
     }
 }
@@ -1028,8 +1055,16 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
     SsaId uv = pack_to_vec2_f32(blk_id, coord);
 
     std::string tex_key = "tex:0:0";
+    bool is_cube_dim = false;
     if (auto it = sampled_images_.find(img_id); it != sampled_images_.end()) {
         tex_key = it->second.canonical_key;
+        const SpirvType* sit = mod_.get_type(it->second.pointee_type_id);
+        if (sit && sit->kind == SpirvTypeKind::SampledImage) {
+            sit = mod_.get_type(sit->elem_type);
+        }
+        if (sit && sit->kind == SpirvTypeKind::Image && sit->image_dim == 3u) {
+            is_cube_dim = true;
+        }
     }
 
     const auto op = static_cast<SpvOp>(inst.opcode);
@@ -1051,6 +1086,9 @@ LoweredValue SpirvLowerer::lower_image_sample(uint32_t blk_id, const SpirvInst& 
     ts.aux_bool = (op == SpvOpImageSampleImplicitLod || op == SpvOpImageSampleDrefImplicitLod ||
                    op == SpvOpImageSampleProjImplicitLod);
     ts.aux_bool2 = (op == SpvOpImageGather || op == SpvOpImageDrefGather);
+    if (is_cube_dim && (ts.op == SsaOp::TexSample || ts.op == SsaOp::TexSampleLod)) {
+        ts.imm_u32_2 = 1u;
+    }
     ts.args = {uv};
     for (size_t ci = 2; ci < coord.lanes.size(); ++ci) {
         ts.args.push_back(coord.lanes[ci]);

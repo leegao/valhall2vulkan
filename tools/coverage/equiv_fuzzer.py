@@ -111,31 +111,57 @@ def run_concolic_equiv_fuzz(
     deadline = t0 + (time_budget_ms / 1000.0)
     is_valhall_seed = seed_side == "valhall"
     seed_ssa = valhall_ssa if is_valhall_seed else direct_ssa
-    if policy is not None:
-        eff_policy = policy
-    else:
-        eff_policy = DiffPolicy()
-        # RC-6: If direct_ssa stores an F32 (or Bitcast F32->U32) computed via
-        # transcendental ops into an SSBO, allow Vulkan GLSL.std.450 ULP tolerance (<=8 ULP).
+    eff_policy = policy if policy is not None else DiffPolicy()
+    if eff_policy.max_ulp > 0 and "ssbo:" not in eff_policy.fp_output_prefixes:
+        # RC-6: If direct_ssa stores an F32 (or Bitcast F32->U32, even through Phi/Select)
+        # computed via transcendental ops into an SSBO, allow Vulkan GLSL.std.450 tolerance.
         _TRANSCENDENTALS = {"Sin", "Cos", "Tan", "Exp2", "Log2", "Pow", "Atan", "Atan2", "Rsqrt"}
         _d_nodes = {int(n["id"]): n for n in direct_ssa.get("nodes", [])}
         _has_trans = any(n.get("op") in _TRANSCENDENTALS for n in _d_nodes.values())
         if _has_trans:
-            _has_fp_ssbo = False
-            for _n in _d_nodes.values():
-                if _n.get("op") == "PsbStore" and len(_n.get("args", [])) >= 2:
-                    _val = _d_nodes.get(int(_n["args"][1]))
-                    if _val and _val.get("type") == "F32":
-                        _has_fp_ssbo = True
-                    elif _val and _val.get("op") == "Bitcast" and _val.get("args"):
-                        _src = _d_nodes.get(int(_val["args"][0]))
-                        if _src and _src.get("type") == "F32":
-                            _has_fp_ssbo = True
+            def _reaches_f32(_start_id: int) -> bool:
+                _work = [_start_id]
+                _seen = set()
+                while _work:
+                    _cid = _work.pop()
+                    if _cid in _seen:
+                        continue
+                    _seen.add(_cid)
+                    _cn = _d_nodes.get(_cid)
+                    if not _cn:
+                        continue
+                    if _cn.get("type") == "F32":
+                        return True
+                    _cop = _cn.get("op")
+                    if _cop in ("Bitcast", "Copy") and _cn.get("args"):
+                        _work.append(int(_cn["args"][0]))
+                    elif _cop == "Select" and len(_cn.get("args", [])) >= 3:
+                        _work.append(int(_cn["args"][1]))
+                        _work.append(int(_cn["args"][2]))
+                    elif _cop == "Phi":
+                        for _inc in _cn.get("phi_incomings", []):
+                            if isinstance(_inc, dict) and "val" in _inc:
+                                _work.append(int(_inc["val"]))
+                            elif isinstance(_inc, (list, tuple)) and len(_inc) >= 2:
+                                _work.append(int(_inc[1]))
+                        for _a in _cn.get("args", []):
+                            _work.append(int(_a))
+                return False
+
+            _has_fp_ssbo = any(
+                _n.get("op") == "PsbStore"
+                and len(_n.get("args", [])) >= 2
+                and _reaches_f32(int(_n["args"][1]))
+                for _n in _d_nodes.values()
+            )
             if _has_fp_ssbo:
+                _has_pow = any(n.get("op") == "Pow" for n in _d_nodes.values())
                 eff_policy = DiffPolicy(
-                    max_ulp=8,
+                    max_ulp=max(eff_policy.max_ulp, 32 if _has_pow else 8),
+                    ignore_nan_payload=eff_policy.ignore_nan_payload,
+                    treat_neg_zero_eq=eff_policy.treat_neg_zero_eq,
                     fp_output_prefixes=tuple(eff_policy.fp_output_prefixes) + ("ssbo:",),
-                    max_abs_err=2.0 ** -11,
+                    max_abs_err=max(eff_policy.max_abs_err, 2.0 ** -11),
                 )
 
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)

@@ -468,6 +468,9 @@ void sr_set(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, cons
 }
 
 SsaId tuple_val(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, ValType vt, SsaId tup) {
+    if (tup != kInvalidSsa && ctx.mod.get(tup).type == ValType::U32) {
+        return tup;
+    }
     SsaNode ev{};
     ev.op = SsaOp::TupleExtract;
     ev.type = vt;
@@ -477,6 +480,9 @@ SsaId tuple_val(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, cons
 }
 
 SsaId tuple_tok(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, SsaId tup) {
+    if (tup != kInvalidSsa && ctx.mod.get(tup).type == ValType::U32) {
+        return ctx.sb.current_token(blk);
+    }
     SsaNode et{};
     et.op = SsaOp::TupleExtract;
     et.type = ValType::Token;
@@ -489,6 +495,84 @@ SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, c
     SsaId eff_addr = addr;
     std::string buf_sym;
     if (is_pka && ins.srcs.size() >= 2) {
+        if (ins.pc == ctx.last_pka_pc && ctx.last_pka_table_hi != kInvalidSsa) {
+            return ctx.last_pka_table_hi;
+        }
+        if (ins.pc != ctx.last_pka_pc) {
+            ctx.last_pka_table_hi = kInvalidSsa;
+        }
+        // Check for SRT descriptor-table load: LD_PKA.i64 with mode descriptor 0x3e000000 | rack.
+        if (ins.pc != ctx.last_pka_pc && elem_bytes == 4u &&
+            ins.srcs[1].kind == SourceKind::FauUniform) {
+            uint32_t word_off = static_cast<uint32_t>(ins.srcs[1].fau_index64) * 8u +
+                                (ins.srcs[1].word_select ? 4u : 0u);
+            auto fit = ctx.opts.fau_fcst_words.find(word_off);
+            if (fit != ctx.opts.fau_fcst_words.end() && (fit->second & 0xFE000000u) == 0x3E000000u) {
+                uint32_t rack = fit->second & 0xFFu;
+                // Unwrap UConvert32To64 / Copy / Bitcast on addr to recover base_off (+ dynamic bidx<<5).
+                SsaId cur = addr;
+                for (int depth = 0; depth < 6 && cur != kInvalidSsa; ++depth) {
+                    const auto& n = ctx.mod.get(cur);
+                    if ((n.op == SsaOp::UConvert32To64 || n.op == SsaOp::SConvert32To64 ||
+                         n.op == SsaOp::Copy || n.op == SsaOp::Bitcast) && !n.args.empty()) {
+                        cur = n.args[0];
+                    } else {
+                        break;
+                    }
+                }
+                bool has_base_off = false;
+                uint32_t base_off = 0u;
+                SsaId dyn_off = kInvalidSsa;
+                if (cur != kInvalidSsa) {
+                    const auto& n = ctx.mod.get(cur);
+                    if (n.op == SsaOp::ConstU32) {
+                        has_base_off = true;
+                        base_off = n.imm_u32;
+                    } else if (n.op == SsaOp::IAdd && n.args.size() >= 2) {
+                        const auto& a0 = ctx.mod.get(n.args[0]);
+                        const auto& a1 = ctx.mod.get(n.args[1]);
+                        if (a1.op == SsaOp::ConstU32) {
+                            has_base_off = true;
+                            base_off = a1.imm_u32;
+                            dyn_off = n.args[0];
+                        } else if (a0.op == SsaOp::ConstU32) {
+                            has_base_off = true;
+                            base_off = a0.imm_u32;
+                            dyn_off = n.args[1];
+                        }
+                    }
+                }
+                if (has_base_off && (base_off & 0x1Fu) == 8u) {
+                    uint32_t desc_idx = base_off >> 5u;
+                    uint32_t packed_desc = (rack << 24u) | (desc_idx & 0x00FFFFFFu);
+                    auto sit = ctx.opts.srt_pka_buf_names.find(packed_desc);
+                    if (sit != ctx.opts.srt_pka_buf_names.end() && !sit->second.empty()) {
+                        SsaNode base_n{};
+                        base_n.op = SsaOp::LoadSidebandU64;
+                        base_n.type = ValType::U64;
+                        base_n.imm_u32 = 0x10u;
+                        base_n.aux_str = sit->second;
+                        base_n.effects.flags |= EffectSet::kFlagUsesSideband;
+                        ctx.res.uses_sideband = true;
+                        SsaId ptr64 = ctx.sb.emit(blk, std::move(base_n));
+                        if (dyn_off != kInvalidSsa) {
+                            SsaId bidx32 = ctx.emit_op(blk, SsaOp::ShrU, ValType::U32,
+                                                       { dyn_off, ctx.sb.emit_const_u32(blk, 5u) });
+                            SsaId bidx64 = ctx.emit_op(blk, SsaOp::UConvert32To64, ValType::U64, { bidx32 });
+                            SsaId slice_off = ctx.emit_op(blk, SsaOp::Shl64, ValType::U64,
+                                                          { bidx64, ctx.sb.emit_const_u64(blk, 24u) });
+                            ptr64 = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { ptr64, slice_off });
+                        }
+                        SsaId lo = kInvalidSsa, hi = kInvalidSsa;
+                        ctx.emit_split64(blk, ptr64, &lo, &hi);
+                        ctx.last_pka_pc = ins.pc;
+                        ctx.last_pka_buf_sym = sit->second;
+                        ctx.last_pka_table_hi = hi;
+                        return lo;
+                    }
+                }
+            }
+        }
         if (ins.pc == ctx.last_pka_pc) {
             buf_sym = ctx.last_pka_buf_sym;
         } else if (ins.srcs[1].kind == SourceKind::FauUniform) {
@@ -790,8 +874,10 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     }
     bool is_explicit_lod = false;
     bool is_zero_lod = false;
+    bool is_grdesc = false;
     if (auto it = ins.modifier_strs.find("lod_mode"); it != ins.modifier_strs.end()) {
         if (it->second == "explicit") is_explicit_lod = true;
+        else if (it->second == "grdesc") is_grdesc = true;
         else if (it->second == "zero" || it->second == "none") is_zero_lod = true;
     }
     if (!is_explicit_lod && ctx.opts.stage != ShaderStage::Fragment) {
@@ -833,7 +919,30 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     uint32_t sr_cnt = abi::sr_read_count(ctx, blk, ins, nullptr);
     uint32_t max_sr = std::min<uint32_t>(sr_cnt, 8u);
     uint32_t extra_end = (has_texel_offset && max_sr > 2u) ? (max_sr - 1u) : max_sr;
-    if (extra_end > 2u &&
+    bool resolved_grdesc = false;
+    if (is_grdesc && extra_end >= 4u) {
+        SsaId g0 = abi::sr_get(ctx, blk, ins, nullptr, 2u);
+        SsaId cur = g0;
+        for (int depth = 0; depth < 6 && cur != kInvalidSsa; ++depth) {
+            if (ctx.grad_desc_map.count(cur)) break;
+            const auto& n = ctx.mod.get(cur);
+            if ((n.op == SsaOp::Bitcast || n.op == SsaOp::Copy ||
+                 n.op == SsaOp::VecExtract || n.op == SsaOp::TupleExtract) && !n.args.empty()) {
+                cur = n.args[0];
+            } else {
+                break;
+            }
+        }
+        auto git = ctx.grad_desc_map.find(cur);
+        if (git != ctx.grad_desc_map.end()) {
+            ts.op = SsaOp::TexSampleLod;
+            for (SsaId gv : git->second) {
+                ts.args.push_back(gv);
+            }
+            resolved_grdesc = true;
+        }
+    }
+    if (!resolved_grdesc && extra_end > 2u &&
         ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
         for (uint32_t sr_i = 2u; sr_i < extra_end; ++sr_i) {
             ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
@@ -856,7 +965,19 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.args.push_back(tok);
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
-    return ctx.sb.emit(blk, std::move(ts));
+    SsaId ts_id = ctx.sb.emit(blk, std::move(ts));
+    if (is_grad && sr_cnt >= 4u) {
+        auto it_d = ins.modifier_strs.find("coordinate_or_derivative");
+        if (it_d != ins.modifier_strs.end() && it_d->second == "derivative") {
+            // Valhall TEX_GRADIENT.derivative SRs: (ddx.x, ddy.x, ddx.y, ddy.y) -> SPIR-V (ddx.x, ddx.y, ddy.x, ddy.y).
+            SsaId ddx_x = abi::sr_get(ctx, blk, ins, nullptr, 0u);
+            SsaId ddy_x = abi::sr_get(ctx, blk, ins, nullptr, 1u);
+            SsaId ddx_y = abi::sr_get(ctx, blk, ins, nullptr, 2u);
+            SsaId ddy_y = abi::sr_get(ctx, blk, ins, nullptr, 3u);
+            ctx.grad_desc_map[ts_id] = { ddx_x, ddx_y, ddy_x, ddy_y };
+        }
+    }
+    return ts_id;
 }
 
 SsaId lea_tex(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, SsaId xy, SsaId z_layer) {

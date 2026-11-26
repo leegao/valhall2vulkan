@@ -4,6 +4,8 @@
 #include "valhall_tables_generated.h"
 #include <cstdint>
 #include <string>
+#include <array>
+#include <unordered_map>
 #include <vector>
 
 namespace valhall::compiler {
@@ -15,6 +17,8 @@ struct Pass1Context {
     Pass1Result& res;
     uint64_t last_pka_pc = ~0ULL;
     std::string last_pka_buf_sym;
+    SsaId last_pka_table_hi = kInvalidSsa;
+    std::unordered_map<SsaId, std::array<SsaId, 4>> grad_desc_map;
 
     Pass1Context(ValhallSsaModule& m, const ValhallTranslateOptions& o, Pass1Result& r)
         : mod(m), sb(m), opts(o), res(r) {}

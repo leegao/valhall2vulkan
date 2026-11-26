@@ -169,6 +169,7 @@ void populate_mbs2_translate_options(
             vopts->srt_pka_buf_names[packed_desc] = kv.second;
         }
         for (const auto& kv : fcst_all) {
+            vopts->fau_fcst_words[kv.first] = kv.second;
             uint32_t rack = (kv.second >> 24u) & 0xFFu;
             uint32_t addr = kv.second & 0xFFFFu;
             auto it = pka_buf_by_rack_addr.find({rack, addr});

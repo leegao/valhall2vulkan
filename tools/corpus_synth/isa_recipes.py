@@ -114,10 +114,10 @@ RECIPES: dict[str, IsaRecipe] = {
     "ARSHIFT": _cr("%t = OpShiftRightArithmetic %s32 %sa %b\n%res = OpBitcast %u32 %t"),
     "LSHIFT_AND": _cr("%t = OpShiftLeftLogical %u32 %a %b\n%res = OpBitwiseAnd %u32 %t %c"),
     "LSHIFT_OR": _cr("%t = OpShiftLeftLogical %u32 %a %b\n%res = OpBitwiseOr %u32 %t %c"),
-    "LSHIFT_XOR": _cr("%t = OpShiftLeftLogical %u32 %a %b\n%res = OpBitwiseXor %u32 %t %c"),
+    "LSHIFT_XOR": _cr("%t = OpShiftLeftLogical %u32 %a %b\n%res = OpBitwiseXor %u32 %t %d"),
     "RSHIFT_AND": _cr("%t = OpShiftRightLogical %u32 %a %b\n%res = OpBitwiseAnd %u32 %t %c"),
     "RSHIFT_OR": _cr("%t = OpShiftRightLogical %u32 %a %b\n%res = OpBitwiseOr %u32 %t %c"),
-    "RSHIFT_XOR": _cr("%t = OpShiftRightLogical %u32 %a %b\n%res = OpBitwiseXor %u32 %t %c"),
+    "RSHIFT_XOR": _cr("%t = OpShiftRightLogical %u32 %a %b\n%res = OpBitwiseXor %u32 %t %d"),
     "LROT": _cr(
         "%t1 = OpShiftLeftLogical %u32 %a %c5\n"
         "%t2 = OpShiftRightLogical %u32 %a %c27\n"
@@ -196,6 +196,14 @@ RECIPES: dict[str, IsaRecipe] = {
         "%res = OpSelect %u32 %ko %a %d"
     ),
     "ICMP_MULTI": _vr(
+        "%op0 = OpAccessChain %pOutV4 %out_arr %c0\n"
+        "OpStore %op0 %a1\n"
+        "%op1 = OpAccessChain %pOutV4 %out_arr %c1\n"
+        "OpStore %op1 %a1\n"
+        "%op2 = OpAccessChain %pOutV4 %out_arr %c2\n"
+        "OpStore %op2 %a1\n"
+        "%op3 = OpAccessChain %pOutV4 %out_arr %c3\n"
+        "OpStore %op3 %a1\n"
         "%oidx0 = OpLoad %u32 %in_oidx\n"
         "%oidx = OpBitwiseAnd %u32 %oidx0 %c3\n"
         "%optr = OpAccessChain %pOutV4 %out_arr %oidx\n"
@@ -245,7 +253,7 @@ RECIPES: dict[str, IsaRecipe] = {
     "LDEXP": _cr("%t = OpExtInst %f32 %ext Ldexp %fa %sb\n%res = OpBitcast %u32 %t"),
     "FLOGD": _cr("%t = OpExtInst %f32 %ext Log2 %fa\n%res = OpBitcast %u32 %t"),
     "FADD_LSCALE": _cr("%t = OpExtInst %f32 %ext Log2 %fa\n%res = OpBitcast %u32 %t"),
-    "FMUL_RSCALE": _cr("%t = OpExtInst %f32 %ext Pow %fa %fb\n%res = OpBitcast %u32 %t"),
+    "FMUL_RSCALE": _cr("%fa_pos = OpExtInst %f32 %ext FAbs %fa\n%fa_safe = OpFAdd %f32 %fa_pos %cf1\n%t = OpExtInst %f32 %ext Pow %fa_safe %fb\n%res = OpBitcast %u32 %t"),
     "FMA_RSCALE": _fr(
         "%dir = OpVectorShuffle %v3f32 %v0 %v0 0 1 2\n"
         "%ci = OpLoad %tSampledCube %texcube\n"
@@ -403,7 +411,7 @@ RECIPES: dict[str, IsaRecipe] = {
         "%res = OpAtomicCompareExchange %u32 %po2 %c1 %c0 %c0 %b %a"
     ),
     "CLPER": _cr(
-        "%res = OpGroupNonUniformShuffleXor %u32 %c3 %a %b",
+        "%m = OpBitwiseAnd %u32 %b %c15\n%res = OpGroupNonUniformShuffleXor %u32 %c3 %a %m",
         caps=("GroupNonUniform", "GroupNonUniformShuffle"),
     ),
     "WMASK": _cr(

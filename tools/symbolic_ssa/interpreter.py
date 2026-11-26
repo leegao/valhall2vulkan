@@ -393,6 +393,53 @@ class SsaInterpreter(Generic[V]):
             uf_args.extend([self.const_u32(0), self.const_u32(0)])
         if op == "TexGather" and len(data_args) <= 1:
             uf_args.append(self.const_u32(imm_u32_2))
+        elif op in ("TexSample", "TexSampleLod") and imm_u32_2 == 1 and len(uf_args) >= 3:
+            # Canonicalize Direct 3D cube (x, y, z) to Valhall TEX_SINGLE.cube (s_packed, t)
+            # using the exact Valhall CUBEFACE2/CUBEFACE1/FRCP/CUBE_SSEL/CUBE_TSEL/FMA_RSCALE/MUX semantics.
+            x_f = uf_args[0]
+            y_f = uf_args[1]
+            z_f = uf_args[2]
+            f0 = self.const_u32(0x00000000)
+            f1 = self.const_u32(0x3F800000)
+            ax = self.fp_unary("FAbs", x_f)
+            ay = self.fp_unary("FAbs", y_f)
+            az = self.fp_unary("FAbs", z_f)
+            major = self.fp_binary("FMax", ax, self.fp_binary("FMax", ay, az))
+            rcp_major = self.fp_binary("FDiv", f1, major)
+            nx_nan = self.logical_not(self.fp_cmp("FCmpOrdEq", x_f, x_f))
+            ny_nan = self.logical_not(self.fp_cmp("FCmpOrdEq", y_f, y_f))
+            nz_nan = self.logical_not(self.fp_cmp("FCmpOrdEq", z_f, z_f))
+            any_nan = self.logical_or(self.logical_or(nx_nan, ny_nan), nz_nan)
+            mxy = self.fp_binary("NMax", ax, ay)
+            m = self.fp_binary("NMax", mxy, az)
+            is_inf_raw = self.fp_cmp("FCmpOrdEq", m, self.const_u32(0x7F800000))
+            is_inf = self.logical_and(is_inf_raw, self.logical_not(any_nan))
+            fx = self.select(self.fp_cmp("FCmpOrdLt", x_f, f0), self.const_u32(1), self.const_u32(0))
+            fy = self.select(self.fp_cmp("FCmpOrdLt", y_f, f0), self.const_u32(3), self.const_u32(2))
+            fz = self.select(self.fp_cmp("FCmpOrdLt", z_f, f0), self.const_u32(5), self.const_u32(4))
+            fyx = self.select(self.fp_cmp("FCmpOrdEq", ay, m), fy, fx)
+            fzyx = self.select(self.fp_cmp("FCmpOrdEq", az, m), fz, fyx)
+            face = self.select(any_nan, self.const_u32(4), fzyx)
+            inf_bit = self.select(is_inf, self.const_u32(65536), self.const_u32(0))
+            fw = self.int32_binary("BitOr", self.int32_binary("Shl", face, self.const_u32(29)), inf_bit)
+            nx = self.fp_unary("FNeg", x_f)
+            nz = self.fp_unary("FNeg", z_f)
+            s_45 = self.select(self.icmp("ICmpEq", face, self.const_u32(5)), nx, x_f)
+            s_1p = self.select(self.icmp("ICmpEq", face, self.const_u32(1)), z_f, s_45)
+            sc = self.select(self.icmp("ICmpEq", face, self.const_u32(0)), nz, s_1p)
+            ny = self.fp_unary("FNeg", y_f)
+            t_3p = self.select(self.icmp("ICmpEq", face, self.const_u32(3)), nz, ny)
+            tc = self.select(self.icmp("ICmpEq", face, self.const_u32(2)), z_f, t_3p)
+            neg1 = self.const_u32(0xFFFFFFFF)
+            s_raw = self.fp_clamp(self.fp_binary("Ldexp", self.fp_fma(rcp_major, sc, f1), neg1), f0, f1)
+            t_raw = self.fp_clamp(self.fp_binary("Ldexp", self.fp_fma(rcp_major, tc, f1), neg1), f0, f1)
+            s_u32 = self.domain.as_u32(s_raw)
+            s_packed = self.int32_binary(
+                "BitOr",
+                self.int32_binary("BitAnd", s_u32, self.const_u32(0x1FFFFFFF)),
+                self.int32_binary("BitAnd", fw, self.const_u32(0xE0000000)),
+            )
+            uf_args = [s_packed, self.domain.as_u32(t_raw)] + uf_args[3:]
         tkey = aux_str or f"tex_{imm_u32}"
         op_tag = op.lower()
         arity = len(uf_args)

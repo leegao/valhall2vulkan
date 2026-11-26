@@ -2296,7 +2296,7 @@
         "*"
       ],
       "op_class": "fp_ldexp",
-      "ssa_op": "Ldexp",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
         "f32",
@@ -2306,7 +2306,14 @@
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
-      ]
+      ],
+      "inline_ops": [
+        "%exp : s32 = %1;",
+        "if (@mod_eq(inf, inf)) { %exp = BfeS(%1, #u32(0), #u32(16)); }",
+        "if (@mod_eq(inf, inf0)) { %exp = BfeS(%1, #u32(0), #u32(16)); }",
+        "%out : f32 = Ldexp(%0, %exp);"
+      ],
+      "comment": "Valhall LDEXP.f32 scales src0 by 2^src1; .inf/.inf0 atan2 helpers read signed int16 exponent from low 16 bits (h0)."
     },
     {
       "mnemonic": "FREXPE",
@@ -2417,16 +2424,43 @@
         "*"
       ],
       "op_class": "fp_sfu1",
-      "ssa_op": "Atan",
-      "dest_type": "f32",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
       "src_types": [
+        "f32",
         "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
-      ]
+      ],
+      "inline_ops": [
+        "%ay : f32 = FAbs(%0);",
+        "%ax : f32 = FAbs(%1);",
+        "%m : f32 = FMax(%ay, %ax);",
+        "%em : s32 = FrexpExp(%m);",
+        "%neg_em : s32 = ISub(#s32(0), %em);",
+        "%e_lt : bool = ICmpSLt(%neg_em, #s32(-126));",
+        "%e_lo : s32 = Select(%e_lt, #s32(-126), %neg_em);",
+        "%e_gt : bool = ICmpSGt(%e_lo, #s32(126));",
+        "%e_cl : s32 = Select(%e_gt, #s32(126), %e_lo);",
+        "%m_zero : bool = FCmpOrdEq(%m, #f32(0));",
+        "%e : s32 = Select(%m_zero, #s32(0), %e_cl);",
+        "%ys : f32 = Ldexp(%ay, %e);",
+        "%xs : f32 = Ldexp(%ax, %e);",
+        "%raw_ratio : f32 = FDiv(%ys, %xs);",
+        "%c_clamped : f32 = FClamp(%raw_ratio, #f32(0), #f32(65504));",
+        "%y_zero : bool = FCmpOrdEq(%ys, #f32(0));",
+        "%c_f32 : f32 = Select(%y_zero, #f32(0), %c_clamped);",
+        "%v2 : v2f32 = VecConstruct2(#f32(0), %c_f32);",
+        "%pk : u32 = PackHalf2x16(%v2);",
+        "%e_u32 : u32 = Bitcast(%e);",
+        "%lo16 : u32 = BitAnd(%e_u32, #u32(65535));",
+        "%hi16 : u32 = BitAnd(%pk, #u32(4294901760));",
+        "%out : u32 = BitOr(%lo16, %hi16);"
+      ],
+      "comment": "Valhall FATAN_ASSIST.f32(y, x): h0 = signed int16 exponent scale e = -frexp_exp(max(|y|,|x|)); h1 = f16(clamp(|y'|/|x'|, 0, 65504))."
     },
     {
       "mnemonic": "FATAN_TABLE",
@@ -2434,16 +2468,42 @@
         "*"
       ],
       "op_class": "fp_sfu1",
-      "ssa_op": "Atan",
+      "ssa_op": "@INLINE_OPS",
       "dest_type": "f32",
       "src_types": [
+        "f32",
         "f32"
       ],
       "splits_block": false,
       "is_barrier_or_cf": false,
       "effects": [
         "uses_glsl_std450"
-      ]
+      ],
+      "inline_ops": [
+        "%ay : f32 = FAbs(%0);",
+        "%ax : f32 = FAbs(%1);",
+        "%m : f32 = FMax(%ay, %ax);",
+        "%em : s32 = FrexpExp(%m);",
+        "%neg_em : s32 = ISub(#s32(0), %em);",
+        "%e_lt : bool = ICmpSLt(%neg_em, #s32(-126));",
+        "%e_lo : s32 = Select(%e_lt, #s32(-126), %neg_em);",
+        "%e_gt : bool = ICmpSGt(%e_lo, #s32(126));",
+        "%e_cl : s32 = Select(%e_gt, #s32(126), %e_lo);",
+        "%m_zero : bool = FCmpOrdEq(%m, #f32(0));",
+        "%e : s32 = Select(%m_zero, #s32(0), %e_cl);",
+        "%ys : f32 = Ldexp(%ay, %e);",
+        "%xs : f32 = Ldexp(%ax, %e);",
+        "%raw_ratio : f32 = FDiv(%ys, %xs);",
+        "%c_clamped : f32 = FClamp(%raw_ratio, #f32(0), #f32(65504));",
+        "%y_zero : bool = FCmpOrdEq(%ys, #f32(0));",
+        "%c_f32 : f32 = Select(%y_zero, #f32(0), %c_clamped);",
+        "%v2 : v2f32 = VecConstruct2(#f32(0), %c_f32);",
+        "%pk : u32 = PackHalf2x16(%v2);",
+        "%unp : v2f32 = UnpackHalf2x16(%pk);",
+        "%c_exact : f32 = @extract(%unp, 1);",
+        "%out : f32 = Atan(%c_exact);"
+      ],
+      "comment": "Valhall FATAN_TABLE.f32(y, x): returns f32 atan(f16_to_f32(FATAN_ASSIST(y,x).h1))."
     },
     {
       "mnemonic": "FRCBRT_APPROX_A",

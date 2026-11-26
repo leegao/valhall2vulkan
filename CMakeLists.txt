@@ -464,6 +464,12 @@ add_test(
   COMMAND ${VALHALL_PYTHON} -m unittest tools/symbolic_ssa/test_v46_defau_swz_tex_and_imgq.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+add_test(
+    NAME test_v49_isa_sweep_fixes
+    COMMAND ${Python3_EXECUTABLE} -m unittest tools/symbolic_ssa/test_v49_isa_sweep_fixes.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 set_tests_properties(test_v46_defau_swz_tex_and_imgq PROPERTIES
     ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
 )

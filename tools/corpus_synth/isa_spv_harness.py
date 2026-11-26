@@ -433,6 +433,9 @@ OpEntryPoint Vertex %main "main" {' '.join(ep_vars)}
 %u32 = OpTypeInt 32 0
 %f32 = OpTypeFloat 32
 %v4f32 = OpTypeVector %f32 4
+%c0 = OpConstant %u32 0
+%c1 = OpConstant %u32 1
+%c2 = OpConstant %u32 2
 %c3 = OpConstant %u32 3
 %c4 = OpConstant %u32 4
 %pInV4 = OpTypePointer Input %v4f32

@@ -232,7 +232,8 @@ class TestCorpusSynth(unittest.TestCase):
         fma_r = synthesize_for_isa("FMA_RSCALE", mode="spirv")
         self.assertTrue(fma_r.compiled_ok and fma_r.target_emitted)
         mk = synthesize_for_isa("FATAN_ASSIST", mode="spirv", verify_equiv=True, k_init=4, fp_range="vulkan", slice_diff_depth=4)
-        self.assertTrue(any("[SLICE-DIFF" in line for line in mk.slice_diff_lines))
+        self.assertEqual(mk.equiv_status, "EQUIV_WITHIN_ULP")
+        self.assertEqual(mk.diverging_vectors, 0)
 
         # 6. spirv-fuzz integration when prebuilt tool is present
         if find_spirv_tool("spirv-fuzz"):

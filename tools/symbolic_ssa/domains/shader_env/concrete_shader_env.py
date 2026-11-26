@@ -236,6 +236,8 @@ class ConcreteShaderEnv(ShaderEnvBase):
             return tuple(self.sample_u32(f"bi_{bi}_{c}") for c in range(3))
         if vt == "Bool":
             return (self.sample_u32(f"bi_{bi}") & 1) != 0
+        if bi == 40:
+            return self.sample_u32("bi_40") & 0xF
         return self.sample_u32(f"bi_{bi}")
 
     def get_input_vec4(self, kind: str, loc: int) -> tuple[int, ...]:
