@@ -804,6 +804,8 @@ SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
             ex.op = SsaOp::VecExtract;
             ex.type = ValType::F32;
             ex.imm_u32 = (varying_name == VaryingNameM::frag_w) ? 3u : 2u;
+            ex.aux_bool = (varying_name == VaryingNameM::frag_w &&
+                           !ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register);
             ex.args = { fc };
             return ctx.sb.emit(blk, std::move(ex));
         }
@@ -945,7 +947,16 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     if (!resolved_grdesc && extra_end > 2u &&
         ins.mnemonic != Mnemonic::LD_TEX && ins.mnemonic != Mnemonic::LD_TEX_IMM) {
         for (uint32_t sr_i = 2u; sr_i < extra_end; ++sr_i) {
-            ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
+            SsaId sr_val = abi::sr_get(ctx, blk, ins, nullptr, sr_i);
+            if (is_explicit_lod && !is_dref && sr_i == extra_end - 1u) {
+                SsaId lod_s16 = ctx.emit_op(blk, SsaOp::BfeS, ValType::S32,
+                                            {sr_val, ctx.sb.emit_const_u32(blk, 0u),
+                                             ctx.sb.emit_const_u32(blk, 16u)});
+                SsaId lod_f = ctx.emit_op(blk, SsaOp::ConvertSToF, ValType::F32, {lod_s16});
+                SsaId inv256 = ctx.sb.emit_const_f32_bits(blk, 0x3b800000u);
+                sr_val = ctx.emit_op(blk, SsaOp::FMul, ValType::F32, {lod_f, inv256});
+            }
+            ts.args.push_back(sr_val);
         }
     }
     if ((ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) ||

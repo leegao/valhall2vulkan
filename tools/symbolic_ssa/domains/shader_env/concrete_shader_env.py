@@ -184,10 +184,17 @@ class ConcreteShaderEnv(ShaderEnvBase):
                     return max(1, dim >> lod)
         norm_args = [int(a) & MASK32 for a in args]
         if base_uf.startswith("tex_texsamplelod_") and len(norm_args) in (3, 4):
+            import math as _math
+            import struct as _struct
             lod_idx = len(norm_args) - 1
             lod_u = norm_args[lod_idx]
-            if (lod_u & 0x80000000) and (lod_u & 0x7FFFFFFF) <= 0x7F800000:
+            lod_f = _struct.unpack("<f", _struct.pack("<I", lod_u))[0]
+            if _math.isnan(lod_f) or lod_f <= 0.0:
                 norm_args[lod_idx] = 0
+            elif _math.isinf(lod_f) or lod_f >= 127.99609375:
+                norm_args[lod_idx] = 0x7FFF
+            else:
+                norm_args[lod_idx] = int(_math.trunc(lod_f * 256.0))
         elif base_uf.startswith("tex_texfetch_") and len(norm_args) >= 2:
             norm_args[0] &= 0xFFFF
             norm_args[1] &= 0xFFFF

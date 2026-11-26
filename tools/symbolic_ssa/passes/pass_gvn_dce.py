@@ -144,7 +144,13 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
 
     def _is_valhall_frag_w(self, nid: int) -> bool:
         n = self.nodes_by_id.get(nid)
-        if not n or n.get("op") != "VecExtract" or int(n.get("imm_u32", 0)) != 3 or not n.get("args"):
+        if (
+            not n
+            or n.get("op") != "VecExtract"
+            or int(n.get("imm_u32", 0)) != 3
+            or n.get("aux_bool", False)
+            or not n.get("args")
+        ):
             return False
         base = self.nodes_by_id.get(int(n["args"][0]))
         return bool(base and base.get("op") == "LoadBuiltinInput" and base.get("aux_str") == "gl_FragCoord")

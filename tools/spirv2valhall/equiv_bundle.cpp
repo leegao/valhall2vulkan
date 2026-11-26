@@ -147,7 +147,7 @@ void populate_mbs2_translate_options(
         auto add_pka = [&](const std::vector<Mbs2Symbol>& syms, bool is_ssbo) {
             for (const auto& sym : syms) {
                 std::string bname = sym.name;
-                if (!is_ssbo && sym.rack_index == 0u && sym.name == "gl_mali_non_rmu_buffer") {
+                if (!is_ssbo && sym.rack_index == 0u && (sym.name == "gl_mali_non_rmu_buffer" || sym.address == 0x20000u)) {
                     bname = "gl_mali_non_rmu_buffer";
                     if ((sym.address & 0xFFFFu) == 0u && sym.address >= 0x10000u) {
                         pka_buf_by_rack_addr[{0u, sym.address >> 16u}] = bname;
