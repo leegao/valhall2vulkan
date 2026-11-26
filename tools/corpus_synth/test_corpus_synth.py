@@ -183,5 +183,67 @@ class TestCorpusSynth(unittest.TestCase):
             self.assertGreaterEqual(len(res.raw_results), 2)
 
 
+    def test_v47_1_direct_isa_fixtures_slice_diff_and_spirv_fuzz(self) -> None:
+        import json
+        import subprocess
+        from tools.corpus_synth.isa_target_synth import build_spvasm_for_isa
+        from tools.corpus_synth.spv_fuzzer import fuzz_spv_with_spirv_fuzz
+        from tools.corpus_synth.valhall_isel_catalog import VALHALL_ISEL_CATALOG
+        from tools.spec import load_isa_spec_index as spec_loader
+        from tools.verify.spvasm_io import find_spirv_tool
+
+        # 1. Unified tools.spec loader
+        idx = spec_loader()
+        self.assertEqual(len(idx.variants), 627)
+
+        # 2. All non-emitted catalog mnemonics carry DDK RE notes
+        for rule in VALHALL_ISEL_CATALOG:
+            if rule.mnemonic not in RECIPES:
+                self.assertTrue(rule.ddk_re_note, f"Missing ddk_re_note for {rule.mnemonic}")
+
+        # 3. Intermediate SSA materialization emits pinned outbuf stores
+        _, hadd_pin = build_spvasm_for_isa("HADD", materialize_intermediates=True)
+        self.assertIn("%pin_p1 = OpAccessChain", hadd_pin)
+
+        if not os.path.exists("./build/spirv2valhall"):
+            self.skipTest("spirv2valhall binary not built")
+
+        # 4. --direct-isa on .tsv and .valhall fixtures (with @fau sideband)
+        for fixture, min_rows in (
+            ("tests/fixtures/direct-isa-sample.tsv", 3),
+            ("tests/fixtures/direct-isa-sample.valhall", 2),
+        ):
+            proc = subprocess.run(
+                ["./build/spirv2valhall", "--direct-isa", fixture],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            self.assertEqual(proc.returncode, 0, f"--direct-isa failed on {fixture}: {proc.stderr}")
+            rows = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+            self.assertGreaterEqual(len(rows), min_rows)
+            for row in rows:
+                self.assertTrue(row["decoded_ok"], f"Decode failed in {fixture}: {row}")
+                self.assertTrue(row["pass1_ok"], f"Pass1 failed in {fixture}: {row}")
+            self.assertTrue(any(r.get("fau_count", 0) == 2 for r in rows), f"Missing @fau sideband in {fixture}")
+
+        # 5. FMA_RSCALE verified SPIR-V emission + --slice-diff on MKVEC
+        fma_r = synthesize_for_isa("FMA_RSCALE", mode="spirv")
+        self.assertTrue(fma_r.compiled_ok and fma_r.target_emitted)
+        mk = synthesize_for_isa("MKVEC", mode="spirv", verify_equiv=True, k_init=4, fp_range="vulkan", slice_diff_depth=4)
+        self.assertTrue(any("[SLICE-DIFF" in line for line in mk.slice_diff_lines))
+
+        # 6. spirv-fuzz integration when prebuilt tool is present
+        if find_spirv_tool("spirv-fuzz"):
+            with tempfile.TemporaryDirectory() as td:
+                seed_res = synthesize_for_isa("HADD", mode="spirv", out_dir=td)
+                fuzzed = fuzz_spv_with_spirv_fuzz(
+                    seed_res.spv_path, num_variants=1, out_dir=td, verify_equiv=True, k_init=4, fp_range="vulkan"
+                )
+                self.assertEqual(len(fuzzed), 1)
+                self.assertTrue(fuzzed[0].fuzz_ok and fuzzed[0].valid_spv and fuzzed[0].compiled_ok)
+                self.assertEqual(fuzzed[0].equiv_status, "EQUIV_EXACT")
+
 if __name__ == "__main__":
     unittest.main()

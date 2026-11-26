@@ -14,6 +14,7 @@ invariants:
 from __future__ import annotations
 
 import dataclasses
+import re
 
 
 @dataclasses.dataclass(frozen=True)
@@ -39,7 +40,38 @@ class IsaRecipe:
     result_var: str = "%res"
 
 
-def build_compute_spvasm(recipe: IsaRecipe, complexity: str = "minimal") -> str:
+
+_INTERM_DEF_RE = re.compile(r"^\s*(%[A-Za-z0-9_]+)\s*=\s*(Op\w+)\s+(%u32|%s32|%f32)\b")
+
+
+def _build_intermediate_stores(body: str) -> str:
+    """Emit SSBO stores pinning scalar `%u32/%s32/%f32` intermediate SSA IDs in `outbuf`."""
+    if "OpSelectionMerge" in body or "OpBranch" in body:
+        return ""
+    lines: list[str] = []
+    slot = 0
+    for raw in body.splitlines():
+        m = _INTERM_DEF_RE.match(raw)
+        if not m:
+            continue
+        vid, op, ty = m.group(1), m.group(2), m.group(3)
+        if vid in ("%res", "%final_res") or op in ("OpLoad", "OpAccessChain", "OpLabel", "OpCopyObject"):
+            continue
+        slot += 1
+        if slot > 3:
+            break
+        idx_var = f"%i{slot}"
+        ptr_var = f"%pin_p{slot}"
+        val_var = vid
+        if ty != "%u32":
+            val_var = f"%pin_u{slot}"
+            lines.append(f"{val_var} = OpBitcast %u32 {vid}")
+        lines.append(f"{ptr_var} = OpAccessChain %pU32 %outbuf %c0 {idx_var}")
+        lines.append(f"OpStore {ptr_var} {val_var}")
+    return ("\n".join(lines) + "\n") if lines else ""
+
+
+def build_compute_spvasm(recipe: IsaRecipe, complexity: str = "minimal", *, materialize_intermediates: bool = False) -> str:
     """Wrap a compute `IsaRecipe` in a Vulkan 1.3 GLCompute SPIR-V harness."""
     caps = ["Shader"] + list(recipe.caps)
     if recipe.needs_storage_img or recipe.needs_storage_img_array:
@@ -182,7 +214,8 @@ def build_compute_spvasm(recipe: IsaRecipe, complexity: str = "minimal") -> str:
             "%mix1 = OpBitwiseXor %u32 %res %raw_d\n"
             "%final_res = OpIAdd %u32 %mix1 %gx\n"
         )
-        core = f"{recipe.body}\n{post}"
+        pin_s = _build_intermediate_stores(recipe.body) if materialize_intermediates else ""
+        core = f"{recipe.body}\n{pin_s}{post}"
     elif complexity == "branchy" and "OpSelectionMerge" not in recipe.body and not recipe.needs_wg:
         pre = (
             "%a = OpCopyObject %u32 %raw_a\n"
@@ -210,7 +243,8 @@ def build_compute_spvasm(recipe: IsaRecipe, complexity: str = "minimal") -> str:
             "%c = OpCopyObject %u32 %raw_c\n"
             "%d = OpCopyObject %u32 %raw_d\n"
         )
-        core = f"{recipe.body}\n%final_res = OpCopyObject %u32 %res\n"
+        pin_s = _build_intermediate_stores(recipe.body) if materialize_intermediates else ""
+        core = f"{recipe.body}\n{pin_s}%final_res = OpCopyObject %u32 %res\n"
 
     return f"""{cap_lines}
 {ext_lines}
@@ -421,10 +455,10 @@ OpFunctionEnd
 """
 
 
-def build_spvasm_from_recipe(recipe: IsaRecipe, complexity: str = "minimal") -> str:
+def build_spvasm_from_recipe(recipe: IsaRecipe, complexity: str = "minimal", *, materialize_intermediates: bool = False) -> str:
     """Dispatch `recipe` to the matching stage SPIR-V harness builder."""
     if recipe.stage == "compute":
-        return build_compute_spvasm(recipe, complexity)
+        return build_compute_spvasm(recipe, complexity, materialize_intermediates=materialize_intermediates)
     if recipe.stage == "fragment":
         return build_fragment_spvasm(recipe, complexity)
     if recipe.stage == "vertex":

@@ -1,0 +1,4 @@
+# Direct-ISA batch sample (TSV): case_id\tarch\tstage\tword0,word1[,...]\t[optional fau]
+fadd_f32_baseline	11	compute	00a4c80000000100,7800c00000000000
+fadd_f32_fau_u0	11	compute	00a4c80000000180,7800c00000000000	u0=0x3f800000,u1=0x40000000
+iadd_s32_sat	11	compute	00a8c80040000100,7800c00000000000

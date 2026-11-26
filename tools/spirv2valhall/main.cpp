@@ -1,5 +1,6 @@
 #include "spirv2valhall.h"
 #include "equiv_bundle.h"
+#include "direct_isa_parser.h"
 #include "spirv2ssa.h"
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
@@ -33,7 +34,7 @@ static void print_usage(const char* argv0) {
         << "  --dump-ssa                  Lower Valhall ISA to ValhallSSA and print SSA instead of ISA\n"
         << "  --dump-ssa-json <FILE>      Write lowered (and optionally optimized) ValhallSSA JSON to FILE\n"
         << "  --direct-ssa                Lower input .spv directly via spirv2ssa (bypassing libMali) and output SSA\n"
-        << "  --raw-valhall-batch <FILE>  Decode and Pass1-lower raw 64-bit Valhall instruction streams (TSV -> JSONL)\n"
+        << "  --direct-isa <FILE>         Bypass libMali: decode and Pass1-lower .valhall or .tsv ISA streams\n"
         << "  --dump-equiv-json <FILE>    Write dual ValhallSSA equivalence bundle JSON\n"
         << "  --opt-ssa                   Run verification SSA optimization pipeline on ValhallSSA / spirv2ssa\n"
         << "  --defau                     Run De-FAU devirtualization + fact prover on lowered ValhallSSA\n"
@@ -53,109 +54,6 @@ static void print_usage(const char* argv0) {
 }
 
 
-static std::string json_escape_str(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() + 8);
-    for (unsigned char c : s) {
-        if (c == '\\') out += "\\\\";
-        else if (c == '"') out += "\\\"";
-        else if (c == '\n') out += "\\n";
-        else if (c == '\r') out += "\\r";
-        else if (c == '\t') out += "\\t";
-        else if (c < 0x20) out += ' ';
-        else out += static_cast<char>(c);
-    }
-    return out;
-}
-
-// Batch decode + Pass 1 lowering verifier for raw 64-bit Valhall instruction streams.
-// Input TSV format (one case per line): case_id\tarch\tstage\tword0_hex,word1_hex,...
-static int run_raw_valhall_batch(const std::string& batch_path) {
-    std::ifstream ifs(batch_path);
-    if (!ifs.good()) {
-        std::cerr << "[spirv2valhall] ERROR: Cannot open batch file: " << batch_path << "\n";
-        return 1;
-    }
-    std::string line;
-    while (std::getline(ifs, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        std::stringstream ss(line);
-        std::string case_id, arch_s, stage_s, words_s;
-        if (!std::getline(ss, case_id, '\t') ||
-            !std::getline(ss, arch_s, '\t') ||
-            !std::getline(ss, stage_s, '\t') ||
-            !std::getline(ss, words_s, '\t')) {
-            continue;
-        }
-        uint8_t arch = static_cast<uint8_t>(std::atoi(arch_s.c_str()));
-        valhall::ShaderStage stage = valhall::ShaderStage::Compute;
-        if (stage_s == "fragment") stage = valhall::ShaderStage::Fragment;
-        else if (stage_s == "vertex") stage = valhall::ShaderStage::Vertex;
-
-        std::vector<uint8_t> bytes;
-        std::stringstream ws(words_s);
-        std::string tok;
-        while (std::getline(ws, tok, ',')) {
-            if (tok.empty()) continue;
-            uint64_t w = std::strtoull(tok.c_str(), nullptr, 16);
-            for (int b = 0; b < 8; ++b) {
-                bytes.push_back(static_cast<uint8_t>((w >> (b * 8)) & 0xFFu));
-            }
-        }
-
-        auto insts = valhall::decode_valhall_shader(bytes.data(), bytes.size(), arch, false);
-        bool decoded_ok = !insts.empty() && insts[0].valid && insts[0].mnemonic != valhall::Mnemonic::INVALID;
-        std::string mn = decoded_ok ? valhall::mnemonic_to_string(insts[0].mnemonic) : "";
-        std::string cmn = decoded_ok ? valhall::mnemonic_to_string(insts[0].canonical_mnemonic) : "";
-        std::string var = decoded_ok ? valhall::variant_to_string(insts[0].variant) : "";
-        std::string disasm = decoded_ok ? insts[0].disassembly : "";
-
-        bool pass1_ok = false;
-        size_t ssa_nodes = 0;
-        std::vector<std::string> ssa_ops;
-        std::string err_msg;
-
-        if (decoded_ok) {
-            valhall::ValhallTranslateOptions vopts;
-            vopts.stage = stage;
-            vopts.arch = arch;
-            vopts.tolerant_ssa = true;
-            vopts.run_ssa_opt = false;
-            auto cfg = valhall::cfg::build_cfg(insts);
-            valhall::cfg::ControlFlowGraph empty_sec;
-            auto p1 = valhall::compiler::run_pass1_lowering(cfg, empty_sec, vopts);
-            pass1_ok = p1.ok;
-            err_msg = p1.error_message;
-            if (p1.ok) {
-                ssa_nodes = p1.ssa.nodes.size();
-                for (const auto& n : p1.ssa.nodes) {
-                    if (ssa_ops.size() < 24) {
-                        ssa_ops.push_back(valhall::tables::ssa_op_to_string(n.op));
-                    }
-                }
-            }
-        } else {
-            err_msg = "decode failed";
-        }
-
-        std::cout << "{\"case_id\":\"" << json_escape_str(case_id)
-                  << "\",\"decoded_ok\":" << (decoded_ok ? "true" : "false")
-                  << ",\"mnemonic\":\"" << json_escape_str(mn)
-                  << "\",\"canonical_mnemonic\":\"" << json_escape_str(cmn)
-                  << "\",\"variant\":\"" << json_escape_str(var)
-                  << "\",\"disasm\":\"" << json_escape_str(disasm)
-                  << "\",\"pass1_ok\":" << (pass1_ok ? "true" : "false")
-                  << ",\"ssa_nodes\":" << ssa_nodes
-                  << ",\"ssa_ops\":[";
-        for (size_t k = 0; k < ssa_ops.size(); ++k) {
-            if (k) std::cout << ",";
-            std::cout << "\"" << json_escape_str(ssa_ops[k]) << "\"";
-        }
-        std::cout << "],\"error\":\"" << json_escape_str(err_msg) << "\"}\n";
-    }
-    return 0;
-}
-
 static valhall::ShaderStage to_compiler_stage(valhall::spirv2valhall::ShaderStage st) {
     using valhall::spirv2valhall::ShaderStage;
     switch (st) {
@@ -173,7 +71,7 @@ int main(int argc, char** argv) {
     std::string out_spirv_prefix;
     std::string dump_equiv_json_path;
     std::string dump_ssa_json_path;
-    std::string raw_valhall_batch_path;
+    std::string direct_isa_path;
     valhall::spirv2valhall::EquivBundleOptions equiv_opts;
     bool dump_ssa = false;
     bool run_defau = false;
@@ -211,8 +109,8 @@ int main(int argc, char** argv) {
             dump_ssa_json_path = argv[++i];
         } else if (arg == "--direct-ssa") {
             direct_ssa = true;
-        } else if (arg == "--raw-valhall-batch" && i + 1 < argc) {
-            raw_valhall_batch_path = argv[++i];
+        } else if ((arg == "--direct-isa" || arg == "--raw-valhall-batch") && i + 1 < argc) {
+            direct_isa_path = argv[++i];
         } else if (arg == "--dump-equiv-json" && i + 1 < argc) {
             dump_equiv_json_path = argv[++i];
         } else if (arg == "--opt-ssa") {
@@ -257,8 +155,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (!raw_valhall_batch_path.empty()) {
-        return run_raw_valhall_batch(raw_valhall_batch_path);
+    if (!direct_isa_path.empty()) {
+        return valhall::spirv2valhall::run_direct_isa_file(direct_isa_path);
     }
 
     if (spv_path.empty()) {

@@ -1,0 +1,13 @@
+# Direct-ISA .valhall text format sample
+@case fadd_f32_fau_sideband
+@arch 11
+@stage compute
+@fau u0=0x3f800000 u1=0x40000000
+0x00a4c80000000180  # FADD.f32 r8, u0, r1
+0x7800c00000000000  # NOP.end
+
+@case kaboom_internal
+@arch 11
+@stage compute
+0x0006c00000000000  # KABOOM
+0x7800c00000000000  # NOP.end

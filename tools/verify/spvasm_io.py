@@ -13,7 +13,21 @@ from typing import Any
 
 
 def find_spirv_tool(name: str) -> str | None:
-    """Locate a SPIR-V Tools binary (e.g. spirv-as, spirv-dis, spirv-val, spirv-reduce)."""
+    """Locate a SPIR-V Tools binary (e.g. spirv-as, spirv-dis, spirv-val, spirv-reduce, spirv-fuzz).
+
+    Search order:
+      1. `<repo>/third_party/prebuilts/spirv-tools/<name>` (and `bin/<name>`) if present and executable.
+      2. `$SPIRV_TOOLS_DIR/<name>`.
+      3. `PATH` via `shutil.which`.
+    """
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    for rel in (
+        os.path.join("third_party", "prebuilts", "spirv-tools", name),
+        os.path.join("third_party", "prebuilts", "spirv-tools", "bin", name),
+    ):
+        cand = os.path.join(repo_root, rel)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
     env_dir = os.environ.get("SPIRV_TOOLS_DIR")
     if env_dir:
         cand = os.path.join(env_dir, name)
@@ -57,13 +71,16 @@ def disassemble_spv(spv_path: str) -> str:
     return proc.stdout
 
 
-def validate_spv(spv_path: str) -> bool:
+def validate_spv(spv_path: str, target_env: str = "vulkan1.3") -> bool:
     """Validate a binary .spv file via spirv-val (returns True if valid or spirv-val unavailable)."""
     tool = find_spirv_tool("spirv-val")
     if not tool:
         return True
-    proc = subprocess.run([tool, spv_path], check=False, capture_output=True, text=True, timeout=30)
-    return proc.returncode == 0
+    proc = subprocess.run([tool, "--target-env", target_env, spv_path], check=False, capture_output=True, text=True, timeout=30)
+    if proc.returncode == 0:
+        return True
+    proc2 = subprocess.run([tool, spv_path], check=False, capture_output=True, text=True, timeout=30)
+    return proc2.returncode == 0
 
 
 @contextlib.contextmanager

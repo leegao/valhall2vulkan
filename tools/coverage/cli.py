@@ -17,6 +17,7 @@ from tools.coverage.shrinker import (
     localize_and_shrink_divergence,
 )
 from tools.coverage.synthesizer import synthesize_coverage_vectors
+from tools.coverage.slice_diff import format_slice_diff
 from tools.coverage.triage import format_divergence_and_triage, triage_divergence
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
 from tools.verify.cec import run_concrete_diff
@@ -49,6 +50,22 @@ def _handle_divergence(
     )
     for line in format_divergence_and_triage(rep, triage, trace_diff=args.trace_diff):
         print(line)
+    if getattr(args, 'slice_diff', 0) > 0:
+        for line in format_slice_diff(bundle, d_ssa, v_ssa, rep, depth=args.slice_diff, fp_range=args.fp_range):
+            print(line)
+    if args.shrink and not args.record and not args.spv_or_json.endswith('.json'):
+        import tempfile as _tf
+        _out = os.path.join(_tf.mkdtemp(prefix='valhall_shrink_'), 'shrunk.spvasm')
+        rec = record_repro_spvasm(
+            args.spv_or_json, _out, args.bin, bundle, rep, triage,
+            canonicalize=args.canonicalize, policy=policy,
+            reduce_timeout_s=args.record_timeout_s, reduce_steps=args.record_steps,
+            no_reduce=args.no_reduce,
+        )
+        print(
+            f'  [SHRINK/spirv-reduce] path={rec.out_path} bytes={rec.original_bytes}->{rec.recorded_bytes} '
+            f'method={rec.reduce_method} verified={rec.verified_reproduces}'
+        )
     if args.record:
         rec = record_repro_spvasm(
             args.spv_or_json,
@@ -100,7 +117,14 @@ def main() -> int:
     ap.add_argument(
         "--shrink",
         action="store_true",
-        help="Auto-shrink and localize any concrete divergence discovered during fuzzing/coverage",
+        help="Shrink diverging SPIR-V inputs via spirv-reduce (or override-shrink JSON bundles)",
+    )
+    ap.add_argument(
+        "--slice-diff",
+        type=int,
+        default=0,
+        metavar="DEPTH",
+        help="Print N-hop side-by-side concrete backward-slice diff (Direct vs Valhall) on divergence",
     )
     ap.add_argument(
         "--trace-diff",

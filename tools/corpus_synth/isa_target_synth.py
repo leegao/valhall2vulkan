@@ -34,7 +34,7 @@ from tools.corpus_synth.isa_field_fragments import (
     generate_field_cases_for_spec,
 )
 from tools.corpus_synth.isa_recipes import RECIPES, VARIANT_RECIPES
-from tools.corpus_synth.isa_spec_index import IsaSpecIndex, load_isa_spec_index
+from tools.spec.isa_spec_index import IsaSpecIndex, load_isa_spec_index
 from tools.corpus_synth.isa_spv_harness import IsaRecipe, build_spvasm_from_recipe
 from tools.corpus_synth.oracle import _parse_valhall_mnemonic
 from tools.corpus_synth.valhall_isel_catalog import (
@@ -49,6 +49,7 @@ from tools.corpus_synth.valhall_raw_synth import (
 )
 from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
 from tools.coverage.shrinker import DiffPolicy, DivergenceReport
+from tools.coverage.slice_diff import format_slice_diff
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
 from tools.verify.spvasm_io import assemble_spvasm, load_equiv_bundle
 
@@ -72,6 +73,7 @@ class IsaTargetResult:
     benign_fp_diffs: int = 0
     divergence_report: DivergenceReport | None = None
     raw_results: list[RawVerifyResult] = dataclasses.field(default_factory=list)
+    slice_diff_lines: list[str] = dataclasses.field(default_factory=list)
     elapsed_ms: float = 0.0
     error: str = ""
 
@@ -102,6 +104,7 @@ def build_spvasm_for_isa(
     complexity: str = "minimal",
     *,
     variant: str | None = None,
+    materialize_intermediates: bool = False,
 ) -> tuple[str, str]:
     """Return `(stage, spvasm_text)` for `mnemonic` (and optional `variant`) at `complexity`."""
     mn = mnemonic.upper()
@@ -114,7 +117,7 @@ def build_spvasm_for_isa(
         rule = get_rule_for_mnemonic(mn)
         hint = f" (catalog tier={rule.tier}: {rule.spirv_pattern})" if rule else ""
         raise ValueError(f"No executable SPIR-V recipe for Valhall mnemonic '{mn}'{hint}")
-    return recipe.stage, build_spvasm_from_recipe(recipe, complexity=complexity)
+    return recipe.stage, build_spvasm_from_recipe(recipe, complexity=complexity, materialize_intermediates=materialize_intermediates)
 
 
 def synthesize_for_isa(
@@ -132,6 +135,9 @@ def synthesize_for_isa(
     k_init: int = 32,
     fp_range: str = "unconstrained",
     seed: int = 42,
+    materialize_intermediates: bool = False,
+    max_coverage_seeds: bool = False,
+    slice_diff_depth: int = 0,
 ) -> IsaTargetResult:
     """
     Synthesize and verify a target Valhall mnemonic.
@@ -187,7 +193,7 @@ def synthesize_for_isa(
         )
 
     # SPIR-V synthesis path (`mode == "spirv"` or `"both"` with SPIR-V recipe)
-    stage, spvasm = build_spvasm_for_isa(mn, complexity=complexity, variant=variant)
+    stage, spvasm = build_spvasm_for_isa(mn, complexity=complexity, variant=variant, materialize_intermediates=materialize_intermediates)
 
     if out_dir is not None:
         os.makedirs(out_dir, exist_ok=True)
@@ -238,6 +244,7 @@ def synthesize_for_isa(
     divs = 0
     benign = 0
     div_rep: DivergenceReport | None = None
+    slice_lines: list[str] = []
 
     if verify_equiv and bundle.get("direct_ok") and bundle.get("valhall_ok"):
         d_ssa, _ = canonicalize_ssa_module(bundle["direct_ssa"])
@@ -249,12 +256,16 @@ def synthesize_for_isa(
             k_init=k_init,
             fp_range=fp_range,
             seed=seed,
+            max_paths=32 if max_coverage_seeds else 8,
+            time_budget_ms=5000 if max_coverage_seeds else 2000,
             policy=DiffPolicy(),
         )
         equiv_status = ef.status
         divs = ef.diverging_vectors
         benign = ef.benign_fp_diffs
         div_rep = ef.first_divergence
+        if slice_diff_depth > 0 and div_rep is not None and div_rep.diverged:
+            slice_lines = format_slice_diff(bundle, d_ssa, v_ssa, div_rep, depth=slice_diff_depth, fp_range=fp_range)
 
     raw_res: list[RawVerifyResult] = []
     if eff_mode == "both" or mutate_fields:
@@ -284,6 +295,7 @@ def synthesize_for_isa(
         benign_fp_diffs=benign,
         divergence_report=div_rep,
         raw_results=raw_res,
+        slice_diff_lines=slice_lines,
         elapsed_ms=elapsed,
     )
 

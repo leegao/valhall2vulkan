@@ -2,7 +2,7 @@
 Declarative SPIR-V Synthesis Recipes for Valhall ISA Mnemonics & Variants.
 
 Contains:
-  - `RECIPES`: 128 empirically verified Vulkan 1.3 SPIR-V recipes guaranteed to
+  - `RECIPES`: 129 empirically verified Vulkan 1.3 SPIR-V recipes guaranteed to
     emit the target Valhall mnemonic in `EBIN[0]` (main shader) via `libMali-Gxx`.
   - `VARIANT_RECIPES`: Targeted SPIR-V recipes inducing specific non-default
     `(mnemonic, variant)` pairs (e.g., `IADD.v2u16`, `IADD.v4u8`, `FADD.v2f16`,
@@ -79,7 +79,7 @@ def _vr(
     )
 
 
-# 128 empirically verified Vulkan 1.3 SPIR-V recipes emitting the target mnemonic in EBIN[0].
+# 129 empirically verified Vulkan 1.3 SPIR-V recipes emitting the target mnemonic in EBIN[0].
 RECIPES: dict[str, IsaRecipe] = {
     # --- Integer Arithmetic ---
     "IADD": _cr("%res = OpIAdd %u32 %a %b"),
@@ -246,6 +246,12 @@ RECIPES: dict[str, IsaRecipe] = {
     "FLOGD": _cr("%t = OpExtInst %f32 %ext Log2 %fa\n%res = OpBitcast %u32 %t"),
     "FADD_LSCALE": _cr("%t = OpExtInst %f32 %ext Log2 %fa\n%res = OpBitcast %u32 %t"),
     "FMUL_RSCALE": _cr("%t = OpExtInst %f32 %ext Pow %fa %fb\n%res = OpBitcast %u32 %t"),
+    "FMA_RSCALE": _fr(
+        "%dir = OpVectorShuffle %v3f32 %v0 %v0 0 1 2\n"
+        "%ci = OpLoad %tSampledCube %texcube\n"
+        "%res = OpImageSampleImplicitLod %v4f32 %ci %dir",
+        needs_cube=True,
+    ),
     "FEXP": _cr("%t = OpExtInst %f32 %ext Exp2 %fa\n%res = OpBitcast %u32 %t"),
     "FSIN_TABLE": _cr("%t = OpExtInst %f32 %ext Sin %fa\n%res = OpBitcast %u32 %t"),
     "FCOS_TABLE": _cr("%t = OpExtInst %f32 %ext Cos %fa\n%res = OpBitcast %u32 %t"),

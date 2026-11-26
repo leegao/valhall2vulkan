@@ -15,7 +15,7 @@ from tools.corpus_synth.isa_field_fragments import (
     generate_field_cases_for_spec,
 )
 from tools.corpus_synth.isa_recipes import RECIPES, VARIANT_RECIPES
-from tools.corpus_synth.isa_spec_index import (
+from tools.spec.isa_spec_index import (
     IsaEnum,
     IsaFieldSpec,
     IsaSpecIndex,

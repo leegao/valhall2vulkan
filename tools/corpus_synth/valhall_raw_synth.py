@@ -4,7 +4,7 @@ Raw Valhall 64-Bit Instruction Encoder & Pass-1 Lowering Verifier.
 Assembles any `IsaVariantSpec` + `FieldMutationCase` directly into valid 64-bit
 Valhall machine words, wraps it in a minimal self-contained shader stream
 (target instruction + canonical `NOP.end`), and verifies decoding and Pass-1
-SSA lowering via `build/spirv2valhall --raw-valhall-batch`.
+SSA lowering via `build/spirv2valhall --direct-isa`.
 
 Covers 100% of all 201 mnemonics (including all 34 `internal` ops and any
 `compute`/`graphics` ops not directly emitted by `libMali-Gxx` for Vulkan 1.3),
@@ -26,7 +26,7 @@ from tools.corpus_synth.isa_field_fragments import (
     FieldValue,
     generate_field_cases_for_spec,
 )
-from tools.corpus_synth.isa_spec_index import (
+from tools.spec.isa_spec_index import (
     IsaFieldSpec,
     IsaSpecIndex,
     IsaVariantSpec,
@@ -236,7 +236,7 @@ def verify_raw_valhall_batch(
                 fh.write(f"{ec.case.case_id}\t{ec.case.arch}\t{ec.stage}\t{words_csv}\n")
 
         proc = subprocess.run(
-            [bin_path, "--raw-valhall-batch", tsv_path],
+            [bin_path, "--direct-isa", tsv_path],
             check=False,
             capture_output=True,
             text=True,
@@ -244,7 +244,7 @@ def verify_raw_valhall_batch(
         )
         if proc.returncode != 0:
             raise RuntimeError(
-                f"spirv2valhall --raw-valhall-batch failed (rc={proc.returncode}): {proc.stderr.strip()[:300]}"
+                f"spirv2valhall --direct-isa failed (rc={proc.returncode}): {proc.stderr.strip()[:300]}"
             )
 
         results: list[RawVerifyResult] = []
