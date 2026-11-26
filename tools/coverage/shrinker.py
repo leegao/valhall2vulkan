@@ -38,6 +38,7 @@ class DiffPolicy:
     ignore_nan_payload: bool = True
     treat_neg_zero_eq: bool = True
     fp_output_prefixes: Tuple[str, ...] = ("frag_color[", "builtin_out[0]", "vert_var[")
+    max_abs_err: float = 0.0
 
 
 @dataclass
@@ -108,6 +109,9 @@ def classify_value_diff(
     ud = _f32_ulp_diff(du, vu)
     if ud is not None and ud <= policy.max_ulp:
         return "BENIGN_FP_ROUNDING", ud
+    if policy.max_abs_err > 0.0 and math.isfinite(df) and math.isfinite(vf):
+        if abs(df - vf) <= policy.max_abs_err:
+            return "BENIGN_FP_ROUNDING", ud
     return "REAL_DIVERGENCE", ud
 
 

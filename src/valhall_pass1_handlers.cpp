@@ -386,9 +386,18 @@ SsaId extract(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, co
             ? SsaOp::TupleExtract : SsaOp::VecExtract;
     ex.type = vt;
     uint32_t eff_idx = idx;
-    if (ex.op == SsaOp::VecExtract && src_ty == ValType::V4F32 &&
-        rule && rule->op_class == tables::OpClass::TexSample) {
+    bool is_tex_result = (vec < ctx.res.ssa.nodes.size() &&
+                          ctx.res.ssa.get(vec).op == SsaOp::TupleExtract);
+    if (ex.op == SsaOp::VecExtract && src_ty == ValType::V4F32 && is_tex_result &&
+        rule && (rule->op_class == tables::OpClass::TexSample ||
+                 rule->op_class == tables::OpClass::TexVarSample)) {
         eff_idx = map_tex_write_mask_channel(ins, idx);
+        if ((ins.mnemonic == Mnemonic::TEX_GATHER ||
+             ins.mnemonic == Mnemonic::VAR_TEX_GATHER) && eff_idx < 4u) {
+            // Valhall gather4 writes hardware channels (r,g,b,a) = SPIR-V (w,z,x,y) = (3,2,0,1).
+            static constexpr uint32_t kGather4Perm[4] = { 3u, 2u, 0u, 1u };
+            eff_idx = kGather4Perm[eff_idx];
+        }
     }
     ex.imm_u32 = eff_idx;
     ex.args = { vec };
@@ -430,7 +439,32 @@ SsaId sr_get(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, con
 
 void sr_set(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t offset, SsaId val) {
     uint8_t base = ins.sr_write.present ? ins.sr_write.base_reg : 0;
-    ctx.sb.set_reg(blk, static_cast<uint8_t>(base + offset), val);
+    uint8_t dst_reg = static_cast<uint8_t>(base + offset);
+    // BUG-020: LOAD.i16/i8 with extend=none and lane=h0/h1/b0..b3 inserts into the target
+    // subword lane of dst_reg while preserving all other bits of dst_reg.
+    if (offset == 0u && ins.mnemonic == Mnemonic::LOAD) {
+        auto it_ext = ins.modifier_strs.find("extend");
+        auto it_lane = ins.modifier_strs.find("lane");
+        if ((it_ext == ins.modifier_strs.end() || it_ext->second == "none") &&
+            it_lane != ins.modifier_strs.end()) {
+            const std::string& ln = it_lane->second;
+            uint32_t bit_off = 0u, bit_w = 0u;
+            if (ln == "h0") { bit_off = 0u; bit_w = 16u; }
+            else if (ln == "h1") { bit_off = 16u; bit_w = 16u; }
+            else if (ln == "b0") { bit_off = 0u; bit_w = 8u; }
+            else if (ln == "b1") { bit_off = 8u; bit_w = 8u; }
+            else if (ln == "b2") { bit_off = 16u; bit_w = 8u; }
+            else if (ln == "b3") { bit_off = 24u; bit_w = 8u; }
+            if (bit_w != 0u) {
+                SsaId prev = ctx.sb.current_reg(blk, dst_reg);
+                if (prev == kInvalidSsa) prev = ctx.sb.emit_const_u32(blk, 0u);
+                val = ctx.emit_op(blk, SsaOp::Bfi, ValType::U32, {
+                    prev, val, ctx.sb.emit_const_u32(blk, bit_off), ctx.sb.emit_const_u32(blk, bit_w)
+                });
+            }
+        }
+    }
+    ctx.sb.set_reg(blk, dst_reg, val);
 }
 
 SsaId tuple_val(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, ValType vt, SsaId tup) {
@@ -613,7 +647,7 @@ SsaId atomic_cmpxchg(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&,
     return ctx.sb.emit(blk, std::move(at));
 }
 
-SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*) {
+SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
     uint32_t attr_idx = 0;
     auto it = ins.fields.find("attribute_index");
     if (it != ins.fields.end()) attr_idx = it->second;
@@ -621,11 +655,17 @@ SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& 
     ld.op = SsaOp::LoadVertAttr;
     ld.type = ValType::V4F32;
     ld.imm_u32 = attr_idx;
+    if (ins.mnemonic == Mnemonic::LD_ATTR && !ins.srcs.empty()) {
+        uint32_t dyn_si = static_cast<uint32_t>(ins.srcs.size() - 1u);
+        SsaId raw_idx = fetch_src_int32(ctx, blk, ins, rule, dyn_si, false);
+        SsaId masked = ctx.emit_op(blk, SsaOp::BitAnd, ValType::U32, {raw_idx, ctx.sb.emit_const_u32(blk, 0xFFFFu)});
+        ld.args = { masked };
+    }
     ld.is_barrier_or_cf = true;
     return ctx.sb.emit(blk, std::move(ld));
 }
 
-SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, bool is_flat) {
+SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, bool is_flat) {
     uint32_t var_loc = 0;
     auto it = ins.fields.find("varying_index");
     if (it != ins.fields.end()) {
@@ -642,6 +682,12 @@ SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& i
     ld.type = ValType::V4F32;
     ld.imm_u32 = var_loc;
     ld.aux_bool = is_flat;
+    if ((ins.mnemonic == Mnemonic::LD_VAR || ins.mnemonic == Mnemonic::LD_VAR_FLAT) && !ins.srcs.empty()) {
+        uint32_t dyn_si = static_cast<uint32_t>(ins.srcs.size() - 1u);
+        SsaId raw_idx = fetch_src_int32(ctx, blk, ins, rule, dyn_si, false);
+        SsaId masked = ctx.emit_op(blk, SsaOp::BitAnd, ValType::U32, {raw_idx, ctx.sb.emit_const_u32(blk, 0xFFFFu)});
+        ld.args = { masked };
+    }
     ld.is_barrier_or_cf = true;
     return ctx.sb.emit(blk, std::move(ld));
 }
@@ -829,6 +875,10 @@ SsaId lea_tex(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, co
             tex_idx = it_fau->second;
             has_tex_idx = true;
         }
+    }
+    if (!has_tex_idx && ctx.opts.samplers.size() == 1u) {
+        tex_idx = ctx.opts.samplers[0].tex_index;
+        has_tex_idx = true;
     }
     SsaNode n{};
     n.op = SsaOp::ImageTexelAddr;

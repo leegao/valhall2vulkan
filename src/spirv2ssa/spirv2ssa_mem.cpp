@@ -678,6 +678,13 @@ LoweredValue SpirvLowerer::lower_load_ptr(uint32_t blk_id, uint32_t res_type, ui
         ld.type = ValType::V4F32;
         ld.imm_u32 = loc;
         ld.aux_bool = ptr.is_flat;
+        if (ptr.dynamic_index != valhall::compiler::kInvalidSsa) {
+            SsaId dyn_idx = sb_.emit_bitcast(blk_id, ValType::U32, ptr.dynamic_index);
+            SsaId dyn_loc = (loc != 0u)
+                ? emit_op(blk_id, SsaOp::IAdd, ValType::U32, {dyn_idx, sb_.emit_const_u32(blk_id, loc)})
+                : dyn_idx;
+            ld.args = { dyn_loc };
+        }
         ld.is_barrier_or_cf = true;
         SsaId vec4 = sb_.emit(blk_id, std::move(ld));
 

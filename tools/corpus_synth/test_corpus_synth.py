@@ -275,5 +275,85 @@ class TestCorpusSynth(unittest.TestCase):
                 self.assertEqual(ef.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for {label}, got {ef.status}")
 
 
+    def test_v48_1_gather_and_dynamic_attr_fixes(self) -> None:
+        """Regression test for Checkpoint v48.1 fixes (NEW-1, RC-10b, NEW-3, NEW-4)."""
+        import json, subprocess, tempfile
+        from pathlib import Path
+        from tools.corpus_synth.isa_recipes import RECIPES
+        from tools.corpus_synth.isa_spv_harness import build_spvasm_from_recipe
+        from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
+
+        for label in ("TEX_GATHER", "VAR_TEX_GATHER", "LD_ATTR", "LEA_BUF_IMM"):
+            rec = RECIPES[label]
+            with tempfile.TemporaryDirectory() as td:
+                asm = Path(td) / "s.spvasm"
+                spv = Path(td) / "s.spv"
+                eqj = Path(td) / "eq.json"
+                asm.write_text(build_spvasm_from_recipe(rec))
+                subprocess.run(["spirv-as", "--target-env", "vulkan1.3", str(asm), "-o", str(spv)], check=True)
+                subprocess.run(["./build/spirv2valhall", "--opt-ssa", "--defau", "--dump-equiv-json", str(eqj), "--quiet", str(spv)], check=True)
+                b = json.loads(eqj.read_text())
+                ef = run_concolic_equiv_fuzz(b, b["direct_ssa"], b["valhall_ssa"], k_init=8, fp_range="vulkan")
+                self.assertEqual(ef.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for {label}, got {ef.status}")
+
+
+    def test_v48_2_varying_sample_and_longitudinal(self) -> None:
+        """Regression test for Checkpoint v48.2 fixes (BUG-011..013) + longitudinal suite."""
+        import json, subprocess, tempfile
+        from pathlib import Path
+        from tools.corpus_synth.isa_recipes import RECIPES
+        from tools.corpus_synth.isa_spv_harness import build_spvasm_from_recipe
+        from tools.corpus_synth.longitudinal_fuzz import run_longitudinal_suite
+        from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
+
+        for label in ("LD_VAR", "LD_VAR_FLAT", "LD_VAR_SPECIAL", "LEA_TEX"):
+            rec = RECIPES[label]
+            with tempfile.TemporaryDirectory() as td:
+                asm, spv, eqj = Path(td) / "s.spvasm", Path(td) / "s.spv", Path(td) / "eq.json"
+                asm.write_text(build_spvasm_from_recipe(rec))
+                subprocess.run(["spirv-as", "--target-env", "vulkan1.3", str(asm), "-o", str(spv)], check=True)
+                subprocess.run(["./build/spirv2valhall", "--opt-ssa", "--defau", "--dump-equiv-json", str(eqj), "--quiet", str(spv)], check=True)
+                b = json.loads(eqj.read_text())
+                ef = run_concolic_equiv_fuzz(b, b["direct_ssa"], b["valhall_ssa"], k_init=8, fp_range="vulkan")
+                self.assertEqual(ef.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for {label}, got {ef.status}")
+
+        passing_longitudinal = [
+            "comp_02_v4u8_iadd_idpadd_iabs_mkvec",
+            "comp_03_bfi_bfe_msb_popcnt_div",
+            "comp_04_fp32_fma_clamp_csel_branch",
+            "comp_06_atom_acmpxchg_mix",
+            "comp_07_f16_to_s32_s8_to_f32_chain",
+            "comp_08_nested_branch_loop_phi",
+        ]
+        for r in run_longitudinal_suite(passing_longitudinal, k_init=8):
+            self.assertEqual(r.status, "EQUIV_EXACT", f"Longitudinal {r.name} got {r.status}")
+
+
+    def test_v48_3_longitudinal_12_and_transcendental_ulp(self) -> None:
+        """Regression test for Checkpoint v48.3 fixes (BUG-016, BUG-019, BUG-020)."""
+        import json, subprocess, tempfile
+        from pathlib import Path
+        from tools.corpus_synth.isa_recipes import RECIPES
+        from tools.corpus_synth.isa_spv_harness import build_spvasm_from_recipe
+        from tools.corpus_synth.longitudinal_fuzz import run_longitudinal_suite
+        from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
+
+        results = run_longitudinal_suite(k_init=8)
+        self.assertEqual(len(results), 12)
+        for r in results:
+            self.assertEqual(r.status, "EQUIV_EXACT", f"Longitudinal {r.name} got {r.status}")
+
+        for label in ("FADD_IMM", "FSIN_TABLE", "FCOS_TABLE"):
+            rec = RECIPES[label]
+            with tempfile.TemporaryDirectory() as td:
+                asm, spv, eqj = Path(td) / "s.spvasm", Path(td) / "s.spv", Path(td) / "eq.json"
+                asm.write_text(build_spvasm_from_recipe(rec))
+                subprocess.run(["spirv-as", "--target-env", "vulkan1.3", str(asm), "-o", str(spv)], check=True)
+                subprocess.run(["./build/spirv2valhall", "--opt-ssa", "--defau", "--dump-equiv-json", str(eqj), "--quiet", str(spv)], check=True)
+                b = json.loads(eqj.read_text())
+                ef = run_concolic_equiv_fuzz(b, b["direct_ssa"], b["valhall_ssa"], k_init=8, fp_range="vulkan")
+                self.assertIn(ef.status, ("EQUIV_EXACT", "EQUIV_WITHIN_ULP"), f"{label} got {ef.status}")
+
+
 if __name__ == "__main__":
     unittest.main()

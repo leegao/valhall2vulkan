@@ -52,6 +52,14 @@ class ConcreteShaderEnv(ShaderEnvBase):
             # using 1/256 granularity ensures exact Q8.8 fixed-point round-trip in Mali's sample table.
             h = _det_hash_u32(name, self.seed, self.vec_idx)
             return _f32_to_u32((h & 0xFF) / 256.0)
+        if name in ("bi_15_0", "bi_15_1"):
+            # Vulkan spec: gl_FragCoord.xy = floor(pixel_xy) + gl_SamplePosition.xy with pixel_xy >= 0.
+            h = _det_hash_u32(name, self.seed, self.vec_idx)
+            pix = float(h & 0xFF)
+            sp_name = "bi_19_0" if name == "bi_15_0" else "bi_19_1"
+            import struct as _st
+            sp_val = _st.unpack("<f", _st.pack("<I", self.sample_u32(sp_name)))[0]
+            return _f32_to_u32(pix + sp_val)
         if self.fp_range == "vulkan":
             rng = random.Random(_det_hash_u32(name, self.seed, self.vec_idx))
             if name in ("bi_42", "bi_43"):

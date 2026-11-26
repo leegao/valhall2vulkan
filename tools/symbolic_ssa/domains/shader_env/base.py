@@ -246,9 +246,18 @@ class ShaderEnvBase:
             for k in range(nwords):
                 self.rloc_by_word[w0 + k] = (bkey, uoff + k * 4)
 
-        self.sinp_addr_to_loc: dict[int, int] = {
-            int(s["addr"]): int(s["location"]) for s in self.mbs2.get("sinp", []) if int(s.get("location", -1)) >= 0
-        }
+        self.sinp_addr_to_loc: dict[int, int] = {}
+        _sinp_entries = sorted(
+            (int(s["addr"]), int(s["location"]))
+            for s in self.mbs2.get("sinp", [])
+            if int(s.get("location", -1)) >= 0
+        )
+        for _i, (_ad, _loc) in enumerate(_sinp_entries):
+            self.sinp_addr_to_loc[_ad] = _loc
+            if _i + 1 < len(_sinp_entries):
+                _next_ad = _sinp_entries[_i + 1][0]
+                for _k in range(1, _next_ad - _ad):
+                    self.sinp_addr_to_loc.setdefault(_ad + _k, _loc + _k)
         self.sout_addr_to_loc: dict[int, int] = {
             int(s["addr"]): int(s["location"]) for s in self.mbs2.get("sout", []) if int(s.get("location", -1)) >= 0
         }

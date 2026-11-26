@@ -584,6 +584,18 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
             break;
     }
 
+    // BUG-020: Quantize Float16 ext-inst results back to IEEE-754 binary16 so chained
+    // v2f16 ops (e.g. Fma -> Floor) match Valhall's intermediate f16 rounding.
+    if (const SpirvType* res_et = mod_.get_type(scalar_elem_type(res_type));
+        res_et && res_et->kind == SpirvTypeKind::Float && res_et->width == 16u) {
+        for (auto& lid : out.lanes) {
+            SsaId v2 = emit_op(blk_id, SsaOp::VecConstruct2, ValType::V2F32, {lid, lid});
+            SsaId pk = emit_op(blk_id, SsaOp::PackHalf2x16, ValType::U32, {v2});
+            SsaId up = emit_op(blk_id, SsaOp::UnpackHalf2x16, ValType::V2F32, {pk});
+            SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = 0; ex.args = {up};
+            lid = sb_.emit(blk_id, std::move(ex));
+        }
+    }
     values_[res_id] = std::move(out);
     return true;
 }
@@ -625,8 +637,52 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
     };
     auto emit_cmp = [&](SsaOp sop) {
         LoweredValue a = arg_v(3), b = arg_v(4);
+        const SpirvType* a_et = mod_.get_type(scalar_elem_type(a.spv_type_id));
+        bool is_i64_cmp = (a_et && a_et->kind == SpirvTypeKind::Int && a_et->width == 64u);
         for (uint32_t i = 0; i < nlanes; ++i) {
-            out.lanes.push_back(emit_op(blk_id, sop, ValType::Bool, {lane_of(a, i), lane_of(b, i)}));
+            SsaId la = lane_of(a, i), lb = lane_of(b, i);
+            if (!is_i64_cmp) {
+                out.lanes.push_back(emit_op(blk_id, sop, ValType::Bool, {la, lb}));
+                continue;
+            }
+            // BUG-019: ValhallSSA ICmp* ops are 32-bit; lower 64-bit integer compares via Split64.
+            SsaNode spa{}; spa.op = SsaOp::Split64; spa.type = ValType::TupleU32x2; spa.args = {la};
+            SsaId ta = sb_.emit(blk_id, std::move(spa));
+            SsaNode spb{}; spb.op = SsaOp::Split64; spb.type = ValType::TupleU32x2; spb.args = {lb};
+            SsaId tb = sb_.emit(blk_id, std::move(spb));
+            auto ex32 = [&](SsaId tup, uint32_t idx) {
+                SsaNode e{}; e.op = SsaOp::TupleExtract; e.type = ValType::U32; e.imm_u32 = idx; e.args = {tup};
+                return sb_.emit(blk_id, std::move(e));
+            };
+            SsaId alo = ex32(ta, 0), ahi = ex32(ta, 1);
+            SsaId blo = ex32(tb, 0), bhi = ex32(tb, 1);
+            SsaId hi_eq = emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {ahi, bhi});
+            if (sop == SsaOp::ICmpEq) {
+                SsaId lo_eq = emit_op(blk_id, SsaOp::ICmpEq, ValType::Bool, {alo, blo});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalAnd, ValType::Bool, {hi_eq, lo_eq}));
+            } else if (sop == SsaOp::ICmpNe) {
+                SsaId hi_ne = emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {ahi, bhi});
+                SsaId lo_ne = emit_op(blk_id, SsaOp::ICmpNe, ValType::Bool, {alo, blo});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalOr, ValType::Bool, {hi_ne, lo_ne}));
+            } else {
+                SsaOp hi_strict = SsaOp::ICmpUGt;
+                SsaOp lo_op = SsaOp::ICmpUGt;
+                switch (sop) {
+                    case SsaOp::ICmpUGt: hi_strict = SsaOp::ICmpUGt; lo_op = SsaOp::ICmpUGt; break;
+                    case SsaOp::ICmpUGe: hi_strict = SsaOp::ICmpUGt; lo_op = SsaOp::ICmpUGe; break;
+                    case SsaOp::ICmpULt: hi_strict = SsaOp::ICmpULt; lo_op = SsaOp::ICmpULt; break;
+                    case SsaOp::ICmpULe: hi_strict = SsaOp::ICmpULt; lo_op = SsaOp::ICmpULe; break;
+                    case SsaOp::ICmpSGt: hi_strict = SsaOp::ICmpSGt; lo_op = SsaOp::ICmpUGt; break;
+                    case SsaOp::ICmpSGe: hi_strict = SsaOp::ICmpSGt; lo_op = SsaOp::ICmpUGe; break;
+                    case SsaOp::ICmpSLt: hi_strict = SsaOp::ICmpSLt; lo_op = SsaOp::ICmpULt; break;
+                    case SsaOp::ICmpSLe: hi_strict = SsaOp::ICmpSLt; lo_op = SsaOp::ICmpULe; break;
+                    default: break;
+                }
+                SsaId c_hi = emit_op(blk_id, hi_strict, ValType::Bool, {ahi, bhi});
+                SsaId c_lo = emit_op(blk_id, lo_op, ValType::Bool, {alo, blo});
+                SsaId tie = emit_op(blk_id, SsaOp::LogicalAnd, ValType::Bool, {hi_eq, c_lo});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::LogicalOr, ValType::Bool, {c_hi, tie}));
+            }
         }
     };
 

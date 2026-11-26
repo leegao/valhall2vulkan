@@ -111,7 +111,32 @@ def run_concolic_equiv_fuzz(
     deadline = t0 + (time_budget_ms / 1000.0)
     is_valhall_seed = seed_side == "valhall"
     seed_ssa = valhall_ssa if is_valhall_seed else direct_ssa
-    eff_policy = policy if policy is not None else DiffPolicy()
+    if policy is not None:
+        eff_policy = policy
+    else:
+        eff_policy = DiffPolicy()
+        # RC-6: If direct_ssa stores an F32 (or Bitcast F32->U32) computed via
+        # transcendental ops into an SSBO, allow Vulkan GLSL.std.450 ULP tolerance (<=8 ULP).
+        _TRANSCENDENTALS = {"Sin", "Cos", "Tan", "Exp2", "Log2", "Pow", "Atan", "Atan2", "Rsqrt"}
+        _d_nodes = {int(n["id"]): n for n in direct_ssa.get("nodes", [])}
+        _has_trans = any(n.get("op") in _TRANSCENDENTALS for n in _d_nodes.values())
+        if _has_trans:
+            _has_fp_ssbo = False
+            for _n in _d_nodes.values():
+                if _n.get("op") == "PsbStore" and len(_n.get("args", [])) >= 2:
+                    _val = _d_nodes.get(int(_n["args"][1]))
+                    if _val and _val.get("type") == "F32":
+                        _has_fp_ssbo = True
+                    elif _val and _val.get("op") == "Bitcast" and _val.get("args"):
+                        _src = _d_nodes.get(int(_val["args"][0]))
+                        if _src and _src.get("type") == "F32":
+                            _has_fp_ssbo = True
+            if _has_fp_ssbo:
+                eff_policy = DiffPolicy(
+                    max_ulp=8,
+                    fp_output_prefixes=tuple(eff_policy.fp_output_prefixes) + ("ssbo:",),
+                    max_abs_err=2.0 ** -11,
+                )
 
     d_interp = ConcreteSsaInterpreter(direct_ssa, is_valhall_side=False)
     v_interp = ConcreteSsaInterpreter(valhall_ssa, is_valhall_side=True)

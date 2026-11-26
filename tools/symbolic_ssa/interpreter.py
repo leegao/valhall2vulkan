@@ -691,9 +691,11 @@ class SsaInterpreter(Generic[V]):
         if op == "LoadBuiltinInput":
             return self.load_builtin(imm_u32, vt)
         if op == "LoadVertAttr":
-            return self.load_vert_attr(imm_u32)
+            dyn_loc = int(args[0]) if (args and isinstance(args[0], int)) else imm_u32
+            return self.load_vert_attr(dyn_loc)
         if op == "LoadFragVarying":
-            return self.load_frag_varying(imm_u32)
+            dyn_loc = int(args[0]) if (args and isinstance(args[0], int)) else imm_u32
+            return self.load_frag_varying(dyn_loc)
         if op == "ImageQuerySize":
             return self.image_query_size(args[0] if args else self.const_u32(0), imm_u32, aux_str)
         if op in TEX_SAMPLE_OPS:
