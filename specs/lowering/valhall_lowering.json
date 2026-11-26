@@ -4845,9 +4845,12 @@
       "inline_ops": [
         "%a : u32 = %0;",
         "%b : u32 = %1;",
+        "%prev : u32 = %2;",
         "%cond : bool = @LOOKUP(uint_cmpf, $modifiers.cmpf)(%a, %b);",
         "if ($is_signed) { %as : s32 = @bitcast(%a); %bs : s32 = @bitcast(%b); %cond = @LOOKUP(sint_cmpf, $modifiers.cmpf)(%as, %bs); }",
-        "%out : u32 = Select(%cond, #lookup_u32(cmp_result_const, $modifiers.result_type), #u32(0));"
+        "%eq : bool = ICmpEq(%a, %b);",
+        "%cmp_res : u32 = Select(%cond, #lookup_u32(cmp_result_const, $modifiers.result_type), #u32(0));",
+        "%out : u32 = Select(%eq, %prev, %cmp_res);"
       ]
     },
     {
@@ -6467,7 +6470,7 @@
       "inline_ops": [
         "%addr : u64 = %0;",
         "if ($has_imm_nonzero) { %addr = IAdd64(%addr, #imm_u64); }",
-        "%tup : tuple_val_token = @atomic_cmpxchg(%addr, @sr_get(1), @sr_get(0), #token);",
+        "%tup : tuple_val_token = @atomic_cmpxchg(%addr, @sr_get(0), @sr_get(1), #token);",
         "%old : u32 = @tuple_val(%tup);",
         "@set_token(@tuple_tok(%tup));",
         "if ($sr_write_present) { @sr_set(0, %old); }"
@@ -6990,7 +6993,7 @@
         "%u : f32 = @extract(%uv4, 0);",
         "%v : f32 = @extract(%uv4, 1);",
         "%uv : v2f32 = VecConstruct2(%u, %v);",
-        "%tup : tuple_val_token = @tex_sample(%uv, false, #token);",
+        "%tup : tuple_val_token = @tex_sample(%uv, true, #token);",
         "%sampled : v4f32 = @tuple_val(%tup);",
         "@set_token(@tuple_tok(%tup));",
         "for (%c : 0 .. $sr_write_count_max4) {",

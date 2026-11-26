@@ -760,6 +760,10 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.type = ValType::TupleValToken;
     ts.imm_u32 = tex_idx;
     ts.imm_u32_2 = gcomp;
+    if (!has_tex_idx && ctx.opts.samplers.size() == 1u) {
+        tex_idx = ctx.opts.samplers[0].tex_index;
+        has_tex_idx = true;
+    }
     if (has_tex_idx) {
         uint32_t d_set = 0;
         uint32_t binding = tex_idx;
@@ -789,7 +793,8 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
             ts.args.push_back(abi::sr_get(ctx, blk, ins, nullptr, sr_i));
         }
     }
-    if (ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) {
+    if ((ts.op == SsaOp::TexSampleLod && is_zero_lod && !is_explicit_lod) ||
+        (ins.mnemonic == Mnemonic::TEX_FETCH && ts.args.size() == 1u)) {
         ts.args.push_back(ctx.sb.emit_const_u32(blk, 0u));
     }
     if (has_texel_offset && max_sr > 2u &&
@@ -966,7 +971,7 @@ void kill_cond(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const
 
 void handle_int_idpadd(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule) {
     std::string var = variant_to_string(ins.canonical_variant);
-    bool s0_signed = (var.find("s") == 0);
+    bool s0_signed = (var.find("s") != std::string::npos);
     bool s1_signed = s0_signed;
     if (ins.fields.count("unsigned0") && ins.fields.at("unsigned0") != 0) s0_signed = false;
     if (ins.fields.count("unsigned1") && ins.fields.at("unsigned1") != 0) s1_signed = false;

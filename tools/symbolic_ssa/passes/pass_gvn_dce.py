@@ -184,13 +184,6 @@ def pass_gvn_dce(
     next_nid = (max(nodes_by_id.keys()) + 1) if nodes_by_id else 1
     entry_bid = 0 if 0 in blocks_by_id else (min(blocks_by_id.keys()) if blocks_by_id else 0)
     shift_const_cache: dict[int, int] = {}
-    if entry_bid in blocks_by_id:
-        for nid in blocks_by_id[entry_bid].get("nodes", []):
-            n = nodes_by_id.get(nid)
-            if n and n.get("op") in ("ConstU32", "ConstS32"):
-                v = int(n.get("imm_u32", 0))
-                if 0 <= v < 32 and v not in shift_const_cache:
-                    shift_const_cache[v] = nid
 
     for nid, n in list(nodes_by_id.items()):
         if n.get("op") != "IMul":

@@ -130,7 +130,25 @@ bool SpirvLowerer::lower_glsl450_ext_inst(uint32_t blk_id, const SpirvInst& inst
         case kGlslRoundEven: emit_unary(SsaOp::RoundEven); break;
         case kGlslTrunc: emit_unary(SsaOp::Trunc); break;
         case kGlslFAbs: emit_unary(SsaOp::FAbs); break;
-        case kGlslSAbs: emit_unary(SsaOp::SAbs); break;
+        case kGlslSAbs: {
+            LoweredValue a = arg_val(0);
+            const SpirvType* src_et = mod_.get_type(scalar_elem_type(a.spv_type_id));
+            const SpirvType* dst_et = mod_.get_type(scalar_elem_type(res_type));
+            uint32_t sw = src_et ? src_et->width : 32u;
+            uint32_t dw = dst_et ? dst_et->width : 32u;
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId x = lane_of(a, i);
+                if (sw < 32u) {
+                    x = emit_op(blk_id, SsaOp::BfeS, ValType::S32, {sb_.emit_bitcast(blk_id, ValType::U32, x), sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, sw)});
+                }
+                SsaId r = emit_op(blk_id, SsaOp::SAbs, elem_vt, {x});
+                if (dw < 32u) {
+                    r = emit_op(blk_id, SsaOp::BfeU, elem_vt, {sb_.emit_bitcast(blk_id, ValType::U32, r), sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, dw)});
+                }
+                out.lanes.push_back(r);
+            }
+            break;
+        }
         case kGlslFSign: {
             LoweredValue a = arg_val(0);
             SsaId z = sb_.emit_const_f32_bits(blk_id, 0u);
@@ -732,7 +750,19 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         // Conversions
         case SpvOpConvertFToU: emit_unary(SsaOp::ConvertFToU); break;
         case SpvOpConvertFToS: emit_unary(SsaOp::ConvertFToS); break;
-        case SpvOpConvertSToF: emit_unary(SsaOp::ConvertSToF); break;
+        case SpvOpConvertSToF: {
+            LoweredValue a = arg_v(3);
+            const SpirvType* src_et = mod_.get_type(scalar_elem_type(a.spv_type_id));
+            uint32_t sw = src_et ? src_et->width : 32u;
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId x = lane_of(a, i);
+                if (sw < 32u) {
+                    x = emit_op(blk_id, SsaOp::BfeS, ValType::S32, {sb_.emit_bitcast(blk_id, ValType::U32, x), sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, sw)});
+                }
+                out.lanes.push_back(emit_op(blk_id, SsaOp::ConvertSToF, elem_vt, {x}));
+            }
+            break;
+        }
         case SpvOpConvertUToF: emit_unary(SsaOp::ConvertUToF); break;
         case SpvOpUConvert: {
             LoweredValue a = arg_v(3);
@@ -858,16 +888,49 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
                     out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, sb_.emit(blk_id, std::move(e1))));
                 }
             } else if (sw == 32 && dw == 16 && nlanes == a.lanes.size() * 2) {
+                bool dst_f16 = (et && et->kind == SpirvTypeKind::Float);
                 for (size_t i = 0; i < a.lanes.size(); ++i) {
                     SsaId u = sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[i]);
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, 16u)}));
-                    out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 16u), sb_.emit_const_u32(blk_id, 16u)}));
+                    if (dst_f16) {
+                        SsaId v2 = emit_op(blk_id, SsaOp::UnpackHalf2x16, ValType::V2F32, {u});
+                        SsaNode e0{}; e0.op = SsaOp::VecExtract; e0.type = ValType::F32; e0.imm_u32 = 0; e0.args = {v2};
+                        SsaNode e1{}; e1.op = SsaOp::VecExtract; e1.type = ValType::F32; e1.imm_u32 = 1; e1.args = {v2};
+                        out.lanes.push_back(sb_.emit(blk_id, std::move(e0)));
+                        out.lanes.push_back(sb_.emit(blk_id, std::move(e1)));
+                    } else {
+                        out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, 16u)}));
+                        out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, 16u), sb_.emit_const_u32(blk_id, 16u)}));
+                    }
                 }
             } else if (sw == 16 && dw == 32 && a.lanes.size() == nlanes * 2) {
+                bool src_f16 = (src_et && src_et->kind == SpirvTypeKind::Float);
                 for (uint32_t i = 0; i < nlanes; ++i) {
-                    SsaId lo = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i]), sb_.emit_const_u32(blk_id, 0xFFFFu)});
-                    SsaId hi = emit_op(blk_id, SsaOp::Shl, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i + 1]), sb_.emit_const_u32(blk_id, 16u)});
-                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, emit_op(blk_id, SsaOp::BitOr, ValType::U32, {lo, hi})));
+                    if (src_f16) {
+                        SsaId v2 = emit_op(blk_id, SsaOp::VecConstruct2, ValType::V2F32, {a.lanes[2 * i], a.lanes[2 * i + 1]});
+                        SsaId pk = emit_op(blk_id, SsaOp::PackHalf2x16, ValType::U32, {v2});
+                        out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, pk));
+                    } else {
+                        SsaId lo = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i]), sb_.emit_const_u32(blk_id, 0xFFFFu)});
+                        SsaId hi = emit_op(blk_id, SsaOp::Shl, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[2 * i + 1]), sb_.emit_const_u32(blk_id, 16u)});
+                        out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, emit_op(blk_id, SsaOp::BitOr, ValType::U32, {lo, hi})));
+                    }
+                }
+            } else if (sw == 32 && dw == 8 && nlanes == a.lanes.size() * 4) {
+                for (size_t i = 0; i < a.lanes.size(); ++i) {
+                    SsaId u = sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[i]);
+                    for (uint32_t b = 0; b < 4; ++b) {
+                        out.lanes.push_back(emit_op(blk_id, SsaOp::BfeU, ValType::U32, {u, sb_.emit_const_u32(blk_id, b * 8u), sb_.emit_const_u32(blk_id, 8u)}));
+                    }
+                }
+            } else if (sw == 8 && dw == 32 && a.lanes.size() == nlanes * 4) {
+                for (uint32_t i = 0; i < nlanes; ++i) {
+                    SsaId acc = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[4 * i]), sb_.emit_const_u32(blk_id, 0xFFu)});
+                    for (uint32_t b = 1; b < 4; ++b) {
+                        SsaId lane = emit_op(blk_id, SsaOp::BitAnd, ValType::U32, {sb_.emit_bitcast(blk_id, ValType::U32, a.lanes[4 * i + b]), sb_.emit_const_u32(blk_id, 0xFFu)});
+                        SsaId sh = emit_op(blk_id, SsaOp::Shl, ValType::U32, {lane, sb_.emit_const_u32(blk_id, b * 8u)});
+                        acc = emit_op(blk_id, SsaOp::BitOr, ValType::U32, {acc, sh});
+                    }
+                    out.lanes.push_back(sb_.emit_bitcast(blk_id, elem_vt, acc));
                 }
             } else {
                 for (uint32_t i = 0; i < nlanes; ++i) {
@@ -880,7 +943,17 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         // Arithmetic
         case SpvOpSNegate: emit_unary(SsaOp::SNeg); break;
         case SpvOpFNegate: emit_unary(SsaOp::FNeg); break;
-        case SpvOpIAdd: emit_binary(is_64 ? SsaOp::IAdd64 : SsaOp::IAdd); break;
+        case SpvOpIAdd: {
+            emit_binary(is_64 ? SsaOp::IAdd64 : SsaOp::IAdd);
+            uint32_t dw = et ? et->width : 32u;
+            if (!is_64 && dw < 32u) {
+                SsaOp mask_op = (et && et->is_signed) ? SsaOp::BfeS : SsaOp::BfeU;
+                for (auto& lid : out.lanes) {
+                    lid = emit_op(blk_id, mask_op, elem_vt, {sb_.emit_bitcast(blk_id, ValType::U32, lid), sb_.emit_const_u32(blk_id, 0u), sb_.emit_const_u32(blk_id, dw)});
+                }
+            }
+            break;
+        }
         case SpvOpFAdd: emit_binary(SsaOp::FAdd); break;
         case SpvOpISub: emit_binary(is_64 ? SsaOp::ISub64 : SsaOp::ISub); break;
         case SpvOpFSub: emit_binary(SsaOp::FSub); break;
@@ -1018,6 +1091,17 @@ bool SpirvLowerer::lower_alu_or_misc_inst(uint32_t blk_id, const SpirvInst& inst
         case SpvOpSDot: emit_binary(SsaOp::IDot4S); break;
         case SpvOpUDot: emit_binary(SsaOp::IDot4U); break;
         case SpvOpSUDot: emit_binary(SsaOp::IDot4SU); break;
+        case SpvOpSDotAccSat:
+        case SpvOpUDotAccSat:
+        case SpvOpSUDotAccSat: {
+            LoweredValue a = arg_v(3), b = arg_v(4), acc = arg_v(5);
+            SsaOp dot_op = (op == SpvOpSDotAccSat) ? SsaOp::IDot4S : (op == SpvOpUDotAccSat ? SsaOp::IDot4U : SsaOp::IDot4SU);
+            for (uint32_t i = 0; i < nlanes; ++i) {
+                SsaId d = emit_op(blk_id, dot_op, elem_vt, {lane_of(a, i), lane_of(b, i)});
+                out.lanes.push_back(emit_op(blk_id, SsaOp::IAdd, elem_vt, {d, lane_of(acc, i)}));
+            }
+            break;
+        }
 
         // Relational & Logical
         case SpvOpAny: {

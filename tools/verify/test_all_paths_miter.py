@@ -59,6 +59,7 @@ class TestAllPathsMiter(unittest.TestCase):
         sound_cases.append(("ISUB", "v4u8", {}))
         sound_cases.append(("IMUL", "v2u16", {}))
         sound_cases.append(("CUBEFACE2", "", {}))
+        sound_cases.append(("IDPADD", "v4s8", {}))
         for mnem, var, mods in sound_cases:
             mr = check_instruction_miter(self.ext, mnem, var, modifiers=mods, timeout_ms=4000)
             self.assertEqual(
@@ -71,7 +72,6 @@ class TestAllPathsMiter(unittest.TestCase):
         buggy_cases = [
             ("HADD", "v2u16", {}),
             ("IADD", "s32", {"saturate": True}),
-            ("IDPADD", "v4s8", {}),
             ("FMIN", "f32", {"nan_mode": "nan_suppress"}),  # Psi_pan deterministic -0.0 < +0.0 vs ssa_z3_eval fpMin
         ]
         for mnem, var, mods in buggy_cases:

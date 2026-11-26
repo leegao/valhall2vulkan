@@ -231,7 +231,7 @@ class TestCorpusSynth(unittest.TestCase):
         # 5. FMA_RSCALE verified SPIR-V emission + --slice-diff on MKVEC
         fma_r = synthesize_for_isa("FMA_RSCALE", mode="spirv")
         self.assertTrue(fma_r.compiled_ok and fma_r.target_emitted)
-        mk = synthesize_for_isa("MKVEC", mode="spirv", verify_equiv=True, k_init=4, fp_range="vulkan", slice_diff_depth=4)
+        mk = synthesize_for_isa("FATAN_ASSIST", mode="spirv", verify_equiv=True, k_init=4, fp_range="vulkan", slice_diff_depth=4)
         self.assertTrue(any("[SLICE-DIFF" in line for line in mk.slice_diff_lines))
 
         # 6. spirv-fuzz integration when prebuilt tool is present
@@ -244,6 +244,36 @@ class TestCorpusSynth(unittest.TestCase):
                 self.assertEqual(len(fuzzed), 1)
                 self.assertTrue(fuzzed[0].fuzz_ok and fuzzed[0].valid_spv and fuzzed[0].compiled_ok)
                 self.assertEqual(fuzzed[0].equiv_status, "EQUIV_EXACT")
+
+    def test_v48_lowering_and_opt_fixes(self) -> None:
+        """Regression test for Checkpoint v48 fixes (RC-1..RC-4, RC-9, RC-10d, RC-11)."""
+        import json, subprocess, tempfile
+        from pathlib import Path
+        from tools.corpus_synth.isa_recipes import RECIPES, VARIANT_RECIPES
+        from tools.corpus_synth.isa_spv_harness import build_spvasm_from_recipe
+        from tools.coverage.equiv_fuzzer import run_concolic_equiv_fuzz
+
+        probes = [
+            ("ATOM", RECIPES["ATOM"]),
+            ("ACMPXCHG", RECIPES["ACMPXCHG"]),
+            ("FADD.v2f16", VARIANT_RECIPES[("FADD", "v2f16")]),
+            ("IABS", RECIPES["IABS"]),
+            ("S16_TO_F32", RECIPES["S16_TO_F32"]),
+            ("IDPADD", RECIPES["IDPADD"]),
+            ("TEX_FETCH", RECIPES["TEX_FETCH"]),
+        ]
+        for label, rec in probes:
+            with tempfile.TemporaryDirectory() as td:
+                asm = Path(td) / "s.spvasm"
+                spv = Path(td) / "s.spv"
+                eqj = Path(td) / "eq.json"
+                asm.write_text(build_spvasm_from_recipe(rec))
+                subprocess.run(["spirv-as", "--target-env", "vulkan1.3", str(asm), "-o", str(spv)], check=True)
+                subprocess.run(["./build/spirv2valhall", "--opt-ssa", "--defau", "--dump-equiv-json", str(eqj), "--quiet", str(spv)], check=True)
+                b = json.loads(eqj.read_text())
+                ef = run_concolic_equiv_fuzz(b, b["direct_ssa"], b["valhall_ssa"], k_init=8, fp_range="vulkan")
+                self.assertEqual(ef.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for {label}, got {ef.status}")
+
 
 if __name__ == "__main__":
     unittest.main()

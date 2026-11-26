@@ -266,4 +266,6 @@ class ConcreteBitvecDomain(SsaDomain):
         return _det_hash_u32("SubgroupBallot", env.seed, env.vec_idx, self.as_u32(x), env.lane_id)
 
     def subgroup_shuffle(self, env: Any, x: Any, lane: Any) -> int:
+        if self.as_u32(lane) == (env.lane_id & 0xFFFFFFFF):
+            return self.as_u32(x)
         return _det_hash_u32("SubgroupShuffle", env.seed, env.vec_idx, self.as_u32(x), self.as_u32(lane), env.lane_id)
