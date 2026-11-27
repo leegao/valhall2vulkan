@@ -1072,7 +1072,7 @@ class CppSymbolicEvaluator:
                     return None
             if isinstance(obj, dict) and m == "end":
                 return ("end", obj)
-            if isinstance(obj, tuple) and obj[0] == "ssa" and m == "get":
+            if isinstance(obj, tuple) and obj[0] in ("ssa", "mod") and m == "get":
                 return obj[1].nodes[int(args[0])]
             qc = expr.qualified_callee
             if not qc and isinstance(obj, tuple) and obj[0] == "sb":

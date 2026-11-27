@@ -1,11 +1,11 @@
 #pragma once
 
 #include "equiv_bundle.h"
+#include "panfrost_vk_compiler.h"
 #include "valhall_to_spirv.h"
 
-#include <map>
-
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -13,16 +13,18 @@ namespace valhall::spirv2valhall {
 
 enum class PanfrostMode {
     None,
-    Vulkan,  // --panfrost: Native Mesa Panfrost Vulkan SPIR-V -> NIR -> Valhall ISA (VS/FS/CS)
+    Vulkan,  // --panfrost: Native Mesa Panfrost Vulkan SPIR-V -> NIR -> Valhall ISA (VS/FS/CS) via panfrost_vk_compile
     OpenCL,  // --panfrost-cl: OpenCL (or translated Vulkan compute) SPIR-V -> panfrost_compile
 };
 
 struct PanfrostKernelBinary {
     std::string name;
     valhall::ShaderStage stage = valhall::ShaderStage::Compute;
-    uint8_t arch = 10;
+    uint8_t arch = 11;
     uint32_t local_size[3] = {1, 1, 1};
     uint32_t work_reg_count = 32;
+    uint32_t tls_size = 0;
+    uint32_t wls_size = 0;
     std::vector<uint8_t> ebin_bytes;
     std::string header_text;
 };
@@ -39,6 +41,16 @@ struct PanfrostArgBinding {
 struct PanfrostCompileResult {
     bool ok = false;
     std::string error;
+    std::string backend_used;  // "kraid", "bifrost", or "opencl"
+    bool idvs = true;
+    bool robust = false;
+    bool merge_workgroups = false;
+    uint32_t fau_sysval_slots = 0;
+    uint32_t fau_driver_slots = 0;
+    uint32_t fau_reserved_words = 0;
+    uint32_t fau_total_words = 0;
+    std::vector<uint32_t> used_sysval_words;
+    std::vector<uint32_t> used_push_const_words;
     std::vector<PanfrostKernelBinary> kernels;
     std::vector<PanfrostArgBinding> arg_bindings;
     std::map<uint32_t, uint32_t> fau_const_words;
@@ -47,7 +59,10 @@ struct PanfrostCompileResult {
 
 struct PanfrostRunOptions {
     PanfrostMode mode = PanfrostMode::None;
-    uint8_t arch = 10;
+    uint8_t arch = 11;
+    PanfrostVkBackend vk_backend = PanfrostVkBackend::Auto;
+    bool vk_robust = false;
+    bool vk_no_idvs = false;
     std::string panfrost_bin;
     std::string out_bin_prefix;
     std::string out_spirv_prefix;
@@ -61,7 +76,7 @@ struct PanfrostRunOptions {
     bool verbose = false;
 };
 
-/// Locate the Panfrost `panfrost_compile` compiler executable.
+/// Locate the Panfrost OpenCL `panfrost_compile` compiler executable.
 /// Search order: explicit_path, PANFROST_COMPILE_BIN env var,
 /// third_party/prebuilts/panfrost/panfrost_compile (CWD or parent dirs), then PATH.
 std::string find_panfrost_compiler(const std::string& explicit_path = "");
@@ -90,7 +105,10 @@ PanfrostCompileResult compile_with_panfrost(
     PanfrostMode mode,
     uint8_t arch,
     const std::string& panfrost_bin = "",
-    bool verbose = false);
+    bool verbose = false,
+    PanfrostVkBackend vk_backend = PanfrostVkBackend::Auto,
+    bool vk_robust = false,
+    bool vk_no_idvs = false);
 
 /// End-to-end CLI driver for `--panfrost` and `--panfrost-cl` modes in `spirv2valhall`.
 /// Supports Valhall ISA disassembly, `--out-bin`, `--dump-ssa`, `--dump-ssa-json`,

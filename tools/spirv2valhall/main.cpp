@@ -47,9 +47,12 @@ static void print_usage(const char* argv0) {
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
         << "  --mali-lib <PATH>           Path to libMali-Gxx_r55p0-00rel0.so\n"
-        << "  --panfrost                  Compile Vulkan SPIR-V via Mesa Panfrost (spirv -> isa -> ssa)\n"
-        << "  --panfrost-cl               Compile OpenCL SPIR-V via Mesa Panfrost (spirv -> isa -> ssa)\n"
-        << "  --panfrost-bin <PATH>       Path to panfrost_compile executable\n"
+        << "  --panfrost                  Compile Vulkan SPIR-V via Mesa Panfrost (panfrost_vk_compile)\n"
+        << "  --panfrost-cl               Compile OpenCL SPIR-V via Mesa Panfrost (panfrost_compile)\n"
+        << "  --panfrost-backend <MODE>   Panfrost Vulkan backend: auto, kraid, or bifrost (default: auto)\n"
+        << "  --panfrost-robust           Enable SSBO/descriptor robustness bounds checks in panfrost_vk_compile\n"
+        << "  --panfrost-no-idvs          Disable IDVS for vertex shaders in panfrost_vk_compile\n"
+        << "  --panfrost-bin <PATH>       Path to panfrost_vk_compile (or panfrost_compile for --panfrost-cl)\n"
         << "  --no-strip-caps             Do not strip unused Float64/Interlock capabilities\n"
         << "  --mods                      Include decoded modifier key=value pairs\n"
         << "  --quiet                     Do not print text output to stdout\n"
@@ -88,6 +91,9 @@ int main(int argc, char** argv) {
     bool dump_spirv = false;
     bool quiet = false;
     valhall::spirv2valhall::PanfrostMode panfrost_mode = valhall::spirv2valhall::PanfrostMode::None;
+    valhall::spirv2valhall::PanfrostVkBackend panfrost_vk_backend = valhall::spirv2valhall::PanfrostVkBackend::Auto;
+    bool panfrost_vk_robust = false;
+    bool panfrost_vk_no_idvs = false;
     std::string panfrost_bin;
 
     for (int i = 1; i < argc; ++i) {
@@ -148,6 +154,19 @@ int main(int argc, char** argv) {
             panfrost_mode = valhall::spirv2valhall::PanfrostMode::Vulkan;
         } else if (arg == "--panfrost-cl") {
             panfrost_mode = valhall::spirv2valhall::PanfrostMode::OpenCL;
+        } else if (arg == "--panfrost-backend" && i + 1 < argc) {
+            std::string b = argv[++i];
+            if (b == "auto") panfrost_vk_backend = valhall::spirv2valhall::PanfrostVkBackend::Auto;
+            else if (b == "kraid") panfrost_vk_backend = valhall::spirv2valhall::PanfrostVkBackend::Kraid;
+            else if (b == "bifrost") panfrost_vk_backend = valhall::spirv2valhall::PanfrostVkBackend::Bifrost;
+            else {
+                std::cerr << "spirv2valhall: unknown --panfrost-backend '" << b << "' (expected auto|kraid|bifrost)\n";
+                return 2;
+            }
+        } else if (arg == "--panfrost-robust") {
+            panfrost_vk_robust = true;
+        } else if (arg == "--panfrost-no-idvs") {
+            panfrost_vk_no_idvs = true;
         } else if (arg == "--panfrost-bin" && i + 1 < argc) {
             panfrost_bin = argv[++i];
         } else if (arg == "--no-strip-caps") {
@@ -181,6 +200,9 @@ int main(int argc, char** argv) {
         valhall::spirv2valhall::PanfrostRunOptions popts;
         popts.mode = panfrost_mode;
         popts.arch = opts.arch;
+        popts.vk_backend = panfrost_vk_backend;
+        popts.vk_robust = panfrost_vk_robust;
+        popts.vk_no_idvs = panfrost_vk_no_idvs;
         popts.panfrost_bin = panfrost_bin;
         popts.out_bin_prefix = out_bin_prefix;
         popts.out_spirv_prefix = out_spirv_prefix;

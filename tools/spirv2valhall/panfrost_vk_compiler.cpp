@@ -1,328 +1,104 @@
 #include "panfrost_vk_compiler.h"
 
-#include <dlfcn.h>
-#include <elf.h>
 #include <fcntl.h>
-#include <link.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <unordered_map>
+
+namespace fs = std::filesystem;
 
 namespace valhall::spirv2valhall {
 
 namespace {
 
-// Mesa 26.3 ABI structures matching the prebuilt panfrost_compile DWARF layout.
-struct SpirvToNirOptionsAbi {
-    uint32_t environment;
-    uint8_t pad0[20];
-    const void* capabilities;
-    uint32_t ubo_addr_format;
-    uint32_t ssbo_addr_format;
-    uint32_t phys_ssbo_addr_format;
-    uint32_t push_const_addr_format;
-    uint32_t shared_addr_format;
-    uint32_t task_payload_addr_format;
-    uint32_t global_addr_format;
-    uint32_t temp_addr_format;
-    uint32_t constant_addr_format;
-    uint32_t min_ubo_alignment;
-    uint32_t min_ssbo_alignment;
-    uint8_t pad1[144 - 76];
-};
-static_assert(sizeof(SpirvToNirOptionsAbi) == 144, "spirv_to_nir_options ABI size mismatch");
-
-struct PanCompileInputsAbi {
-    uint64_t gpu_id;
-    uint32_t gpu_variant;
-    bool is_blend;
-    bool is_blit;
-    bool no_idvs;
-    uint8_t pad0;
-    uint32_t view_mask;
-    uint8_t fragcolor_nr_cbufs;
-    uint8_t pad1[3];
-    uint32_t robust_modes;
-    bool robust_descriptors;
-    uint8_t pad2[3];
-    const void* varying_layout;
-    uint32_t fau_reserved;
-    uint32_t fau_pushable_ubos;
-    bool fau_promote_immediates;
-    uint8_t pad3[7];
-};
-static_assert(sizeof(PanCompileInputsAbi) == 56, "pan_compile_inputs ABI size mismatch");
-
-struct UtilDynarrayAbi {
-    void* mem_ctx;
-    void* data;
-    uint32_t size;
-    uint32_t capacity;
-};
-static_assert(sizeof(UtilDynarrayAbi) == 24, "util_dynarray ABI size mismatch");
-
-struct ExecNodeAbi {
-    ExecNodeAbi* next;
-    ExecNodeAbi* prev;
-};
-
-struct ExecListAbi {
-    ExecNodeAbi head_sentinel;
-    ExecNodeAbi tail_sentinel;
-};
-
-struct NirCursorAbi {
-    uint32_t option;
-    uint32_t pad;
-    void* ptr;
-};
-
-// Mesa 26.3 NIR enum constants verified against panfrost_compile DWARF.
-constexpr uint32_t kNirVarShaderIn = 1u << 2;
-constexpr uint32_t kNirVarShaderOut = 1u << 3;
-constexpr uint32_t kNirVarMemUbo = 1u << 7;
-constexpr uint32_t kNirVarMemPushConst = 1u << 8;
-constexpr uint32_t kNirVarMemSsbo = 1u << 9;
-constexpr uint32_t kNirVarMemShared = 1u << 24;
-constexpr uint32_t kNirVarAll = 0x03ffffffu;
-
-constexpr uint32_t kNirAddr64BitGlobal = 1;
-constexpr uint32_t kNirAddr32BitIndexOffset = 5;
-constexpr uint32_t kNirAddr32BitOffset = 9;
-
-constexpr uint32_t kNirInstrTypeTex = 3;
-constexpr uint32_t kNirInstrTypeIntrinsic = 4;
-
-constexpr uint32_t kNirTexSrcTextureDeref = 13;
-constexpr uint32_t kNirTexSrcSamplerDeref = 14;
-
-constexpr uint32_t kNirIntrinLoadPushConstant = 524;
-constexpr uint32_t kNirIntrinLoadViewportOffset = 729;
-constexpr uint32_t kNirIntrinLoadViewportScale = 730;
-constexpr uint32_t kNirIntrinLoadVulkanDescriptor = 742;
-constexpr uint32_t kNirIntrinVulkanResourceIndex = 946;
-
-constexpr size_t kPanShaderInfoFauOffset = 420;
-constexpr size_t kPanFauWordsCount = 128;
-
-/// Resolved Mesa 26.3 compiler function pointers loaded once from panfrost_compile.
-struct MesaVkApi {
-    bool loaded = false;
-    std::string loaded_path;
-    std::string load_error;
-
-    void (*glsl_init)() = nullptr;
-    const void* (*pan_get_opts)(unsigned, int, bool) = nullptr;
-    void* (*spirv_to_nir)(const uint32_t*, size_t, void*, int, const char*, const void*, const void*) = nullptr;
-    bool (*nir_lower_variable_initializers)(void*, uint32_t) = nullptr;
-    bool (*nir_lower_returns)(void*) = nullptr;
-    bool (*nir_inline_functions)(void*) = nullptr;
-    void (*nir_remove_non_entrypoints)(void*) = nullptr;
-    bool (*nir_lower_io_vars_to_temporaries)(void*, void*, uint32_t) = nullptr;
-    bool (*nir_lower_global_vars_to_local)(void*) = nullptr;
-    bool (*nir_split_var_copies)(void*) = nullptr;
-    bool (*nir_opt_copy_prop_vars)(void*) = nullptr;
-    bool (*nir_opt_combine_stores)(void*, uint32_t) = nullptr;
-    bool (*nir_lower_var_copies)(void*) = nullptr;
-    bool (*nir_lower_memcpy)(void*) = nullptr;
-    bool (*nir_lower_vars_to_ssa)(void*) = nullptr;
-    bool (*nir_lower_system_values)(void*) = nullptr;
-    bool (*nir_lower_compute_system_values)(void*, const void*) = nullptr;
-    bool (*nir_lower_vars_to_explicit_types)(void*, uint32_t, void*) = nullptr;
-    void* glsl_cl_size_align = nullptr;
-    void* type_size_vec4 = nullptr;
-    bool (*nir_lower_explicit_io)(void*, uint32_t, uint32_t) = nullptr;
-    void (*nir_assign_io_var_locations)(void*, uint32_t, unsigned*, int) = nullptr;
-    bool (*nir_lower_io)(void*, uint32_t, void*, uint32_t) = nullptr;
-    void (*pan_preprocess_nir)(void*, uint64_t) = nullptr;
-    void (*pan_postprocess_nir)(void*, const void*, void*) = nullptr;
-    void (*pan_varying_collect_formats)(void*, void*, uint64_t) = nullptr;
-    void (*pan_build_varying_layout_compact)(void*, void*, uint64_t) = nullptr;
-    bool (*nir_opt_constant_folding)(void*) = nullptr;
-    bool (*nir_opt_dce)(void*) = nullptr;
-    void (*pan_shader_compile)(void*, void*, void*, void*) = nullptr;
-    void* (*nir_load_const_instr_create)(void*, unsigned, unsigned) = nullptr;
-    void (*nir_instr_insert)(NirCursorAbi, void*) = nullptr;
-    void (*nir_def_rewrite_uses)(void*, void*) = nullptr;
-    void (*nir_instr_remove_v)(void*) = nullptr;
-    void (*nir_tex_instr_remove_src)(void*, unsigned) = nullptr;
-};
-
-static bool load_elf_symtab(
-    const std::string& elf_path,
-    std::unordered_map<std::string, uint64_t>* out_syms,
-    std::string* err) {
-    int fd = ::open(elf_path.c_str(), O_RDONLY);
-    if (fd < 0) {
-        if (err) *err = "Failed to open " + elf_path;
-        return false;
-    }
+bool is_executable_file(const std::string& path) {
+    if (path.empty()) return false;
     struct stat st {};
-    if (::fstat(fd, &st) != 0 || st.st_size < static_cast<off_t>(sizeof(Elf64_Ehdr))) {
-        ::close(fd);
-        if (err) *err = "Invalid ELF file: " + elf_path;
-        return false;
-    }
-    void* mapped = ::mmap(nullptr, static_cast<size_t>(st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
-    ::close(fd);
-    if (mapped == MAP_FAILED) {
-        if (err) *err = "mmap failed for " + elf_path;
-        return false;
-    }
+    if (::stat(path.c_str(), &st) != 0) return false;
+    if (!S_ISREG(st.st_mode)) return false;
+    return ::access(path.c_str(), X_OK) == 0;
+}
 
-    const auto* base = static_cast<const uint8_t*>(mapped);
-    const auto* eh = reinterpret_cast<const Elf64_Ehdr*>(base);
-    const auto* sh = reinterpret_cast<const Elf64_Shdr*>(base + eh->e_shoff);
-    bool found_symtab = false;
-    for (int i = 0; i < eh->e_shnum; ++i) {
-        if (sh[i].sh_type != SHT_SYMTAB) continue;
-        found_symtab = true;
-        const auto* syms = reinterpret_cast<const Elf64_Sym*>(base + sh[i].sh_offset);
-        size_t count = sh[i].sh_size / sizeof(Elf64_Sym);
-        const char* strtab = reinterpret_cast<const char*>(base + sh[sh[i].sh_link].sh_offset);
-        for (size_t k = 0; k < count; ++k) {
-            if (syms[k].st_name != 0 && syms[k].st_value != 0) {
-                (*out_syms)[strtab + syms[k].st_name] = syms[k].st_value;
-            }
-        }
-    }
-    ::munmap(mapped, static_cast<size_t>(st.st_size));
-    if (!found_symtab) {
-        if (err) *err = "No .symtab section in " + elf_path + " (cannot resolve Mesa Vulkan symbols)";
+bool read_file_bytes(const std::string& path, std::vector<uint8_t>* out, std::string* err) {
+    std::ifstream ifs(path, std::ios::binary);
+    if (!ifs) {
+        if (err) *err = "Failed to open file: " + path;
         return false;
     }
+    out->assign((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     return true;
 }
 
-static const MesaVkApi& get_mesa_vk_api(const std::string& panfrost_bin) {
-    static MesaVkApi api;
-    if (api.loaded && api.loaded_path == panfrost_bin) {
-        return api;
-    }
-    api = MesaVkApi{};
-    api.loaded_path = panfrost_bin;
-
-    std::unordered_map<std::string, uint64_t> syms;
-    if (!load_elf_symtab(panfrost_bin, &syms, &api.load_error)) {
-        return api;
-    }
-
-    void* handle = ::dlopen(panfrost_bin.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (!handle) {
-        const char* dlerr = ::dlerror();
-        api.load_error = std::string("dlopen(") + panfrost_bin + ") failed: " +
-                         (dlerr ? dlerr : "unknown error");
-        return api;
-    }
-    struct link_map* lm = nullptr;
-    if (::dlinfo(handle, RTLD_DI_LINKMAP, &lm) != 0 || !lm) {
-        api.load_error = "dlinfo(RTLD_DI_LINKMAP) failed for " + panfrost_bin;
-        return api;
-    }
-    uintptr_t base = static_cast<uintptr_t>(lm->l_addr);
-
-    auto resolve = [&](const char* name, auto& dst) -> bool {
-        auto it = syms.find(name);
-        if (it == syms.end()) {
-            api.load_error = std::string("Missing Mesa symbol in panfrost_compile: ") + name;
-            return false;
-        }
-        using FnType = std::remove_reference_t<decltype(dst)>;
-        dst = reinterpret_cast<FnType>(base + it->second);
-        return true;
-    };
-
-    bool ok =
-        resolve("glsl_type_singleton_init_or_ref", api.glsl_init) &&
-        resolve("pan_get_nir_shader_compiler_options", api.pan_get_opts) &&
-        resolve("spirv_to_nir", api.spirv_to_nir) &&
-        resolve("nir_lower_variable_initializers", api.nir_lower_variable_initializers) &&
-        resolve("nir_lower_returns", api.nir_lower_returns) &&
-        resolve("nir_inline_functions", api.nir_inline_functions) &&
-        resolve("nir_remove_non_entrypoints", api.nir_remove_non_entrypoints) &&
-        resolve("nir_lower_io_vars_to_temporaries", api.nir_lower_io_vars_to_temporaries) &&
-        resolve("nir_lower_global_vars_to_local", api.nir_lower_global_vars_to_local) &&
-        resolve("nir_split_var_copies", api.nir_split_var_copies) &&
-        resolve("nir_opt_copy_prop_vars", api.nir_opt_copy_prop_vars) &&
-        resolve("nir_opt_combine_stores", api.nir_opt_combine_stores) &&
-        resolve("nir_lower_var_copies", api.nir_lower_var_copies) &&
-        resolve("nir_lower_memcpy", api.nir_lower_memcpy) &&
-        resolve("nir_lower_vars_to_ssa", api.nir_lower_vars_to_ssa) &&
-        resolve("nir_lower_system_values", api.nir_lower_system_values) &&
-        resolve("nir_lower_compute_system_values", api.nir_lower_compute_system_values) &&
-        resolve("nir_lower_vars_to_explicit_types", api.nir_lower_vars_to_explicit_types) &&
-        resolve("glsl_get_cl_type_size_align", api.glsl_cl_size_align) &&
-        resolve("type_size_vec4", api.type_size_vec4) &&
-        resolve("nir_lower_explicit_io", api.nir_lower_explicit_io) &&
-        resolve("nir_assign_io_var_locations", api.nir_assign_io_var_locations) &&
-        resolve("nir_lower_io", api.nir_lower_io) &&
-        resolve("pan_preprocess_nir", api.pan_preprocess_nir) &&
-        resolve("pan_postprocess_nir", api.pan_postprocess_nir) &&
-        resolve("pan_varying_collect_formats", api.pan_varying_collect_formats) &&
-        resolve("pan_build_varying_layout_compact", api.pan_build_varying_layout_compact) &&
-        resolve("nir_opt_constant_folding", api.nir_opt_constant_folding) &&
-        resolve("nir_opt_dce", api.nir_opt_dce) &&
-        resolve("pan_shader_compile", api.pan_shader_compile) &&
-        resolve("nir_load_const_instr_create", api.nir_load_const_instr_create) &&
-        resolve("nir_instr_insert", api.nir_instr_insert) &&
-        resolve("nir_def_rewrite_uses", api.nir_def_rewrite_uses) &&
-        resolve("nir_instr_remove_v", api.nir_instr_remove_v) &&
-        resolve("nir_tex_instr_remove_src", api.nir_tex_instr_remove_src);
-
-    if (ok) {
-        api.glsl_init();
-        api.loaded = true;
-    }
-    return api;
-}
-
-struct SpvMeta {
-    int mesa_stage = -1;
-    valhall::ShaderStage stage = valhall::ShaderStage::Compute;
-    std::string entry_point = "main";
-    uint32_t local_size[3] = {1, 1, 1};
-    std::map<uint32_t, std::string> srt_pka_buf_names;
-};
-
-static bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::string* err) {
-    if (words.size() < 5 || words[0] != 0x07230203u) {
-        if (err) *err = "Invalid SPIR-V magic header";
+bool read_file_text(const std::string& path, std::string* out, std::string* err) {
+    std::ifstream ifs(path);
+    if (!ifs) {
+        if (err) *err = "Failed to open file: " + path;
         return false;
     }
+    std::ostringstream ss;
+    ss << ifs.rdbuf();
+    *out = ss.str();
+    return true;
+}
+
+/// Minimal SPIR-V metadata needed to complement `panfrost_vk_compile --info-json`
+/// (specifically compute LocalSize and SSBO vs. UBO storage class per (set, binding)).
+struct SpvMeta {
+    std::string entry_point = "main";
+    valhall::ShaderStage stage = valhall::ShaderStage::Compute;
+    uint32_t local_size[3] = {1, 1, 1};
+    /// Maps ((set << 16) | binding) -> storage class (12 = StorageBuffer, 2 = Uniform).
+    std::unordered_map<uint64_t, uint32_t> binding_storage_class;
+};
+
+bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::string* err) {
+    if (words.size() < 5 || words[0] != 0x07230203u) {
+        if (err) *err = "Invalid SPIR-V magic/header";
+        return false;
+    }
+    bool found_ep = false;
     std::unordered_map<uint32_t, uint32_t> desc_set;
     std::unordered_map<uint32_t, uint32_t> binding;
-    std::unordered_map<uint32_t, uint32_t> var_storage_class;
-    std::unordered_map<uint32_t, bool> type_is_buffer_block;
-    std::unordered_map<uint32_t, uint32_t> ptr_pointee;
+    std::unordered_map<uint32_t, uint32_t> var_sc;
+    std::unordered_map<uint32_t, uint32_t> ptr_to_pointee;
+    std::unordered_map<uint32_t, bool> is_buffer_block;
 
     size_t i = 5;
     while (i < words.size()) {
         uint16_t wc = static_cast<uint16_t>(words[i] >> 16);
         uint16_t op = static_cast<uint16_t>(words[i] & 0xFFFFu);
         if (wc == 0 || i + wc > words.size()) break;
-        if (op == 15 && wc >= 4 && out->mesa_stage < 0) {  // OpEntryPoint
-            uint32_t em = words[i + 1];
-            const char* nm = reinterpret_cast<const char*>(&words[i + 3]);
-            out->entry_point = nm;
-            if (em == 0) {
-                out->mesa_stage = 0;
+        if (op == 15 && wc >= 4 && !found_ep) {  // OpEntryPoint
+            uint32_t model = words[i + 1];
+            if (model == 0) {
                 out->stage = valhall::ShaderStage::Vertex;
-            } else if (em == 4) {
-                out->mesa_stage = 4;
+            } else if (model == 4) {
                 out->stage = valhall::ShaderStage::Fragment;
-            } else if (em == 5) {
-                out->mesa_stage = 5;
+            } else if (model == 5) {
                 out->stage = valhall::ShaderStage::Compute;
+            } else {
+                if (err) {
+                    *err = "Unsupported SPIR-V execution model " + std::to_string(model) +
+                           " for Panfrost Vulkan compiler (supported: Vertex, Fragment, GLCompute)";
+                }
+                return false;
             }
+            const char* name_ptr = reinterpret_cast<const char*>(&words[i + 3]);
+            size_t max_len = (wc - 3) * 4;
+            size_t len = strnlen(name_ptr, max_len);
+            out->entry_point.assign(name_ptr, len);
+            found_ep = true;
         } else if (op == 16 && wc >= 6 && words[i + 2] == 17) {  // OpExecutionMode LocalSize
             out->local_size[0] = words[i + 3];
             out->local_size[1] = words[i + 4];
@@ -331,237 +107,322 @@ static bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out,
             uint32_t target = words[i + 1];
             uint32_t dec = words[i + 2];
             if (dec == 34 && wc >= 4) desc_set[target] = words[i + 3];  // DescriptorSet
-            if (dec == 33 && wc >= 4) binding[target] = words[i + 3];   // Binding
-            if (dec == 3) type_is_buffer_block[target] = true;          // BufferBlock
+            else if (dec == 33 && wc >= 4) binding[target] = words[i + 3];  // Binding
+            else if (dec == 3) is_buffer_block[target] = true;  // BufferBlock (legacy SSBO in Uniform SC)
         } else if (op == 32 && wc >= 4) {  // OpTypePointer
-            ptr_pointee[words[i + 1]] = words[i + 3];
+            ptr_to_pointee[words[i + 1]] = words[i + 3];
         } else if (op == 59 && wc >= 4) {  // OpVariable
-            uint32_t result_type = words[i + 1];
-            uint32_t id = words[i + 2];
+            uint32_t res_type = words[i + 1];
+            uint32_t res_id = words[i + 2];
             uint32_t sc = words[i + 3];
-            if (sc == 2 || sc == 12) {  // Uniform or StorageBuffer
-                var_storage_class[id] = sc;
-                if (sc == 2) {
-                    auto pit = ptr_pointee.find(result_type);
-                    if (pit != ptr_pointee.end() && type_is_buffer_block.count(pit->second)) {
-                        var_storage_class[id] = 12;  // Legacy BufferBlock SSBO
-                    }
-                }
+            if (sc == 2 && ptr_to_pointee.count(res_type) && is_buffer_block[ptr_to_pointee[res_type]]) {
+                sc = 12;  // Uniform + BufferBlock -> SSBO
             }
+            var_sc[res_id] = sc;
         }
         i += wc;
     }
-
-    if (out->mesa_stage < 0) {
-        if (err) *err = "Unsupported or missing Vulkan SPIR-V entry point (only Vertex/Fragment/Compute supported)";
+    if (!found_ep) {
+        if (err) *err = "No OpEntryPoint found in SPIR-V module";
         return false;
     }
-
-    // Build Valhall packed descriptor ID -> canonical buffer name mapping.
-    // Matches Panfrost's Valhall LD_PKA/LEA_PKA encoding: ((4 + desc_set) << 24) | binding.
-    for (const auto& [var_id, sc] : var_storage_class) {
+    for (const auto& [var_id, sc] : var_sc) {
+        if (sc != 12 && sc != 2) continue;
         auto bit = binding.find(var_id);
         if (bit == binding.end()) continue;
         uint32_t ds = desc_set.count(var_id) ? desc_set[var_id] : 0u;
         uint32_t bd = bit->second;
-        uint32_t packed = ((4u + ds) << 24) | (bd & 0xFFFFu);
-        std::string prefix = (sc == 12) ? "ssbo_s" : "ubo_s";
-        out->srt_pka_buf_names[packed] = prefix + std::to_string(ds) + "_b" + std::to_string(bd);
+        uint64_t sb_key = (static_cast<uint64_t>(ds) << 32) | bd;
+        out->binding_storage_class[sb_key] = sc;
     }
     return true;
 }
 
-static void* get_entrypoint_impl(void* shader) {
-    auto* fns = reinterpret_cast<ExecListAbi*>(static_cast<uint8_t*>(shader) + 472);
-    ExecNodeAbi* fn = fns->head_sentinel.next;
-    while (fn && fn->next) {
-        void* impl = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(fn) + 48);
-        if (impl) return impl;
-        fn = fn->next;
-    }
-    return nullptr;
-}
+/// Lightweight JSON DOM sufficient to parse `panfrost_vk_compile --info-json`.
+struct JsonVal {
+    enum class Kind { Null, Bool, Int, Str, Array, Object };
+    Kind kind = Kind::Null;
+    bool bval = false;
+    int64_t ival = 0;
+    std::string sval;
+    std::vector<JsonVal> arr;
+    std::map<std::string, JsonVal> obj;
 
-/// Lower Vulkan resource-index/descriptor intrinsics, clear push-constant range/base,
-/// and strip Vulkan texture/sampler deref sources prior to Panfrost post-processing.
-static void walk_pre_cf_list(const MesaVkApi& api, void* shader, ExecListAbi* list) {
-    ExecNodeAbi* node = list->head_sentinel.next;
-    while (node && node->next) {
-        auto* cf = reinterpret_cast<uint8_t*>(node);
-        uint32_t cf_type = *reinterpret_cast<uint32_t*>(cf + 16);
-        if (cf_type == 0) {  // nir_cf_node_block
-            auto* ilist = reinterpret_cast<ExecListAbi*>(cf + 32);
-            ExecNodeAbi* in = ilist->head_sentinel.next;
-            while (in && in->next) {
-                ExecNodeAbi* next_in = in->next;
-                auto* ins = reinterpret_cast<uint8_t*>(in);
-                uint8_t itype = *(ins + 24);
-                if (itype == kNirInstrTypeIntrinsic) {
-                    uint32_t intrin = *reinterpret_cast<uint32_t*>(ins + 56);
-                    uint8_t* def_ptr = ins + 32;
-                    uint8_t nc = *(ins + 60);
-                    auto* cidx = reinterpret_cast<int32_t*>(ins + 64);
-                    if (intrin == kNirIntrinVulkanResourceIndex) {
-                        uint32_t dset = static_cast<uint32_t>(cidx[0]);
-                        uint32_t bind = static_cast<uint32_t>(cidx[1]);
-                        uint32_t packed = ((4u + dset) << 24) | (bind & 0xFFFFu);
-                        unsigned comps = nc ? nc : 2u;
-                        auto* lc = static_cast<uint8_t*>(api.nir_load_const_instr_create(shader, comps, 32));
-                        auto* vals = reinterpret_cast<uint64_t*>(lc + 56);
-                        vals[0] = packed;
-                        if (comps >= 2) vals[1] = 0;
-                        NirCursorAbi cur{2, 0, ins};
-                        api.nir_instr_insert(cur, lc);
-                        api.nir_def_rewrite_uses(def_ptr, lc + 32);
-                        api.nir_instr_remove_v(ins);
-                    } else if (intrin == kNirIntrinLoadVulkanDescriptor) {
-                        void* src0_ssa = *reinterpret_cast<void**>(ins + 112 + 24);
-                        api.nir_def_rewrite_uses(def_ptr, src0_ssa);
-                        api.nir_instr_remove_v(ins);
-                    } else if (intrin == kNirIntrinLoadPushConstant) {
-                        // bi_emit_load_push_constant requires base == 0 and range == 0.
-                        cidx[0] = 0;
-                        cidx[2] = 0;
-                    }
-                } else if (itype == kNirInstrTypeTex) {
-                    auto* srcs = *reinterpret_cast<uint8_t**>(ins + 72);
-                    uint32_t nsrcs = *reinterpret_cast<uint32_t*>(ins + 80);
-                    for (int si = static_cast<int>(nsrcs) - 1; si >= 0; --si) {
-                        uint32_t stype = *reinterpret_cast<uint32_t*>(srcs + si * 40 + 32);
-                        if (stype == kNirTexSrcTextureDeref || stype == kNirTexSrcSamplerDeref) {
-                            api.nir_tex_instr_remove_src(ins, static_cast<unsigned>(si));
-                            srcs = *reinterpret_cast<uint8_t**>(ins + 72);
-                        }
-                    }
-                }
-                in = next_in;
-            }
-        } else if (cf_type == 1) {  // nir_cf_node_if
-            walk_pre_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 72));
-            walk_pre_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 104));
-        } else if (cf_type == 2) {  // nir_cf_node_loop
-            walk_pre_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 32));
-            walk_pre_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 64));
-        }
-        node = node->next;
+    const JsonVal* get(const std::string& k) const {
+        if (kind != Kind::Object) return nullptr;
+        auto it = obj.find(k);
+        return (it != obj.end()) ? &it->second : nullptr;
     }
-}
-
-/// Lower post-process vertex viewport sysvals (`load_viewport_scale`, `load_viewport_offset`)
-/// that panvk normally lowers via `panvk_lower_sysvals`.
-static void walk_post_cf_list(const MesaVkApi& api, void* shader, ExecListAbi* list) {
-    ExecNodeAbi* node = list->head_sentinel.next;
-    while (node && node->next) {
-        auto* cf = reinterpret_cast<uint8_t*>(node);
-        uint32_t cf_type = *reinterpret_cast<uint32_t*>(cf + 16);
-        if (cf_type == 0) {
-            auto* ilist = reinterpret_cast<ExecListAbi*>(cf + 32);
-            ExecNodeAbi* in = ilist->head_sentinel.next;
-            while (in && in->next) {
-                ExecNodeAbi* next_in = in->next;
-                auto* ins = reinterpret_cast<uint8_t*>(in);
-                if (*(ins + 24) == kNirInstrTypeIntrinsic) {
-                    uint32_t intrin = *reinterpret_cast<uint32_t*>(ins + 56);
-                    if (intrin == kNirIntrinLoadViewportScale || intrin == kNirIntrinLoadViewportOffset) {
-                        auto* lc = static_cast<uint8_t*>(api.nir_load_const_instr_create(shader, 3, 32));
-                        auto* vals = reinterpret_cast<uint64_t*>(lc + 56);
-                        uint32_t bits = (intrin == kNirIntrinLoadViewportScale) ? 0x3f800000u : 0x00000000u;
-                        vals[0] = bits;
-                        vals[1] = bits;
-                        vals[2] = bits;
-                        NirCursorAbi cur{2, 0, ins};
-                        api.nir_instr_insert(cur, lc);
-                        api.nir_def_rewrite_uses(ins + 32, lc + 32);
-                        api.nir_instr_remove_v(ins);
-                    }
-                }
-                in = next_in;
-            }
-        } else if (cf_type == 1) {
-            walk_post_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 72));
-            walk_post_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 104));
-        } else if (cf_type == 2) {
-            walk_post_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 32));
-            walk_post_cf_list(api, shader, reinterpret_cast<ExecListAbi*>(cf + 64));
-        }
-        node = node->next;
+    uint32_t as_u32(uint32_t def = 0) const {
+        return (kind == Kind::Int && ival >= 0) ? static_cast<uint32_t>(ival) : def;
     }
-}
-
-static void run_cf_walk(const MesaVkApi& api, void* shader, bool post) {
-    auto* fns = reinterpret_cast<ExecListAbi*>(static_cast<uint8_t*>(shader) + 472);
-    ExecNodeAbi* fn = fns->head_sentinel.next;
-    while (fn && fn->next) {
-        void* impl = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(fn) + 48);
-        if (impl) {
-            auto* body = reinterpret_cast<ExecListAbi*>(static_cast<uint8_t*>(impl) + 48);
-            if (post) {
-                walk_post_cf_list(api, shader, body);
-            } else {
-                walk_pre_cf_list(api, shader, body);
-            }
-        }
-        fn = fn->next;
+    bool as_bool(bool def = false) const {
+        return (kind == Kind::Bool) ? bval : def;
     }
-}
-
-struct ChildResultHeader {
-    uint32_t ok;
-    uint32_t work_reg_count;
-    uint32_t tls_size;
-    uint32_t wls_size;
-    uint32_t binary_size;
-    uint32_t fau_count;
-    uint32_t fau_words[kPanFauWordsCount];
-    uint32_t fau_is_const[4];
+    std::string as_str(const std::string& def = "") const {
+        return (kind == Kind::Str) ? sval : def;
+    }
 };
 
-static bool write_all(int fd, const void* buf, size_t len) {
-    const auto* p = static_cast<const uint8_t*>(buf);
-    while (len > 0) {
-        ssize_t n = ::write(fd, p, len);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            return false;
-        }
-        p += n;
-        len -= static_cast<size_t>(n);
+class MiniJsonParser {
+public:
+    explicit MiniJsonParser(const std::string& s) : s_(s) {}
+
+    bool parse(JsonVal* out) {
+        skip_ws();
+        if (!parse_val(out)) return false;
+        skip_ws();
+        return pos_ == s_.size();
     }
-    return true;
+
+private:
+    const std::string& s_;
+    size_t pos_ = 0;
+
+    void skip_ws() {
+        while (pos_ < s_.size() && std::isspace(static_cast<unsigned char>(s_[pos_]))) {
+            ++pos_;
+        }
+    }
+
+    bool match(const char* lit) {
+        size_t n = std::strlen(lit);
+        if (pos_ + n <= s_.size() && s_.compare(pos_, n, lit) == 0) {
+            pos_ += n;
+            return true;
+        }
+        return false;
+    }
+
+    bool parse_string(std::string* out) {
+        if (pos_ >= s_.size() || s_[pos_] != '"') return false;
+        ++pos_;
+        out->clear();
+        while (pos_ < s_.size()) {
+            char c = s_[pos_++];
+            if (c == '"') return true;
+            if (c == '\\' && pos_ < s_.size()) {
+                char e = s_[pos_++];
+                switch (e) {
+                    case '"': out->push_back('"'); break;
+                    case '\\': out->push_back('\\'); break;
+                    case '/': out->push_back('/'); break;
+                    case 'n': out->push_back('\n'); break;
+                    case 'r': out->push_back('\r'); break;
+                    case 't': out->push_back('\t'); break;
+                    default: out->push_back(e); break;
+                }
+            } else {
+                out->push_back(c);
+            }
+        }
+        return false;
+    }
+
+    bool parse_number(JsonVal* out) {
+        size_t start = pos_;
+        if (pos_ < s_.size() && s_[pos_] == '-') ++pos_;
+        while (pos_ < s_.size() && std::isdigit(static_cast<unsigned char>(s_[pos_]))) ++pos_;
+        if (pos_ < s_.size() && (s_[pos_] == '.' || s_[pos_] == 'e' || s_[pos_] == 'E')) {
+            while (pos_ < s_.size() &&
+                   (std::isalnum(static_cast<unsigned char>(s_[pos_])) ||
+                    s_[pos_] == '.' || s_[pos_] == '+' || s_[pos_] == '-')) {
+                ++pos_;
+            }
+        }
+        if (pos_ == start) return false;
+        out->kind = JsonVal::Kind::Int;
+        out->ival = std::strtoll(s_.substr(start, pos_ - start).c_str(), nullptr, 10);
+        return true;
+    }
+
+    bool parse_val(JsonVal* out) {
+        skip_ws();
+        if (pos_ >= s_.size()) return false;
+        char c = s_[pos_];
+        if (c == '{') {
+            ++pos_;
+            out->kind = JsonVal::Kind::Object;
+            skip_ws();
+            if (pos_ < s_.size() && s_[pos_] == '}') {
+                ++pos_;
+                return true;
+            }
+            while (true) {
+                skip_ws();
+                std::string key;
+                if (!parse_string(&key)) return false;
+                skip_ws();
+                if (pos_ >= s_.size() || s_[pos_] != ':') return false;
+                ++pos_;
+                JsonVal val;
+                if (!parse_val(&val)) return false;
+                out->obj[std::move(key)] = std::move(val);
+                skip_ws();
+                if (pos_ < s_.size() && s_[pos_] == ',') {
+                    ++pos_;
+                    continue;
+                }
+                if (pos_ < s_.size() && s_[pos_] == '}') {
+                    ++pos_;
+                    return true;
+                }
+                return false;
+            }
+        } else if (c == '[') {
+            ++pos_;
+            out->kind = JsonVal::Kind::Array;
+            skip_ws();
+            if (pos_ < s_.size() && s_[pos_] == ']') {
+                ++pos_;
+                return true;
+            }
+            while (true) {
+                JsonVal val;
+                if (!parse_val(&val)) return false;
+                out->arr.push_back(std::move(val));
+                skip_ws();
+                if (pos_ < s_.size() && s_[pos_] == ',') {
+                    ++pos_;
+                    continue;
+                }
+                if (pos_ < s_.size() && s_[pos_] == ']') {
+                    ++pos_;
+                    return true;
+                }
+                return false;
+            }
+        } else if (c == '"') {
+            out->kind = JsonVal::Kind::Str;
+            return parse_string(&out->sval);
+        } else if (match("true")) {
+            out->kind = JsonVal::Kind::Bool;
+            out->bval = true;
+            return true;
+        } else if (match("false")) {
+            out->kind = JsonVal::Kind::Bool;
+            out->bval = false;
+            return true;
+        } else if (match("null")) {
+            out->kind = JsonVal::Kind::Null;
+            return true;
+        } else if (c == '-' || std::isdigit(static_cast<unsigned char>(c))) {
+            return parse_number(out);
+        }
+        return false;
+    }
+};
+
+valhall::ShaderStage parse_stage_str(const std::string& s, valhall::ShaderStage fallback) {
+    if (s == "vertex" || s == "vert") return valhall::ShaderStage::Vertex;
+    if (s == "fragment" || s == "frag") return valhall::ShaderStage::Fragment;
+    if (s == "compute" || s == "comp") return valhall::ShaderStage::Compute;
+    return fallback;
 }
 
-static bool read_all(int fd, void* buf, size_t len) {
-    auto* p = static_cast<uint8_t*>(buf);
-    while (len > 0) {
-        ssize_t n = ::read(fd, p, len);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            return false;
-        }
-        if (n == 0) return false;
-        p += n;
-        len -= static_cast<size_t>(n);
+/// Spawn `bin` with `argv` via fork/execv, capturing stderr into `stderr_out`.
+bool run_subprocess(const std::string& bin,
+                    const std::vector<std::string>& args,
+                    int* exit_code_out,
+                    int* term_sig_out,
+                    std::string* stderr_out,
+                    std::string* err) {
+    int err_pipe[2] = {-1, -1};
+    if (::pipe(err_pipe) != 0) {
+        if (err) *err = "pipe() failed for panfrost_vk_compile";
+        return false;
     }
+
+    pid_t pid = ::fork();
+    if (pid < 0) {
+        ::close(err_pipe[0]);
+        ::close(err_pipe[1]);
+        if (err) *err = "fork() failed for panfrost_vk_compile";
+        return false;
+    }
+
+    if (pid == 0) {
+        ::close(err_pipe[0]);
+        ::dup2(err_pipe[1], STDERR_FILENO);
+        ::close(err_pipe[1]);
+        int devnull = ::open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            ::dup2(devnull, STDOUT_FILENO);
+            ::close(devnull);
+        }
+        std::vector<char*> cargv;
+        cargv.reserve(args.size() + 1);
+        for (const auto& a : args) {
+            cargv.push_back(const_cast<char*>(a.c_str()));
+        }
+        cargv.push_back(nullptr);
+        ::execv(bin.c_str(), cargv.data());
+        std::fprintf(stderr, "execv(%s) failed: %s\n", bin.c_str(), std::strerror(errno));
+        ::_exit(127);
+    }
+
+    ::close(err_pipe[1]);
+    stderr_out->clear();
+    char buf[512];
+    ssize_t n = 0;
+    while ((n = ::read(err_pipe[0], buf, sizeof(buf))) > 0) {
+        stderr_out->append(buf, static_cast<size_t>(n));
+    }
+    ::close(err_pipe[0]);
+
+    int status = 0;
+    while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+
+    *exit_code_out = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    *term_sig_out = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
     return true;
 }
 
 }  // namespace
 
+std::string find_panfrost_vk_compiler(const std::string& explicit_path) {
+    if (!explicit_path.empty() && is_executable_file(explicit_path)) {
+        return explicit_path;
+    }
+    if (const char* env = std::getenv("PANFROST_VK_COMPILE_BIN")) {
+        if (is_executable_file(env)) return env;
+    }
+    fs::path cur = fs::current_path();
+    for (int depth = 0; depth < 5; ++depth) {
+        fs::path cand = cur / "third_party" / "prebuilts" / "panfrost" / "panfrost_vk_compile";
+        if (is_executable_file(cand.string())) return cand.string();
+        if (!cur.has_parent_path() || cur == cur.parent_path()) break;
+        cur = cur.parent_path();
+    }
+    if (const char* path_env = std::getenv("PATH")) {
+        std::istringstream iss(path_env);
+        std::string dir;
+        while (std::getline(iss, dir, ':')) {
+            if (dir.empty()) continue;
+            fs::path cand = fs::path(dir) / "panfrost_vk_compile";
+            if (is_executable_file(cand.string())) return cand.string();
+        }
+    }
+    return "";
+}
+
 PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     const std::string& spv_path,
-    uint8_t arch,
-    const std::string& panfrost_bin,
-    bool verbose) {
+    const PanfrostVkCompileOptions& opts) {
     PanfrostVkCompileOutput out;
-    if (arch < 6 || arch > 14) arch = 10;
-    out.arch = arch;
+    out.arch = (opts.arch != 0) ? opts.arch : 11;
 
-    std::ifstream ifs(spv_path, std::ios::binary);
-    if (!ifs) {
-        out.error = "Failed to open SPIR-V file: " + spv_path;
+    std::string bin = find_panfrost_vk_compiler(opts.panfrost_vk_bin);
+    if (bin.empty()) {
+        out.error = "panfrost_vk_compile not found (checked --panfrost-bin, PANFROST_VK_COMPILE_BIN, "
+                    "third_party/prebuilts/panfrost/panfrost_vk_compile, and PATH)";
         return out;
     }
-    std::vector<uint8_t> raw_bytes((std::istreambuf_iterator<char>(ifs)), {});
+
+    std::vector<uint8_t> raw_bytes;
+    if (!read_file_bytes(spv_path, &raw_bytes, &out.error)) {
+        return out;
+    }
     if (raw_bytes.size() < 20 || (raw_bytes.size() % 4) != 0) {
         out.error = "Invalid SPIR-V binary size: " + spv_path;
         return out;
@@ -578,218 +439,160 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     out.local_size[0] = meta.local_size[0];
     out.local_size[1] = meta.local_size[1];
     out.local_size[2] = meta.local_size[2];
-    out.srt_pka_buf_names = std::move(meta.srt_pka_buf_names);
 
-    const MesaVkApi& api = get_mesa_vk_api(panfrost_bin);
-    if (!api.loaded) {
-        out.error = api.load_error;
+    char tmpl[] = "/tmp/panfrost_vk_XXXXXX";
+    char* td_c = ::mkdtemp(tmpl);
+    if (!td_c) {
+        out.error = "mkdtemp() failed for panfrost_vk_compile";
+        return out;
+    }
+    fs::path td(td_c);
+    auto cleanup = [&]() {
+        std::error_code ec;
+        fs::remove_all(td, ec);
+    };
+
+    fs::path out_bin = td / "shader.bin";
+    fs::path out_json = td / "shader_info.json";
+
+    std::vector<std::string> argv;
+    argv.push_back(bin);
+    if (opts.backend == PanfrostVkBackend::Kraid) {
+        argv.push_back("--kraid");
+    } else if (opts.backend == PanfrostVkBackend::Bifrost) {
+        argv.push_back("--no-kraid");
+    }
+    if (opts.robust) argv.push_back("--robust");
+    if (opts.no_idvs) argv.push_back("--no-idvs");
+    if (opts.no_promote_imm) argv.push_back("--no-promote-imm");
+    if (opts.no_clamp_version) argv.push_back("--no-clamp-version");
+    if (opts.core_max_id != 0) {
+        argv.push_back("--core-max-id");
+        argv.push_back(std::to_string(opts.core_max_id));
+    }
+    argv.push_back("--info-json");
+    argv.push_back(out_json.string());
+    argv.push_back(spv_path);
+    argv.push_back(out_bin.string());
+
+    if (opts.verbose) {
+        std::cerr << "[panfrost-vk] running:";
+        for (const auto& a : argv) std::cerr << " " << a;
+        std::cerr << "\n";
+    }
+
+    int exit_code = -1;
+    int term_sig = 0;
+    std::string stderr_text;
+    if (!run_subprocess(bin, argv, &exit_code, &term_sig, &stderr_text, &out.error)) {
+        cleanup();
         return out;
     }
 
-    int data_pipe[2] = {-1, -1};
-    int err_pipe[2] = {-1, -1};
-    if (::pipe(data_pipe) != 0 || ::pipe(err_pipe) != 0) {
-        out.error = "Failed to create pipes for Panfrost Vulkan compiler worker";
-        if (data_pipe[0] >= 0) { ::close(data_pipe[0]); ::close(data_pipe[1]); }
-        if (err_pipe[0] >= 0) { ::close(err_pipe[0]); ::close(err_pipe[1]); }
+    if (term_sig != 0) {
+        out.error = "panfrost_vk_compile crashed with signal " + std::to_string(term_sig);
+        if (!stderr_text.empty()) out.error += ": " + stderr_text;
+        cleanup();
+        return out;
+    }
+    if (exit_code != 0) {
+        out.error = "panfrost_vk_compile failed (rc=" + std::to_string(exit_code) + ")";
+        if (!stderr_text.empty()) out.error += ": " + stderr_text;
+        cleanup();
         return out;
     }
 
-    if (verbose) {
-        std::cerr << "[panfrost-vk] compiling " << spv_path
-                  << " stage=" << meta.mesa_stage
-                  << " entry=" << meta.entry_point
-                  << " arch=v" << static_cast<int>(arch) << "\n";
-    }
-
-    pid_t pid = ::fork();
-    if (pid < 0) {
-        ::close(data_pipe[0]); ::close(data_pipe[1]);
-        ::close(err_pipe[0]); ::close(err_pipe[1]);
-        out.error = "fork() failed for Panfrost Vulkan compiler worker";
+    if (!read_file_bytes(out_bin.string(), &out.ebin_bytes, &out.error) || out.ebin_bytes.empty()) {
+        if (out.error.empty()) out.error = "panfrost_vk_compile produced empty binary";
+        cleanup();
         return out;
     }
-
-    if (pid == 0) {
-        ::close(data_pipe[0]);
-        ::close(err_pipe[0]);
-        ::dup2(err_pipe[1], STDERR_FILENO);
-        ::close(err_pipe[1]);
-
-        uint8_t all_caps[512];
-        std::memset(all_caps, 1, sizeof(all_caps));
-
-        SpirvToNirOptionsAbi sopts{};
-        sopts.environment = 0;  // NIR_SPIRV_VULKAN
-        sopts.capabilities = all_caps;
-        sopts.ubo_addr_format = kNirAddr32BitIndexOffset;
-        sopts.ssbo_addr_format = kNirAddr32BitIndexOffset;
-        sopts.phys_ssbo_addr_format = kNirAddr64BitGlobal;
-        sopts.push_const_addr_format = kNirAddr32BitOffset;
-        sopts.shared_addr_format = kNirAddr32BitOffset;
-        sopts.min_ubo_alignment = 16;
-        sopts.min_ssbo_alignment = 16;
-
-        const void* nopts = api.pan_get_opts(arch, meta.mesa_stage, false);
-        void* nir = api.spirv_to_nir(
-            spv_words.data(), spv_words.size(), nullptr, meta.mesa_stage,
-            meta.entry_point.c_str(), &sopts, nopts);
-        if (!nir) {
-            std::fprintf(stderr, "spirv_to_nir returned null\n");
-            ::_exit(2);
-        }
-
-        api.nir_lower_variable_initializers(nir, kNirVarAll);
-        api.nir_lower_returns(nir);
-        api.nir_inline_functions(nir);
-        api.nir_remove_non_entrypoints(nir);
-
-        if (meta.mesa_stage == 0 || meta.mesa_stage == 4) {
-            void* ep = get_entrypoint_impl(nir);
-            if (ep) {
-                api.nir_lower_io_vars_to_temporaries(nir, ep, kNirVarShaderOut);
-            }
-        }
-
-        api.nir_lower_global_vars_to_local(nir);
-        api.nir_split_var_copies(nir);
-        api.nir_opt_copy_prop_vars(nir);
-        api.nir_opt_combine_stores(nir, kNirVarAll);
-        api.nir_lower_var_copies(nir);
-        api.nir_lower_memcpy(nir);
-        api.nir_lower_vars_to_ssa(nir);
-        api.nir_lower_system_values(nir);
-        if (meta.mesa_stage == 5) {
-            uint8_t cs_opts[64] = {};
-            api.nir_lower_compute_system_values(nir, cs_opts);
-        }
-
-        uint64_t gpu_id = static_cast<uint64_t>(arch & 0xfu) << 28;
-        api.pan_preprocess_nir(nir, gpu_id);
-
-        if (meta.mesa_stage == 5) {
-            api.nir_lower_vars_to_explicit_types(nir, kNirVarMemShared, api.glsl_cl_size_align);
-            api.nir_lower_explicit_io(nir, kNirVarMemShared, kNirAddr32BitOffset);
-        }
-        api.nir_lower_explicit_io(nir, kNirVarMemUbo | kNirVarMemSsbo, kNirAddr32BitIndexOffset);
-        api.nir_lower_explicit_io(nir, kNirVarMemPushConst, kNirAddr32BitOffset);
-        if (meta.mesa_stage == 0 || meta.mesa_stage == 4) {
-            unsigned num_in = 0, num_out = 0;
-            api.nir_assign_io_var_locations(nir, kNirVarShaderIn, &num_in, meta.mesa_stage);
-            api.nir_assign_io_var_locations(nir, kNirVarShaderOut, &num_out, meta.mesa_stage);
-            api.nir_lower_io(nir, kNirVarShaderIn | kNirVarShaderOut, api.type_size_vec4,
-                             (meta.mesa_stage == 4) ? 1u : 0u);
-        }
-
-        run_cf_walk(api, nir, false);
-        api.nir_opt_constant_folding(nir);
-        api.nir_opt_dce(nir);
-
-        PanCompileInputsAbi inputs{};
-        inputs.gpu_id = gpu_id;
-        inputs.no_idvs = true;
-        inputs.fau_reserved = 64;
-        inputs.fau_promote_immediates = true;
-
-        uint8_t vlayout_buf[4096] = {};
-        if (meta.mesa_stage == 0) {
-            api.pan_varying_collect_formats(vlayout_buf, nir, gpu_id);
-            api.pan_build_varying_layout_compact(vlayout_buf, nir, gpu_id);
-            inputs.varying_layout = vlayout_buf;
-        }
-
-        uint8_t info_buf[2048] = {};
-        api.pan_postprocess_nir(nir, &inputs, info_buf);
-        run_cf_walk(api, nir, true);
-
-        UtilDynarrayAbi binary{};
-        api.pan_shader_compile(nir, &inputs, &binary, info_buf);
-
-        ChildResultHeader hdr{};
-        hdr.ok = (binary.data != nullptr && binary.size > 0) ? 1u : 0u;
-        std::memcpy(&hdr.work_reg_count, info_buf + 4, 4);
-        std::memcpy(&hdr.tls_size, info_buf + 8, 4);
-        std::memcpy(&hdr.wls_size, info_buf + 12, 4);
-        hdr.binary_size = binary.size;
-        std::memcpy(hdr.fau_words, info_buf + kPanShaderInfoFauOffset, sizeof(hdr.fau_words));
-        std::memcpy(hdr.fau_is_const, info_buf + kPanShaderInfoFauOffset + 512, sizeof(hdr.fau_is_const));
-        std::memcpy(&hdr.fau_count, info_buf + kPanShaderInfoFauOffset + 532, 4);
-
-        write_all(data_pipe[1], &hdr, sizeof(hdr));
-        if (hdr.ok && hdr.binary_size > 0) {
-            write_all(data_pipe[1], binary.data, hdr.binary_size);
-        }
-        ::close(data_pipe[1]);
-        ::_exit(0);
-    }
-
-    ::close(data_pipe[1]);
-    ::close(err_pipe[1]);
-
-    ChildResultHeader hdr{};
-    bool got_hdr = read_all(data_pipe[0], &hdr, sizeof(hdr));
-    std::vector<uint8_t> bin_bytes;
-    if (got_hdr && hdr.ok && hdr.binary_size > 0 && hdr.binary_size <= (64u * 1024u * 1024u)) {
-        bin_bytes.resize(hdr.binary_size);
-        if (!read_all(data_pipe[0], bin_bytes.data(), hdr.binary_size)) {
-            got_hdr = false;
-        }
-    }
-    ::close(data_pipe[0]);
-
-    std::string err_text;
-    char buf[512];
-    ssize_t n = 0;
-    while ((n = ::read(err_pipe[0], buf, sizeof(buf))) > 0) {
-        err_text.append(buf, static_cast<size_t>(n));
-    }
-    ::close(err_pipe[0]);
-
-    int status = 0;
-    ::waitpid(pid, &status, 0);
-
-    if (!got_hdr || !hdr.ok || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        std::string reason;
-        if (WIFSIGNALED(status)) {
-            reason = "Panfrost Vulkan compiler terminated by signal " + std::to_string(WTERMSIG(status));
-        } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-            reason = "Panfrost Vulkan compiler exited with code " + std::to_string(WEXITSTATUS(status));
-        } else {
-            reason = "Panfrost Vulkan compiler produced empty binary";
-        }
-        if (!err_text.empty()) {
-            while (!err_text.empty() && (err_text.back() == '\n' || err_text.back() == '\r')) {
-                err_text.pop_back();
-            }
-            reason += ": " + err_text;
-        }
-        out.error = std::move(reason);
-        return out;
-    }
-
-    // Trim trailing all-zero 64-bit Valhall alignment padding words.
-    while (bin_bytes.size() >= 8) {
+    // Trim trailing all-zero 64-bit cache-line alignment padding words emitted by Panfrost.
+    while (out.ebin_bytes.size() > 8u && (out.ebin_bytes.size() % 8u) == 0u) {
         uint64_t tail = 0;
-        std::memcpy(&tail, bin_bytes.data() + bin_bytes.size() - 8, 8);
-        if (tail == 0) {
-            bin_bytes.resize(bin_bytes.size() - 8);
-        } else {
-            break;
+        std::memcpy(&tail, out.ebin_bytes.data() + out.ebin_bytes.size() - 8u, 8u);
+        if (tail != 0u) break;
+        out.ebin_bytes.resize(out.ebin_bytes.size() - 8u);
+    }
+
+    std::string info_text;
+    if (!read_file_text(out_json.string(), &info_text, &out.error)) {
+        cleanup();
+        return out;
+    }
+
+    JsonVal root;
+    MiniJsonParser parser(info_text);
+    if (!parser.parse(&root) || root.kind != JsonVal::Kind::Object) {
+        out.error = "Failed to parse panfrost_vk_compile --info-json output";
+        cleanup();
+        return out;
+    }
+
+    if (const auto* v = root.get("arch")) out.arch = static_cast<uint8_t>(v->as_u32(out.arch));
+    if (const auto* v = root.get("stage")) out.stage = parse_stage_str(v->as_str(), out.stage);
+    if (const auto* v = root.get("entry")) out.entry_point = v->as_str(out.entry_point);
+    if (const auto* v = root.get("backend")) out.backend_used = v->as_str();
+    if (const auto* v = root.get("idvs")) out.idvs = v->as_bool(true);
+    if (const auto* v = root.get("robust")) out.robust = v->as_bool(false);
+    if (const auto* v = root.get("merge_workgroups")) out.merge_workgroups = v->as_bool(false);
+    if (const auto* v = root.get("instrs")) out.instrs = v->as_u32(0);
+    if (const auto* v = root.get("work_reg_count")) out.work_reg_count = v->as_u32(32);
+    if (const auto* v = root.get("tls_size")) out.tls_size = v->as_u32(0);
+    if (const auto* v = root.get("wls_size")) out.wls_size = v->as_u32(0);
+
+    if (const auto* fau = root.get("fau")) {
+        if (const auto* v = fau->get("sysval_slots")) out.fau_sysval_slots = v->as_u32(0);
+        if (const auto* v = fau->get("driver_slots")) out.fau_driver_slots = v->as_u32(0);
+        if (const auto* v = fau->get("reserved_words")) out.fau_reserved_words = v->as_u32(0);
+        if (const auto* v = fau->get("total_words")) out.fau_total_words = v->as_u32(0);
+        if (const auto* arr = fau->get("used_sysval_words"); arr && arr->kind == JsonVal::Kind::Array) {
+            for (const auto& el : arr->arr) out.used_sysval_words.push_back(el.as_u32());
+        }
+        if (const auto* arr = fau->get("used_push_const_words"); arr && arr->kind == JsonVal::Kind::Array) {
+            for (const auto& el : arr->arr) out.used_push_const_words.push_back(el.as_u32());
+        }
+        if (const auto* imms = fau->get("immediates"); imms && imms->kind == JsonVal::Kind::Array) {
+            for (const auto& item : imms->arr) {
+                const auto* wv = item.get("word");
+                const auto* vv = item.get("value");
+                if (!wv || !vv) continue;
+                uint32_t word_idx = wv->as_u32();
+                uint32_t val = static_cast<uint32_t>(std::strtoul(vv->as_str().c_str(), nullptr, 0));
+                out.fau_const_words[word_idx] = val;
+            }
         }
     }
 
+    if (const auto* descs = root.get("descriptors"); descs && descs->kind == JsonVal::Kind::Array) {
+        for (const auto& item : descs->arr) {
+            PanfrostVkDescriptorInfo di;
+            if (const auto* v = item.get("set")) di.set = v->as_u32();
+            if (const auto* v = item.get("table")) di.table = v->as_u32(di.set + 1u);
+            if (const auto* v = item.get("binding")) di.binding = v->as_u32();
+            if (const auto* v = item.get("kind")) di.kind = v->as_str();
+            if (const auto* v = item.get("desc_idx")) di.desc_idx = v->as_u32();
+            if (const auto* v = item.get("desc_count")) di.desc_count = v->as_u32(1);
+            out.descriptors.push_back(di);
+
+            if (di.kind == "buffer") {
+                uint64_t sb_key = (static_cast<uint64_t>(di.set) << 32) | di.binding;
+                uint32_t sc = 12u;  // Default to StorageBuffer if metadata didn't classify it
+                auto sit = meta.binding_storage_class.find(sb_key);
+                if (sit != meta.binding_storage_class.end()) sc = sit->second;
+                std::string prefix = (sc == 12u) ? "ssbo:" : "ubo:";
+                std::string canonical = prefix + std::to_string(di.set) + ":" + std::to_string(di.binding);
+                uint32_t count = (di.desc_count > 0 && di.desc_count <= 64u) ? di.desc_count : 1u;
+                for (uint32_t elem = 0; elem < count; ++elem) {
+                    uint32_t packed = (di.table << 24) | ((di.desc_idx + elem) & 0xFFFFFFu);
+                    out.srt_pka_buf_names[packed] = canonical;
+                }
+            }
+        }
+    }
+
+    cleanup();
     out.ok = true;
-    out.work_reg_count = hdr.work_reg_count;
-    out.tls_size = hdr.tls_size;
-    out.wls_size = hdr.wls_size;
-    out.ebin_bytes = std::move(bin_bytes);
-
-    uint32_t fcount = (hdr.fau_count <= kPanFauWordsCount) ? hdr.fau_count : kPanFauWordsCount;
-    for (uint32_t w = 0; w < fcount; ++w) {
-        if ((hdr.fau_is_const[w / 32u] >> (w % 32u)) & 1u) {
-            out.fau_const_words[w] = hdr.fau_words[w];
-        }
-    }
     return out;
 }
 

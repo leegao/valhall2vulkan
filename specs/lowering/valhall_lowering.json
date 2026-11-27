@@ -874,6 +874,12 @@
         "SsaId",
         "SsaId"
       ]
+    },
+    "lea_pka": {
+      "ret": "void",
+      "args": [
+        "SsaId"
+      ]
     }
   },
   "lookup_tables": {
@@ -6259,18 +6265,14 @@
       "op_class": "mem_lea",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [],
       "inline_ops": [
-        "%off : u32 = #u32(0);",
-        "if (@has_field(attribute_index)) { %off = @field_u32_mul16(attribute_index); }",
-        "else { if (@has_field(buffer_index)) { %off = @field_u32_mul16(buffer_index); }",
-        "else { if (@has_field(texture_index)) { %off = @field_u32_mul16(texture_index); }",
-        "else { if (@has_field(index)) { %off = @field_u32_mul16(index); } } } }",
-        "@sr_set(0, %off);",
-        "@sr_set(1, #u32(0xEEEEEEEE));"
+        "@lea_pka(%0);"
       ]
     },
     {

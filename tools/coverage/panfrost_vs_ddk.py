@@ -1,7 +1,8 @@
 """Cross-compiler equivalence fuzzer: Mesa Panfrost Valhall ISA -> SSA vs. Mali DDK Valhall ISA -> SSA.
 
-Compiles the same Vulkan GLCompute SPIR-V shader through both:
+Compiles the same Vulkan SPIR-V shader (Vertex, Fragment, or Compute) through both:
   1. Mesa Panfrost (`spirv2valhall --panfrost --dump-equiv-json`) -> Valhall ISA -> SSA
+     (using standalone `panfrost_vk_compile` with Rust Kraid or C Bifrost backend, or legacy `--panfrost-cl`)
   2. Arm Mali DDK (`spirv2valhall --dump-equiv-json`) -> Valhall ISA -> SSA
 and runs concolic equivalence fuzzing (`run_concolic_equiv_fuzz`) directly between the two
 ISA-lifted SSA modules in a shared ShaderEnv, plus 3-way triangle attribution against Direct
@@ -27,7 +28,11 @@ from tools.symbolic_ssa.passes import canonicalize_ssa_module
 @dataclass
 class PanfrostVsDdkResult:
     path: str
-    status: str  # EQUIV_EXACT, EQUIV_WITHIN_ULP, DIVERGED, SKIP, PANFROST_UNSUPPORTED, DDK_FAILED
+    status: str
+    stage: str = "Compute"  # EQUIV_EXACT, EQUIV_WITHIN_ULP, DIVERGED, SKIP, PANFROST_UNSUPPORTED, DDK_FAILED
+    panfrost_backend: str = ""  # "kraid", "bifrost", or "opencl"
+    panfrost_idvs: bool = True
+    panfrost_merge_workgroups: bool = False
     error: str = ""
     divs: int = 0
     vecs: int = 0
@@ -59,8 +64,12 @@ def _extract_opcode_hist(pc_disasm: dict[str, str]) -> tuple[int, dict[str, int]
 def build_panfrost_vs_ddk_bundle(
     spv_path: str,
     spirv2valhall_bin: str = "build/spirv2valhall",
-    arch: int = 10,
+    arch: int = 11,
     timeout_s: float = 20.0,
+    panfrost_flag: str = "--panfrost",
+    panfrost_backend: str = "auto",
+    panfrost_robust: bool = False,
+    panfrost_no_idvs: bool = False,
 ) -> tuple[dict[str, Any] | None, str | None, str]:
     """Compile `spv_path` with both Mali DDK and Mesa Panfrost and return a unified bundle.
 
@@ -83,18 +92,27 @@ def build_panfrost_vs_ddk_bundle(
             err = (p_ddk.stderr or p_ddk.stdout).strip().splitlines()[:2]
             return None, "DDK compile failed: " + " | ".join(err), "DDK_FAILED"
 
+        pan_cmd = [
+            spirv2valhall_bin,
+            panfrost_flag,
+            "--arch",
+            str(arch),
+            "--quiet",
+            "--dump-equiv-json",
+            pan_json,
+        ]
+        if panfrost_flag == "--panfrost":
+            if panfrost_backend and panfrost_backend != "auto":
+                pan_cmd.extend(["--panfrost-backend", panfrost_backend])
+            if panfrost_robust:
+                pan_cmd.append("--panfrost-robust")
+            if panfrost_no_idvs:
+                pan_cmd.append("--panfrost-no-idvs")
+        pan_cmd.append(spv_path)
+
         try:
             p_pan = subprocess.run(
-                [
-                    spirv2valhall_bin,
-                    "--panfrost",
-                    "--arch",
-                    str(arch),
-                    "--quiet",
-                    "--dump-equiv-json",
-                    pan_json,
-                    spv_path,
-                ],
+                pan_cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,
@@ -116,11 +134,20 @@ def build_panfrost_vs_ddk_bundle(
         bundle: dict[str, Any] = {
             "stage": ddk.get("stage", "Compute"),
             "arch": ddk.get("arch", arch),
+            "panfrost_backend": pan.get("panfrost_backend", ""),
+            "panfrost_idvs": bool(pan.get("panfrost_idvs", True)),
+            "panfrost_merge_workgroups": bool(pan.get("panfrost_merge_workgroups", False)),
             "local_size": ddk.get("local_size", pan.get("local_size", [1, 1, 1])),
             "direct_ssa": pan["valhall_ssa"],
             "valhall_ssa": ddk["valhall_ssa"],
             "orig_direct_ssa": ddk["direct_ssa"],
-            "mbs2_context": ddk.get("mbs2_context", {}),
+            "mbs2_context": {
+                **ddk.get("mbs2_context", {}),
+                "srt_pka_buf_names": {
+                    **pan.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
+                    **ddk.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
+                },
+            },
             "panfrost_pc_disasm": pan.get("pc_disasm", {}),
             "panfrost_arg_bindings": pan.get("panfrost_arg_bindings", []),
         }
@@ -132,17 +159,32 @@ def run_panfrost_vs_ddk_equiv(
     k_init: int = 64,
     fp_range: str = "vulkan",
     canonicalize: bool = True,
-    arch: int = 10,
+    arch: int = 11,
     spirv2valhall_bin: str = "build/spirv2valhall",
     time_budget_ms: int = 3000,
     compute_triangle: bool = True,
+    panfrost_flag: str = "--panfrost",
+    panfrost_backend: str = "auto",
+    panfrost_robust: bool = False,
+    panfrost_no_idvs: bool = False,
 ) -> PanfrostVsDdkResult:
     """Run equivalence fuzzing comparing Panfrost ISA->SSA against Mali DDK ISA->SSA."""
     bundle, err, fail_kind = build_panfrost_vs_ddk_bundle(
-        spv_path, spirv2valhall_bin=spirv2valhall_bin, arch=arch
+        spv_path,
+        spirv2valhall_bin=spirv2valhall_bin,
+        arch=arch,
+        panfrost_flag=panfrost_flag,
+        panfrost_backend=panfrost_backend,
+        panfrost_robust=panfrost_robust,
+        panfrost_no_idvs=panfrost_no_idvs,
     )
     if bundle is None:
-        return PanfrostVsDdkResult(path=spv_path, status=fail_kind or "ERROR", error=err or "")
+        return PanfrostVsDdkResult(
+            path=spv_path,
+            status=fail_kind or "ERROR",
+            panfrost_backend=panfrost_backend if panfrost_flag == "--panfrost" else "opencl",
+            error=err or "",
+        )
 
     pan_insts, pan_ops, pan_lines = _extract_opcode_hist(bundle.get("panfrost_pc_disasm", {}))
     ddk_pc = bundle.get("mbs2_context", {}).get("pc_disasm", {})
@@ -208,6 +250,10 @@ def run_panfrost_vs_ddk_equiv(
     return PanfrostVsDdkResult(
         path=spv_path,
         status=res.status,
+        stage=bundle.get("stage", "Compute"),
+        panfrost_backend=bundle.get("panfrost_backend", ""),
+        panfrost_idvs=bundle.get("panfrost_idvs", True),
+        panfrost_merge_workgroups=bundle.get("panfrost_merge_workgroups", False),
         divs=res.diverging_vectors,
         vecs=res.vectors_tested,
         benign_fp=res.benign_fp_diffs,
@@ -228,12 +274,17 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="Equivalence fuzzing between Mesa Panfrost Valhall ISA->SSA and Mali DDK Valhall ISA->SSA."
     )
-    ap.add_argument("shaders", nargs="+", help="One or more Vulkan GLCompute .spv paths")
+    ap.add_argument("shaders", nargs="+", help="One or more Vulkan .spv paths (VS/FS/CS)")
     ap.add_argument("--bin", default="build/spirv2valhall", help="Path to spirv2valhall binary")
-    ap.add_argument("--arch", type=int, default=10, help="Valhall architecture version (default: 10)")
+    ap.add_argument("--arch", type=int, default=11, help="Valhall architecture version (default: 11)")
     ap.add_argument("--k-init", type=int, default=64, help="Concrete input vectors per shader")
     ap.add_argument("--fp-range", choices=("vulkan", "unconstrained"), default="vulkan")
     ap.add_argument("--no-canonicalize", action="store_true")
+    ap.add_argument("--panfrost-cl", action="store_true", help="Use OpenCL --panfrost-cl backend instead of native Vulkan --panfrost")
+    ap.add_argument("--panfrost-backend", choices=("auto", "kraid", "bifrost"), default="auto",
+                    help="Backend for panfrost_vk_compile (auto, kraid, or bifrost)")
+    ap.add_argument("--panfrost-robust", action="store_true", help="Enable --robust in panfrost_vk_compile")
+    ap.add_argument("--panfrost-no-idvs", action="store_true", help="Pass --no-idvs to panfrost_vk_compile")
     ap.add_argument("--json-out", default="", help="Optional path to write full JSON results")
     args = ap.parse_args(argv)
 
@@ -247,11 +298,15 @@ def main(argv: list[str] | None = None) -> int:
             canonicalize=not args.no_canonicalize,
             arch=args.arch,
             spirv2valhall_bin=args.bin,
+            panfrost_flag="--panfrost-cl" if args.panfrost_cl else "--panfrost",
+            panfrost_backend=args.panfrost_backend,
+            panfrost_robust=args.panfrost_robust,
+            panfrost_no_idvs=args.panfrost_no_idvs,
         )
         all_res.append(r.__dict__)
         tag = os.path.basename(spv)
         print(
-            f"[PANFROST-VS-DDK] {tag:36s} status={r.status:20s} "
+            f"[PANFROST-VS-DDK] {tag:36s} ({r.panfrost_backend or '?':7s}) status={r.status:20s} "
             f"vecs={r.vecs:3d} divs={r.divs:3d} tri={r.triangle:13s} "
             f"insts=(pan={r.panfrost_insts},ddk={r.ddk_insts})"
             + (f" err={r.error[:60]}" if r.error else "")

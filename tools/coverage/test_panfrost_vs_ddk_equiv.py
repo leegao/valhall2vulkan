@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 
-from tools.coverage.panfrost_vs_ddk import run_panfrost_vs_ddk_equiv
+from tools.coverage.panfrost_vs_ddk import build_panfrost_vs_ddk_bundle, run_panfrost_vs_ddk_equiv
 
 
 _SIMPLE_ALU_SPVASM = """\
@@ -64,7 +64,7 @@ _SIMPLE_ALU_SPVASM = """\
 
 class TestPanfrostVsDdkEquiv(unittest.TestCase):
     def test_comp_rep_minimal_panfrost_vs_ddk_equiv_exact(self) -> None:
-        """samples/comp_rep_minimal.spv compiles via both Panfrost and DDK and is EQUIV_EXACT."""
+        """samples/comp_rep_minimal.spv compiles via native Vulkan Panfrost and DDK and is EQUIV_EXACT."""
         res = run_panfrost_vs_ddk_equiv(
             "samples/comp_rep_minimal.spv",
             k_init=32,
@@ -73,9 +73,59 @@ class TestPanfrostVsDdkEquiv(unittest.TestCase):
             arch=10,
         )
         self.assertEqual(res.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT, got {res}")
+        self.assertEqual(res.stage, "Compute")
         self.assertEqual(res.divs, 0)
         self.assertGreater(res.panfrost_insts, 0)
         self.assertGreater(res.ddk_insts, 0)
+
+    def test_frag_rep_minimal_panfrost_vs_ddk_equiv_exact(self) -> None:
+        """samples/frag_rep_minimal.spv compiles via native Vulkan Panfrost and DDK and is EQUIV_EXACT."""
+        res = run_panfrost_vs_ddk_equiv(
+            "samples/frag_rep_minimal.spv",
+            k_init=32,
+            fp_range="vulkan",
+            canonicalize=True,
+            arch=10,
+        )
+        self.assertEqual(res.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT, got {res}")
+        self.assertEqual(res.stage, "Fragment")
+        self.assertEqual(res.divs, 0)
+        self.assertGreater(res.panfrost_insts, 0)
+
+    def test_vert_rep_minimal_panfrost_vs_ddk_dual_compile(self) -> None:
+        """samples/vert_rep_minimal.spv dual-compiles natively on Vertex stage via --panfrost and DDK."""
+        bundle, err, fail_kind = build_panfrost_vs_ddk_bundle("samples/vert_rep_minimal.spv", arch=10)
+        self.assertIsNotNone(bundle, f"Vertex dual-compile failed ({fail_kind}): {err}")
+        self.assertEqual(bundle["stage"], "Vertex")
+        self.assertGreater(len(bundle.get("panfrost_pc_disasm", {})), 0)
+
+
+    def test_comp_rep_minimal_panfrost_bifrost_backend_equiv_exact(self) -> None:
+        """samples/comp_rep_minimal.spv compiles via --panfrost-backend bifrost and is EQUIV_EXACT."""
+        res = run_panfrost_vs_ddk_equiv(
+            "samples/comp_rep_minimal.spv",
+            k_init=32,
+            fp_range="vulkan",
+            canonicalize=True,
+            arch=11,
+            panfrost_backend="bifrost",
+        )
+        self.assertEqual(res.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for bifrost, got {res}")
+        self.assertEqual(res.panfrost_backend, "bifrost")
+        self.assertEqual(res.divs, 0)
+
+    def test_comp_rep_minimal_panfrost_cl_legacy_equiv_exact(self) -> None:
+        """Legacy OpenCL --panfrost-cl path remains operational and EQUIV_EXACT on compute shaders."""
+        res = run_panfrost_vs_ddk_equiv(
+            "samples/comp_rep_minimal.spv",
+            k_init=32,
+            fp_range="vulkan",
+            canonicalize=True,
+            arch=10,
+            panfrost_flag="--panfrost-cl",
+        )
+        self.assertEqual(res.status, "EQUIV_EXACT", f"Expected EQUIV_EXACT for --panfrost-cl, got {res}")
+        self.assertEqual(res.divs, 0)
 
     def test_synthetic_compute_alu_panfrost_vs_ddk_equiv_exact(self) -> None:
         """Vulkan GLCompute SSBO ALU kernel is EQUIV_EXACT between Panfrost ISA->SSA and DDK ISA->SSA."""
