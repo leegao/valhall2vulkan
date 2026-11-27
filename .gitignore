@@ -81,3 +81,4 @@ mkarchive.sh
 .obsidian/
 
 !docs/de-fau-devirt-design.md
+!third_party/prebuilts/panfrost/libpanfrost_vk_compile.a
