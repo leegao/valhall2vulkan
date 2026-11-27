@@ -1,4 +1,5 @@
 #include "panfrost_compiler.h"
+#include "panfrost_abi_bridge.h"
 #include "panfrost_vk_compiler.h"
 
 #include "spirv2ssa.h"
@@ -766,6 +767,7 @@ PanfrostCompileResult compile_with_panfrost(
         res.kernels.push_back(std::move(kb));
         res.fau_const_words = std::move(vko.fau_const_words);
         res.srt_pka_buf_names = std::move(vko.srt_pka_buf_names);
+        res.descriptors = std::move(vko.descriptors);
         res.ok = true;
         return res;
     }
@@ -877,192 +879,6 @@ PanfrostCompileResult compile_with_panfrost(
 }
 
 
-static void devirtualize_panfrost_fau(
-    valhall::compiler::ValhallSsaModule& ssa,
-    const std::vector<PanfrostArgBinding>& bindings) {
-    if (ssa.blocks.empty()) return;
-    // Map FAU word_idx -> (key, is_hi) for 64-bit buffer pointers at offset 24 + 8*i.
-    std::unordered_map<uint32_t, std::pair<std::string, bool>> word_to_buf;
-    for (const auto& ab : bindings) {
-        uint32_t w_lo = ab.fau_offset / 4u;
-        word_to_buf[w_lo] = {ab.key, false};
-        word_to_buf[w_lo + 1u] = {ab.key, true};
-    }
-
-    // Check if any LoadFau references a bound buffer or num_workgroups (words 0, 1, 2).
-    std::unordered_map<std::string, std::pair<valhall::compiler::SsaId, valhall::compiler::SsaId>> buf_lo_hi;
-    valhall::compiler::SsaId nwg_id = valhall::compiler::kInvalidSsa;
-    std::vector<valhall::compiler::SsaId> entry_prefix;
-
-    auto emit_entry = [&](valhall::compiler::SsaNode n) -> valhall::compiler::SsaId {
-        n.id = static_cast<valhall::compiler::SsaId>(ssa.nodes.size());
-        n.block_id = 0;
-        ssa.nodes.push_back(std::move(n));
-        entry_prefix.push_back(ssa.nodes.back().id);
-        return ssa.nodes.back().id;
-    };
-
-    auto get_buf_lo_hi = [&](const std::string& key) -> std::pair<valhall::compiler::SsaId, valhall::compiler::SsaId> {
-        auto it = buf_lo_hi.find(key);
-        if (it != buf_lo_hi.end()) return it->second;
-        valhall::compiler::SsaNode sb{};
-        sb.op = valhall::tables::SsaOp::LoadSidebandU64;
-        sb.type = valhall::compiler::ValType::U64;
-        sb.imm_u32 = 0x10u;
-        sb.aux_str = key;
-        auto base = emit_entry(std::move(sb));
-
-        valhall::compiler::SsaNode sp{};
-        sp.op = valhall::tables::SsaOp::Split64;
-        sp.type = valhall::compiler::ValType::TupleU32x2;
-        sp.args = {base};
-        auto sp_id = emit_entry(std::move(sp));
-
-        valhall::compiler::SsaNode lo{};
-        lo.op = valhall::tables::SsaOp::TupleExtract;
-        lo.type = valhall::compiler::ValType::U32;
-        lo.imm_u32 = 0;
-        lo.args = {sp_id};
-        auto lo_id = emit_entry(std::move(lo));
-
-        valhall::compiler::SsaNode hi{};
-        hi.op = valhall::tables::SsaOp::TupleExtract;
-        hi.type = valhall::compiler::ValType::U32;
-        hi.imm_u32 = 1;
-        hi.args = {sp_id};
-        auto hi_id = emit_entry(std::move(hi));
-
-        buf_lo_hi[key] = {lo_id, hi_id};
-        return {lo_id, hi_id};
-    };
-
-    auto get_nwg = [&]() -> valhall::compiler::SsaId {
-        if (nwg_id != valhall::compiler::kInvalidSsa) return nwg_id;
-        valhall::compiler::SsaNode bn{};
-        bn.op = valhall::tables::SsaOp::LoadBuiltinInput;
-        bn.type = valhall::compiler::ValType::V3U32;
-        bn.imm_u32 = 24u;  // SpvBuiltInNumWorkgroups
-        bn.aux_str = "gl_NumWorkGroups";
-        nwg_id = emit_entry(std::move(bn));
-        return nwg_id;
-    };
-
-    size_t orig_count = ssa.nodes.size();
-    for (size_t i = 0; i < orig_count; ++i) {
-        if (ssa.nodes[i].op != valhall::tables::SsaOp::LoadFau) continue;
-        uint32_t widx = ssa.nodes[i].imm_u32;
-        auto bit = word_to_buf.find(widx);
-        if (bit != word_to_buf.end()) {
-            auto [lo_id, hi_id] = get_buf_lo_hi(bit->second.first);
-            ssa.nodes[i].op = valhall::tables::SsaOp::Copy;
-            ssa.nodes[i].args = {bit->second.second ? hi_id : lo_id};
-            ssa.nodes[i].imm_u32 = 0;
-            ssa.nodes[i].aux_str = bit->second.first;
-        } else if (widx < 3u) {
-            auto nw = get_nwg();
-            ssa.nodes[i].op = valhall::tables::SsaOp::VecExtract;
-            ssa.nodes[i].type = valhall::compiler::ValType::U32;
-            ssa.nodes[i].args = {nw};
-            ssa.nodes[i].imm_u32 = widx;
-        }
-    }
-
-    if (!entry_prefix.empty()) {
-        auto& b0_nodes = ssa.blocks[0].nodes;
-        b0_nodes.insert(b0_nodes.begin(), entry_prefix.begin(), entry_prefix.end());
-    }
-}
-
-
-static void devirtualize_panfrost_vk_fau(
-    valhall::compiler::ValhallSsaModule& ssa,
-    const PanfrostCompileResult& cres,
-    const PanfrostKernelBinary& kb) {
-    if (ssa.blocks.empty()) return;
-
-    valhall::dataflow::FauSummaryMap summary;
-    std::unordered_map<uint32_t, uint32_t> nwg_word_to_comp;
-
-    // Decode panvk compacted sysval FAU slots (64-bit slots packed in ascending order).
-    const uint32_t sysval_count = static_cast<uint32_t>(cres.used_sysval_words.size());
-    for (uint32_t i = 0; i < sysval_count; ++i) {
-        uint32_t orig_slot = cres.used_sysval_words[i];
-        uint32_t fau_byte = i * 8u;
-        uint32_t fau_word = i * 2u;
-        if (kb.stage == valhall::ShaderStage::Compute) {
-            // panvk_compute_sysvals: slot 0={base.x,base.y}, slot 1={base.z,_pad},
-            // slot 5={num_wg.x,num_wg.y}, slot 6={num_wg.z,local_sz.x}, slot 7={local_sz.y,local_sz.z}
-            if (orig_slot == 0u) {
-                summary[fau_byte] = valhall::dataflow::SymExpr::make_const_u32(0u);
-                summary[fau_byte + 4u] = valhall::dataflow::SymExpr::make_const_u32(0u);
-            } else if (orig_slot == 1u) {
-                summary[fau_byte] = valhall::dataflow::SymExpr::make_const_u32(0u);
-            } else if (orig_slot == 5u) {
-                nwg_word_to_comp[fau_word] = 0u;
-                nwg_word_to_comp[fau_word + 1u] = 1u;
-            } else if (orig_slot == 6u) {
-                nwg_word_to_comp[fau_word] = 2u;
-                summary[fau_byte + 4u] = valhall::dataflow::SymExpr::make_const_u32(kb.local_size[0]);
-            } else if (orig_slot == 7u) {
-                summary[fau_byte] = valhall::dataflow::SymExpr::make_const_u32(kb.local_size[1]);
-                summary[fau_byte + 4u] = valhall::dataflow::SymExpr::make_const_u32(kb.local_size[2]);
-            }
-        }
-    }
-
-    // Rewrite num_workgroups sysval loads to VecExtract(LoadBuiltinInput(NumWorkgroups), comp).
-    if (!nwg_word_to_comp.empty()) {
-        valhall::compiler::SsaId nwg_id = valhall::compiler::kInvalidSsa;
-        std::vector<valhall::compiler::SsaId> entry_prefix;
-        size_t orig_count = ssa.nodes.size();
-        for (size_t idx = 0; idx < orig_count; ++idx) {
-            if (ssa.nodes[idx].op != valhall::tables::SsaOp::LoadFau) continue;
-            auto it = nwg_word_to_comp.find(ssa.nodes[idx].imm_u32);
-            if (it == nwg_word_to_comp.end()) continue;
-            if (nwg_id == valhall::compiler::kInvalidSsa) {
-                valhall::compiler::SsaNode bn{};
-                bn.id = static_cast<valhall::compiler::SsaId>(ssa.nodes.size());
-                bn.block_id = 0;
-                bn.op = valhall::tables::SsaOp::LoadBuiltinInput;
-                bn.type = valhall::compiler::ValType::V3U32;
-                bn.imm_u32 = 24u;  // SpvBuiltInNumWorkgroups
-                bn.aux_str = "gl_NumWorkGroups";
-                ssa.nodes.push_back(std::move(bn));
-                nwg_id = ssa.nodes.back().id;
-                entry_prefix.push_back(nwg_id);
-            }
-            ssa.nodes[idx].op = valhall::tables::SsaOp::VecExtract;
-            ssa.nodes[idx].type = valhall::compiler::ValType::U32;
-            ssa.nodes[idx].args = {nwg_id};
-            ssa.nodes[idx].imm_u32 = it->second;
-            ssa.nodes[idx].aux_str.clear();
-        }
-        if (!entry_prefix.empty()) {
-            auto& b0 = ssa.blocks[0].nodes;
-            b0.insert(b0.begin(), entry_prefix.begin(), entry_prefix.end());
-        }
-    }
-
-    // Decode panvk compacted user push-constant FAU slots into canonical "push_const" loads.
-    for (uint32_t j = 0; j < cres.used_push_const_words.size(); ++j) {
-        uint32_t pc_slot = cres.used_push_const_words[j];
-        uint32_t fau_byte = (sysval_count + j) * 8u;
-        summary[fau_byte] = valhall::dataflow::SymExpr::make_buffer_load(-1, -1, "push_const", pc_slot * 8u, 4u);
-        summary[fau_byte + 4u] = valhall::dataflow::SymExpr::make_buffer_load(-1, -1, "push_const", pc_slot * 8u + 4u, 4u);
-    }
-
-    // Seed promoted FAU immediate constants.
-    for (const auto& [w, val] : cres.fau_const_words) {
-        summary[w * 4u] = valhall::dataflow::SymExpr::make_const_u32(val);
-    }
-
-    if (!summary.empty()) {
-        valhall::dataflow::DeFauDevirtOptions dopt;
-        dopt.record_fallbacks = false;
-        valhall::dataflow::run_ssa_defau_devirt(ssa, summary, dopt);
-    }
-}
-
 static const char* stage_name_str(valhall::ShaderStage st) {
     switch (st) {
         case valhall::ShaderStage::Vertex: return "Vertex";
@@ -1102,37 +918,28 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
                     !opts.out_spirv_prefix.empty();
 
     valhall::compiler::Pass1Result primary_p1;
+    PanfrostAbiBridgeReport bridge_report{};
     if (!cres.kernels.empty() && need_ssa) {
         const auto& kb0 = cres.kernels[0];
         valhall::ValhallTranslateOptions vopts{};
-        vopts.stage = kb0.stage;
-        vopts.arch = arch;
-        vopts.local_size_x = kb0.local_size[0];
-        vopts.local_size_y = kb0.local_size[1];
-        vopts.local_size_z = kb0.local_size[2];
-        vopts.srt_pka_buf_names = cres.srt_pka_buf_names;
-        for (const auto& [w, val] : cres.fau_const_words) {
-            uint32_t byte_off = w * 4u;
-            vopts.fau_fcst_words[byte_off] = val;
-            auto sit = cres.srt_pka_buf_names.find(val);
-            if (sit != cres.srt_pka_buf_names.end()) {
-                vopts.fau_pka_buf_names[byte_off] = sit->second;
-            }
-        }
-        std::vector<valhall::DecodedValhallInst> pri_insts;
-        for (size_t i = 0; i + 8 <= kb0.ebin_bytes.size(); i += 8) {
-            uint64_t word = 0;
-            std::memcpy(&word, kb0.ebin_bytes.data() + i, 8);
-            pri_insts.push_back(valhall::decode_valhall_instruction(word, arch, i));
-        }
-        valhall::cfg::ControlFlowGraph pri_cfg = valhall::cfg::build_cfg(pri_insts);
+        populate_panfrost_translate_options(cres, kb0, &vopts, &bridge_report);
+        PanfrostIdvsSplit split = decode_and_split_panfrost_binary(
+            kb0.ebin_bytes, arch, kb0.stage, cres.idvs);
+        bridge_report.idvs_split = split.is_idvs_split;
+        bridge_report.primary_inst_count = static_cast<uint32_t>(split.primary_insts.size());
+        bridge_report.secondary_inst_count = static_cast<uint32_t>(split.secondary_insts.size());
+
+        valhall::cfg::ControlFlowGraph pri_cfg = valhall::cfg::build_cfg(split.primary_insts);
         valhall::cfg::ControlFlowGraph sec_cfg;
+        if (!split.secondary_insts.empty()) {
+            sec_cfg = valhall::cfg::build_cfg(split.secondary_insts);
+        }
         primary_p1 = valhall::compiler::run_pass1_lowering(pri_cfg, sec_cfg, vopts);
         if (primary_p1.ok && !cres.arg_bindings.empty()) {
-            devirtualize_panfrost_fau(primary_p1.ssa, cres.arg_bindings);
+            apply_panfrost_cl_abi_bridge(primary_p1.ssa, cres.arg_bindings);
         }
         if (primary_p1.ok && opts.mode == PanfrostMode::Vulkan) {
-            devirtualize_panfrost_vk_fau(primary_p1.ssa, cres, kb0);
+            apply_panfrost_vk_abi_bridge(primary_p1.ssa, cres, kb0, &bridge_report);
         }
         if (opts.equiv_opts.run_ssa_opt && primary_p1.ok) {
             valhall::dataflow::SsaOptPipelineOptions oopt;
@@ -1229,6 +1036,13 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
            << "  \"compiler\": \"" << mode_label << "\",\n"
            << "  \"panfrost_backend\": \"" << cres.backend_used << "\",\n"
            << "  \"panfrost_idvs\": " << (cres.idvs ? "true" : "false") << ",\n"
+           << "  \"panfrost_abi_bridge\": {\"idvs_split\": " << (bridge_report.idvs_split ? "true" : "false")
+           << ", \"primary_insts\": " << bridge_report.primary_inst_count
+           << ", \"secondary_insts\": " << bridge_report.secondary_inst_count
+           << ", \"viewport_words_devirt\": " << bridge_report.viewport_fau_words_devirt
+           << ", \"compute_sysval_words_devirt\": " << bridge_report.compute_sysval_words_devirt
+           << ", \"push_const_words_devirt\": " << bridge_report.push_const_words_devirt
+           << ", \"immediate_words_devirt\": " << bridge_report.immediate_words_devirt << "},\n"
            << "  \"panfrost_robust\": " << (cres.robust ? "true" : "false") << ",\n"
            << "  \"panfrost_merge_workgroups\": " << (cres.merge_workgroups ? "true" : "false") << ",\n"
            << "  \"panfrost_fau_sysval_slots\": " << cres.fau_sysval_slots << ",\n"

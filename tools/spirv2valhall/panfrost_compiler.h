@@ -55,6 +55,7 @@ struct PanfrostCompileResult {
     std::vector<PanfrostArgBinding> arg_bindings;
     std::map<uint32_t, uint32_t> fau_const_words;
     std::map<uint32_t, std::string> srt_pka_buf_names;
+    std::vector<PanfrostVkDescriptorInfo> descriptors;
 };
 
 struct PanfrostRunOptions {

@@ -997,9 +997,15 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     else if (is_dref) ts.op = SsaOp::TexSampleDref;
     else if (is_explicit_lod || is_zero_lod) ts.op = SsaOp::TexSampleLod;
     else ts.op = SsaOp::TexSample;
+    bool is_cube = false;
+    if (auto it = ins.modifier_strs.find("dimensionality"); it != ins.modifier_strs.end() && it->second == "cube") {
+        is_cube = true;
+    } else if (auto it = ins.modifier_strs.find("dimension"); it != ins.modifier_strs.end() && it->second == "cube") {
+        is_cube = true;
+    }
     ts.type = ValType::TupleValToken;
     ts.imm_u32 = tex_idx;
-    ts.imm_u32_2 = gcomp;
+    ts.imm_u32_2 = (is_cube && (ts.op == SsaOp::TexSample || ts.op == SsaOp::TexSampleLod)) ? 1u : gcomp;
     if (!has_tex_idx && ctx.opts.samplers.size() == 1u) {
         tex_idx = ctx.opts.samplers[0].tex_index;
         has_tex_idx = true;
@@ -1061,6 +1067,9 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
                 SsaId lod_f = ctx.emit_op(blk, SsaOp::ConvertSToF, ValType::F32, {lod_s16});
                 SsaId inv256 = ctx.sb.emit_const_f32_bits(blk, 0x3b800000u);
                 sr_val = ctx.emit_op(blk, SsaOp::FMul, ValType::F32, {lod_f, inv256});
+            }
+            if (is_cube && sr_i == 2u) {
+                sr_val = ctx.sb.emit_bitcast(blk, ValType::F32, sr_val);
             }
             ts.args.push_back(sr_val);
         }
@@ -1326,7 +1335,8 @@ std::string get_dest_mod(Pass1Context&, uint32_t, const DecodedValhallInst& ins,
 }
 
 bool get_src_abs(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
-    if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE) && src_idx == 2u) return false;
+    if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE ||
+         ins.mnemonic == Mnemonic::FADD_RSCALE || ins.canonical_mnemonic == Mnemonic::FADD_RSCALE) && src_idx == 2u) return false;
     if ((ins.mnemonic == Mnemonic::FABS || ins.canonical_mnemonic == Mnemonic::FABS) && src_idx == 0u) return false;
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].abs) return true;
     auto it = ins.fields.find("abs" + std::to_string(src_idx));
@@ -1334,7 +1344,8 @@ bool get_src_abs(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const t
 }
 
 bool get_src_neg(Pass1Context&, uint32_t, const DecodedValhallInst& ins, const tables::LoweringRuleSpec*, uint32_t src_idx) {
-    if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE) && src_idx == 2u) return false;
+    if ((ins.mnemonic == Mnemonic::FMUL_RSCALE || ins.canonical_mnemonic == Mnemonic::FMUL_RSCALE ||
+         ins.mnemonic == Mnemonic::FADD_RSCALE || ins.canonical_mnemonic == Mnemonic::FADD_RSCALE) && src_idx == 2u) return false;
     if ((ins.mnemonic == Mnemonic::FNEG || ins.canonical_mnemonic == Mnemonic::FNEG) && src_idx == 0u) return false;
     if (src_idx < ins.srcs.size() && ins.srcs[src_idx].neg) return true;
     auto it = ins.fields.find("neg" + std::to_string(src_idx));
