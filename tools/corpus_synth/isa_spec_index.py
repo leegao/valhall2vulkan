@@ -1,6 +1,6 @@
-"""Backwards-compatible re-export of `tools.spec.isa_spec_index`."""
+"""Backwards-compatible re-export of `tools.specs.isa_spec_index`."""
 
-from tools.spec.isa_spec_index import (
+from tools.specs.isa_spec_index import (
     DEFAULT_ISA_XML,
     STRUCTURAL_FIELD_NAMES,
     IsaEnum,

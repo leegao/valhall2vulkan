@@ -34,7 +34,7 @@ from tools.corpus_synth.isa_field_fragments import (
     generate_field_cases_for_spec,
 )
 from tools.corpus_synth.isa_recipes import RECIPES, VARIANT_RECIPES
-from tools.spec.isa_spec_index import IsaSpecIndex, load_isa_spec_index
+from tools.specs.isa_spec_index import IsaSpecIndex, load_isa_spec_index
 from tools.corpus_synth.isa_spv_harness import IsaRecipe, build_spvasm_from_recipe
 from tools.corpus_synth.oracle import _parse_valhall_mnemonic
 from tools.corpus_synth.valhall_isel_catalog import (

@@ -26,7 +26,7 @@ from tools.corpus_synth.isa_field_fragments import (
     FieldValue,
     generate_field_cases_for_spec,
 )
-from tools.spec.isa_spec_index import (
+from tools.specs.isa_spec_index import (
     IsaFieldSpec,
     IsaSpecIndex,
     IsaVariantSpec,

@@ -189,10 +189,10 @@ class TestCorpusSynth(unittest.TestCase):
         from tools.corpus_synth.isa_target_synth import build_spvasm_for_isa
         from tools.corpus_synth.spv_fuzzer import fuzz_spv_with_spirv_fuzz
         from tools.corpus_synth.valhall_isel_catalog import VALHALL_ISEL_CATALOG
-        from tools.spec import load_isa_spec_index as spec_loader
+        from tools.specs import load_isa_spec_index as spec_loader
         from tools.equivalence.spvasm_io import find_spirv_tool
 
-        # 1. Unified tools.spec loader
+        # 1. Unified tools.specs loader
         idx = spec_loader()
         self.assertEqual(len(idx.variants), 627)
 

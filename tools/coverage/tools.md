@@ -23,6 +23,14 @@ python3 -m tools.coverage samples/comp_unique_03_fba18fbe.spv \
 # 4. Predicate-coverage input synthesis + auto-shrinking any discovered divergence
 python3 -m tools.coverage samples/comp_unique_03_fba18fbe.spv \
   --k-init 64 --fp-mode exact --shrink --dump-vectors /tmp/vecs.json
+
+# 5. Maximal-reachability-seeded coverage synthesis
+python3 -m tools.coverage samples/comp_unique_03_fba18fbe.spv \
+  --maximal-reachability-seed --domain udomain_backfill --dump-vectors /tmp/vecs.json
+
+# 6. Cross-compiler equivalence fuzzing (Mesa Panfrost vs Mali DDK)
+python3 -m tools.coverage.panfrost_vs_ddk samples/comp_unique_03_fba18fbe.spv \
+  --maximal-reachability-seed --trace-diff --slice-diff 8 --record bugs/
 ```
 
 If Z3 is installed in a local wheel directory, prepend `PYTHONPATH=/path/to/z3_site_packages:.` before `python3`.
@@ -48,13 +56,14 @@ If Z3 is installed in a local wheel directory, prepend `PYTHONPATH=/path/to/z3_s
 | `--side {direct,valhall}` | `direct` | SSA side targeted for synthesis/reachability or used to seed `--equiv-fuzz`. |
 | `--k-init <N>` | `32` | Number of initial concrete seed vectors (edge-case corners + deterministic PRNG). |
 | `--max-rounds <N>` | `12` | Maximum synthesis rounds in default coverage mode. |
-| `--domain {bitvec,udomain,udomain_exact}` | `udomain` | Symbolic value domain for concolic solving. |
+| `--domain {bitvec,udomain,udomain_backfill,udomain_exact}` | `udomain_backfill` | Symbolic value domain for concolic solving. |
 | `--fp-mode {exact,real,uf}` | `exact` | Z3 floating-point theory: `exact` (`QF_FP`), `real` (`QF_NRA` algebraic), or `uf` (uninterpreted FP ops). |
 | `--fp-range {unconstrained,vulkan}` | `unconstrained` | Concrete input FP sampling range (`vulkan` restricts to finite Vulkan-safe floats). |
 | `--canonicalize` / `--no-canonicalize` | `True` | Enable or disable pre-SMT structural canonicalization (`tools.symbolic_ssa.passes`). |
 | `--defau` / `--no-defau` | `True` | Enable or disable De-FAU devirtualization when invoking `spirv2valhall`. |
 | `--opt-ssa` / `--no-opt-ssa` | `True` | Enable or disable C++ `ssa-opt` passes when invoking `spirv2valhall`. |
 | `--maximal-reachability` | `False` | Solve and report pairwise-disjoint reachability conditions exercising all paths. |
+| `--maximal-reachability-seed` | `False` | Use maximal reachability to find maximal path vector seeds, then run maximal coverage (and equivalence fuzzing when `--equiv-fuzz` is active). |
 | `--equiv-fuzz` | `False` | Seed concrete vectors from `--side` and concretely test Direct vs Valhall equivalence. |
 | `--shrink` | `False` | Auto-shrink diverging inputs (always enabled in `--equiv-fuzz`). |
 | `--slice-diff <DEPTH>` | `0` | On divergence, print an N-hop side-by-side Direct vs Valhall concrete backward-slice diff aligned by shared values. |
@@ -69,6 +78,22 @@ If Z3 is installed in a local wheel directory, prepend `PYTHONPATH=/path/to/z3_s
 | `--time-budget-ms <MS>` | `5000` | Total wall-clock budget in milliseconds for synthesis, reachability, or `--equiv-fuzz`. |
 | `--max-unroll <N>` | `1` | Bounded loop unrolling depth (coverage mode adaptively increases up to 3 when loops remain uncovered). |
 | `--dump-vectors <FILE>` | `None` | Write synthesized override dicts (or disjoint path records in `--maximal-reachability`) to JSON. |
+
+---
+
+## Panfrost vs. DDK Cross-Compiler CLI (`python3 -m tools.coverage.panfrost_vs_ddk`)
+
+`tools.coverage.panfrost_vs_ddk` accepts one or more `.spv`/`.spvasm` `shaders` and shares the same concolic, reachability, triage, and recording flags as `python3 -m tools.coverage` (`--bin`, `--side {direct,valhall,panfrost,ddk}`, `--k-init` default `64`, `--max-rounds`, `--domain` default `udomain_backfill`, `--fp-mode` default `real`, `--fp-range` default `vulkan`, `--canonicalize`/`--no-canonicalize`, `--defau`/`--no-defau`, `--opt-ssa`/`--no-opt-ssa`, `--maximal-reachability`, `--maximal-reachability-seed`, `--equiv-fuzz`, `--shrink`, `--slice-diff`, `--trace-diff`, `--record`, `--no-reduce`, `--record-timeout-s`, `--record-steps`, `--max-ulp`, `--max-paths`, `--timeout-ms`, `--time-budget-ms` default `3000`, `--max-unroll`, `--dump-vectors`), plus Panfrost-specific options:
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--arch <N>` | `11` | Valhall architecture version. |
+| `--panfrost-cl` | `False` | Use OpenCL `--panfrost-cl` backend instead of native Vulkan `--panfrost`. |
+| `--panfrost-backend {auto,kraid,bifrost}` | `auto` | Backend for `panfrost_vk_compile`. |
+| `--panfrost-robust` | `False` | Enable `--robust` in `panfrost_vk_compile`. |
+| `--panfrost-no-idvs` | `False` | Pass `--no-idvs` to `panfrost_vk_compile`. |
+| `--no-triangle` | `False` | Skip 3-way Direct attribution on divergence. |
+| `--json-out <FILE>` | `""` | Write full `PanfrostVsDdkResult` list to JSON. |
 
 ---
 

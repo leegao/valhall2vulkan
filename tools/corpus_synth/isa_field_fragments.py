@@ -17,7 +17,7 @@ import dataclasses
 from collections.abc import Callable, Sequence
 from typing import Union
 
-from tools.spec.isa_spec_index import IsaSpecIndex, IsaVariantSpec
+from tools.specs.isa_spec_index import IsaSpecIndex, IsaVariantSpec
 
 FieldValue = Union[int, str]
 

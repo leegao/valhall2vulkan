@@ -14,6 +14,7 @@
 | `gen_spirv_parser.py` | `specs/spirv/spirv.core.grammar.json` | `src/generated/valhall_spirv_parser_generated.{h,cpp}` |
 | `dsl_parser.py` | Library (`specs/lowering/spec.md` LL(1) grammar) | Parses `@INLINE_OPS` and operand-fetcher bodies into strict typed ASTs (`parse_inline_ops`). |
 | `valhall_lowering_dsl.py` | Library (consumes `dsl_parser.py` ASTs) | Compiles `@INLINE_OPS` rules and operand fetchers into C++ code for `gen_valhall_tables.py`. |
+| `isa_spec_index.py` | Library (`specs/kraid/isa-v9-v14.xml`) | Shared Valhall ISA XML specification reader (`IsaSpecIndex`, `load_isa_spec_index`). |
 
 ---
 
