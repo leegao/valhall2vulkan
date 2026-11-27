@@ -23,31 +23,74 @@ PanfrostIdvsSplit decode_and_split_panfrost_binary(
     const std::vector<uint8_t>& ebin_bytes,
     uint8_t arch,
     valhall::ShaderStage stage,
-    bool idvs_enabled) {
+    bool idvs_enabled,
+    uint32_t constant_data_size,
+    bool secondary_enable,
+    uint32_t secondary_offset) {
     PanfrostIdvsSplit out;
-    const size_t n_qwords = ebin_bytes.size() / 8u;
-    if (n_qwords == 0) return out;
-
-    // Identify an IDVS Position/Varying boundary: a `.end` instruction followed by
-    // one or more 64-bit zero alignment padding words and a non-zero Varying shader.
-    size_t split_qword = n_qwords;
-    if (stage == valhall::ShaderStage::Vertex && idvs_enabled) {
-        bool saw_end = false;
-        bool saw_zero_after_end = false;
-        for (size_t i = 0; i < n_qwords; ++i) {
+    size_t code_bytes = ebin_bytes.size();
+    if (constant_data_size > 0u && ebin_bytes.size() >= constant_data_size) {
+        // Panfrost emits [code][align_pad to 128B][constant_data][trailing prefetch zero-pad].
+        // Find the exact start of constant_data via the minimum ADR target PC (or 128B-aligned end of code).
+        size_t total_qw = ebin_bytes.size() / 8u;
+        size_t min_adr_target = SIZE_MAX;
+        size_t last_end_plus_8 = 0;
+        for (size_t i = 0; i < total_qw; ++i) {
             uint64_t word = 0;
             std::memcpy(&word, ebin_bytes.data() + i * 8u, 8u);
-            if (word == 0u) {
-                if (saw_end) saw_zero_after_end = true;
-                continue;
-            }
-            if (saw_end && saw_zero_after_end) {
-                split_qword = i;
-                break;
-            }
+            if (word == 0u) continue;
             auto di = valhall::decode_valhall_instruction(word, arch, i * 8u);
+            if (di.mnemonic == valhall::Mnemonic::ADR && di.imm_signed > 0) {
+                size_t tgt = i * 8u + static_cast<size_t>(di.imm_signed);
+                if (tgt < min_adr_target && tgt + constant_data_size <= ebin_bytes.size()) {
+                    min_adr_target = tgt;
+                }
+            }
             if (inst_has_end_flow(di)) {
-                saw_end = true;
+                last_end_plus_8 = (i + 1u) * 8u;
+                if (min_adr_target != SIZE_MAX) break;
+            }
+            if (min_adr_target != SIZE_MAX && (i + 1u) * 8u >= min_adr_target) break;
+        }
+        size_t ro_off = (min_adr_target != SIZE_MAX)
+                            ? min_adr_target
+                            : ((last_end_plus_8 > 0u) ? ((last_end_plus_8 + 127u) & ~size_t(127u))
+                                                      : (ebin_bytes.size() - constant_data_size));
+        if (ro_off + constant_data_size <= ebin_bytes.size()) {
+            code_bytes = ro_off;
+            out.rodata_offset = static_cast<uint32_t>(ro_off);
+            out.rodata_size = constant_data_size;
+        }
+    }
+    out.code_bytes = static_cast<uint32_t>(code_bytes);
+    const size_t n_qwords = code_bytes / 8u;
+    if (n_qwords == 0) return out;
+
+    // Identify an IDVS Position/Varying boundary: prefer exact compiler-reported
+    // secondary_offset when available, falling back to `.end` + zero-padding scan.
+    size_t split_qword = n_qwords;
+    if (stage == valhall::ShaderStage::Vertex && idvs_enabled) {
+        if (secondary_enable && secondary_offset > 0u && (secondary_offset % 8u) == 0u &&
+            (secondary_offset / 8u) < n_qwords) {
+            split_qword = secondary_offset / 8u;
+        } else {
+            bool saw_end = false;
+            bool saw_zero_after_end = false;
+            for (size_t i = 0; i < n_qwords; ++i) {
+                uint64_t word = 0;
+                std::memcpy(&word, ebin_bytes.data() + i * 8u, 8u);
+                if (word == 0u) {
+                    if (saw_end) saw_zero_after_end = true;
+                    continue;
+                }
+                if (saw_end && saw_zero_after_end) {
+                    split_qword = i;
+                    break;
+                }
+                auto di = valhall::decode_valhall_instruction(word, arch, i * 8u);
+                if (inst_has_end_flow(di)) {
+                    saw_end = true;
+                }
             }
         }
     }
@@ -112,6 +155,24 @@ void populate_panfrost_translate_options(
             sbi.sampler_index = (d.kind == "combined_image_sampler") ? (d.desc_idx + 1u) : d.desc_idx;
             vopts->samplers.push_back(sbi);
             ++mapped_samplers;
+        }
+    }
+    if (kb.stage == valhall::ShaderStage::Vertex) {
+        for (const auto& v : cres.varyings) {
+            if (v.offset < 0) continue;
+            valhall::ValhallTranslateOptions::IdvsVaryingOffsetSpec spec{};
+            spec.user_location = v.user_location;
+            spec.is_point_size = (v.name == "psiz" || v.location == 1);
+            spec.is_position = (v.name == "pos" || v.location == 0);
+            spec.ncomps = (v.ncomps > 0u) ? v.ncomps : 4u;
+            spec.name = v.name;
+            vopts->idvs_varying_offsets[v.offset] = std::move(spec);
+        }
+    } else if (kb.stage == valhall::ShaderStage::Fragment) {
+        for (const auto& v : cres.varyings) {
+            if (v.user_location >= 0) {
+                vopts->frag_varying_addr_to_loc[v.index] = static_cast<uint32_t>(v.user_location);
+            }
         }
     }
     if (report) {

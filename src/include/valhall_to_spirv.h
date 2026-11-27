@@ -84,6 +84,14 @@ struct ValhallTranslateOptions {
     std::map<uint32_t, uint32_t> fau_fcst_words;
     std::map<uint32_t, uint32_t> frag_varying_addr_to_loc;
     std::map<uint32_t, std::string> vert_sout_attr_names;
+    struct IdvsVaryingOffsetSpec {
+        int32_t user_location = -1;
+        bool is_point_size = false;
+        bool is_position = false;
+        uint32_t ncomps = 4;
+        std::string name;
+    };
+    std::map<int64_t, IdvsVaryingOffsetSpec> idvs_varying_offsets;
     uint32_t num_color_attachments = 1;
     bool emits_depth = false;
 

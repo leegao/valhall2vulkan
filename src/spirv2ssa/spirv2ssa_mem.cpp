@@ -714,9 +714,23 @@ LoweredValue SpirvLowerer::lower_load_ptr(uint32_t blk_id, uint32_t res_type, ui
     ValType lane_vt = to_val_type(scalar_elem_type(res_type));
 
     if (ptr.dynamic_index != compiler::kInvalidSsa) {
-        const SpirvType* rt = mod_.get_type(root_tid);
-        uint32_t total_elems = (rt && (rt->kind == SpirvTypeKind::Array || rt->kind == SpirvTypeKind::Vector))
-                                   ? std::min<uint32_t>(rt->count, 32u)
+        uint32_t dyn_tid = root_tid;
+        for (uint32_t c_idx : ptr.const_path) {
+            const SpirvType* ct = mod_.get_type(dyn_tid);
+            if (!ct) break;
+            if (ct->kind == SpirvTypeKind::Struct && c_idx < ct->member_types.size()) {
+                dyn_tid = ct->member_types[c_idx];
+            } else if (ct->kind == SpirvTypeKind::Array || ct->kind == SpirvTypeKind::Matrix ||
+                       ct->kind == SpirvTypeKind::Vector) {
+                dyn_tid = ct->elem_type;
+            } else {
+                break;
+            }
+        }
+        const SpirvType* rt = mod_.get_type(dyn_tid);
+        uint32_t total_elems = (rt && (rt->kind == SpirvTypeKind::Array || rt->kind == SpirvTypeKind::Vector ||
+                                       rt->kind == SpirvTypeKind::Matrix))
+                                   ? std::min<uint32_t>(rt->count, 256u)
                                    : 4u;
         for (uint32_t lane = 0; lane < nlanes; ++lane) {
             SsaId acc = read_slot(blk_id, make_slot_key(ptr.root_var_id, base_flat + lane), lane_vt);
@@ -802,9 +816,23 @@ void SpirvLowerer::lower_store_val(uint32_t blk_id, uint32_t ptr_id, const Lower
     uint32_t base_flat = compute_flat_offset(mod_, *this, root_tid, ptr.const_path);
 
     if (ptr.dynamic_index != compiler::kInvalidSsa) {
-        const SpirvType* rt = mod_.get_type(root_tid);
-        uint32_t total_elems = (rt && (rt->kind == SpirvTypeKind::Array || rt->kind == SpirvTypeKind::Vector))
-                                   ? std::min<uint32_t>(rt->count, 32u)
+        uint32_t dyn_tid = root_tid;
+        for (uint32_t c_idx : ptr.const_path) {
+            const SpirvType* ct = mod_.get_type(dyn_tid);
+            if (!ct) break;
+            if (ct->kind == SpirvTypeKind::Struct && c_idx < ct->member_types.size()) {
+                dyn_tid = ct->member_types[c_idx];
+            } else if (ct->kind == SpirvTypeKind::Array || ct->kind == SpirvTypeKind::Matrix ||
+                       ct->kind == SpirvTypeKind::Vector) {
+                dyn_tid = ct->elem_type;
+            } else {
+                break;
+            }
+        }
+        const SpirvType* rt = mod_.get_type(dyn_tid);
+        uint32_t total_elems = (rt && (rt->kind == SpirvTypeKind::Array || rt->kind == SpirvTypeKind::Vector ||
+                                       rt->kind == SpirvTypeKind::Matrix))
+                                   ? std::min<uint32_t>(rt->count, 256u)
                                    : 4u;
         uint32_t nlanes = static_cast<uint32_t>(val.lanes.size());
         for (uint32_t e = 0; e < total_elems; ++e) {

@@ -1,5 +1,7 @@
 #include "spirv2valhall.h"
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
 #include "panfrost_compiler.h"
+#endif
 #include "cmpbe_chunks.h"
 
 #include <cassert>
@@ -142,9 +144,12 @@ void main() {
     const std::string comp_spv = std::string(TEST_BUILD_DIR) + "/s2v_test_comp.spv";
     const std::string vert_spv = std::string(TEST_BUILD_DIR) + "/s2v_test_vert.spv";
     const std::string frag_spv = std::string(TEST_BUILD_DIR) + "/s2v_test_frag.spv";
-    assert(compile_glsl_to_spv("comp", comp_glsl, comp_spv));
-    assert(compile_glsl_to_spv("vert", vert_glsl, vert_spv));
-    assert(compile_glsl_to_spv("frag", frag_glsl, frag_spv));
+    if (!compile_glsl_to_spv("comp", comp_glsl, comp_spv) ||
+        !compile_glsl_to_spv("vert", vert_glsl, vert_spv) ||
+        !compile_glsl_to_spv("frag", frag_glsl, frag_spv)) {
+        std::cerr << "[FAIL] compile_glsl_to_spv failed\n";
+        return 1;
+    }
 
     ExtractOptions opts;
     opts.core = "Mali-G710";
@@ -244,6 +249,7 @@ void main() {
     assert(spv_out0.good());
     std::cout << "[PASS] spirv2valhall CLI verified end-to-end with context dump, pilot shader, and --dump-spirv\n";
 
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
     // Verify Panfrost compiler integration (--panfrost and --panfrost-cl) when prebuilt is available
     {
         std::string pf_bin = find_panfrost_compiler();
@@ -316,6 +322,7 @@ void main() {
 
         std::cout << "[PASS] spirv2valhall --panfrost (VS/FS/CS + bcn_bc7) and --panfrost-cl verified end-to-end\n";
     }
+#endif
 
     cmpbe_chunk_EBIN dummy_ebin{};
     (void)dummy_ebin;

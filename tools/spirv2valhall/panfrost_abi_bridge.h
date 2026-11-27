@@ -15,6 +15,9 @@ namespace valhall::spirv2valhall {
 struct PanfrostIdvsSplit {
     bool is_idvs_split = false;
     uint32_t split_pc = 0;
+    uint32_t code_bytes = 0;
+    uint32_t rodata_offset = 0;
+    uint32_t rodata_size = 0;
     std::vector<valhall::DecodedValhallInst> primary_insts;
     std::vector<valhall::DecodedValhallInst> secondary_insts;
 };
@@ -40,7 +43,10 @@ PanfrostIdvsSplit decode_and_split_panfrost_binary(
     const std::vector<uint8_t>& ebin_bytes,
     uint8_t arch,
     valhall::ShaderStage stage,
-    bool idvs_enabled);
+    bool idvs_enabled,
+    uint32_t constant_data_size = 0,
+    bool secondary_enable = false,
+    uint32_t secondary_offset = 0);
 
 /// Populate `ValhallTranslateOptions` with Panfrost's descriptor-handle (`srt_pka_buf_names`,
 /// `fau_pka_buf_names`), promoted FAU constant (`fau_fcst_words`), and texture/sampler

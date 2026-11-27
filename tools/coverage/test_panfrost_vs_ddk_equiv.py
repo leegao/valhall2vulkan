@@ -335,5 +335,70 @@ class TestPanfrostVsDdkEquiv(unittest.TestCase):
             self.assertEqual(bridge.get("viewport_words_devirt"), 6)
 
 
+    def test_v52_vert_rep_minimal_idvs_varying_and_ncomps_equiv_exact(self) -> None:
+        """v52: IDVS varying byte-offset map + pre-lowering ncomps undef-lane zero-pad -> EQUIV_EXACT."""
+        r = run_panfrost_vs_ddk_equiv(
+            "samples/vert_rep_minimal.spv",
+            k_init=16,
+            spirv2valhall_bin="./build/spirv2valhall",
+            time_budget_ms=0,
+            compute_triangle=True,
+            panfrost_backend="kraid",
+        )
+        self.assertEqual(r.status, "EQUIV_EXACT", f"vert_rep_minimal failed: {r.status} divs={r.divs}/{r.vecs}")
+
+    def test_v52_bcn_bc7_rodata_and_local_array_256_kraid_vs_direct_exact(self) -> None:
+        """v52: BC7 Mode 2 Partition 62 (64-entry LocalVar array + carved Kraid .rodata) -> Kraid == Direct."""
+        r = run_panfrost_vs_ddk_equiv(
+            "samples/bcn_bc7.spv",
+            k_init=40,
+            spirv2valhall_bin="./build/spirv2valhall",
+            time_budget_ms=0,
+            compute_triangle=True,
+            panfrost_backend="kraid",
+        )
+        self.assertEqual(
+            r.direct_vs_panfrost,
+            "EQUIV_EXACT",
+            f"bcn_bc7 Kraid vs Direct failed: {r.direct_vs_panfrost} (pan_ddk={r.status})",
+        )
+
+    def test_v52_synthetic_kraid_lowering_fixes_equiv_exact(self) -> None:
+        """v52: IADD.v2s16/v2u16 .b01, TEX_GRADIENT->IADD.u64, ADR .rodata, LD_VAR_SPECIAL, LD_VAR/FLAT."""
+        from tools.corpus_synth.isa_target_synth import build_spvasm_for_isa
+
+        targets = [
+            "V2S8_TO_V2S16",
+            "V2U8_TO_V2U16",
+            "TEX_GRADIENT",
+            "ADR",
+            "LD_VAR_SPECIAL",
+            "LD_VAR",
+            "LD_VAR_FLAT",
+        ]
+        with tempfile.TemporaryDirectory(prefix="test_v52_synth_") as td:
+            for mnem in targets:
+                _, asm = build_spvasm_for_isa(mnem)
+                spv_path = os.path.join(td, f"isa_{mnem.lower()}.spv")
+                p_as = subprocess.run(
+                    ["spirv-as", "--target-env", "vulkan1.2", "-", "-o", spv_path],
+                    input=asm.encode(),
+                    capture_output=True,
+                )
+                self.assertEqual(p_as.returncode, 0, f"spirv-as failed for {mnem}: {p_as.stderr.decode()}")
+                r = run_panfrost_vs_ddk_equiv(
+                    spv_path,
+                    k_init=16,
+                    spirv2valhall_bin="./build/spirv2valhall",
+                    time_budget_ms=0,
+                    compute_triangle=True,
+                    panfrost_backend="kraid",
+                )
+                self.assertEqual(
+                    r.status,
+                    "EQUIV_EXACT",
+                    f"{mnem} failed: status={r.status} divs={r.divs}/{r.vecs} tri={r.triangle}",
+                )
+
 if __name__ == "__main__":
     unittest.main()

@@ -736,7 +736,6 @@ PanfrostCompileResult compile_with_panfrost(
         vk_opts.backend = vk_backend;
         vk_opts.robust = vk_robust;
         vk_opts.no_idvs = vk_no_idvs;
-        vk_opts.panfrost_vk_bin = panfrost_bin;
         vk_opts.verbose = verbose;
         PanfrostVkCompileOutput vko = compile_vulkan_spv_via_panfrost(spv_path, vk_opts);
         if (!vko.ok) {
@@ -753,6 +752,7 @@ PanfrostCompileResult compile_with_panfrost(
         kb.work_reg_count = vko.work_reg_count;
         kb.tls_size = vko.tls_size;
         kb.wls_size = vko.wls_size;
+        kb.constant_data_size = vko.constant_data_size;
         kb.ebin_bytes = std::move(vko.ebin_bytes);
         res.backend_used = vko.backend_used;
         res.idvs = vko.idvs;
@@ -768,6 +768,10 @@ PanfrostCompileResult compile_with_panfrost(
         res.fau_const_words = std::move(vko.fau_const_words);
         res.srt_pka_buf_names = std::move(vko.srt_pka_buf_names);
         res.descriptors = std::move(vko.descriptors);
+        res.constant_data_size = vko.constant_data_size;
+        res.secondary_enable = vko.secondary_enable;
+        res.secondary_offset = vko.secondary_offset;
+        res.varyings = std::move(vko.varyings);
         res.ok = true;
         return res;
     }
@@ -919,12 +923,19 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
 
     valhall::compiler::Pass1Result primary_p1;
     PanfrostAbiBridgeReport bridge_report{};
+    uint32_t carved_code_bytes = 0;
+    uint32_t carved_rodata_offset = 0;
+    uint32_t carved_rodata_size = 0;
     if (!cres.kernels.empty() && need_ssa) {
         const auto& kb0 = cres.kernels[0];
         valhall::ValhallTranslateOptions vopts{};
         populate_panfrost_translate_options(cres, kb0, &vopts, &bridge_report);
         PanfrostIdvsSplit split = decode_and_split_panfrost_binary(
-            kb0.ebin_bytes, arch, kb0.stage, cres.idvs);
+            kb0.ebin_bytes, arch, kb0.stage, cres.idvs,
+            cres.constant_data_size, cres.secondary_enable, cres.secondary_offset);
+        carved_code_bytes = split.code_bytes;
+        carved_rodata_offset = split.rodata_offset;
+        carved_rodata_size = split.rodata_size;
         bridge_report.idvs_split = split.is_idvs_split;
         bridge_report.primary_inst_count = static_cast<uint32_t>(split.primary_insts.size());
         bridge_report.secondary_inst_count = static_cast<uint32_t>(split.secondary_insts.size());
@@ -982,7 +993,8 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
         pc_js << "{";
         if (!cres.kernels.empty()) {
             const auto& kb0 = cres.kernels[0];
-            size_t n_insts = kb0.ebin_bytes.size() / 8;
+            size_t code_sz = (carved_code_bytes > 0u) ? carved_code_bytes : kb0.ebin_bytes.size();
+            size_t n_insts = code_sz / 8;
             bool first_pc = true;
             for (size_t i = 0; i < n_insts; ++i) {
                 uint64_t word = 0;
@@ -1030,6 +1042,22 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
             pka_js << "\"" << pid << "\":\"" << name << "\"";
         }
         pka_js << "}";
+        std::ostringstream rodata_js;
+        if (!cres.kernels.empty() && carved_rodata_size > 0u &&
+            carved_rodata_offset + carved_rodata_size <= cres.kernels[0].ebin_bytes.size()) {
+            const auto& eb = cres.kernels[0].ebin_bytes;
+            static constexpr char kHex[] = "0123456789abcdef";
+            std::string hex;
+            hex.reserve(carved_rodata_size * 2u);
+            for (size_t i = 0; i < carved_rodata_size; ++i) {
+                uint8_t b = eb[carved_rodata_offset + i];
+                hex.push_back(kHex[b >> 4]);
+                hex.push_back(kHex[b & 0x0Fu]);
+            }
+            rodata_js << ", \"ebin_rodata\": {\"offset\": " << carved_rodata_offset
+                      << ", \"size\": " << carved_rodata_size
+                      << ", \"hex\": \"" << hex << "\"}";
+        }
         const char* st_str = cres.kernels.empty() ? "Compute" : stage_name_str(cres.kernels[0].stage);
         std::ostringstream js;
         js << "{\n"
@@ -1052,7 +1080,7 @@ int run_panfrost_pipeline(const std::string& spv_path, const PanfrostRunOptions&
            << "  \"stage\": \"" << st_str << "\",\n"
            << "  \"arch\": " << static_cast<int>(arch) << ",\n"
            << "  \"mbs2_context\": {\"fau_fcst_words\": " << fau_js.str()
-           << ", \"srt_pka_buf_names\": " << pka_js.str() << "},\n"
+           << ", \"srt_pka_buf_names\": " << pka_js.str() << rodata_js.str() << "},\n"
            << "  \"local_size\": ["
            << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[0]) << ","
            << (cres.kernels.empty() ? 1 : cres.kernels[0].local_size[1]) << ","

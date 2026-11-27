@@ -333,6 +333,8 @@ class SsaInterpreter(Generic[V]):
         ):
             return self.const_u64(self._env.get_buf_base(aux_str))
         if imm_u32 == 1:
+            if aux_str == "panfrost_ebin_rodata":
+                return self.const_u64(self._env.get_buf_base("panfrost_ebin_rodata"))
             return self.const_u64(self._env.get_buf_base("ebin_rodata"))
         if imm_u32 == 2:
             return self.const_u64(self._env.get_buf_base("pilot_srt_0"))

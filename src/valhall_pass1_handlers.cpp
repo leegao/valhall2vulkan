@@ -1037,12 +1037,27 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     if (is_grdesc && extra_end >= 4u) {
         SsaId g0 = abi::sr_get(ctx, blk, ins, nullptr, 2u);
         SsaId cur = g0;
-        for (int depth = 0; depth < 6 && cur != kInvalidSsa; ++depth) {
+        auto is_zero_const = [&](SsaId id) -> bool {
+            if (id == kInvalidSsa || id >= ctx.mod.nodes.size()) return false;
+            const auto& cn = ctx.mod.get(id);
+            return (cn.op == SsaOp::ConstU32 && cn.imm_u32 == 0u) ||
+                   (cn.op == SsaOp::ConstU64 && cn.imm_u64 == 0u);
+        };
+        for (int depth = 0; depth < 12 && cur != kInvalidSsa; ++depth) {
             if (ctx.grad_desc_map.count(cur)) break;
             const auto& n = ctx.mod.get(cur);
             if ((n.op == SsaOp::Bitcast || n.op == SsaOp::Copy ||
-                 n.op == SsaOp::VecExtract || n.op == SsaOp::TupleExtract) && !n.args.empty()) {
+                 n.op == SsaOp::VecExtract || n.op == SsaOp::TupleExtract ||
+                 n.op == SsaOp::Split64 || n.op == SsaOp::Pack64) && !n.args.empty()) {
                 cur = n.args[0];
+            } else if ((n.op == SsaOp::IAdd64 || n.op == SsaOp::IAdd) && n.args.size() == 2u) {
+                if (is_zero_const(n.args[1])) {
+                    cur = n.args[0];
+                } else if (is_zero_const(n.args[0])) {
+                    cur = n.args[1];
+                } else {
+                    break;
+                }
             } else {
                 break;
             }
@@ -1179,6 +1194,47 @@ SsaId store_vert_varying(Pass1Context& ctx, uint32_t blk, const DecodedValhallIn
         return store_builtin_pos(ctx, blk, ins, rule, vec, tok);
     }
     uint32_t var_loc = static_cast<uint32_t>(std::max<int64_t>(0, ins.imm_signed) / 16);
+    if (ins.mnemonic == Mnemonic::STORE && !ctx.opts.idvs_varying_offsets.empty()) {
+        if (auto vit = ctx.opts.idvs_varying_offsets.find(ins.imm_signed);
+            vit != ctx.opts.idvs_varying_offsets.end()) {
+            const auto& vspec = vit->second;
+            if (vspec.is_position) {
+                return store_builtin_pos(ctx, blk, ins, rule, vec, tok);
+            }
+            if (vspec.is_point_size) {
+                SsaNode ex0{}; ex0.op = SsaOp::VecExtract; ex0.type = ValType::F32; ex0.imm_u32 = 0; ex0.args = { vec };
+                SsaId ps_f32 = ctx.sb.emit(blk, std::move(ex0));
+                if (ins.variant == Variant::I16) {
+                    SsaId raw_u32 = ctx.sb.emit_bitcast(blk, ValType::U32, ps_f32);
+                    SsaId up2 = ctx.emit_op(blk, SsaOp::UnpackHalf2x16, ValType::V2F32, { raw_u32 });
+                    SsaNode ex_ps{}; ex_ps.op = SsaOp::VecExtract; ex_ps.type = ValType::F32; ex_ps.imm_u32 = 0; ex_ps.args = { up2 };
+                    ps_f32 = ctx.sb.emit(blk, std::move(ex_ps));
+                }
+                SsaNode st{};
+                st.op = SsaOp::StoreBuiltinOutput;
+                st.type = ValType::Token;
+                st.imm_u32 = static_cast<uint32_t>(spirv::BuiltIn::PointSize);
+                st.aux_str = "gl_PointSize";
+                st.args = { ps_f32, tok };
+                st.is_barrier_or_cf = true;
+                st.is_side_effect = true;
+                return ctx.sb.emit(blk, std::move(st));
+            }
+            if (vspec.user_location >= 0) {
+                var_loc = static_cast<uint32_t>(vspec.user_location);
+                if (vspec.ncomps > 0u && vspec.ncomps < 4u) {
+                    SsaId zf = ctx.sb.emit_const_f32_bits(blk, 0u);
+                    std::vector<SsaId> lanes(4, zf);
+                    for (uint32_t c = 0; c < vspec.ncomps; ++c) {
+                        SsaNode ex{}; ex.op = SsaOp::VecExtract; ex.type = ValType::F32; ex.imm_u32 = c; ex.args = { vec };
+                        lanes[c] = ctx.sb.emit(blk, std::move(ex));
+                    }
+                    SsaNode vc{}; vc.op = SsaOp::VecConstruct4; vc.type = ValType::V4F32; vc.args = std::move(lanes);
+                    vec = ctx.sb.emit(blk, std::move(vc));
+                }
+            }
+        }
+    }
     if (ins.mnemonic == Mnemonic::ST_CVT) {
         uint32_t attr_idx = 0xFFFFFFFFu;
         if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register) {

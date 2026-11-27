@@ -1,7 +1,7 @@
 #include "panfrost_vk_compiler.h"
+#include "panfrost_vk_compile.h"
 
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -21,14 +21,6 @@ namespace fs = std::filesystem;
 namespace valhall::spirv2valhall {
 
 namespace {
-
-bool is_executable_file(const std::string& path) {
-    if (path.empty()) return false;
-    struct stat st {};
-    if (::stat(path.c_str(), &st) != 0) return false;
-    if (!S_ISREG(st.st_mode)) return false;
-    return ::access(path.c_str(), X_OK) == 0;
-}
 
 bool read_file_bytes(const std::string& path, std::vector<uint8_t>* out, std::string* err) {
     std::ifstream ifs(path, std::ios::binary);
@@ -320,104 +312,128 @@ valhall::ShaderStage parse_stage_str(const std::string& s, valhall::ShaderStage 
     return fallback;
 }
 
-/// Spawn `bin` with `argv` via fork/execv, capturing stderr into `stderr_out`.
-bool run_subprocess(const std::string& bin,
-                    const std::vector<std::string>& args,
-                    int* exit_code_out,
-                    int* term_sig_out,
-                    std::string* stderr_out,
-                    std::string* err) {
-    int err_pipe[2] = {-1, -1};
-    if (::pipe(err_pipe) != 0) {
-        if (err) *err = "pipe() failed for panfrost_vk_compile";
-        return false;
-    }
+/// Invoke the statically linked `panfrost_vk_compile()` directly in-process,
+/// capturing stderr into `stderr_out`. Because Mesa's `pan_use_kraid()` caches
+/// `PAN_USE_KRAID` once per process via `DEBUG_GET_ONCE_FLAGS_OPTION`, we track
+/// the latched backend and only fork a child if a single process switches
+/// between Kraid and Bifrost mid-process. HACKY
+bool run_panfrost_vk_static(const std::string& spv_path,
+                            const std::string& out_bin,
+                            const std::string& out_json,
+                            const PanfrostVkCompileOptions& opts,
+                            int* rc_out,
+                            int* term_sig_out,
+                            std::string* stderr_out,
+                            std::string* err) {
+    struct panfrost_vk_compile_options c_opts {};
+    c_opts.in_path = spv_path.c_str();
+    c_opts.out_path = out_bin.c_str();
+    c_opts.arch = (opts.arch != 0) ? opts.arch : 11u;
+    c_opts.entry_override = nullptr;
+    c_opts.info_json_path = out_json.c_str();
+    c_opts.stage_override = -1;
+    c_opts.robust = opts.robust;
+    c_opts.no_idvs = opts.no_idvs;
+    c_opts.promote_imm = !opts.no_promote_imm;
+    c_opts.clamp_version = !opts.no_clamp_version;
+    c_opts.dump_nir = false;
+    c_opts.disasm = false;
+    c_opts.core_max_id = opts.core_max_id;
 
-    pid_t pid = ::fork();
-    if (pid < 0) {
-        ::close(err_pipe[0]);
-        ::close(err_pipe[1]);
-        if (err) *err = "fork() failed for panfrost_vk_compile";
-        return false;
-    }
+    // Resolve desired PAN_USE_KRAID value ("all" for Kraid/Auto, "0" for Bifrost).
+    const bool want_bifrost = (opts.backend == PanfrostVkBackend::Bifrost);
+    const char* desired_env = want_bifrost ? "0" : "all";
 
-    if (pid == 0) {
-        ::close(err_pipe[0]);
-        ::dup2(err_pipe[1], STDERR_FILENO);
-        ::close(err_pipe[1]);
-        int devnull = ::open("/dev/null", O_WRONLY);
-        if (devnull >= 0) {
-            ::dup2(devnull, STDOUT_FILENO);
-            ::close(devnull);
+    static bool has_latched = false;
+    static bool latched_bifrost = false;
+
+    const bool need_fork_for_backend_switch =
+        has_latched && (latched_bifrost != want_bifrost);
+
+    if (need_fork_for_backend_switch) {
+        int err_pipe[2] = {-1, -1};
+        if (::pipe(err_pipe) != 0) {
+            if (err) *err = "pipe() failed for static panfrost_vk_compile backend switch";
+            return false;
         }
-        std::vector<char*> cargv;
-        cargv.reserve(args.size() + 1);
-        for (const auto& a : args) {
-            cargv.push_back(const_cast<char*>(a.c_str()));
+        pid_t pid = ::fork();
+        if (pid < 0) {
+            ::close(err_pipe[0]);
+            ::close(err_pipe[1]);
+            if (err) *err = "fork() failed for static panfrost_vk_compile backend switch";
+            return false;
         }
-        cargv.push_back(nullptr);
-        ::execv(bin.c_str(), cargv.data());
-        std::fprintf(stderr, "execv(%s) failed: %s\n", bin.c_str(), std::strerror(errno));
-        ::_exit(127);
+        if (pid == 0) {
+            ::close(err_pipe[0]);
+            ::dup2(err_pipe[1], STDERR_FILENO);
+            ::close(err_pipe[1]);
+            ::setenv("PAN_USE_KRAID", desired_env, 1);
+            int rc = ::panfrost_vk_compile(&c_opts);
+            std::fflush(stderr);
+            ::_exit(rc == 0 ? 0 : 1);
+        }
+        ::close(err_pipe[1]);
+        stderr_out->clear();
+        char buf[512];
+        ssize_t n = 0;
+        while ((n = ::read(err_pipe[0], buf, sizeof(buf))) > 0) {
+            stderr_out->append(buf, static_cast<size_t>(n));
+        }
+        ::close(err_pipe[0]);
+        int status = 0;
+        while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+        *rc_out = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        *term_sig_out = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+        return true;
     }
 
-    ::close(err_pipe[1]);
-    stderr_out->clear();
-    char buf[512];
-    ssize_t n = 0;
-    while ((n = ::read(err_pipe[0], buf, sizeof(buf))) > 0) {
-        stderr_out->append(buf, static_cast<size_t>(n));
+    if (!has_latched) {
+        if (opts.backend != PanfrostVkBackend::Auto) {
+            ::setenv("PAN_USE_KRAID", desired_env, 1);
+        } else if (!std::getenv("PAN_USE_KRAID")) {
+            ::setenv("PAN_USE_KRAID", "all", 1);
+        }
+        has_latched = true;
+        latched_bifrost = want_bifrost;
     }
-    ::close(err_pipe[0]);
 
-    int status = 0;
-    while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    // Redirect stderr to a temp file during the in-process call so Mesa diagnostics
+    // are captured cleanly without polluting JSON stdout/stderr.
+    std::string err_path = out_json + ".stderr";
+    std::fflush(stderr);
+    int saved_stderr = ::dup(STDERR_FILENO);
+    int err_fd = ::open(err_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (saved_stderr >= 0 && err_fd >= 0) {
+        ::dup2(err_fd, STDERR_FILENO);
+        ::close(err_fd);
+    } else if (err_fd >= 0) {
+        ::close(err_fd);
+    }
 
-    *exit_code_out = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-    *term_sig_out = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
+    int rc = ::panfrost_vk_compile(&c_opts);
+    std::fflush(stderr);
+
+    if (saved_stderr >= 0) {
+        ::dup2(saved_stderr, STDERR_FILENO);
+        ::close(saved_stderr);
+    }
+    read_file_text(err_path, stderr_out, nullptr);
+    if (opts.verbose && !stderr_out->empty()) {
+        std::cerr << *stderr_out;
+    }
+
+    *rc_out = rc;
+    *term_sig_out = 0;
     return true;
 }
 
 }  // namespace
-
-std::string find_panfrost_vk_compiler(const std::string& explicit_path) {
-    if (!explicit_path.empty() && is_executable_file(explicit_path)) {
-        return explicit_path;
-    }
-    if (const char* env = std::getenv("PANFROST_VK_COMPILE_BIN")) {
-        if (is_executable_file(env)) return env;
-    }
-    fs::path cur = fs::current_path();
-    for (int depth = 0; depth < 5; ++depth) {
-        fs::path cand = cur / "third_party" / "prebuilts" / "panfrost" / "panfrost_vk_compile";
-        if (is_executable_file(cand.string())) return cand.string();
-        if (!cur.has_parent_path() || cur == cur.parent_path()) break;
-        cur = cur.parent_path();
-    }
-    if (const char* path_env = std::getenv("PATH")) {
-        std::istringstream iss(path_env);
-        std::string dir;
-        while (std::getline(iss, dir, ':')) {
-            if (dir.empty()) continue;
-            fs::path cand = fs::path(dir) / "panfrost_vk_compile";
-            if (is_executable_file(cand.string())) return cand.string();
-        }
-    }
-    return "";
-}
 
 PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     const std::string& spv_path,
     const PanfrostVkCompileOptions& opts) {
     PanfrostVkCompileOutput out;
     out.arch = (opts.arch != 0) ? opts.arch : 11;
-
-    std::string bin = find_panfrost_vk_compiler(opts.panfrost_vk_bin);
-    if (bin.empty()) {
-        out.error = "panfrost_vk_compile not found (checked --panfrost-bin, PANFROST_VK_COMPILE_BIN, "
-                    "third_party/prebuilts/panfrost/panfrost_vk_compile, and PATH)";
-        return out;
-    }
 
     std::vector<uint8_t> raw_bytes;
     if (!read_file_bytes(spv_path, &raw_bytes, &out.error)) {
@@ -455,36 +471,15 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     fs::path out_bin = td / "shader.bin";
     fs::path out_json = td / "shader_info.json";
 
-    std::vector<std::string> argv;
-    argv.push_back(bin);
-    if (opts.backend == PanfrostVkBackend::Kraid) {
-        argv.push_back("--kraid");
-    } else if (opts.backend == PanfrostVkBackend::Bifrost) {
-        argv.push_back("--no-kraid");
-    }
-    if (opts.robust) argv.push_back("--robust");
-    if (opts.no_idvs) argv.push_back("--no-idvs");
-    if (opts.no_promote_imm) argv.push_back("--no-promote-imm");
-    if (opts.no_clamp_version) argv.push_back("--no-clamp-version");
-    if (opts.core_max_id != 0) {
-        argv.push_back("--core-max-id");
-        argv.push_back(std::to_string(opts.core_max_id));
-    }
-    argv.push_back("--info-json");
-    argv.push_back(out_json.string());
-    argv.push_back(spv_path);
-    argv.push_back(out_bin.string());
-
     if (opts.verbose) {
-        std::cerr << "[panfrost-vk] running:";
-        for (const auto& a : argv) std::cerr << " " << a;
-        std::cerr << "\n";
+        std::cerr << "[panfrost-vk] running static panfrost_vk_compile on " << spv_path << "\n";
     }
 
     int exit_code = -1;
     int term_sig = 0;
     std::string stderr_text;
-    if (!run_subprocess(bin, argv, &exit_code, &term_sig, &stderr_text, &out.error)) {
+    if (!run_panfrost_vk_static(spv_path, out_bin.string(), out_json.string(),
+                                opts, &exit_code, &term_sig, &stderr_text, &out.error)) {
         cleanup();
         return out;
     }
@@ -506,13 +501,6 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
         if (out.error.empty()) out.error = "panfrost_vk_compile produced empty binary";
         cleanup();
         return out;
-    }
-    // Trim trailing all-zero 64-bit cache-line alignment padding words emitted by Panfrost.
-    while (out.ebin_bytes.size() > 8u && (out.ebin_bytes.size() % 8u) == 0u) {
-        uint64_t tail = 0;
-        std::memcpy(&tail, out.ebin_bytes.data() + out.ebin_bytes.size() - 8u, 8u);
-        if (tail != 0u) break;
-        out.ebin_bytes.resize(out.ebin_bytes.size() - 8u);
     }
 
     std::string info_text;
@@ -540,6 +528,20 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     if (const auto* v = root.get("work_reg_count")) out.work_reg_count = v->as_u32(32);
     if (const auto* v = root.get("tls_size")) out.tls_size = v->as_u32(0);
     if (const auto* v = root.get("wls_size")) out.wls_size = v->as_u32(0);
+    if (const auto* v = root.get("constant_data_size")) out.constant_data_size = v->as_u32(0);
+    if (const auto* v = root.get("secondary_enable")) out.secondary_enable = v->as_bool(false);
+    if (const auto* v = root.get("secondary_offset")) out.secondary_offset = v->as_u32(0);
+
+    // Trim trailing all-zero 64-bit cache-line alignment padding only when there is no
+    // trailing .rodata constant pool (otherwise trailing zero constants would be truncated).
+    if (out.constant_data_size == 0u) {
+        while (out.ebin_bytes.size() > 8u && (out.ebin_bytes.size() % 8u) == 0u) {
+            uint64_t tail = 0;
+            std::memcpy(&tail, out.ebin_bytes.data() + out.ebin_bytes.size() - 8u, 8u);
+            if (tail != 0u) break;
+            out.ebin_bytes.resize(out.ebin_bytes.size() - 8u);
+        }
+    }
 
     if (const auto* fau = root.get("fau")) {
         if (const auto* v = fau->get("sysval_slots")) out.fau_sysval_slots = v->as_u32(0);
@@ -588,6 +590,24 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
                     out.srt_pka_buf_names[packed] = canonical;
                 }
             }
+        }
+    }
+
+    if (const auto* vars = root.get("varyings"); vars && vars->kind == JsonVal::Kind::Array) {
+        for (const auto& item : vars->arr) {
+            PanfrostVkVaryingInfo vi;
+            if (const auto* v = item.get("index")) vi.index = v->as_u32();
+            if (const auto* v = item.get("location")) vi.location = v->as_u32();
+            if (const auto* v = item.get("user_location"); v && v->kind == JsonVal::Kind::Int) {
+                vi.user_location = static_cast<int32_t>(v->ival);
+            }
+            if (const auto* v = item.get("name")) vi.name = v->as_str();
+            if (const auto* v = item.get("offset"); v && v->kind == JsonVal::Kind::Int) {
+                vi.offset = static_cast<int32_t>(v->ival);
+            }
+            if (const auto* v = item.get("ncomps")) vi.ncomps = v->as_u32();
+            if (const auto* v = item.get("section")) vi.section = v->as_u32();
+            out.varyings.push_back(std::move(vi));
         }
     }
 

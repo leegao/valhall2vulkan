@@ -48,6 +48,10 @@ class ConcreteShaderEnv(ShaderEnvBase):
         if name in ("bi_4424", "bi_4425"):
             return 0
         if name in ("bi_19_0", "bi_19_1"):
+            # Under Vulkan 1x-MSAA (single-sampled pipelines, which panfrost_vk_compile targets),
+            # the Vulkan spec fixes gl_SamplePosition = (0.5, 0.5).
+            if self.bundle.get("panfrost_single_sample_frag"):
+                return _f32_to_u32(0.5)
             # Vulkan gl_SamplePosition lies on a subpixel grid in [0.0, 1.0);
             # using 1/256 granularity ensures exact Q8.8 fixed-point round-trip in Mali's sample table.
             h = _det_hash_u32(name, self.seed, self.vec_idx)
@@ -112,6 +116,8 @@ class ConcreteShaderEnv(ShaderEnvBase):
             return ((sy & 0xFFFF) << 16) | (sx & 0xFFFF)
         if bkey == "ebin_rodata":
             return self.read_ebin_rodata_u32(off32)
+        if bkey == "panfrost_ebin_rodata":
+            return self.read_panfrost_ebin_rodata_u32(off32)
         srt_val = self.read_pilot_srt_u32(bkey, off32)
         if srt_val is not None:
             return srt_val

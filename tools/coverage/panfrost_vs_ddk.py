@@ -131,23 +131,36 @@ def build_panfrost_vs_ddk_bundle(
         if not ddk.get("valhall_ok") or not pan.get("valhall_ok"):
             return None, "ISA->SSA lowering failed on one side", "LOWERING_FAILED"
 
+        pan_ssa_raw = pan["valhall_ssa"]
+        pan_rodata = pan.get("mbs2_context", {}).get("ebin_rodata")
+        if pan_rodata:
+            for node in pan_ssa_raw.get("nodes", []):
+                if node.get("op") == "LoadSidebandU64" and int(node.get("imm_u32", 0)) == 1:
+                    node["aux_str"] = "panfrost_ebin_rodata"
+
+        mbs2_merged = {
+            **ddk.get("mbs2_context", {}),
+            "srt_pka_buf_names": {
+                **pan.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
+                **ddk.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
+            },
+        }
+        if pan_rodata:
+            mbs2_merged["panfrost_ebin_rodata"] = pan_rodata
+
+        stage_str = ddk.get("stage", "Compute")
         bundle: dict[str, Any] = {
-            "stage": ddk.get("stage", "Compute"),
+            "stage": stage_str,
             "arch": ddk.get("arch", arch),
             "panfrost_backend": pan.get("panfrost_backend", ""),
             "panfrost_idvs": bool(pan.get("panfrost_idvs", True)),
             "panfrost_merge_workgroups": bool(pan.get("panfrost_merge_workgroups", False)),
+            "panfrost_single_sample_frag": (stage_str == "Fragment"),
             "local_size": ddk.get("local_size", pan.get("local_size", [1, 1, 1])),
-            "direct_ssa": pan["valhall_ssa"],
+            "direct_ssa": pan_ssa_raw,
             "valhall_ssa": ddk["valhall_ssa"],
             "orig_direct_ssa": ddk["direct_ssa"],
-            "mbs2_context": {
-                **ddk.get("mbs2_context", {}),
-                "srt_pka_buf_names": {
-                    **pan.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
-                    **ddk.get("mbs2_context", {}).get("srt_pka_buf_names", {}),
-                },
-            },
+            "mbs2_context": mbs2_merged,
             "panfrost_pc_disasm": pan.get("pc_disasm", {}),
             "panfrost_arg_bindings": pan.get("panfrost_arg_bindings", []),
         }

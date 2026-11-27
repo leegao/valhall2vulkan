@@ -215,9 +215,6 @@ add_library(spirv2valhall_lib STATIC
     tools/spirv2valhall/spirv_roundtrip.cpp
     tools/spirv2valhall/equiv_bundle.cpp
     tools/spirv2valhall/direct_isa_parser.cpp
-    tools/spirv2valhall/panfrost_compiler.cpp
-    tools/spirv2valhall/panfrost_vk_compiler.cpp
-    tools/spirv2valhall/panfrost_abi_bridge.cpp
     tools/spirv2valhall/spirv2valhall.cpp
 )
 target_include_directories(spirv2valhall_lib PUBLIC
@@ -227,6 +224,35 @@ target_compile_options(spirv2valhall_lib PRIVATE -Wall -Wextra -Wno-unused-param
 target_link_libraries(spirv2valhall_lib PUBLIC valhall2spirv)
 if(TARGET malioc_inproc)
     target_link_libraries(spirv2valhall_lib PUBLIC malioc_inproc)
+endif()
+
+option(VALHALL_ENABLE_PANFROST "Enable Panfrost compiler integration in spirv2valhall" ON)
+set(PANFROST_VK_STATIC_LIB "${CMAKE_CURRENT_SOURCE_DIR}/third_party/prebuilts/panfrost/libpanfrost_vk_compile.a")
+set(PANFROST_VK_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/third_party/prebuilts/panfrost/panfrost_vk_compile.h")
+if(VALHALL_ENABLE_PANFROST AND NOT ANDROID AND EXISTS "${PANFROST_VK_STATIC_LIB}" AND EXISTS "${PANFROST_VK_HEADER}")
+    target_sources(spirv2valhall_lib PRIVATE
+        tools/spirv2valhall/panfrost_compiler.cpp
+        tools/spirv2valhall/panfrost_vk_compiler.cpp
+        tools/spirv2valhall/panfrost_abi_bridge.cpp
+    )
+    target_include_directories(spirv2valhall_lib PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/prebuilts/panfrost"
+    )
+    target_compile_definitions(spirv2valhall_lib PUBLIC VALHALL_HAS_STATIC_PANFROST_VK_COMPILE=1)
+    find_library(VALHALL_Z_LIB NAMES z)
+    set(_panfrost_extra_libs rt pthread dl m util)
+    if(VALHALL_Z_LIB)
+        list(PREPEND _panfrost_extra_libs "${VALHALL_Z_LIB}")
+    endif()
+    add_library(panfrost_vk_link_compat STATIC
+        tools/spirv2valhall/panfrost_vk_link_compat.c
+    )
+    target_compile_options(panfrost_vk_link_compat PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(spirv2valhall_lib PUBLIC
+        "${PANFROST_VK_STATIC_LIB}"
+        panfrost_vk_link_compat
+        ${_panfrost_extra_libs}
+    )
 endif()
 
 add_executable(spirv2valhall

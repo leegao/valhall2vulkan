@@ -278,6 +278,13 @@ class ShaderEnvBase:
         if self._ebin_rodata_bytes:
             self.get_buf_base("ebin_rodata")
 
+        pro = self.mbs2.get("panfrost_ebin_rodata") or {}
+        self._panfrost_ebin_rodata_offset: int = int(pro.get("offset", 0))
+        pro_hex = str(pro.get("hex", ""))
+        self._panfrost_ebin_rodata_bytes: bytes = bytes.fromhex(pro_hex) if pro_hex else b""
+        if self._panfrost_ebin_rodata_bytes:
+            self.get_buf_base("panfrost_ebin_rodata")
+
     REGION_STRIDE_HI: int = 0x100
 
     def get_buf_base(self, key: str) -> int:
@@ -349,4 +356,23 @@ class ShaderEnvBase:
             | (self.read_ebin_rodata_byte(base + 1) << 8)
             | (self.read_ebin_rodata_byte(base + 2) << 16)
             | (self.read_ebin_rodata_byte(base + 3) << 24)
+        )
+
+    def read_panfrost_ebin_rodata_byte(self, off32: int) -> int:
+        """Read one byte from Panfrost's embedded EBIN .rodata at EBIN-relative byte offset `off32`."""
+        if not self._panfrost_ebin_rodata_bytes:
+            return self.read_ebin_rodata_byte(off32)
+        rel = (int(off32) & MASK32) - self._panfrost_ebin_rodata_offset
+        if 0 <= rel < len(self._panfrost_ebin_rodata_bytes):
+            return self._panfrost_ebin_rodata_bytes[rel]
+        return 0
+
+    def read_panfrost_ebin_rodata_u32(self, off32: int) -> int:
+        """Read a little-endian 32-bit word from Panfrost's embedded EBIN .rodata at `off32`."""
+        base = int(off32) & MASK32
+        return (
+            self.read_panfrost_ebin_rodata_byte(base)
+            | (self.read_panfrost_ebin_rodata_byte(base + 1) << 8)
+            | (self.read_panfrost_ebin_rodata_byte(base + 2) << 16)
+            | (self.read_panfrost_ebin_rodata_byte(base + 3) << 24)
         )

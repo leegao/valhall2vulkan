@@ -9,11 +9,11 @@
 
 namespace valhall::spirv2valhall {
 
-/// Backend selection for the standalone `panfrost_vk_compile` driver.
+/// Backend selection for `panfrost_vk_compile`.
 enum class PanfrostVkBackend {
     Auto,     // Use panfrost_vk_compile's default backend (Rust Kraid on v11)
-    Kraid,    // Force Rust Kraid backend (--kraid)
-    Bifrost,  // Force C Bifrost/Valhall backend (--no-kraid)
+    Kraid,    // Force Rust Kraid backend (PAN_USE_KRAID=all)
+    Bifrost,  // Force C Bifrost/Valhall backend (PAN_USE_KRAID=0)
 };
 
 /// Invocation options for `panfrost_vk_compile`.
@@ -25,7 +25,6 @@ struct PanfrostVkCompileOptions {
     bool no_promote_imm = false;
     bool no_clamp_version = false;
     uint32_t core_max_id = 0;
-    std::string panfrost_vk_bin;
     bool verbose = false;
 };
 
@@ -39,7 +38,18 @@ struct PanfrostVkDescriptorInfo {
     uint32_t desc_count = 1;
 };
 
-/// Compiled output from Mesa's standalone `panfrost_vk_compile` Vulkan SPIR-V compiler.
+/// Varying slot layout entry emitted by `panfrost_vk_compile --info-json`.
+struct PanfrostVkVaryingInfo {
+    uint32_t index = 0;
+    uint32_t location = 0;      // Mesa gl_varying_slot enum value
+    int32_t user_location = -1; // location - VARYING_SLOT_VAR0, or -1 for builtins
+    std::string name;           // "POS", "PSIZ", "CLIP_DIST0", etc., or "" for user loc
+    int32_t offset = -1;        // Byte offset in varying/position buffer
+    uint32_t ncomps = 0;
+    uint32_t section = 0;
+};
+
+/// Compiled output from Mesa's `panfrost_vk_compile` Vulkan SPIR-V compiler.
 struct PanfrostVkCompileOutput {
     bool ok = false;
     std::string error;
@@ -50,6 +60,9 @@ struct PanfrostVkCompileOutput {
     bool idvs = true;
     bool robust = false;
     bool merge_workgroups = false;
+    bool secondary_enable = false;
+    uint32_t secondary_offset = 0;
+    uint32_t constant_data_size = 0;
     uint32_t local_size[3] = {1, 1, 1};
     uint32_t instrs = 0;
     uint32_t work_reg_count = 32;
@@ -68,15 +81,12 @@ struct PanfrostVkCompileOutput {
     std::map<uint32_t, std::string> srt_pka_buf_names;
     /// Full descriptor table entries reported by `--info-json`.
     std::vector<PanfrostVkDescriptorInfo> descriptors;
+    /// Varying slot layout reported by `--info-json` (VS outputs or FS inputs).
+    std::vector<PanfrostVkVaryingInfo> varyings;
 };
 
-/// Locate the standalone `panfrost_vk_compile` executable.
-/// Search order: explicit_path, PANFROST_VK_COMPILE_BIN env var,
-/// third_party/prebuilts/panfrost/panfrost_vk_compile (CWD or parent dirs), then PATH.
-std::string find_panfrost_vk_compiler(const std::string& explicit_path = "");
-
 /// Compile a Vulkan SPIR-V shader (Vertex, Fragment, or Compute) directly to Valhall ISA
-/// by invoking Mesa's standalone `panfrost_vk_compile` binary with `--info-json`.
+/// via the statically linked `libpanfrost_vk_compile.a`.
 PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     const std::string& spv_path,
     const PanfrostVkCompileOptions& opts = {});

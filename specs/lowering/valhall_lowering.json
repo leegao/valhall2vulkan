@@ -2761,7 +2761,35 @@
     {
       "mnemonic": "IADD",
       "variants": [
-        "v2u16",
+        "v2u16"
+      ],
+      "op_class": "int_binary",
+      "ssa_op": "@INLINE_OPS",
+      "dest_type": "u32",
+      "src_types": [
+        "u32",
+        "u32"
+      ],
+      "splits_block": false,
+      "is_barrier_or_cf": false,
+      "effects": [],
+      "inline_ops": [
+        "%lo0 : u32 = BfeU(%0, #u32(0), #u32(16));",
+        "%hi0 : u32 = BfeU(%0, #u32(16), #u32(16));",
+        "if (@src_swz_eq(0, \"b01\")) { %lo0 = BfeU(%0, #u32(0), #u32(8)); %hi0 = BfeU(%0, #u32(8), #u32(8)); }",
+        "else { if (@src_swz_eq(0, \"b23\")) { %lo0 = BfeU(%0, #u32(16), #u32(8)); %hi0 = BfeU(%0, #u32(24), #u32(8)); } else { if (@src_swz_eq(0, \"h00\")) { %hi0 = %lo0; } else { if (@src_swz_eq(0, \"h11\")) { %lo0 = %hi0; } } } }",
+        "%lo1 : u32 = BfeU(%1, #u32(0), #u32(16));",
+        "%hi1 : u32 = BfeU(%1, #u32(16), #u32(16));",
+        "if (@src_swz_eq(1, \"b01\")) { %lo1 = BfeU(%1, #u32(0), #u32(8)); %hi1 = BfeU(%1, #u32(8), #u32(8)); }",
+        "else { if (@src_swz_eq(1, \"b23\")) { %lo1 = BfeU(%1, #u32(16), #u32(8)); %hi1 = BfeU(%1, #u32(24), #u32(8)); } else { if (@src_swz_eq(1, \"h00\")) { %hi1 = %lo1; } else { if (@src_swz_eq(1, \"h11\")) { %lo1 = %hi1; } } } }",
+        "%rlo : u32 = BitAnd(IAdd(%lo0, %lo1), #u32(65535));",
+        "%rhi : u32 = Shl(BitAnd(IAdd(%hi0, %hi1), #u32(65535)), #u32(16));",
+        "%out : u32 = BitOr(%rlo, %rhi);"
+      ]
+    },
+    {
+      "mnemonic": "IADD",
+      "variants": [
         "v2s16"
       ],
       "op_class": "int_binary",
@@ -2775,12 +2803,16 @@
       "is_barrier_or_cf": false,
       "effects": [],
       "inline_ops": [
-        "%lo0 : u32 = BitAnd(%0, #u32(65535));",
-        "%lo1 : u32 = BitAnd(%1, #u32(65535));",
+        "%lo0 : s32 = BfeS(%0, #u32(0), #u32(16));",
+        "%hi0 : s32 = BfeS(%0, #u32(16), #u32(16));",
+        "if (@src_swz_eq(0, \"b01\")) { %lo0 = BfeS(%0, #u32(0), #u32(8)); %hi0 = BfeS(%0, #u32(8), #u32(8)); }",
+        "else { if (@src_swz_eq(0, \"b23\")) { %lo0 = BfeS(%0, #u32(16), #u32(8)); %hi0 = BfeS(%0, #u32(24), #u32(8)); } else { if (@src_swz_eq(0, \"h00\")) { %hi0 = %lo0; } else { if (@src_swz_eq(0, \"h11\")) { %lo0 = %hi0; } } } }",
+        "%lo1 : s32 = BfeS(%1, #u32(0), #u32(16));",
+        "%hi1 : s32 = BfeS(%1, #u32(16), #u32(16));",
+        "if (@src_swz_eq(1, \"b01\")) { %lo1 = BfeS(%1, #u32(0), #u32(8)); %hi1 = BfeS(%1, #u32(8), #u32(8)); }",
+        "else { if (@src_swz_eq(1, \"b23\")) { %lo1 = BfeS(%1, #u32(16), #u32(8)); %hi1 = BfeS(%1, #u32(24), #u32(8)); } else { if (@src_swz_eq(1, \"h00\")) { %hi1 = %lo1; } else { if (@src_swz_eq(1, \"h11\")) { %lo1 = %hi1; } } } }",
         "%rlo : u32 = BitAnd(IAdd(%lo0, %lo1), #u32(65535));",
-        "%hi0 : u32 = ShrU(%0, #u32(16));",
-        "%hi1 : u32 = ShrU(%1, #u32(16));",
-        "%rhi : u32 = Shl(IAdd(%hi0, %hi1), #u32(16));",
+        "%rhi : u32 = Shl(BitAnd(IAdd(%hi0, %hi1), #u32(65535)), #u32(16));",
         "%out : u32 = BitOr(%rlo, %rhi);"
       ]
     },

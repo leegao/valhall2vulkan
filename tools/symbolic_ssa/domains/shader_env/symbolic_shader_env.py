@@ -133,6 +133,8 @@ class SymbolicShaderEnv(ShaderEnvBase):
         """
         if bkey == "ebin_rodata":
             return self.domain.lift_z3_bv32(_dsl_bv32(self.read_ebin_rodata_u32(const_off)))
+        if bkey == "panfrost_ebin_rodata":
+            return self.domain.lift_z3_bv32(_dsl_bv32(self.read_panfrost_ebin_rodata_u32(const_off)))
         srt_val = self.read_pilot_srt_u32(bkey, const_off)
         if srt_val is not None:
             return self.domain.lift_z3_bv32(_dsl_bv32(srt_val))
@@ -170,7 +172,21 @@ class SymbolicShaderEnv(ShaderEnvBase):
         if key == "wls_shared" and self.unique_workgroup_key is not None:
             key = self.unique_workgroup_key
         if key not in self.init_buf_mem:
-            if key == "ebin_rodata" and self._ebin_rodata_bytes:
+            if key == "panfrost_ebin_rodata" and self._panfrost_ebin_rodata_bytes:
+                if self.memory_model == "byte":
+                    arr = dsl.K(BV32, dsl.BitVecVal(0, 8))
+                    for i, bval in enumerate(self._panfrost_ebin_rodata_bytes):
+                        if bval != 0:
+                            arr = dsl.Store(arr, _dsl_bv32(self._panfrost_ebin_rodata_offset + i), dsl.BitVecVal(bval, 8))
+                else:
+                    arr = dsl.K(BV32, _dsl_bv32(0))
+                    n = len(self._panfrost_ebin_rodata_bytes)
+                    for i in range(0, n, 4):
+                        w = self.read_panfrost_ebin_rodata_u32(self._panfrost_ebin_rodata_offset + i)
+                        if w != 0:
+                            arr = dsl.Store(arr, _dsl_bv32(self._panfrost_ebin_rodata_offset + i), _dsl_bv32(w))
+                self.init_buf_mem[key] = arr
+            elif key == "ebin_rodata" and self._ebin_rodata_bytes:
                 if self.memory_model == "byte":
                     arr = dsl.K(BV32, dsl.BitVecVal(0, 8))
                     for i, bval in enumerate(self._ebin_rodata_bytes):

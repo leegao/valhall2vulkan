@@ -1,7 +1,9 @@
 #include "spirv2valhall.h"
 #include "equiv_bundle.h"
 #include "direct_isa_parser.h"
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
 #include "panfrost_compiler.h"
+#endif
 #include "spirv2ssa.h"
 #include "valhall_cfg.h"
 #include "valhall_pass1.h"
@@ -47,12 +49,14 @@ static void print_usage(const char* argv0) {
         << "  --context-only              Print only the CSF Execution Context & Descriptor Graph\n"
         << "  --no-enrich                 Print raw Valhall disassembly without MBS2/ABI/SRT tags\n"
         << "  --mali-lib <PATH>           Path to libMali-Gxx_r55p0-00rel0.so\n"
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
         << "  --panfrost                  Compile Vulkan SPIR-V via Mesa Panfrost (panfrost_vk_compile)\n"
         << "  --panfrost-cl               Compile OpenCL SPIR-V via Mesa Panfrost (panfrost_compile)\n"
         << "  --panfrost-backend <MODE>   Panfrost Vulkan backend: auto, kraid, or bifrost (default: auto)\n"
         << "  --panfrost-robust           Enable SSBO/descriptor robustness bounds checks in panfrost_vk_compile\n"
         << "  --panfrost-no-idvs          Disable IDVS for vertex shaders in panfrost_vk_compile\n"
         << "  --panfrost-bin <PATH>       Path to panfrost_vk_compile (or panfrost_compile for --panfrost-cl)\n"
+#endif
         << "  --no-strip-caps             Do not strip unused Float64/Interlock capabilities\n"
         << "  --mods                      Include decoded modifier key=value pairs\n"
         << "  --quiet                     Do not print text output to stdout\n"
@@ -90,11 +94,13 @@ int main(int argc, char** argv) {
     bool enrich = true;
     bool dump_spirv = false;
     bool quiet = false;
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
     valhall::spirv2valhall::PanfrostMode panfrost_mode = valhall::spirv2valhall::PanfrostMode::None;
     valhall::spirv2valhall::PanfrostVkBackend panfrost_vk_backend = valhall::spirv2valhall::PanfrostVkBackend::Auto;
     bool panfrost_vk_robust = false;
     bool panfrost_vk_no_idvs = false;
     std::string panfrost_bin;
+#endif
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -150,6 +156,7 @@ int main(int argc, char** argv) {
             enrich = false;
         } else if (arg == "--mali-lib" && i + 1 < argc) {
             opts.mali_lib_path = argv[++i];
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
         } else if (arg == "--panfrost") {
             panfrost_mode = valhall::spirv2valhall::PanfrostMode::Vulkan;
         } else if (arg == "--panfrost-cl") {
@@ -169,6 +176,7 @@ int main(int argc, char** argv) {
             panfrost_vk_no_idvs = true;
         } else if (arg == "--panfrost-bin" && i + 1 < argc) {
             panfrost_bin = argv[++i];
+#endif
         } else if (arg == "--no-strip-caps") {
             opts.strip_unused_caps = false;
         } else if (arg == "--mods") {
@@ -195,6 +203,7 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+#ifdef VALHALL_HAS_STATIC_PANFROST_VK_COMPILE
     // Mesa Panfrost compiler mode (--panfrost or --panfrost-cl).
     if (panfrost_mode != valhall::spirv2valhall::PanfrostMode::None) {
         valhall::spirv2valhall::PanfrostRunOptions popts;
@@ -216,6 +225,7 @@ int main(int argc, char** argv) {
         popts.verbose = opts.verbose;
         return valhall::spirv2valhall::run_panfrost_pipeline(spv_path, popts);
     }
+#endif
 
     // Direct SPIR-V -> ValhallSSA mode (bypasses libMali compilation).
     if (direct_ssa) {

@@ -25,6 +25,7 @@ struct PanfrostKernelBinary {
     uint32_t work_reg_count = 32;
     uint32_t tls_size = 0;
     uint32_t wls_size = 0;
+    uint32_t constant_data_size = 0;
     std::vector<uint8_t> ebin_bytes;
     std::string header_text;
 };
@@ -56,6 +57,10 @@ struct PanfrostCompileResult {
     std::map<uint32_t, uint32_t> fau_const_words;
     std::map<uint32_t, std::string> srt_pka_buf_names;
     std::vector<PanfrostVkDescriptorInfo> descriptors;
+    uint32_t constant_data_size = 0;
+    bool secondary_enable = false;
+    uint32_t secondary_offset = 0;
+    std::vector<PanfrostVkVaryingInfo> varyings;
 };
 
 struct PanfrostRunOptions {
