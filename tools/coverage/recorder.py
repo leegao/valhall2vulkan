@@ -59,15 +59,53 @@ def _resolve_output_path(dest: str, src_path: str, output_name: str) -> str:
     return dest
 
 
+def _load_bundle_for_record(
+    spv_path: str,
+    bin_path: str,
+    *,
+    timeout: int = 15,
+    defau: bool = True,
+    opt_ssa: bool = True,
+    panfrost_cfg: dict | None = None,
+) -> dict:
+    if panfrost_cfg is not None:
+        from tools.coverage.panfrost_vs_ddk import build_panfrost_vs_ddk_bundle
+
+        bundle, err, _ = build_panfrost_vs_ddk_bundle(
+            spv_path,
+            spirv2valhall_bin=bin_path,
+            timeout_s=float(timeout),
+            defau=defau,
+            opt_ssa=opt_ssa,
+            **panfrost_cfg,
+        )
+        if bundle is None:
+            raise RuntimeError(err or "build_panfrost_vs_ddk_bundle failed")
+        return bundle
+    return load_equiv_bundle(spv_path, bin_path, timeout=timeout, defau=defau, opt_ssa=opt_ssa)
+
+
 def _check_spv_reproduces(
     spv_path: str,
     bin_path: str,
     rep: DivergenceReport,
     canonicalize: bool,
     policy: DiffPolicy,
+    *,
+    defau: bool = True,
+    opt_ssa: bool = True,
+    fp_range: str = "unconstrained",
+    panfrost_cfg: dict | None = None,
 ) -> bool:
     try:
-        bundle = load_equiv_bundle(spv_path, bin_path, timeout=15)
+        bundle = _load_bundle_for_record(
+            spv_path,
+            bin_path,
+            timeout=15,
+            defau=defau,
+            opt_ssa=opt_ssa,
+            panfrost_cfg=panfrost_cfg,
+        )
         d_ssa = bundle["direct_ssa"]
         v_ssa = bundle["valhall_ssa"]
         if canonicalize:
@@ -80,6 +118,7 @@ def _check_spv_reproduces(
             overrides=rep.shrunk_overrides,
             vec_idx=rep.vec_idx,
             policy=policy,
+            fp_range=fp_range,
         )
         return bool(div)
     except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError):
@@ -95,6 +134,11 @@ def _try_spirv_reduce(
     policy: DiffPolicy,
     timeout_s: float,
     step_limit: int,
+    *,
+    defau: bool = True,
+    opt_ssa: bool = True,
+    fp_range: str = "unconstrained",
+    panfrost_cfg: dict | None = None,
 ) -> bool:
     reduce_bin = find_spirv_tool("spirv-reduce")
     if not reduce_bin:
@@ -114,6 +158,10 @@ def _try_spirv_reduce(
         "max_ulp": policy.max_ulp,
         "target_output": rep.output_name,
         "require_both_present": (rep.direct_val != "None" and rep.valhall_val != "None"),
+        "defau": defau,
+        "opt_ssa": opt_ssa,
+        "fp_range": fp_range,
+        "panfrost_cfg": panfrost_cfg,
     }
 
     with tempfile.TemporaryDirectory(prefix="valhall_reduce_") as td:
@@ -128,21 +176,26 @@ def _try_spirv_reduce(
             fh.write(
                 f"#!{py_exe}\n"
                 "import json, os, shutil, sys\n"
-                "from tools.equivalence.spvasm_io import load_equiv_bundle\n"
+                "from tools.coverage.recorder import _load_bundle_for_record\n"
                 "from tools.symbolic_ssa.passes import canonicalize_ssa_module\n"
                 "from tools.coverage.shrinker import DiffPolicy, compare_concrete_outputs\n"
                 f"with open({cfg_path!r}, 'r', encoding='utf-8') as f: cfg = json.load(f)\n"
                 f"best_path = {best_spv!r}\n"
                 "cand = sys.argv[1]\n"
                 "try:\n"
-                "    b = load_equiv_bundle(cand, cfg['bin_path'], timeout=10)\n"
+                "    b = _load_bundle_for_record(\n"
+                "        cand, cfg['bin_path'], timeout=10,\n"
+                "        defau=cfg.get('defau', True), opt_ssa=cfg.get('opt_ssa', True),\n"
+                "        panfrost_cfg=cfg.get('panfrost_cfg'),\n"
+                "    )\n"
                 "    d, v = b['direct_ssa'], b['valhall_ssa']\n"
                 "    if cfg['canonicalize']:\n"
                 "        d, _ = canonicalize_ssa_module(d)\n"
                 "        v, _ = canonicalize_ssa_module(v)\n"
                 "    div, out_name, d_str, v_str, _, _ = compare_concrete_outputs(\n"
                 "        b, d, v, overrides=cfg['overrides'], vec_idx=cfg['vec_idx'],\n"
-                "        policy=DiffPolicy(max_ulp=cfg['max_ulp'])\n"
+                "        policy=DiffPolicy(max_ulp=cfg['max_ulp']),\n"
+                "        fp_range=cfg.get('fp_range', 'unconstrained'),\n"
                 "    )\n"
                 "    if div and (not cfg.get('require_both_present') or (d_str != 'None' and v_str != 'None')):\n"
                 "        if os.path.getsize(cand) < os.path.getsize(best_path):\n"
@@ -180,7 +233,17 @@ def _try_spirv_reduce(
             return False
         if not validate_spv(out_spv):
             return False
-        return _check_spv_reproduces(out_spv, bin_path, rep, canonicalize, policy)
+        return _check_spv_reproduces(
+            out_spv,
+            bin_path,
+            rep,
+            canonicalize,
+            policy,
+            defau=defau,
+            opt_ssa=opt_ssa,
+            fp_range=fp_range,
+            panfrost_cfg=panfrost_cfg,
+        )
 
 
 def record_repro_spvasm(
@@ -196,6 +259,10 @@ def record_repro_spvasm(
     reduce_timeout_s: float = 15.0,
     reduce_steps: int = 120,
     no_reduce: bool = False,
+    defau: bool = True,
+    opt_ssa: bool = True,
+    fp_range: str = "unconstrained",
+    panfrost_cfg: dict | None = None,
 ) -> RecordResult:
     """
     Record a self-contained, optionally spirv-reduce-shrunken .spvasm reproduction
@@ -226,6 +293,10 @@ def record_repro_spvasm(
                     eff_policy,
                     timeout_s=reduce_timeout_s,
                     step_limit=reduce_steps,
+                    defau=defau,
+                    opt_ssa=opt_ssa,
+                    fp_range=fp_range,
+                    panfrost_cfg=panfrost_cfg,
                 )
                 if ok:
                     chosen_spv = tmp_reduced
@@ -234,7 +305,17 @@ def record_repro_spvasm(
 
             rec_bytes = os.path.getsize(chosen_spv)
             asm_body = disassemble_spv(chosen_spv)
-            verified = _check_spv_reproduces(chosen_spv, bin_path, rep, canonicalize, eff_policy)
+            verified = _check_spv_reproduces(
+                chosen_spv,
+                bin_path,
+                rep,
+                canonicalize,
+                eff_policy,
+                defau=defau,
+                opt_ssa=opt_ssa,
+                fp_range=fp_range,
+                panfrost_cfg=panfrost_cfg,
+            )
         finally:
             if os.path.exists(tmp_reduced):
                 os.remove(tmp_reduced)

@@ -101,6 +101,7 @@ def run_concolic_equiv_fuzz(
     seed: int = 0x5A17,
     domain: str = "udomain",
     fp_range: str = "unconstrained",
+    maximal_reachability_seed: bool = False,
 ) -> ConcolicEquivFuzzResult:
     """
     Concolically seed input vectors from `seed_side` (`direct` or `valhall`) to
@@ -176,7 +177,8 @@ def run_concolic_equiv_fuzz(
     first_div_vec: Optional[Tuple[int, Dict[str, Any]]] = None
 
     # Phase 1: Initial concrete differential seed vectors (corner cases + PRNG).
-    for i in range(k_init):
+    init_vecs = 0 if maximal_reachability_seed else k_init
+    for i in range(init_vecs):
         cenv = ConcreteShaderEnv(bundle, vec_idx=i, seed=seed, fp_range=fp_range)
         d_vals, v_vals, chk, ben, is_div = _compare_pair_on_env(d_interp, v_interp, cenv, eff_policy)
         max_checked_outputs = max(max_checked_outputs, chk)
@@ -197,7 +199,7 @@ def run_concolic_equiv_fuzz(
 
     # Phase 2: Maximal-reachability path seeding on `seed_side`.
     rem_ms = int((deadline - time.perf_counter()) * 1000.0)
-    if rem_ms > 50 and first_div_vec is None:
+    if (rem_ms > 50 or maximal_reachability_seed) and first_div_vec is None:
         reach_budget = max(200, rem_ms // 2)
         mres = solve_maximal_reachability(
             bundle,
@@ -212,7 +214,7 @@ def run_concolic_equiv_fuzz(
         )
         blocks_reached = len(mres.reached_blocks)
         for p in mres.paths:
-            vec_idx = k_init + reach_vecs
+            vec_idx = init_vecs + reach_vecs
             reach_vecs += 1
             ov = dict(p.witness_overrides)
             tested_overrides.append(ov)
@@ -238,12 +240,12 @@ def run_concolic_equiv_fuzz(
             is_valhall_side=is_valhall_seed,
             fp_mode=fp_mode,
             domain=domain,
-            base_vec_idx=k_init + reach_vecs,
+            base_vec_idx=init_vecs + reach_vecs,
             max_unroll=max_unroll,
             time_budget_ms=rem_ms,
         )
         for ov in cres.synthesized_overrides:
-            vec_idx = k_init + reach_vecs + cov_vecs
+            vec_idx = init_vecs + reach_vecs + cov_vecs
             cov_vecs += 1
             tested_overrides.append(dict(ov))
             cenv = ConcreteShaderEnv(bundle, vec_idx=vec_idx, seed=seed, overrides=ov, fp_range=fp_range)
@@ -284,8 +286,8 @@ def run_concolic_equiv_fuzz(
     return ConcolicEquivFuzzResult(
         status=status,
         seed_side=seed_side,
-        vectors_tested=k_init + reach_vecs + cov_vecs,
-        init_vectors=k_init,
+        vectors_tested=init_vecs + reach_vecs + cov_vecs,
+        init_vectors=init_vecs,
         reachability_vectors=reach_vecs,
         coverage_vectors=cov_vecs,
         blocks_reached=blocks_reached,

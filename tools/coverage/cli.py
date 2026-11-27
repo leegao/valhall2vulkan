@@ -19,6 +19,8 @@ from tools.coverage.shrinker import (
 from tools.coverage.synthesizer import synthesize_coverage_vectors
 from tools.coverage.slice_diff import format_slice_diff
 from tools.coverage.triage import format_divergence_and_triage, triage_divergence
+from tools.symbolic_ssa import ConcreteSsaInterpreter
+from tools.symbolic_ssa.env import ConcreteShaderEnv
 from tools.symbolic_ssa.passes import canonicalize_ssa_module
 from tools.equivalence.cec import run_concrete_diff
 from tools.equivalence.spvasm_io import load_equiv_bundle
@@ -61,6 +63,7 @@ def _handle_divergence(
             canonicalize=args.canonicalize, policy=policy,
             reduce_timeout_s=args.record_timeout_s, reduce_steps=args.record_steps,
             no_reduce=args.no_reduce,
+            defau=args.defau, opt_ssa=args.opt_ssa, fp_range=args.fp_range,
         )
         print(
             f'  [SHRINK/spirv-reduce] path={rec.out_path} bytes={rec.original_bytes}->{rec.recorded_bytes} '
@@ -79,6 +82,9 @@ def _handle_divergence(
             reduce_timeout_s=args.record_timeout_s,
             reduce_steps=args.record_steps,
             no_reduce=args.no_reduce,
+            defau=args.defau,
+            opt_ssa=args.opt_ssa,
+            fp_range=args.fp_range,
         )
         print(
             f"  [RECORD] path={rec.out_path} bytes={rec.original_bytes}->{rec.recorded_bytes} "
@@ -95,7 +101,7 @@ def main() -> int:
     ap.add_argument("--side", choices=["direct", "valhall"], default="direct", help="SSA side to target/seed from")
     ap.add_argument("--k-init", type=int, default=32, help="Initial concrete seed vectors")
     ap.add_argument("--max-rounds", type=int, default=12, help="Maximum synthesis rounds")
-    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_exact"], default="udomain", help="Symbolic value domain")
+    ap.add_argument("--domain", choices=["bitvec", "udomain", "udomain_backfill", "udomain_exact"], default="udomain_backfill", help="Symbolic value domain (default: udomain_backfill)")
     ap.add_argument("--fp-mode", choices=["exact", "real", "uf"], default="exact", help="Z3 FP mode")
     ap.add_argument("--fp-range", choices=["unconstrained", "vulkan"], default="unconstrained", help="Concrete input FP range")
     ap.add_argument("--canonicalize", action="store_true", default=True, help="Canonicalize SSA before synthesis (default: on)")
@@ -108,6 +114,11 @@ def main() -> int:
         "--maximal-reachability",
         action="store_true",
         help="Solve and report disjoint reachability conditions exercising all paths",
+    )
+    ap.add_argument(
+        "--maximal-reachability-seed",
+        action="store_true",
+        help="Use maximal reachability to find maximal path vector seeds, then run maximal coverage",
     )
     ap.add_argument(
         "--equiv-fuzz",
@@ -194,6 +205,7 @@ def main() -> int:
             policy=policy,
             auto_shrink=True,
             fp_range=args.fp_range,
+            maximal_reachability_seed=args.maximal_reachability_seed,
         )
         print(
             f"[EQUIV-FUZZ] {os.path.basename(args.spv_or_json)} status={ef.status} "
@@ -248,8 +260,39 @@ def main() -> int:
                 json.dump(payload, fh, indent=2)
         return 0
 
-    cd = run_concrete_diff(bundle, d_ssa, v_ssa, k=args.k_init)
-    traces = cd.v_node_traces if is_valhall else cd.d_node_traces
+    seed_overrides: list[dict] = []
+    cd = None
+    if args.maximal_reachability_seed:
+        mres = solve_maximal_reachability(
+            bundle,
+            target_ssa,
+            is_valhall_side=is_valhall,
+            fp_mode=args.fp_mode,
+            domain=args.domain,
+            max_paths=args.max_paths,
+            timeout_ms=args.timeout_ms,
+            max_unroll=args.max_unroll,
+            total_timeout_ms=max(args.time_budget_ms // 2, args.timeout_ms),
+        )
+        seed_overrides = [dict(p.witness_overrides) for p in mres.paths]
+        seed_interp = ConcreteSsaInterpreter(target_ssa, is_valhall_side=is_valhall)
+        traces: dict[int, list] = {}
+        for idx, ov in enumerate(seed_overrides):
+            cenv = ConcreteShaderEnv(bundle, vec_idx=idx, overrides=ov, fp_range=args.fp_range)
+            svals, _ = seed_interp.execute_one(cenv)
+            for nid, val in svals.items():
+                traces.setdefault(nid, []).append(val)
+        print(
+            f"[REACH-SEED] {os.path.basename(args.spv_or_json)} side={args.side} "
+            f"paths={len(mres.paths)} blocks={len(mres.reached_blocks)}/{mres.total_blocks} "
+            f"complete={mres.complete} ({mres.stop_reason}) elapsed={mres.elapsed_ms:.1f}ms"
+        )
+        base_vec_idx = len(seed_overrides)
+    else:
+        cd = run_concrete_diff(bundle, d_ssa, v_ssa, k=args.k_init)
+        traces = cd.v_node_traces if is_valhall else cd.d_node_traces
+        base_vec_idx = args.k_init
+
     res = synthesize_coverage_vectors(
         bundle,
         target_ssa,
@@ -259,7 +302,7 @@ def main() -> int:
         domain=args.domain,
         max_rounds=args.max_rounds,
         probe_timeout_ms=min(args.timeout_ms, 250),
-        base_vec_idx=args.k_init,
+        base_vec_idx=base_vec_idx,
         max_unroll=args.max_unroll,
         time_budget_ms=args.time_budget_ms,
     )
@@ -271,9 +314,18 @@ def main() -> int:
     )
     if args.shrink or args.record:
         checked_any = False
-        if cd.status == "MISMATCH":
+        if cd is not None and cd.status == "MISMATCH":
             for i in range(args.k_init):
                 rep = localize_and_shrink_divergence(bundle, d_ssa, v_ssa, overrides={}, vec_idx=i, policy=policy)
+                if rep.diverged:
+                    _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, rep, policy)
+                    checked_any = True
+                    break
+        if not checked_any and seed_overrides:
+            for idx, ov in enumerate(seed_overrides):
+                rep = localize_and_shrink_divergence(
+                    bundle, d_ssa, v_ssa, overrides=ov, vec_idx=idx, policy=policy, fp_range=args.fp_range
+                )
                 if rep.diverged:
                     _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, rep, policy)
                     checked_any = True
@@ -281,14 +333,15 @@ def main() -> int:
         if not checked_any:
             for idx, ov in enumerate(res.synthesized_overrides):
                 rep = localize_and_shrink_divergence(
-                    bundle, d_ssa, v_ssa, overrides=ov, vec_idx=args.k_init + idx, policy=policy
+                    bundle, d_ssa, v_ssa, overrides=ov, vec_idx=base_vec_idx + idx, policy=policy, fp_range=args.fp_range
                 )
                 if rep.diverged:
                     _handle_divergence(args, bundle, d_ssa, v_ssa, raw_d_ssa, raw_v_ssa, rep, policy)
                     break
     if args.dump_vectors:
+        payload = seed_overrides + res.synthesized_overrides if args.maximal_reachability_seed else res.synthesized_overrides
         with open(args.dump_vectors, "w", encoding="utf-8") as fh:
-            json.dump(res.synthesized_overrides, fh, indent=2)
+            json.dump(payload, fh, indent=2)
     return 0
 
 

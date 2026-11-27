@@ -441,3 +441,35 @@ class TestV30CleanupAndEquivFuzz(unittest.TestCase):
         self.assertGreater(r_bug.coverage_vectors, 0)
         self.assertIsNotNone(r_bug.first_divergence)
         self.assertTrue(r_bug.first_divergence.diverged)
+
+    def test_cli_maximal_reachability_seed_and_udomain_backfill_default(self) -> None:
+        """tools.coverage.cli defaults to udomain_backfill and supports --maximal-reachability-seed."""
+        import io
+        import json
+        import os
+        import subprocess
+        import tempfile
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+        from tools.coverage.cli import main as cli_main
+
+        with tempfile.TemporaryDirectory(prefix="test_cli_mrs_") as td:
+            spv_path = os.path.join(td, "comp_rep_minimal.spv")
+            # Copy sample or run directly on samples/comp_rep_minimal.spv
+            vec_json = os.path.join(td, "vecs.json")
+            buf = io.StringIO()
+            with patch("sys.argv", [
+                "tools.coverage.cli",
+                "samples/comp_rep_minimal.spv",
+                "--maximal-reachability-seed",
+                "--time-budget-ms", "1000",
+                "--dump-vectors", vec_json,
+            ]), redirect_stdout(buf):
+                rc = cli_main()
+            self.assertEqual(rc, 0, buf.getvalue())
+            out = buf.getvalue()
+            self.assertIn("[REACH-SEED]", out)
+            self.assertIn("[COVERAGE]", out)
+            with open(vec_json, "r", encoding="utf-8") as fh:
+                vecs = json.load(fh)
+            self.assertGreaterEqual(len(vecs), 1)

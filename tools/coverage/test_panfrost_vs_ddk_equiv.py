@@ -356,6 +356,8 @@ class TestPanfrostVsDdkEquiv(unittest.TestCase):
             time_budget_ms=0,
             compute_triangle=True,
             panfrost_backend="kraid",
+            defau=False,
+            opt_ssa=False,
         )
         self.assertEqual(
             r.direct_vs_panfrost,
@@ -399,6 +401,53 @@ class TestPanfrostVsDdkEquiv(unittest.TestCase):
                     "EQUIV_EXACT",
                     f"{mnem} failed: status={r.status} divs={r.divs}/{r.vecs} tri={r.triangle}",
                 )
+
+    def test_cli_flags_and_maximal_reachability_seed(self) -> None:
+        """CLI supports --domain udomain_backfill, --defau/--no-defau, --opt-ssa/--no-opt-ssa, --maximal-reachability, --maximal-reachability-seed, --slice-diff, --trace-diff, --record."""
+        import io
+        from contextlib import redirect_stdout
+        from tools.coverage.panfrost_vs_ddk import main as pan_main
+
+        with tempfile.TemporaryDirectory(prefix="test_pan_cli_") as td:
+            spv_path = os.path.join(td, "alu.spv")
+            subprocess.run(
+                ["spirv-as", "--target-env", "vulkan1.2", "-", "-o", spv_path],
+                input=_SIMPLE_ALU_SPVASM.encode(),
+                check=True,
+                capture_output=True,
+            )
+            vec_json = os.path.join(td, "vecs.json")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = pan_main([
+                    spv_path,
+                    "--bin", "./build/spirv2valhall",
+                    "--domain", "udomain_backfill",
+                    "--defau",
+                    "--opt-ssa",
+                    "--maximal-reachability-seed",
+                    "--k-init", "4",
+                    "--time-budget-ms", "500",
+                    "--slice-diff", "4",
+                    "--trace-diff",
+                    "--dump-vectors", vec_json,
+                ])
+            self.assertEqual(rc, 0, buf.getvalue())
+            self.assertIn("EQUIV_EXACT", buf.getvalue())
+            self.assertTrue(os.path.isfile(vec_json))
+
+            buf_reach = io.StringIO()
+            with redirect_stdout(buf_reach):
+                rc_reach = pan_main([
+                    spv_path,
+                    "--bin", "./build/spirv2valhall",
+                    "--domain", "udomain_backfill",
+                    "--no-defau",
+                    "--no-opt-ssa",
+                    "--maximal-reachability",
+                ])
+            self.assertEqual(rc_reach, 0, buf_reach.getvalue())
+            self.assertIn("[REACHABILITY]", buf_reach.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
