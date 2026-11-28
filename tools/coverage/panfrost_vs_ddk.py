@@ -36,6 +36,7 @@ class PanfrostVsDdkResult:
     path: str
     status: str
     stage: str = "Compute"  # EQUIV_EXACT, EQUIV_WITHIN_ULP, DIVERGED, SKIP, PANFROST_UNSUPPORTED, DDK_FAILED
+    compare: str = "panfrost-vs-ddk"
     panfrost_backend: str = ""  # "kraid", "bifrost", or "opencl"
     panfrost_idvs: bool = True
     panfrost_merge_workgroups: bool = False
@@ -186,6 +187,187 @@ def build_panfrost_vs_ddk_bundle(
         return bundle, None, ""
 
 
+def build_panfrost_vs_direct_bundle(
+    spv_path: str,
+    spirv2valhall_bin: str = "build/spirv2valhall",
+    arch: int = 11,
+    timeout_s: float = 20.0,
+    panfrost_flag: str = "--panfrost",
+    panfrost_backend: str = "auto",
+    panfrost_robust: bool = False,
+    panfrost_no_idvs: bool = False,
+    defau: bool = True,
+    opt_ssa: bool = True,
+) -> tuple[dict[str, Any] | None, str | None, str]:
+    """Compile `spv_path` with Mesa Panfrost and return a Direct-SSA vs Panfrost-ISA bundle."""
+    with ensure_spv_path(spv_path) as resolved_spv, tempfile.TemporaryDirectory(prefix="pan_vs_dir_") as td:
+        pan_json = os.path.join(td, "pan.json")
+        pan_cmd = [
+            spirv2valhall_bin,
+            panfrost_flag,
+            "--arch",
+            str(arch),
+            "--quiet",
+            "--dump-equiv-json",
+            pan_json,
+        ]
+        if defau:
+            pan_cmd.append("--defau")
+        if opt_ssa:
+            pan_cmd.append("--opt-ssa")
+        if panfrost_flag == "--panfrost":
+            if panfrost_backend and panfrost_backend != "auto":
+                pan_cmd.extend(["--panfrost-backend", panfrost_backend])
+            if panfrost_robust:
+                pan_cmd.append("--panfrost-robust")
+            if panfrost_no_idvs:
+                pan_cmd.append("--panfrost-no-idvs")
+        pan_cmd.append(resolved_spv)
+
+        try:
+            p_pan = subprocess.run(pan_cmd, capture_output=True, text=True, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            return None, "Panfrost compilation timed out", "PANFROST_UNSUPPORTED"
+        if p_pan.returncode != 0 or not os.path.exists(pan_json):
+            err = (p_pan.stderr or p_pan.stdout).strip().splitlines()[:2]
+            return None, "Panfrost compile failed: " + " | ".join(err), "PANFROST_UNSUPPORTED"
+
+        with open(pan_json) as f:
+            pan = json.load(f)
+
+        if not pan.get("valhall_ok") or not pan.get("direct_ssa"):
+            return None, "Panfrost ISA->SSA or Direct-SSA lowering failed", "LOWERING_FAILED"
+
+        pan_ssa_raw = pan["valhall_ssa"]
+        mbs2_ctx = dict(pan.get("mbs2_context", {}))
+        pan_rodata = mbs2_ctx.get("ebin_rodata")
+        if pan_rodata:
+            for node in pan_ssa_raw.get("nodes", []):
+                if node.get("op") == "LoadSidebandU64" and int(node.get("imm_u32", 0)) == 1:
+                    node["aux_str"] = "panfrost_ebin_rodata"
+            mbs2_ctx["panfrost_ebin_rodata"] = pan_rodata
+        if pan.get("pc_disasm"):
+            mbs2_ctx["pc_disasm"] = pan["pc_disasm"]
+
+        stage_str = pan.get("stage", "Compute")
+        bundle: dict[str, Any] = {
+            "stage": stage_str,
+            "arch": pan.get("arch", arch),
+            "panfrost_backend": pan.get("panfrost_backend", ""),
+            "panfrost_idvs": bool(pan.get("panfrost_idvs", True)),
+            "panfrost_merge_workgroups": bool(pan.get("panfrost_merge_workgroups", False)),
+            "panfrost_single_sample_frag": (stage_str == "Fragment"),
+            "local_size": pan.get("local_size", [1, 1, 1]),
+            "direct_ssa": pan["direct_ssa"],
+            "valhall_ssa": pan_ssa_raw,
+            "orig_direct_ssa": pan["direct_ssa"],
+            "mbs2_context": mbs2_ctx,
+            "panfrost_pc_disasm": pan.get("pc_disasm", {}),
+            "panfrost_arg_bindings": pan.get("panfrost_arg_bindings", []),
+        }
+        return bundle, None, ""
+
+
+def build_ddk_vs_direct_bundle(
+    spv_path: str,
+    spirv2valhall_bin: str = "build/spirv2valhall",
+    arch: int = 11,
+    timeout_s: float = 20.0,
+    defau: bool = True,
+    opt_ssa: bool = True,
+) -> tuple[dict[str, Any] | None, str | None, str]:
+    """Compile `spv_path` with Mali DDK and return a Direct-SSA vs DDK-ISA bundle."""
+    with ensure_spv_path(spv_path) as resolved_spv, tempfile.TemporaryDirectory(prefix="ddk_vs_dir_") as td:
+        ddk_json = os.path.join(td, "ddk.json")
+        ddk_cmd = [spirv2valhall_bin, "--quiet", "--dump-equiv-json", ddk_json]
+        if defau:
+            ddk_cmd.append("--defau")
+        if opt_ssa:
+            ddk_cmd.append("--opt-ssa")
+        ddk_cmd.append(resolved_spv)
+
+        try:
+            p_ddk = subprocess.run(ddk_cmd, capture_output=True, text=True, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            return None, "DDK compilation timed out", "DDK_FAILED"
+        if p_ddk.returncode != 0 or not os.path.exists(ddk_json):
+            err = (p_ddk.stderr or p_ddk.stdout).strip().splitlines()[:2]
+            return None, "DDK compile failed: " + " | ".join(err), "DDK_FAILED"
+
+        with open(ddk_json) as f:
+            ddk = json.load(f)
+
+        if not ddk.get("valhall_ok") or not ddk.get("direct_ssa"):
+            return None, "DDK ISA->SSA or Direct-SSA lowering failed", "LOWERING_FAILED"
+
+        bundle: dict[str, Any] = {
+            "stage": ddk.get("stage", "Compute"),
+            "arch": ddk.get("arch", arch),
+            "panfrost_backend": "",
+            "panfrost_idvs": False,
+            "panfrost_merge_workgroups": False,
+            "panfrost_single_sample_frag": False,
+            "local_size": ddk.get("local_size", [1, 1, 1]),
+            "direct_ssa": ddk["direct_ssa"],
+            "valhall_ssa": ddk["valhall_ssa"],
+            "orig_direct_ssa": ddk["direct_ssa"],
+            "mbs2_context": ddk.get("mbs2_context", {}),
+            "panfrost_pc_disasm": {},
+            "panfrost_arg_bindings": [],
+        }
+        return bundle, None, ""
+
+
+def _build_bundle_for_compare(
+    compare: str,
+    spv_path: str,
+    *,
+    spirv2valhall_bin: str = "build/spirv2valhall",
+    arch: int = 11,
+    timeout_s: float = 20.0,
+    panfrost_flag: str = "--panfrost",
+    panfrost_backend: str = "auto",
+    panfrost_robust: bool = False,
+    panfrost_no_idvs: bool = False,
+    defau: bool = True,
+    opt_ssa: bool = True,
+) -> tuple[dict[str, Any] | None, str | None, str]:
+    if compare == "panfrost-vs-direct":
+        return build_panfrost_vs_direct_bundle(
+            spv_path,
+            spirv2valhall_bin=spirv2valhall_bin,
+            arch=arch,
+            timeout_s=timeout_s,
+            panfrost_flag=panfrost_flag,
+            panfrost_backend=panfrost_backend,
+            panfrost_robust=panfrost_robust,
+            panfrost_no_idvs=panfrost_no_idvs,
+            defau=defau,
+            opt_ssa=opt_ssa,
+        )
+    if compare == "ddk-vs-direct":
+        return build_ddk_vs_direct_bundle(
+            spv_path,
+            spirv2valhall_bin=spirv2valhall_bin,
+            arch=arch,
+            timeout_s=timeout_s,
+            defau=defau,
+            opt_ssa=opt_ssa,
+        )
+    return build_panfrost_vs_ddk_bundle(
+        spv_path,
+        spirv2valhall_bin=spirv2valhall_bin,
+        arch=arch,
+        timeout_s=timeout_s,
+        panfrost_flag=panfrost_flag,
+        panfrost_backend=panfrost_backend,
+        panfrost_robust=panfrost_robust,
+        panfrost_no_idvs=panfrost_no_idvs,
+        defau=defau,
+        opt_ssa=opt_ssa,
+    )
+
+
 def _run_panfrost_vs_ddk_equiv_ctx(
     spv_path: str,
     k_init: int = 64,
@@ -210,6 +392,7 @@ def _run_panfrost_vs_ddk_equiv_ctx(
     auto_shrink: bool = False,
     maximal_reachability_seed: bool = False,
     seed_side: str = "direct",
+    compare: str = "panfrost-vs-ddk",
 ) -> tuple[
     PanfrostVsDdkResult,
     dict[str, Any] | None,
@@ -221,7 +404,8 @@ def _run_panfrost_vs_ddk_equiv_ctx(
     list[dict[str, Any]],
 ]:
     """Run equivalence fuzzing comparing Panfrost ISA->SSA against Mali DDK ISA->SSA with full context."""
-    bundle, err, fail_kind = build_panfrost_vs_ddk_bundle(
+    bundle, err, fail_kind = _build_bundle_for_compare(
+        compare,
         spv_path,
         spirv2valhall_bin=spirv2valhall_bin,
         arch=arch,
@@ -237,6 +421,7 @@ def _run_panfrost_vs_ddk_equiv_ctx(
             PanfrostVsDdkResult(
                 path=spv_path,
                 status=fail_kind or "ERROR",
+                compare=compare,
                 panfrost_backend=panfrost_backend if panfrost_flag == "--panfrost" else "opencl",
                 error=err or "",
             ),
@@ -250,7 +435,7 @@ def _run_panfrost_vs_ddk_equiv_ctx(
         )
 
     pan_insts, pan_ops, pan_lines = _extract_opcode_hist(bundle.get("panfrost_pc_disasm", {}))
-    ddk_pc = bundle.get("mbs2_context", {}).get("pc_disasm", {})
+    ddk_pc = {} if compare == "panfrost-vs-direct" else bundle.get("mbs2_context", {}).get("pc_disasm", {})
     ddk_insts, ddk_ops, ddk_lines = _extract_opcode_hist(ddk_pc)
 
     raw_pan_ssa = bundle["direct_ssa"]
@@ -295,7 +480,7 @@ def _run_panfrost_vs_ddk_equiv_ctx(
     tri = "MATCH"
     d_vs_p = ""
     d_vs_d = ""
-    if res.status == "DIVERGED" and compute_triangle:
+    if res.status == "DIVERGED" and compute_triangle and compare == "panfrost-vs-ddk":
         rp = run_concolic_equiv_fuzz(
             bundle, orig_direct, pan_ssa, k_init=min(k_init, 32), time_budget_ms=1500,
             fp_mode=fp_mode, fp_range=fp_range, policy=policy, auto_shrink=False, domain=domain,
@@ -321,6 +506,7 @@ def _run_panfrost_vs_ddk_equiv_ctx(
         path=spv_path,
         status=res.status,
         stage=bundle.get("stage", "Compute"),
+        compare=compare,
         panfrost_backend=bundle.get("panfrost_backend", ""),
         panfrost_idvs=bundle.get("panfrost_idvs", True),
         panfrost_merge_workgroups=bundle.get("panfrost_merge_workgroups", False),
@@ -365,6 +551,7 @@ def run_panfrost_vs_ddk_equiv(
     auto_shrink: bool = False,
     maximal_reachability_seed: bool = False,
     seed_side: str = "direct",
+    compare: str = "panfrost-vs-ddk",
 ) -> PanfrostVsDdkResult:
     """Run equivalence fuzzing comparing Panfrost ISA->SSA against Mali DDK ISA->SSA."""
     result, *_ = _run_panfrost_vs_ddk_equiv_ctx(
@@ -390,6 +577,7 @@ def run_panfrost_vs_ddk_equiv(
         auto_shrink=auto_shrink,
         maximal_reachability_seed=maximal_reachability_seed,
         seed_side=seed_side,
+        compare=compare,
     )
     return result
 
@@ -479,6 +667,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("shaders", nargs="+", help="One or more Vulkan .spv/.spvasm paths (VS/FS/CS)")
     ap.add_argument("--bin", default="build/spirv2valhall", help="Path to spirv2valhall binary")
     ap.add_argument("--arch", type=int, default=11, help="Valhall architecture version (default: 11)")
+    ap.add_argument(
+        "--compare",
+        choices=("panfrost-vs-ddk", "panfrost-vs-direct", "ddk-vs-direct"),
+        default="panfrost-vs-ddk",
+        help="Comparison pair: panfrost-vs-ddk (default), panfrost-vs-direct, or ddk-vs-direct",
+    )
     ap.add_argument("--side", choices=("direct", "valhall", "panfrost", "ddk"), default="direct",
                     help="SSA side to target/seed from (direct/panfrost vs valhall/ddk)")
     ap.add_argument("--k-init", type=int, default=64, help="Concrete input vectors per shader")
@@ -549,7 +743,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.maximal_reachability:
         all_paths_payload = []
         for spv in args.shaders:
-            bundle, err, fail_kind = build_panfrost_vs_ddk_bundle(
+            bundle, err, fail_kind = _build_bundle_for_compare(
+                args.compare,
                 spv,
                 spirv2valhall_bin=args.bin,
                 arch=args.arch,
@@ -634,13 +829,15 @@ def main(argv: list[str] | None = None) -> int:
                 auto_shrink=need_triage,
                 maximal_reachability_seed=args.maximal_reachability_seed,
                 seed_side=seed_side,
+                compare=args.compare,
             )
         )
         all_res.append(r.__dict__)
         all_vectors.extend(tested_ovs)
         tag = os.path.basename(spv)
+        cmp_tag = args.compare.upper()
         print(
-            f"[PANFROST-VS-DDK] {tag:36s} ({r.panfrost_backend or '?':7s}) status={r.status:20s} "
+            f"[{cmp_tag}] {tag:36s} ({r.panfrost_backend or '?':7s}) status={r.status:20s} "
             f"vecs={r.vecs:3d} divs={r.divs:3d} tri={r.triangle:13s} "
             f"insts=(pan={r.panfrost_insts},ddk={r.ddk_insts})"
             + (f" err={r.error[:60]}" if r.error else "")

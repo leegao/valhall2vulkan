@@ -1052,6 +1052,42 @@
         "  %lo : u32 = ShrU(%val, @u32(16));",
         "  %hi : u32 = Shl(%val, @u32(16));",
         "  %val = BitOr(%lo, %hi);",
+        "} else if (@src_swz_eq(%src_idx, \"b00\")) {",
+        "  %blo : u32 = @extract_bits(%val, 0, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 0, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
+        "} else if (@src_swz_eq(%src_idx, \"b11\")) {",
+        "  %blo : u32 = @extract_bits(%val, 8, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 8, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
+        "} else if (@src_swz_eq(%src_idx, \"b22\")) {",
+        "  %blo : u32 = @extract_bits(%val, 16, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 16, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
+        "} else if (@src_swz_eq(%src_idx, \"b33\")) {",
+        "  %blo : u32 = @extract_bits(%val, 24, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 24, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
+        "} else if (@src_swz_eq(%src_idx, \"b02\")) {",
+        "  %blo : u32 = @extract_bits(%val, 0, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 16, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
+        "} else if (@src_swz_eq(%src_idx, \"b13\")) {",
+        "  %blo : u32 = @extract_bits(%val, 8, 8, %is_signed);",
+        "  %bhi : u32 = @extract_bits(%val, 24, 8, %is_signed);",
+        "  %lo16 : u32 = BitAnd(%blo, @u32(0xFFFFu));",
+        "  %hi16 : u32 = Shl(%bhi, @u32(16));",
+        "  %val = BitOr(%lo16, %hi16);",
         "} else if (@src_swz_is_b_rep(%src_idx)) {",
         "  %boff : uint32_t = @src_swz_b_rep_off(%src_idx);",
         "  %bk : u32 = BfeU(%val, @u32(%boff), @u32(8));",
@@ -6948,13 +6984,7 @@
         "%v : f32 = @bitcast(@sr_get(1));",
         "%uv : v2f32 = VecConstruct2(%u, %v);",
         "%tup : tuple_val_token = @tex_sample(%uv, $is_gather, #token);",
-        "%sampled : v4f32 = @tuple_val(%tup);",
-        "@set_token(@tuple_tok(%tup));",
-        "for (%c : 0 .. $sr_write_count_max4) {",
-        "  %f : f32 = @extract(%sampled, %c);",
-        "  %u_c : u32 = @bitcast(%f);",
-        "  @sr_set(%c, %u_c);",
-        "}"
+        "@set_token(@tuple_tok(%tup));"
       ]
     },
     {
@@ -7144,13 +7174,7 @@
         "%v : f32 = @extract(%uv4, 1);",
         "%uv : v2f32 = VecConstruct2(%u, %v);",
         "%tup : tuple_val_token = @tex_sample(%uv, false, #token);",
-        "%sampled : v4f32 = @tuple_val(%tup);",
-        "@set_token(@tuple_tok(%tup));",
-        "for (%c : 0 .. $sr_write_count_max4) {",
-        "  %f : f32 = @extract(%sampled, %c);",
-        "  %u_c : u32 = @bitcast(%f);",
-        "  @sr_set(%c, %u_c);",
-        "}"
+        "@set_token(@tuple_tok(%tup));"
       ]
     },
     {
@@ -7290,14 +7314,18 @@
       "op_class": "frag_zs_emit",
       "ssa_op": "@INLINE_OPS",
       "dest_type": "none",
-      "src_types": [],
+      "src_types": [
+        "f32",
+        "u32",
+        "u32"
+      ],
       "splits_block": false,
       "is_barrier_or_cf": true,
       "effects": [
         "exec:DepthReplacing"
       ],
       "inline_ops": [
-        "%z : f32 = @bitcast(@sr_get(0));",
+        "%z : f32 = %0;",
         "%tok : token = @store_builtin_depth(%z, #token);",
         "@set_token(%tok);"
       ]

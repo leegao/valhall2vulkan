@@ -83,6 +83,7 @@ struct ValhallTranslateOptions {
     std::map<uint32_t, std::string> srt_pka_buf_names;
     std::map<uint32_t, uint32_t> fau_fcst_words;
     std::map<uint32_t, uint32_t> frag_varying_addr_to_loc;
+    std::map<uint32_t, uint32_t> vert_attr_idx_to_loc;
     std::map<uint32_t, std::string> vert_sout_attr_names;
     struct IdvsVaryingOffsetSpec {
         int32_t user_location = -1;

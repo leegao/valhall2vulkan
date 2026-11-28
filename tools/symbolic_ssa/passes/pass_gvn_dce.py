@@ -136,14 +136,14 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
         return None
 
     def _is_valhall_persp_var(self, nid: int) -> bool:
-        n = self.nodes_by_id.get(nid)
+        n = self.nodes_by_id.get(self._unwrap_cast(nid))
         if not n or n.get("op") != "VecExtract" or not n.get("args"):
             return False
         base = self.nodes_by_id.get(int(n["args"][0]))
         return bool(base and base.get("op") == "LoadFragVarying" and not base.get("aux_bool", False))
 
     def _is_valhall_frag_w(self, nid: int) -> bool:
-        n = self.nodes_by_id.get(nid)
+        n = self.nodes_by_id.get(self._unwrap_cast(nid))
         if (
             not n
             or n.get("op") != "VecExtract"
@@ -155,6 +155,36 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
         base = self.nodes_by_id.get(int(n["args"][0]))
         return bool(base and base.get("op") == "LoadBuiltinInput" and base.get("aux_str") == "gl_FragCoord")
 
+    def _unwrap_cast(self, nid: int) -> int:
+        seen = set()
+        cur = nid
+        while cur not in seen:
+            seen.add(cur)
+            n = self.nodes_by_id.get(cur)
+            if not n or n.get("op") not in ("Copy", "Bitcast") or not n.get("args"):
+                return cur
+            cur = int(n["args"][0])
+        return cur
+
+    def _is_recip_of_frag_w(self, nid: int) -> bool:
+        n = self.nodes_by_id.get(self._unwrap_cast(nid))
+        if not n or n.get("op") != "FDiv" or len(n.get("args", [])) != 2:
+            return False
+        num = self.nodes_by_id.get(self._unwrap_cast(int(n["args"][0])))
+        if not num or num.get("op") != "ConstF32" or int(num.get("imm_u32", 0)) != 0x3F800000:
+            return False
+        return self._is_valhall_frag_w(self._unwrap_cast(int(n["args"][1])))
+
+    def _is_consumed_by_recip_frag_w(self, nid: int) -> bool:
+        for u in self.nodes_by_id.values():
+            if u.get("op") != "FMul" or len(u.get("args", [])) != 2:
+                continue
+            ua = self._unwrap_cast(int(u["args"][0]))
+            ub = self._unwrap_cast(int(u["args"][1]))
+            if (ua == nid and self._is_recip_of_frag_w(ub)) or (ub == nid and self._is_recip_of_frag_w(ua)):
+                return True
+        return False
+
     def fp_binary(self, op: str, a: Any, b: Any) -> Any:
         if (
             op == "FMul"
@@ -163,10 +193,15 @@ class AlgebraicSimplifierInterpreter(AbstractSsaPass):
             and isinstance(a, int)
             and isinstance(b, int)
         ):
-            if self._is_valhall_persp_var(a) and self._is_valhall_frag_w(b):
-                return a
-            if self._is_valhall_persp_var(b) and self._is_valhall_frag_w(a):
-                return b
+            # DDK perspective varying idiom: FMul(persp_var, frag_w) -> persp_var,
+            # only when not subsequently multiplied by (1 / frag_w) (preserving exact
+            # w=0/inf NaN behavior when the shader explicitly computes (v * w) * (1 / w)).
+            cur_id = int(self._cur_node["id"])
+            if not self._is_consumed_by_recip_frag_w(cur_id):
+                if self._is_valhall_persp_var(a) and self._is_valhall_frag_w(b):
+                    return a
+                if self._is_valhall_persp_var(b) and self._is_valhall_frag_w(a):
+                    return b
         return None
 
 

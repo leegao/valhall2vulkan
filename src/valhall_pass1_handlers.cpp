@@ -494,6 +494,7 @@ SsaId tuple_tok(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, cons
 
 void lea_pka(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId off32) {
     std::string buf_sym;
+    SsaId dyn_desc_idx = kInvalidSsa;
     if (ins.srcs.size() >= 2) {
         if (ins.srcs[1].kind == SourceKind::FauUniform) {
             uint32_t word_off = static_cast<uint32_t>(ins.srcs[1].fau_index64) * 8u +
@@ -532,8 +533,34 @@ void lea_pka(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, con
                 if (dup) continue;
                 seen.push_back(cur);
                 const auto& dn = ctx.res.ssa.get(cur);
-                if ((dn.op == SsaOp::Copy || dn.op == SsaOp::Bitcast) && !dn.args.empty()) {
+                if ((dn.op == SsaOp::Copy || dn.op == SsaOp::Bitcast ||
+                     dn.op == SsaOp::SubgroupShuffle) && !dn.args.empty()) {
                     work.push_back(dn.args[0]);
+                } else if (dn.op == SsaOp::IAdd && dn.args.size() == 2u) {
+                    auto resolve_base = [&](SsaId cand) -> bool {
+                        if (cand == kInvalidSsa || cand >= ctx.res.ssa.nodes.size()) return false;
+                        const auto& cn = ctx.res.ssa.get(cand);
+                        uint32_t dval = 0u;
+                        if (cn.op == SsaOp::LoadFau) {
+                            auto fit = ctx.opts.fau_fcst_words.find(cn.imm_u32 * 4u);
+                            if (fit == ctx.opts.fau_fcst_words.end()) return false;
+                            dval = fit->second;
+                        } else if (cn.op == SsaOp::ConstU32) {
+                            dval = cn.imm_u32;
+                        } else {
+                            return false;
+                        }
+                        return ctx.opts.srt_pka_buf_names.count(dval) > 0u;
+                    };
+                    if (resolve_base(dn.args[0])) {
+                        work.push_back(dn.args[0]);
+                        dyn_desc_idx = dn.args[1];
+                    } else if (resolve_base(dn.args[1])) {
+                        work.push_back(dn.args[1]);
+                        dyn_desc_idx = dn.args[0];
+                    } else {
+                        conflict = true;
+                    }
                 } else if (dn.op == SsaOp::LoadFau) {
                     uint32_t byte_off = dn.imm_u32 * 4u;
                     auto fit = ctx.opts.fau_fcst_words.find(byte_off);
@@ -567,6 +594,12 @@ void lea_pka(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, con
         base_n.effects.flags |= EffectSet::kFlagUsesSideband;
         ctx.res.uses_sideband = true;
         SsaId base_id = ctx.sb.emit(blk, std::move(base_n));
+        if (dyn_desc_idx != kInvalidSsa) {
+            SsaId idx64 = ctx.emit_op(blk, SsaOp::UConvert32To64, ValType::U64, { dyn_desc_idx });
+            SsaId sh24 = ctx.sb.emit_const_u64(blk, 24ull);
+            SsaId stride = ctx.emit_op(blk, SsaOp::Shl64, ValType::U64, { idx64, sh24 });
+            base_id = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { base_id, stride });
+        }
         SsaId off64 = ctx.emit_op(blk, SsaOp::UConvert32To64, ValType::U64, { off32 });
         SsaId eff = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { base_id, off64 });
         SsaId lo = kInvalidSsa, hi = kInvalidSsa;
@@ -582,6 +615,7 @@ void lea_pka(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, con
 SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, const tables::LoweringRuleSpec* rule, SsaId addr, uint32_t elem_bytes, bool is_pka, SsaId tok) {
     SsaId eff_addr = addr;
     std::string buf_sym;
+    SsaId dyn_desc_idx = kInvalidSsa;
     if (is_pka && ins.srcs.size() >= 2) {
         if (ins.pc == ctx.last_pka_pc && ctx.last_pka_table_hi != kInvalidSsa) {
             return ctx.last_pka_table_hi;
@@ -694,8 +728,34 @@ SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, c
                 if (dup) continue;
                 seen.push_back(cur);
                 const auto& dn = ctx.res.ssa.get(cur);
-                if ((dn.op == SsaOp::Copy || dn.op == SsaOp::Bitcast) && !dn.args.empty()) {
+                if ((dn.op == SsaOp::Copy || dn.op == SsaOp::Bitcast ||
+                     dn.op == SsaOp::SubgroupShuffle) && !dn.args.empty()) {
                     work.push_back(dn.args[0]);
+                } else if (dn.op == SsaOp::IAdd && dn.args.size() == 2u) {
+                    auto resolve_base = [&](SsaId cand) -> bool {
+                        if (cand == kInvalidSsa || cand >= ctx.res.ssa.nodes.size()) return false;
+                        const auto& cn = ctx.res.ssa.get(cand);
+                        uint32_t dval = 0u;
+                        if (cn.op == SsaOp::LoadFau) {
+                            auto fit = ctx.opts.fau_fcst_words.find(cn.imm_u32 * 4u);
+                            if (fit == ctx.opts.fau_fcst_words.end()) return false;
+                            dval = fit->second;
+                        } else if (cn.op == SsaOp::ConstU32) {
+                            dval = cn.imm_u32;
+                        } else {
+                            return false;
+                        }
+                        return ctx.opts.srt_pka_buf_names.count(dval) > 0u;
+                    };
+                    if (resolve_base(dn.args[0])) {
+                        work.push_back(dn.args[0]);
+                        dyn_desc_idx = dn.args[1];
+                    } else if (resolve_base(dn.args[1])) {
+                        work.push_back(dn.args[1]);
+                        dyn_desc_idx = dn.args[0];
+                    } else {
+                        conflict = true;
+                    }
                 } else if (dn.op == SsaOp::Phi) {
                     bool any_inc = false;
                     for (const auto& inc : dn.phi_incomings) {
@@ -709,7 +769,8 @@ SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, c
                     if (!any_inc && dn.block_id < ctx.res.ssa.blocks.size()) {
                         for (uint32_t pred : ctx.res.ssa.blocks[dn.block_id].preds) {
                             if (pred < dn.block_id) {
-                                SsaId pv = ctx.sb.current_reg(pred, ins.srcs[1].reg_num);
+                                uint32_t phi_reg = (dn.aux_index < 64u) ? dn.aux_index : ins.srcs[1].reg_num;
+                                SsaId pv = ctx.sb.current_reg(pred, phi_reg);
                                 if (pv != kInvalidSsa) work.push_back(pv);
                             }
                         }
@@ -758,6 +819,12 @@ SsaId psb_load(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins, c
             base_n.effects.flags |= EffectSet::kFlagUsesSideband;
             ctx.res.uses_sideband = true;
             SsaId base_id = ctx.sb.emit(blk, std::move(base_n));
+            if (dyn_desc_idx != kInvalidSsa) {
+                SsaId idx64 = ctx.emit_op(blk, SsaOp::UConvert32To64, ValType::U64, { dyn_desc_idx });
+                SsaId sh24 = ctx.sb.emit_const_u64(blk, 24ull);
+                SsaId stride = ctx.emit_op(blk, SsaOp::Shl64, ValType::U64, { idx64, sh24 });
+                base_id = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { base_id, stride });
+            }
             eff_addr = ctx.emit_op(blk, SsaOp::IAdd64, ValType::U64, { base_id, addr });
         }
     }
@@ -841,6 +908,10 @@ SsaId load_vert_attr(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& 
     uint32_t attr_idx = 0;
     auto it = ins.fields.find("attribute_index");
     if (it != ins.fields.end()) attr_idx = it->second;
+    if (auto mit = ctx.opts.vert_attr_idx_to_loc.find(attr_idx);
+        mit != ctx.opts.vert_attr_idx_to_loc.end()) {
+        attr_idx = mit->second;
+    }
     SsaNode ld{};
     ld.op = SsaOp::LoadVertAttr;
     ld.type = ValType::V4F32;
@@ -883,6 +954,10 @@ SsaId load_frag_var(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& i
 }
 
 SsaId load_frag_var_idx(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst&, const tables::LoweringRuleSpec*, uint32_t var_loc, bool is_flat) {
+    if (auto mit = ctx.opts.frag_varying_addr_to_loc.find(var_loc);
+        mit != ctx.opts.frag_varying_addr_to_loc.end()) {
+        var_loc = mit->second;
+    }
     SsaNode ld{};
     ld.op = SsaOp::LoadFragVarying;
     ld.type = ValType::V4F32;
@@ -966,6 +1041,22 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
             if (hn.op == SsaOp::ConstU32 && (hn.imm_u32 >> 24) == 0x04u) {
                 tex_idx = hn.imm_u32 & 0xFFFFu;
                 has_tex_idx = true;
+            }
+        }
+        if (!has_tex_idx) {
+            SsaId lo_id = ctx.sb.current_reg(blk, ins.srcs[0].reg_num & 62u);
+            if (lo_id != kInvalidSsa) {
+                const auto& ln = ctx.mod.get(lo_id);
+                if (ln.op == SsaOp::ConstU32) {
+                    uint32_t cand = (ln.imm_u32 >> 16) & 0x7FFu;
+                    for (const auto& s : ctx.opts.samplers) {
+                        if (s.tex_index == cand) {
+                            tex_idx = cand;
+                            has_tex_idx = true;
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -1106,7 +1197,104 @@ SsaId tex_sample(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst& ins,
     ts.args.push_back(tok);
     ts.is_barrier_or_cf = true;
     ts.is_side_effect = true;
+    SsaNode ts_template = ts;
     SsaId ts_id = ctx.sb.emit(blk, std::move(ts));
+    if (ins.mnemonic == Mnemonic::TEX_DUAL || ins.mnemonic == Mnemonic::VAR_TEX_DUAL) {
+        uint32_t pmask = 0xFu;
+        if (auto it_pm = ins.fields.find("primary_write_mask"); it_pm != ins.fields.end() && it_pm->second != 0u) {
+            pmask = it_pm->second & 0xFu;
+        }
+        uint32_t smask = 0xFu;
+        if (auto it_sm = ins.fields.find("secondary_write_mask"); it_sm != ins.fields.end() && it_sm->second != 0u) {
+            smask = it_sm->second & 0xFu;
+        }
+        SsaNode pval{};
+        pval.op = SsaOp::TupleExtract;
+        pval.type = ValType::V4F32;
+        pval.imm_u32 = 0u;
+        pval.args = { ts_id };
+        SsaId pval_id = ctx.sb.emit(blk, std::move(pval));
+
+        SsaNode ptok{};
+        ptok.op = SsaOp::TupleExtract;
+        ptok.type = ValType::Token;
+        ptok.imm_u32 = 1u;
+        ptok.args = { ts_id };
+        SsaId ptok_id = ctx.sb.emit(blk, std::move(ptok));
+
+        uint32_t sr_out = 0u;
+        for (uint32_t c = 0u; c < 4u; ++c) {
+            if ((pmask & (1u << c)) == 0u) continue;
+            SsaNode ex{};
+            ex.op = SsaOp::VecExtract;
+            ex.type = ValType::F32;
+            ex.imm_u32 = c;
+            ex.args = { pval_id };
+            SsaId f_id = ctx.sb.emit(blk, std::move(ex));
+            abi::sr_set(ctx, blk, ins, nullptr, sr_out++, ctx.sb.emit_bitcast(blk, ValType::U32, f_id));
+        }
+
+        uint32_t sec_tex_idx = 0u;
+        bool has_sec_tex = false;
+        if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::FauUniform) {
+            uint32_t fau_off2 = static_cast<uint32_t>(ins.srcs[0].fau_index64) * 8u + 4u;
+            auto it_fau2 = ctx.opts.fau_tex_handle_indices.find(fau_off2);
+            if (it_fau2 != ctx.opts.fau_tex_handle_indices.end()) {
+                sec_tex_idx = it_fau2->second;
+                has_sec_tex = true;
+            }
+        } else if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register) {
+            SsaId hi_id2 = ctx.sb.current_reg(blk, (ins.srcs[0].reg_num & 62u) + 1u);
+            if (hi_id2 != kInvalidSsa) {
+                const auto& hn2 = ctx.mod.get(hi_id2);
+                if (hn2.op == SsaOp::ConstU32) {
+                    uint32_t cand = (hn2.imm_u32 >> 16) & 0x7FFu;
+                    for (const auto& s : ctx.opts.samplers) {
+                        if (s.tex_index == cand) {
+                            sec_tex_idx = cand;
+                            has_sec_tex = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        SsaNode ts2 = std::move(ts_template);
+        ts2.imm_u32 = sec_tex_idx;
+        ts2.aux_str.clear();
+        if (has_sec_tex) {
+            uint32_t d_set2 = 0u;
+            uint32_t binding2 = sec_tex_idx;
+            for (const auto& s : ctx.opts.samplers) {
+                if (s.tex_index == sec_tex_idx) {
+                    d_set2 = s.descriptor_set;
+                    binding2 = s.binding;
+                    break;
+                }
+            }
+            ts2.aux_str = "tex:" + std::to_string(d_set2) + ":" + std::to_string(binding2);
+        }
+        if (!ts2.args.empty()) ts2.args.back() = ptok_id;
+        SsaId ts2_id = ctx.sb.emit(blk, std::move(ts2));
+
+        SsaNode sval{};
+        sval.op = SsaOp::TupleExtract;
+        sval.type = ValType::V4F32;
+        sval.imm_u32 = 0u;
+        sval.args = { ts2_id };
+        SsaId sval_id = ctx.sb.emit(blk, std::move(sval));
+        for (uint32_t c = 0u; c < 4u; ++c) {
+            if ((smask & (1u << c)) == 0u) continue;
+            SsaNode ex{};
+            ex.op = SsaOp::VecExtract;
+            ex.type = ValType::F32;
+            ex.imm_u32 = c;
+            ex.args = { sval_id };
+            SsaId f_id = ctx.sb.emit(blk, std::move(ex));
+            abi::sr_set(ctx, blk, ins, nullptr, sr_out++, ctx.sb.emit_bitcast(blk, ValType::U32, f_id));
+        }
+        return ts2_id;
+    }
     if (is_grad && sr_cnt >= 4u) {
         auto it_d = ins.modifier_strs.find("coordinate_or_derivative");
         if (it_d != ins.modifier_strs.end() && it_d->second == "derivative") {

@@ -83,6 +83,8 @@ struct PanfrostVkCompileOutput {
     std::vector<PanfrostVkDescriptorInfo> descriptors;
     /// Varying slot layout reported by `--info-json` (VS outputs or FS inputs).
     std::vector<PanfrostVkVaryingInfo> varyings;
+    /// Sorted SPIR-V Input Locations declared by Vertex shaders (for compact attr_idx -> Location remapping).
+    std::vector<uint32_t> vert_input_locations;
 };
 
 /// Compile a Vulkan SPIR-V shader (Vertex, Fragment, or Compute) directly to Valhall ISA

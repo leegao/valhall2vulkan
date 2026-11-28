@@ -252,6 +252,11 @@ def _convert_expr(node: Optional[Dict[str, Any]]) -> Any:
         )
     if kind == "sizeof":
         return CppCall(callee=CppIdent("sizeof"), args=[], qualified_callee="")
+    if kind == "lambda":
+        return CppLambda(
+            params=[CppParam(pr.get("type", ""), pr["name"]) for pr in node.get("params", [])],
+            body=[_convert_stmt(s) for s in node.get("body", [])],
+        )
     if kind == "init_list":
         items = node.get("items", [])
         ctype = node.get("canonical_type", "")

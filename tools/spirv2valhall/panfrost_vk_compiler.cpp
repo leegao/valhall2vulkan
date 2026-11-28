@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <set>
 #include <unordered_map>
 
 namespace fs = std::filesystem;
@@ -52,6 +53,7 @@ struct SpvMeta {
     uint32_t local_size[3] = {1, 1, 1};
     /// Maps ((set << 16) | binding) -> storage class (12 = StorageBuffer, 2 = Uniform).
     std::unordered_map<uint64_t, uint32_t> binding_storage_class;
+    std::vector<uint32_t> vert_input_locations;
 };
 
 bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::string* err) {
@@ -65,6 +67,11 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
     std::unordered_map<uint32_t, uint32_t> var_sc;
     std::unordered_map<uint32_t, uint32_t> ptr_to_pointee;
     std::unordered_map<uint32_t, bool> is_buffer_block;
+    std::unordered_map<uint32_t, uint32_t> var_location;
+    std::unordered_map<uint32_t, bool> is_builtin;
+    std::unordered_map<uint32_t, uint32_t> var_pointee;
+    std::unordered_map<uint32_t, uint32_t> type_slots;
+    std::unordered_map<uint32_t, uint32_t> const_u32_val;
 
     size_t i = 5;
     while (i < words.size()) {
@@ -101,6 +108,16 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
             if (dec == 34 && wc >= 4) desc_set[target] = words[i + 3];  // DescriptorSet
             else if (dec == 33 && wc >= 4) binding[target] = words[i + 3];  // Binding
             else if (dec == 3) is_buffer_block[target] = true;  // BufferBlock (legacy SSBO in Uniform SC)
+            else if (dec == 30 && wc >= 4) var_location[target] = words[i + 3];  // Location
+            else if (dec == 11) is_builtin[target] = true;  // BuiltIn
+        } else if (op == 43 && wc >= 4) {  // OpConstant
+            const_u32_val[words[i + 2]] = words[i + 3];
+        } else if (op == 24 && wc >= 4) {  // OpTypeMatrix
+            type_slots[words[i + 1]] = words[i + 3];
+        } else if (op == 28 && wc >= 4) {  // OpTypeArray
+            uint32_t elem_slots = type_slots.count(words[i + 2]) ? type_slots[words[i + 2]] : 1u;
+            uint32_t len = const_u32_val.count(words[i + 3]) ? const_u32_val[words[i + 3]] : 1u;
+            if (len > 0u && len <= 64u) type_slots[words[i + 1]] = elem_slots * len;
         } else if (op == 32 && wc >= 4) {  // OpTypePointer
             ptr_to_pointee[words[i + 1]] = words[i + 3];
         } else if (op == 59 && wc >= 4) {  // OpVariable
@@ -111,6 +128,7 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
                 sc = 12;  // Uniform + BufferBlock -> SSBO
             }
             var_sc[res_id] = sc;
+            if (ptr_to_pointee.count(res_type)) var_pointee[res_id] = ptr_to_pointee[res_type];
         }
         i += wc;
     }
@@ -126,6 +144,21 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
         uint32_t bd = bit->second;
         uint64_t sb_key = (static_cast<uint64_t>(ds) << 32) | bd;
         out->binding_storage_class[sb_key] = sc;
+    }
+    if (out->stage == valhall::ShaderStage::Vertex) {
+        std::set<uint32_t> locs;
+        for (const auto& [var_id, sc] : var_sc) {
+            if (sc != 1u || is_builtin[var_id]) continue;  // Input storage class
+            auto lit = var_location.find(var_id);
+            if (lit == var_location.end()) continue;
+            uint32_t slots = 1u;
+            auto pit = var_pointee.find(var_id);
+            if (pit != var_pointee.end() && type_slots.count(pit->second)) {
+                slots = type_slots[pit->second];
+            }
+            for (uint32_t s = 0; s < slots; ++s) locs.insert(lit->second + s);
+        }
+        out->vert_input_locations.assign(locs.begin(), locs.end());
     }
     return true;
 }
@@ -455,6 +488,7 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     out.local_size[0] = meta.local_size[0];
     out.local_size[1] = meta.local_size[1];
     out.local_size[2] = meta.local_size[2];
+    out.vert_input_locations = meta.vert_input_locations;
 
     char tmpl[] = "/tmp/panfrost_vk_XXXXXX";
     char* td_c = ::mkdtemp(tmpl);
@@ -509,6 +543,9 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
         return out;
     }
 
+    if (opts.verbose) {
+        std::cerr << "[panfrost-vk] info_json:\n" << info_text << "\n";
+    }
     JsonVal root;
     MiniJsonParser parser(info_text);
     if (!parser.parse(&root) || root.kind != JsonVal::Kind::Object) {

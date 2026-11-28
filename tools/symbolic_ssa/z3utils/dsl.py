@@ -834,11 +834,29 @@ class Z3Expr:
         cached = self._hash_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
         if cached is not None:
             return cached
-        acc = hash(type(self))
-        for fname in self._struct_fields:
-            acc = hash((acc, _struct_hash_val(getattr(self, fname))))
-        object.__setattr__(self, "_hash_cache", acc)
-        return acc
+        # Iterative post-order traversal to avoid Python RecursionError on deep expression DAGs.
+        stack: list[tuple[Z3Expr, bool]] = [(self, False)]
+        while stack:
+            node, ready = stack.pop()
+            if node._hash_cache is not None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                continue
+            if ready:
+                acc = hash(type(node))
+                for fname in node._struct_fields:
+                    acc = hash((acc, _struct_hash_val(getattr(node, fname))))
+                object.__setattr__(node, "_hash_cache", acc)
+            else:
+                stack.append((node, True))
+                for fname in node._struct_fields:
+                    v = getattr(node, fname)
+                    if isinstance(v, Z3Expr):
+                        if v._hash_cache is None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                            stack.append((v, False))
+                    elif isinstance(v, tuple):
+                        for item in v:
+                            if isinstance(item, Z3Expr) and item._hash_cache is None:  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
+                                stack.append((item, False))
+        return self._hash_cache  # type: ignore  # pyright: ignore[reportAttributeAccessIssue]
 
     def __bool__(self) -> bool:
         raise TypeError(

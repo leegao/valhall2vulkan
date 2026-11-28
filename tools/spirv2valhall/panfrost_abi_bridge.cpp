@@ -134,12 +134,33 @@ void populate_panfrost_translate_options(
     vopts->local_size_z = kb.local_size[2];
     vopts->srt_pka_buf_names = cres.srt_pka_buf_names;
 
+    // Build lookup for Panfrost packed texture/sampler descriptor handles:
+    // Each 32-bit FAU word packs ((table << 11) | tex_idx) in bits 16..31 and
+    // ((table << 11) | samp_idx) in bits 0..15 (e.g. 0x08000801 for table=1, tex=0, samp=1).
+    std::unordered_map<uint32_t, uint32_t> packed_tex_hi16_to_idx;
+    for (const auto& d : cres.descriptors) {
+        if (d.kind == "tex_or_img" || d.kind == "combined_image_sampler") {
+            uint32_t count = (d.desc_count > 0 && d.desc_count <= 64u) ? d.desc_count : 1u;
+            uint32_t stride = (d.kind == "combined_image_sampler") ? 2u : 1u;
+            for (uint32_t elem = 0; elem < count; ++elem) {
+                uint32_t tidx = d.desc_idx + elem * stride;
+                uint32_t hi16 = ((d.table & 0x1Fu) << 11) | (tidx & 0x7FFu);
+                packed_tex_hi16_to_idx[hi16] = tidx;
+            }
+        }
+    }
+
     for (const auto& [w, val] : cres.fau_const_words) {
         uint32_t byte_off = w * 4u;
         vopts->fau_fcst_words[byte_off] = val;
         auto sit = cres.srt_pka_buf_names.find(val);
         if (sit != cres.srt_pka_buf_names.end()) {
             vopts->fau_pka_buf_names[byte_off] = sit->second;
+        }
+        uint32_t hi16 = (val >> 16) & 0xFFFFu;
+        auto tit = packed_tex_hi16_to_idx.find(hi16);
+        if (tit != packed_tex_hi16_to_idx.end()) {
+            vopts->fau_tex_handle_indices[byte_off] = tit->second;
         }
     }
 
@@ -158,6 +179,9 @@ void populate_panfrost_translate_options(
         }
     }
     if (kb.stage == valhall::ShaderStage::Vertex) {
+        for (uint32_t i = 0; i < cres.vert_input_locations.size(); ++i) {
+            vopts->vert_attr_idx_to_loc[i] = cres.vert_input_locations[i];
+        }
         for (const auto& v : cres.varyings) {
             if (v.offset < 0) continue;
             valhall::ValhallTranslateOptions::IdvsVaryingOffsetSpec spec{};
@@ -307,6 +331,64 @@ void apply_panfrost_vk_abi_bridge(
         valhall::dataflow::DeFauDevirtOptions dopt;
         dopt.record_fallbacks = false;
         valhall::dataflow::run_ssa_defau_devirt(ssa, summary, dopt);
+    }
+
+    // Panfrost Kraid fills unwritten NIR undef lanes of sparse vec4 StoreVertVarying
+    // outputs with quiet NaN (0x7fc00000), whereas Direct SPIR-V->SSA and Mali DDK
+    // zero-fill unwritten varying lanes (0.0f). Normalize literal 0x7fc00000 undef
+    // lanes on StoreVertVarying to 0.0f so equivalence checks compare written lanes.
+    if (kb.stage == valhall::ShaderStage::Vertex) {
+        auto is_qnan_undef = [&](valhall::compiler::SsaId id) -> bool {
+            for (int depth = 0; depth < 4 && id != valhall::compiler::kInvalidSsa && id < ssa.nodes.size(); ++depth) {
+                const auto& n = ssa.nodes[id];
+                if ((n.op == valhall::tables::SsaOp::ConstF32 || n.op == valhall::tables::SsaOp::ConstU32) &&
+                    n.imm_u32 == 0x7fc00000u) {
+                    return true;
+                }
+                if ((n.op == valhall::tables::SsaOp::Bitcast || n.op == valhall::tables::SsaOp::Copy) &&
+                    !n.args.empty()) {
+                    id = n.args[0];
+                    continue;
+                }
+                if (n.op == valhall::tables::SsaOp::VecExtract && !n.args.empty()) {
+                    valhall::compiler::SsaId src_vec = n.args[0];
+                    if (src_vec < ssa.nodes.size() &&
+                        ssa.nodes[src_vec].op == valhall::tables::SsaOp::VecConstruct4 &&
+                        n.imm_u32 < ssa.nodes[src_vec].args.size()) {
+                        id = ssa.nodes[src_vec].args[n.imm_u32];
+                        continue;
+                    }
+                }
+                break;
+            }
+            return false;
+        };
+        valhall::compiler::SsaId zero_f32 = valhall::compiler::kInvalidSsa;
+        for (size_t idx = 0; idx < ssa.nodes.size(); ++idx) {
+            if (ssa.nodes[idx].op != valhall::tables::SsaOp::StoreVertVarying || ssa.nodes[idx].args.empty()) {
+                continue;
+            }
+            valhall::compiler::SsaId vec_id = ssa.nodes[idx].args[0];
+            if (vec_id >= ssa.nodes.size() || ssa.nodes[vec_id].op != valhall::tables::SsaOp::VecConstruct4) {
+                continue;
+            }
+            for (size_t c = 0; c < ssa.nodes[vec_id].args.size(); ++c) {
+                if (is_qnan_undef(ssa.nodes[vec_id].args[c])) {
+                    if (zero_f32 == valhall::compiler::kInvalidSsa) {
+                        valhall::compiler::SsaNode zn{};
+                        zn.id = static_cast<valhall::compiler::SsaId>(ssa.nodes.size());
+                        zn.block_id = 0;
+                        zn.op = valhall::tables::SsaOp::ConstF32;
+                        zn.type = valhall::compiler::ValType::F32;
+                        zn.imm_u32 = kF32ZeroBits;
+                        ssa.nodes.push_back(std::move(zn));
+                        zero_f32 = ssa.nodes.back().id;
+                        ssa.blocks[0].nodes.insert(ssa.blocks[0].nodes.begin(), zero_f32);
+                    }
+                    ssa.nodes[vec_id].args[c] = zero_f32;
+                }
+            }
+        }
     }
 
     if (report) {

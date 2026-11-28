@@ -61,6 +61,7 @@ struct PanfrostCompileResult {
     bool secondary_enable = false;
     uint32_t secondary_offset = 0;
     std::vector<PanfrostVkVaryingInfo> varyings;
+    std::vector<uint32_t> vert_input_locations;
 };
 
 struct PanfrostRunOptions {

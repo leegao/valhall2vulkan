@@ -16,21 +16,21 @@ def find_spirv_tool(name: str) -> str | None:
     """Locate a SPIR-V Tools binary (e.g. spirv-as, spirv-dis, spirv-val, spirv-reduce, spirv-fuzz).
 
     Search order:
-      1. `<repo>/third_party/prebuilts/spirv-tools/<name>` (and `bin/<name>`) if present and executable.
-      2. `$SPIRV_TOOLS_DIR/<name>`.
+      1. `$SPIRV_TOOLS_DIR/<name>` when explicitly set in the environment.
+      2. `<repo>/third_party/prebuilts/spirv-tools/<name>` (and `bin/<name>`) if present and executable.
       3. `PATH` via `shutil.which`.
     """
+    env_dir = os.environ.get("SPIRV_TOOLS_DIR")
+    if env_dir:
+        cand = os.path.join(env_dir, name)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     for rel in (
         os.path.join("third_party", "prebuilts", "spirv-tools", name),
         os.path.join("third_party", "prebuilts", "spirv-tools", "bin", name),
     ):
         cand = os.path.join(repo_root, rel)
-        if os.path.isfile(cand) and os.access(cand, os.X_OK):
-            return cand
-    env_dir = os.environ.get("SPIRV_TOOLS_DIR")
-    if env_dir:
-        cand = os.path.join(env_dir, name)
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     return shutil.which(name)

@@ -508,6 +508,9 @@ add_test(
     COMMAND ${Python3_EXECUTABLE} -m unittest tools/coverage/test_panfrost_vs_ddk_equiv.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+    add_test(NAME test_v53_sweep_and_lowering_fixes
+        COMMAND "${VALHALL_PYTHON}" -m unittest tools.symbolic_ssa.test_v53_sweep_and_lowering_fixes
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 set_tests_properties(test_v46_defau_swz_tex_and_imgq PROPERTIES
     ENVIRONMENT "PYTHONPATH=${CMAKE_SOURCE_DIR}:$ENV{PYTHONPATH}"
