@@ -54,6 +54,7 @@ struct SpvMeta {
     /// Maps ((set << 16) | binding) -> storage class (12 = StorageBuffer, 2 = Uniform).
     std::unordered_map<uint64_t, uint32_t> binding_storage_class;
     std::vector<uint32_t> vert_input_locations;
+    bool has_frag_noperspective_varyings = false;
 };
 
 bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::string* err) {
@@ -69,6 +70,7 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
     std::unordered_map<uint32_t, bool> is_buffer_block;
     std::unordered_map<uint32_t, uint32_t> var_location;
     std::unordered_map<uint32_t, bool> is_builtin;
+    std::unordered_map<uint32_t, bool> is_noperspective;
     std::unordered_map<uint32_t, uint32_t> var_pointee;
     std::unordered_map<uint32_t, uint32_t> type_slots;
     std::unordered_map<uint32_t, uint32_t> const_u32_val;
@@ -110,6 +112,7 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
             else if (dec == 3) is_buffer_block[target] = true;  // BufferBlock (legacy SSBO in Uniform SC)
             else if (dec == 30 && wc >= 4) var_location[target] = words[i + 3];  // Location
             else if (dec == 11) is_builtin[target] = true;  // BuiltIn
+            else if (dec == 13) is_noperspective[target] = true;  // NoPerspective
         } else if (op == 43 && wc >= 4) {  // OpConstant
             const_u32_val[words[i + 2]] = words[i + 3];
         } else if (op == 24 && wc >= 4) {  // OpTypeMatrix
@@ -159,6 +162,13 @@ bool parse_spv_metadata(const std::vector<uint32_t>& words, SpvMeta* out, std::s
             for (uint32_t s = 0; s < slots; ++s) locs.insert(lit->second + s);
         }
         out->vert_input_locations.assign(locs.begin(), locs.end());
+    } else if (out->stage == valhall::ShaderStage::Fragment) {
+        for (const auto& [var_id, sc] : var_sc) {
+            if (sc == 1u && is_noperspective[var_id]) {
+                out->has_frag_noperspective_varyings = true;
+                break;
+            }
+        }
     }
     return true;
 }
@@ -489,6 +499,7 @@ PanfrostVkCompileOutput compile_vulkan_spv_via_panfrost(
     out.local_size[1] = meta.local_size[1];
     out.local_size[2] = meta.local_size[2];
     out.vert_input_locations = meta.vert_input_locations;
+    out.has_frag_noperspective_varyings = meta.has_frag_noperspective_varyings;
 
     char tmpl[] = "/tmp/panfrost_vk_XXXXXX";
     char* td_c = ::mkdtemp(tmpl);

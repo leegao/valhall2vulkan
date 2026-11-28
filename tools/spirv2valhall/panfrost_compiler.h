@@ -62,6 +62,7 @@ struct PanfrostCompileResult {
     uint32_t secondary_offset = 0;
     std::vector<PanfrostVkVaryingInfo> varyings;
     std::vector<uint32_t> vert_input_locations;
+    bool has_frag_noperspective_varyings = false;
 };
 
 struct PanfrostRunOptions {

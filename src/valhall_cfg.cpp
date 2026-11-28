@@ -14,6 +14,15 @@ static bool is_branch_inst(const DecodedValhallInst& ins) {
            ins.mnemonic == Mnemonic::JUMP_EX;
 }
 
+/// Non-.end BLEND encodes a fixed-function return PC that skips the immediately
+/// following software blend-shader fallback trampoline (ADR r48, ret; JUMP uN.w1).
+static bool is_blend_return_jump(const DecodedValhallInst& ins) {
+    return (ins.canonical_mnemonic == Mnemonic::BLEND || ins.mnemonic == Mnemonic::BLEND) &&
+           ins.flow != FlowControlM::end &&
+           ins.has_branch_offset &&
+           ins.branch_target_pc > static_cast<int64_t>(ins.pc);
+}
+
 ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructions) {
     ControlFlowGraph cfg;
     if (raw_instructions.empty()) return cfg;
@@ -28,7 +37,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
             break;
         }
         max_valid = i + 1;
-        if (is_branch_inst(ins) && ins.has_branch_offset && ins.branch_target_pc > 0) {
+        if ((is_branch_inst(ins) || is_blend_return_jump(ins)) && ins.has_branch_offset && ins.branch_target_pc > 0) {
             uint64_t tgt = static_cast<uint64_t>(ins.branch_target_pc);
             if (tgt > max_branch_target_pc) max_branch_target_pc = tgt;
         }
@@ -47,7 +56,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
     uint64_t max_exec_pc = cfg.instructions.back().pc;
     for (size_t i = 0; i < cfg.instructions.size(); ++i) {
         const auto& ins = cfg.instructions[i];
-        bool is_br = is_branch_inst(ins);
+        bool is_br = is_branch_inst(ins) || is_blend_return_jump(ins);
         bool is_end = (ins.flow == FlowControlM::end) || (ins.canonical_mnemonic == Mnemonic::DISCARD && ins.srcs.size() < 2);
         bool is_reconv = (ins.flow == FlowControlM::reconverge);
 
@@ -99,7 +108,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
         blk.is_terminated_by_end = (last_ins.flow == FlowControlM::end);
         blk.is_terminated_by_discard = (last_ins.canonical_mnemonic == Mnemonic::DISCARD && last_ins.srcs.size() < 2);
 
-        if (is_branch_inst(last_ins)) {
+        if (is_branch_inst(last_ins) || is_blend_return_jump(last_ins)) {
             if (last_ins.has_branch_offset) {
                 uint64_t tgt_pc = static_cast<uint64_t>(last_ins.branch_target_pc);
                 blk.branch_target_pc = tgt_pc;
@@ -109,7 +118,7 @@ ControlFlowGraph build_cfg(const std::vector<DecodedValhallInst>& raw_instructio
                 }
             }
             // Check if unconditional vs conditional
-            bool uncond = false;
+            bool uncond = is_blend_return_jump(last_ins);
             auto it_cond = last_ins.modifier_strs.find("condition");
             if (it_cond != last_ins.modifier_strs.end() && it_cond->second == "always") {
                 uncond = true;

@@ -986,7 +986,8 @@ SsaId load_frag_special(Pass1Context& ctx, uint32_t blk, const DecodedValhallIns
             ex.type = ValType::F32;
             ex.imm_u32 = (varying_name == VaryingNameM::frag_w) ? 3u : 2u;
             ex.aux_bool = (varying_name == VaryingNameM::frag_w &&
-                           !ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register);
+                           ((ctx.opts.is_panfrost && !ctx.opts.has_frag_noperspective_varyings) ||
+                            (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::Register)));
             ex.args = { fc };
             return ctx.sb.emit(blk, std::move(ex));
         }
@@ -1482,6 +1483,11 @@ SsaId store_frag_color(Pass1Context& ctx, uint32_t blk, const DecodedValhallInst
     if (!ins.srcs.empty() && ins.srcs[0].symbolic_name.find("blend_descriptor_") == 0) {
         char c = ins.srcs[0].symbolic_name.back();
         if (c >= '0' && c <= '7') rt_loc = static_cast<uint32_t>(c - '0');
+    } else if (!ins.srcs.empty() && ins.srcs[0].kind == SourceKind::FauUniform) {
+        auto it = ctx.opts.fau_blend_rt_indices.find(static_cast<uint32_t>(ins.srcs[0].fau_index64));
+        if (it != ctx.opts.fau_blend_rt_indices.end()) {
+            rt_loc = it->second;
+        }
     }
     SsaNode st{};
     st.op = SsaOp::StoreFragColor;

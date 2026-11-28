@@ -82,6 +82,13 @@ struct ValhallTranslateOptions {
     std::map<uint32_t, std::string> fau_pka_buf_names;
     std::map<uint32_t, std::string> srt_pka_buf_names;
     std::map<uint32_t, uint32_t> fau_fcst_words;
+    // Maps 64-bit FAU slot index (uN) to fragment render target index (0..7) for Panfrost blend descriptors.
+    std::map<uint32_t, uint32_t> fau_blend_rt_indices;
+    // True when lowering Mesa Panfrost bytecode (LD_VAR_IMM already applies perspective correction,
+    // so LD_VAR_SPECIAL.frag_w always represents an explicit gl_FragCoord.w read).
+    bool is_panfrost = false;
+    // True when a Panfrost Fragment shader has NoPerspective varyings (which emit FMUL(v/w, frag_w)).
+    bool has_frag_noperspective_varyings = false;
     std::map<uint32_t, uint32_t> frag_varying_addr_to_loc;
     std::map<uint32_t, uint32_t> vert_attr_idx_to_loc;
     std::map<uint32_t, std::string> vert_sout_attr_names;

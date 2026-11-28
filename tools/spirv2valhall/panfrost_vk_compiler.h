@@ -85,6 +85,8 @@ struct PanfrostVkCompileOutput {
     std::vector<PanfrostVkVaryingInfo> varyings;
     /// Sorted SPIR-V Input Locations declared by Vertex shaders (for compact attr_idx -> Location remapping).
     std::vector<uint32_t> vert_input_locations;
+    /// True when a Fragment SPIR-V declares at least one NoPerspective Input varying.
+    bool has_frag_noperspective_varyings = false;
 };
 
 /// Compile a Vulkan SPIR-V shader (Vertex, Fragment, or Compute) directly to Valhall ISA

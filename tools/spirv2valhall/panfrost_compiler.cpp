@@ -773,6 +773,7 @@ PanfrostCompileResult compile_with_panfrost(
         res.secondary_offset = vko.secondary_offset;
         res.varyings = std::move(vko.varyings);
         res.vert_input_locations = std::move(vko.vert_input_locations);
+        res.has_frag_noperspective_varyings = vko.has_frag_noperspective_varyings;
         res.ok = true;
         return res;
     }

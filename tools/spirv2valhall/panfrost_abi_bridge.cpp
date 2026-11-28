@@ -129,6 +129,8 @@ void populate_panfrost_translate_options(
     PanfrostAbiBridgeReport* report) {
     vopts->stage = kb.stage;
     vopts->arch = kb.arch;
+    vopts->is_panfrost = true;
+    vopts->has_frag_noperspective_varyings = cres.has_frag_noperspective_varyings;
     vopts->local_size_x = kb.local_size[0];
     vopts->local_size_y = kb.local_size[1];
     vopts->local_size_z = kb.local_size[2];
@@ -196,6 +198,14 @@ void populate_panfrost_translate_options(
         for (const auto& v : cres.varyings) {
             if (v.user_location >= 0) {
                 vopts->frag_varying_addr_to_loc[v.index] = static_cast<uint32_t>(v.user_location);
+            }
+        }
+        // struct panvk_graphics_sysvals slots 15..22 hold blend.descriptors[0..7]
+        // (compacted into FAU slots u0..uN in ascending order of used_sysval_words).
+        for (uint32_t i = 0; i < cres.used_sysval_words.size(); ++i) {
+            uint32_t orig_slot = cres.used_sysval_words[i];
+            if (orig_slot >= 15u && orig_slot <= 22u) {
+                vopts->fau_blend_rt_indices[i] = orig_slot - 15u;
             }
         }
     }
@@ -338,8 +348,23 @@ void apply_panfrost_vk_abi_bridge(
     // zero-fill unwritten varying lanes (0.0f). Normalize literal 0x7fc00000 undef
     // lanes on StoreVertVarying to 0.0f so equivalence checks compare written lanes.
     if (kb.stage == valhall::ShaderStage::Vertex) {
+        auto is_zero_u64 = [&](valhall::compiler::SsaId z) -> bool {
+            for (int d = 0; d < 4 && z != valhall::compiler::kInvalidSsa && z < ssa.nodes.size(); ++d) {
+                const auto& zn = ssa.nodes[z];
+                if (zn.op == valhall::tables::SsaOp::ConstU64 && zn.imm_u64 == 0u) return true;
+                if ((zn.op == valhall::tables::SsaOp::ConstU32 || zn.op == valhall::tables::SsaOp::ConstS32) && zn.imm_u32 == 0u) return true;
+                if ((zn.op == valhall::tables::SsaOp::Bitcast || zn.op == valhall::tables::SsaOp::Copy ||
+                     zn.op == valhall::tables::SsaOp::UConvert32To64 || zn.op == valhall::tables::SsaOp::SConvert32To64) &&
+                    !zn.args.empty()) {
+                    z = zn.args[0];
+                    continue;
+                }
+                break;
+            }
+            return false;
+        };
         auto is_qnan_undef = [&](valhall::compiler::SsaId id) -> bool {
-            for (int depth = 0; depth < 4 && id != valhall::compiler::kInvalidSsa && id < ssa.nodes.size(); ++depth) {
+            for (int depth = 0; depth < 10 && id != valhall::compiler::kInvalidSsa && id < ssa.nodes.size(); ++depth) {
                 const auto& n = ssa.nodes[id];
                 if ((n.op == valhall::tables::SsaOp::ConstF32 || n.op == valhall::tables::SsaOp::ConstU32) &&
                     n.imm_u32 == 0x7fc00000u) {
@@ -357,6 +382,34 @@ void apply_panfrost_vk_abi_bridge(
                         n.imm_u32 < ssa.nodes[src_vec].args.size()) {
                         id = ssa.nodes[src_vec].args[n.imm_u32];
                         continue;
+                    }
+                }
+                // Unwrap Kraid 64-bit register-pair copy idiom: IADD.u64 [rD:rD+1], [rS:rS+1], k0
+                // -> TupleExtract(Split64(IAdd64(Pack64(lo, hi), 0)), lane).
+                if (n.op == valhall::tables::SsaOp::TupleExtract && !n.args.empty() && n.imm_u32 < 2u) {
+                    valhall::compiler::SsaId sp = n.args[0];
+                    if (sp < ssa.nodes.size() && ssa.nodes[sp].op == valhall::tables::SsaOp::Split64 &&
+                        !ssa.nodes[sp].args.empty()) {
+                        valhall::compiler::SsaId p64 = ssa.nodes[sp].args[0];
+                        for (int d = 0; d < 4 && p64 < ssa.nodes.size(); ++d) {
+                            const auto& pn = ssa.nodes[p64];
+                            if ((pn.op == valhall::tables::SsaOp::Bitcast || pn.op == valhall::tables::SsaOp::Copy) &&
+                                !pn.args.empty()) {
+                                p64 = pn.args[0];
+                                continue;
+                            }
+                            if ((pn.op == valhall::tables::SsaOp::IAdd || pn.op == valhall::tables::SsaOp::IAdd64) &&
+                                pn.args.size() == 2) {
+                                if (is_zero_u64(pn.args[1])) { p64 = pn.args[0]; continue; }
+                                if (is_zero_u64(pn.args[0])) { p64 = pn.args[1]; continue; }
+                            }
+                            break;
+                        }
+                        if (p64 < ssa.nodes.size() && ssa.nodes[p64].op == valhall::tables::SsaOp::Pack64 &&
+                            ssa.nodes[p64].args.size() == 2) {
+                            id = ssa.nodes[p64].args[n.imm_u32];
+                            continue;
+                        }
                     }
                 }
                 break;
